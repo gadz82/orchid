@@ -8,7 +8,10 @@ cd orchid
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+pre-commit install
 ```
+
+The last command installs git hooks that **automatically run ruff (lint + format) and gitlint (commit message check) before every commit**. A commit with lint errors or a non-conventional message will be rejected locally — no need to wait for CI.
 
 ## Commit Message Convention
 
