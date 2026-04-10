@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from orchid.persistence.factory import _import_class, build_chat_storage
+from orchid_ai.persistence.factory import _import_class, build_chat_storage
 
 
 class TestImportClass:
     def test_valid_dotted_path(self):
-        cls = _import_class("orchid.persistence.models.ChatSession")
-        from orchid.persistence.models import ChatSession
+        cls = _import_class("orchid_ai.persistence.models.ChatSession")
+        from orchid_ai.persistence.models import ChatSession
 
         assert cls is ChatSession
 
@@ -27,4 +27,4 @@ class TestBuildChatStorage:
     def test_non_chat_storage_class_raises(self):
         """A class that exists but is NOT a ChatStorage subclass should raise TypeError."""
         with pytest.raises(TypeError, match="not a ChatStorage subclass"):
-            build_chat_storage("orchid.persistence.models.ChatSession", dsn="sqlite:///test.db")
+            build_chat_storage("orchid_ai.persistence.models.ChatSession", dsn="sqlite:///test.db")

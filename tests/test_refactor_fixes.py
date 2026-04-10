@@ -1,16 +1,16 @@
 """Tests for the 10-point refactor — validates all behavioral changes."""
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from orchid.agents.strategies import CallAllStrategy, LLMDecidesStrategy
-from orchid.config.schema import ToolConfig
-from orchid.core.mcp import MCPClient, MCPToolResult
-from orchid.core.state import AuthContext
+from orchid_ai.agents.strategies import CallAllStrategy, LLMDecidesStrategy
+from orchid_ai.config.schema import ToolConfig
+from orchid_ai.core.mcp import MCPClient, MCPToolResult
+from orchid_ai.core.state import AuthContext
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -87,8 +87,8 @@ class TestFetchAllRagConcurrency:
     @pytest.mark.asyncio
     async def test_domain_and_uploads_run_concurrently(self):
         """fetch_all_rag_context should use asyncio.gather for domain + uploads."""
-        from orchid.core.agent import BaseAgent
-        from orchid.rag.scopes import RAGScope
+        from orchid_ai.core.agent import BaseAgent
+        from orchid_ai.rag.scopes import RAGScope
 
         # Create a concrete subclass for testing
         class _TestAgent(BaseAgent):
@@ -135,8 +135,7 @@ class TestNoLitellmFallback:
     @pytest.mark.asyncio
     async def test_summarise_raises_without_llm_service(self):
         """BaseAgent.summarise() should raise RuntimeError when no LLMProvider injected."""
-        from orchid.core.agent import BaseAgent
-        from orchid.rag.scopes import RAGScope
+        from orchid_ai.core.agent import BaseAgent
 
         class _TestAgent(BaseAgent):
             @property
@@ -155,7 +154,10 @@ class TestNoLitellmFallback:
 
         with pytest.raises(RuntimeError, match="no LLMProvider injected"):
             await agent.summarise(
-                "query", {}, [], system_prompt="test",
+                "query",
+                {},
+                [],
+                system_prompt="test",
             )
 
     @pytest.mark.asyncio
@@ -163,13 +165,15 @@ class TestNoLitellmFallback:
         """LLMDecidesStrategy._llm_complete raises RuntimeError without LLMProvider."""
         with pytest.raises(RuntimeError, match="requires an LLMProvider"):
             await LLMDecidesStrategy._llm_complete(
-                None, "model", [{"role": "user", "content": "test"}],
+                None,
+                "model",
+                [{"role": "user", "content": "test"}],
             )
 
     @pytest.mark.asyncio
     async def test_supervisor_llm_complete_raises_without_service(self):
         """supervisor._llm_complete raises RuntimeError without LLMProvider."""
-        from orchid.graph.supervisor import _llm_complete
+        from orchid_ai.graph.supervisor import _llm_complete
 
         with pytest.raises(RuntimeError, match="requires an LLMProvider"):
             await _llm_complete(None, "model", [{"role": "user", "content": "test"}])
@@ -187,14 +191,24 @@ class TestSpecificExceptions:
             async def call_tool(self, name, args, auth):
                 raise ConnectionError("refused")
 
-            async def list_tools(self, auth): return []
-            async def list_prompts(self, auth): return []
-            async def list_resources(self, auth): return []
-            async def get_prompt(self, name, args, auth): return []
-            async def read_resource(self, uri, auth): return ""
+            async def list_tools(self, auth):
+                return []
+
+            async def list_prompts(self, auth):
+                return []
+
+            async def list_resources(self, auth):
+                return []
+
+            async def get_prompt(self, name, args, auth):
+                return []
+
+            async def read_resource(self, uri, auth):
+                return ""
 
             @property
-            def server_url(self): return "http://fail"
+            def server_url(self):
+                return "http://fail"
 
         strategy = CallAllStrategy()
         result = await strategy.execute(_FailClient(), _tools("t"), "q", _auth())
@@ -208,14 +222,24 @@ class TestSpecificExceptions:
             async def call_tool(self, name, args, auth):
                 raise AttributeError("unexpected")
 
-            async def list_tools(self, auth): return []
-            async def list_prompts(self, auth): return []
-            async def list_resources(self, auth): return []
-            async def get_prompt(self, name, args, auth): return []
-            async def read_resource(self, uri, auth): return ""
+            async def list_tools(self, auth):
+                return []
+
+            async def list_prompts(self, auth):
+                return []
+
+            async def list_resources(self, auth):
+                return []
+
+            async def get_prompt(self, name, args, auth):
+                return []
+
+            async def read_resource(self, uri, auth):
+                return ""
 
             @property
-            def server_url(self): return "http://fail"
+            def server_url(self):
+                return "http://fail"
 
         strategy = CallAllStrategy()
         with pytest.raises(AttributeError):
@@ -228,7 +252,8 @@ class TestSpecificExceptions:
 class TestMonotonicClock:
     def test_monotonic_reference_exists(self):
         """GenericAgent module should use time.monotonic for cache checks."""
-        from orchid.agents import generic_agent
+        from orchid_ai.agents import generic_agent
+
         assert generic_agent._monotonic is __import__("time").monotonic
 
 
@@ -238,11 +263,13 @@ class TestMonotonicClock:
 class TestPackageMetadata:
     def test_version_is_set(self):
         import orchid
+
         assert hasattr(orchid, "__version__")
         assert orchid.__version__ == "0.1.0"
 
     def test_py_typed_exists(self):
         import importlib.resources
+
         files = importlib.resources.files("orchid")
         py_typed = files / "py.typed"
         assert py_typed.is_file()
@@ -254,7 +281,8 @@ class TestPackageMetadata:
 class TestGenericAgentDecomposition:
     def test_pipeline_methods_exist(self):
         """GenericAgent should expose named pipeline step methods."""
-        from orchid.agents.generic_agent import GenericAgent
+        from orchid_ai.agents.generic_agent import GenericAgent
+
         assert hasattr(GenericAgent, "_build_scope")
         assert hasattr(GenericAgent, "_step_rag_retrieval")
         assert hasattr(GenericAgent, "_step_cache_check")
@@ -265,12 +293,13 @@ class TestGenericAgentDecomposition:
     @pytest.mark.asyncio
     async def test_build_scope_returns_rag_scope(self):
         """_build_scope should return a RAGScope from auth + state."""
-        from orchid.agents.generic_agent import GenericAgent
-        from orchid.config.schema import AgentConfig, LLMConfig, RAGConfig
-        from orchid.rag.scopes import RAGScope
+        from orchid_ai.agents.generic_agent import GenericAgent
+        from orchid_ai.config.schema import AgentConfig, LLMConfig, RAGConfig
+        from orchid_ai.rag.scopes import RAGScope
 
         config = AgentConfig(
-            description="d", prompt="p",
+            description="d",
+            prompt="p",
             rag=RAGConfig(enabled=False, namespace="ns"),
             llm=LLMConfig(),
         )
@@ -280,8 +309,11 @@ class TestGenericAgentDecomposition:
         llm_service.complete = AsyncMock(return_value="summary")
 
         agent = GenericAgent(
-            config=config, llm="test-model", reader=reader,
-            mcp_clients=[], llm_service=llm_service,
+            config=config,
+            llm="test-model",
+            reader=reader,
+            mcp_clients=[],
+            llm_service=llm_service,
         )
         auth = AuthContext(access_token="tok", tenant_key="t1", user_id="u1")
         state = {"chat_id": "c1"}

@@ -1,4 +1,5 @@
 """Tests for src.rag.scopes — RAGScope + build_qdrant_filter."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -6,7 +7,7 @@ import dataclasses
 import pytest
 from qdrant_client.models import Filter
 
-from orchid.rag.scopes import SHARED_TENANT, RAGScope, build_qdrant_filter
+from orchid_ai.rag.scopes import SHARED_TENANT, RAGScope, build_qdrant_filter
 
 
 # ── RAGScope dataclass ──────────────────────────────────────────
@@ -79,8 +80,7 @@ class TestBuildQdrantFilter:
         # The first clause's must list should contain a FieldCondition
         # matching tenant_id = "__shared__"
         assert any(
-            getattr(cond, "key", None) == "tenant_id"
-            and getattr(cond.match, "value", None) == SHARED_TENANT
+            getattr(cond, "key", None) == "tenant_id" and getattr(cond.match, "value", None) == SHARED_TENANT
             for cond in shared_clause.must
         )
 
@@ -88,10 +88,7 @@ class TestBuildQdrantFilter:
         scope = RAGScope(tenant_id="t-1")
         f = build_qdrant_filter(scope)
         tenant_clause = f.should[1]
-        keys_and_values = {
-            getattr(c, "key", None): getattr(c.match, "value", None)
-            for c in tenant_clause.must
-        }
+        keys_and_values = {getattr(c, "key", None): getattr(c.match, "value", None) for c in tenant_clause.must}
         assert keys_and_values["tenant_id"] == "t-1"
         assert keys_and_values["scope"] == "tenant"
 

@@ -1,7 +1,8 @@
 """Tests for src.graph.state — merge_dicts + replace_list reducers."""
+
 from __future__ import annotations
 
-from orchid.graph.state import merge_dicts, replace_list
+from orchid_ai.graph.state import merge_dicts, replace_list
 
 
 # ── merge_dicts ─────────────────────────────────────────────────

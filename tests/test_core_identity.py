@@ -1,10 +1,11 @@
 """Tests for IdentityResolver ABC and IdentityError from src/core/identity.py."""
+
 from __future__ import annotations
 
 import pytest
 
-from orchid.core.identity import IdentityError, IdentityResolver
-from orchid.core.state import AuthContext
+from orchid_ai.core.identity import IdentityError, IdentityResolver
+from orchid_ai.core.state import AuthContext
 
 
 # ── IdentityResolver is abstract ──

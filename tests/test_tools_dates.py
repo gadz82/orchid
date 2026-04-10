@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from orchid.tools.dates import format_date
+from orchid_ai.tools.dates import format_date
 
 
 def test_iso8601_with_z_suffix():

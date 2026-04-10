@@ -10,7 +10,7 @@ Consumers register their namespaces and documents, then call ``index_all()``
 to seed the vector store at startup.
 
 Usage (startup hook):
-    from orchid.rag.indexer import StaticIndexer
+    from orchid_ai.rag.indexer import StaticIndexer
 
     indexer = StaticIndexer(writer=reader)
     indexer.register_namespace("learning", shared_docs, tenant_docs_fn)

@@ -2,13 +2,13 @@
 
 ## What This Package Is
 
-**orchid** is the core Python library of the Orchid multi-agent AI framework. It is a pip-installable package (`from orchid.xxx`) containing ABCs, `GenericAgent`, LangGraph graph builder, RAG pipeline, persistence, document parsing, and MCP client. It has **no API endpoints, no CLI, no vendor-specific code**. Those live in separate packages (`orchid-api/`, `orchid-cli/`) or consumer projects.
+**orchid-ai** is the core Python library of the Orchid multi-agent AI framework. It is a pip-installable package (`from orchid_ai.xxx`) containing ABCs, `GenericAgent`, LangGraph graph builder, RAG pipeline, persistence, document parsing, and MCP client. It has **no API endpoints, no CLI, no vendor-specific code**. Those live in separate packages (`orchid-api/`, `orchid-cli/`) or consumer projects.
 
 ## Package Structure
 
 ```
 orchid/
-  orchid/                 Package root (import as `from orchid.xxx`)
+  orchid_ai/              Package root (import as `from orchid_ai.xxx`)
     __init__.py           SDK surface: BaseAgent, AuthContext, build_graph, load_config, etc.
     core/                 Pure ABCs — ZERO external dependencies (only stdlib)
       agent.py            BaseAgent ABC
@@ -24,7 +24,7 @@ orchid/
     documents/            Parsers (PDF/DOCX/XLSX/CSV/Image), chunker, pipeline
     persistence/          ChatStorage ABC + factory + models + migrations + built-in backends:
       sqlite.py           SQLiteChatStorage (default, aiosqlite — core dep)
-      postgres.py         PostgresChatStorage (optional, asyncpg — `pip install orchid[postgres]`)
+      postgres.py         PostgresChatStorage (optional, asyncpg — `pip install orchid-ai[postgres]`)
     mcp/                  StreamableHttpMCPClient
     llm_service.py        LiteLLMProvider (concrete LLMProvider)
     tools/                Built-in tools (math, dates)
@@ -67,7 +67,7 @@ documents/   → core/  (standalone)
 | litellm | Multi-provider LLM abstraction | Core |
 | qdrant-client | Vector DB client | Core |
 | aiosqlite | SQLite async driver (default storage) | Core |
-| asyncpg | PostgreSQL async driver | Optional (`orchid[postgres]`) |
+| asyncpg | PostgreSQL async driver | Optional (`orchid-ai[postgres]`) |
 | mcp | MCP protocol client | Core |
 | pymupdf | PDF parsing | Core |
 | python-docx | DOCX parsing | Core |
@@ -85,7 +85,7 @@ documents/   → core/  (standalone)
 
 5. **Parse-once pattern for documents.** Call `extract_text()` once, pass to both prompt builder and `ingest_document(pre_extracted_text=...)`.
 
-6. **Imports are `from orchid.xxx`, not `from src.xxx`.** The three-package split uses `orchid.` as the import root.
+6. **Imports are `from orchid_ai.xxx`, not `from src.xxx`.** The three-package split uses `orchid_ai.` as the import root.
 
 7. **No vendor-specific code.** Platform integrations belong in consumer projects.
 
@@ -105,7 +105,7 @@ class: myproject.agents.custom.CustomAgent
 ### RAG Scoping
 
 ```python
-from orchid.rag.scopes import RAGScope
+from orchid_ai.rag.scopes import RAGScope
 
 scope = RAGScope(
     tenant_id=auth.tenant_key,
@@ -118,7 +118,7 @@ scope = RAGScope(
 ### OrchidRuntime (Dependency Bag)
 
 ```python
-from orchid import OrchidRuntime, build_graph, load_config
+from orchid_ai import OrchidRuntime, build_graph, load_config
 
 runtime = OrchidRuntime(
     default_model="gemini/gemini-2.5-flash",
@@ -147,8 +147,8 @@ Integrators override only what they need. All fields have sensible defaults. The
 cd orchid && source .venv/bin/activate
 pytest tests/ -x              # all tests (197+)
 pytest tests/ -k "test_scopes"  # specific
-ruff check orchid/            # lint
-ruff format orchid/           # format
+ruff check orchid_ai/         # lint
+ruff format orchid_ai/        # format
 ```
 
 ## Embedding Dimensions (Critical for Qdrant)

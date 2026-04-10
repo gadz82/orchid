@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 
-from orchid.config import tool_registry as treg
-from orchid.config.schema import BuiltinToolConfig
+from orchid_ai.config import tool_registry as treg
+from orchid_ai.config.schema import BuiltinToolConfig
 
 
 @pytest.fixture(autouse=True)

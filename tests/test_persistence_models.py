@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from orchid.persistence.models import ChatMessage, ChatSession
+from orchid_ai.persistence.models import ChatMessage, ChatSession
 
 
 class TestChatSession:
@@ -30,8 +30,12 @@ class TestChatSession:
     def test_default_is_shared(self):
         now = datetime.utcnow()
         session = ChatSession(
-            id="s", tenant_id="t", user_id="u", title="",
-            created_at=now, updated_at=now,
+            id="s",
+            tenant_id="t",
+            user_id="u",
+            title="",
+            created_at=now,
+            updated_at=now,
         )
         assert session.is_shared is False
 

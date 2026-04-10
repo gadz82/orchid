@@ -1,11 +1,11 @@
 """Tests for AuthContext and AgentState from src/core/state.py."""
+
 from __future__ import annotations
 
 import time
 
-import pytest
 
-from orchid.core.state import AgentState, AuthContext
+from orchid_ai.core.state import AgentState, AuthContext
 
 
 # ── AuthContext defaults ──

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from orchid.config.schema import (
+from orchid_ai.config.schema import (
     AgentConfig,
     AgentSkillStepConfig,
     AgentsConfig,
@@ -271,10 +271,12 @@ class TestAgentsConfig:
         cfg = AgentsConfig(
             agents={
                 "agent1": AgentConfig(
-                    description="d", prompt="p",
+                    description="d",
+                    prompt="p",
                     mcp_servers=[
                         MCPServerConfig(
-                            name="mcp1", url="http://x",
+                            name="mcp1",
+                            url="http://x",
                             tools=[ToolConfig(name="tool_a")],
                         ),
                     ],
@@ -288,10 +290,12 @@ class TestAgentsConfig:
         cfg = AgentsConfig(
             agents={
                 "agent1": AgentConfig(
-                    description="d", prompt="p",
+                    description="d",
+                    prompt="p",
                     mcp_servers=[
                         MCPServerConfig(
-                            name="mcp1", url="http://x",
+                            name="mcp1",
+                            url="http://x",
                             tools=[
                                 ToolConfig(name="tool_a", inject_to_rag=True),
                                 ToolConfig(name="tool_b"),
@@ -312,7 +316,8 @@ class TestAgentsConfig:
             },
             agents={
                 "agent1": AgentConfig(
-                    description="d", prompt="p",
+                    description="d",
+                    prompt="p",
                     tools=["format_date", "calc_rate"],
                 ),
             },
@@ -327,11 +332,13 @@ class TestAgentsConfig:
             },
             agents={
                 "agent1": AgentConfig(
-                    description="d", prompt="p",
+                    description="d",
+                    prompt="p",
                     tools=["my_builtin"],
                     mcp_servers=[
                         MCPServerConfig(
-                            name="mcp1", url="http://x",
+                            name="mcp1",
+                            url="http://x",
                             tools=[ToolConfig(name="mcp_tool", inject_to_rag=True)],
                         ),
                     ],
@@ -345,10 +352,12 @@ class TestAgentsConfig:
         cfg = AgentsConfig(
             agents={
                 "agent1": AgentConfig(
-                    description="d", prompt="p",
+                    description="d",
+                    prompt="p",
                     mcp_servers=[
                         MCPServerConfig(
-                            name="mcp1", url="http://x",
+                            name="mcp1",
+                            url="http://x",
                             tools=[ToolConfig(name="tool_a", inject_to_rag=True)],
                         ),
                     ],
@@ -362,11 +371,13 @@ class TestAgentsConfig:
         cfg = AgentsConfig(
             agents={
                 "agent1": AgentConfig(
-                    description="d", prompt="p",
+                    description="d",
+                    prompt="p",
                     rag=RAGConfig(namespace="ns", rag_ttl=3600),
                     mcp_servers=[
                         MCPServerConfig(
-                            name="mcp1", url="http://x",
+                            name="mcp1",
+                            url="http://x",
                             tools=[ToolConfig(name="tool_a", inject_to_rag=True)],
                         ),
                     ],
@@ -380,11 +391,13 @@ class TestAgentsConfig:
         cfg = AgentsConfig(
             agents={
                 "agent1": AgentConfig(
-                    description="d", prompt="p",
+                    description="d",
+                    prompt="p",
                     rag=RAGConfig(namespace="ns", rag_ttl=3600),
                     mcp_servers=[
                         MCPServerConfig(
-                            name="mcp1", url="http://x",
+                            name="mcp1",
+                            url="http://x",
                             tools=[
                                 ToolConfig(name="tool_a", inject_to_rag=True, rag_ttl=300),
                                 ToolConfig(name="tool_b", inject_to_rag=True),
@@ -400,15 +413,18 @@ class TestAgentsConfig:
 
     def test_rag_ttl_defaults_propagation(self):
         """defaults.rag.rag_ttl propagates to agents."""
-        from orchid.config.schema import RAGDefaultsConfig
+        from orchid_ai.config.schema import RAGDefaultsConfig
+
         cfg = AgentsConfig(
             defaults=DefaultsConfig(rag=RAGDefaultsConfig(rag_ttl=7200)),
             agents={
                 "agent1": AgentConfig(
-                    description="d", prompt="p",
+                    description="d",
+                    prompt="p",
                     mcp_servers=[
                         MCPServerConfig(
-                            name="mcp1", url="http://x",
+                            name="mcp1",
+                            url="http://x",
                             tools=[ToolConfig(name="tool_a", inject_to_rag=True)],
                         ),
                     ],
