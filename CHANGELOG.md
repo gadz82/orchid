@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-04-10)
+
+### Bug Fixes
+
+- Remove useless Dockerfiles for orchid and orchid-api
+  ([`19476b4`](https://github.com/gadz82/orchid/commit/19476b4882ce36ef231353da0c570340dfb4f6b7))
+
+
 ## v1.1.0 (2026-04-10)
 
 ### Bug Fixes
