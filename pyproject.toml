@@ -1,6 +1,6 @@
 [project]
 name = "orchid-ai"
-version = "1.0.0"
+version = "0.0.0"
 description = "Orchid — platform-agnostic multi-agent AI framework (LangGraph + RAG)"
 requires-python = ">=3.11"
 dependencies = [
