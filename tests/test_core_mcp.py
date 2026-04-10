@@ -1,9 +1,10 @@
 """Tests for MCPToolResult and MCPClient ABC from src/core/mcp.py."""
+
 from __future__ import annotations
 
 import pytest
 
-from orchid.core.mcp import MCPClient, MCPToolResult
+from orchid_ai.core.mcp import MCPClient, MCPToolResult
 
 
 # ── MCPToolResult defaults ──
@@ -19,19 +20,23 @@ def test_tool_result_defaults():
 
 
 def test_text_concatenates_text_blocks():
-    r = MCPToolResult(content=[
-        {"type": "text", "text": "hello"},
-        {"type": "text", "text": "world"},
-    ])
+    r = MCPToolResult(
+        content=[
+            {"type": "text", "text": "hello"},
+            {"type": "text", "text": "world"},
+        ]
+    )
     assert r.text == "hello\nworld"
 
 
 def test_text_ignores_non_text_blocks():
-    r = MCPToolResult(content=[
-        {"type": "text", "text": "keep"},
-        {"type": "image", "url": "http://img.png"},
-        {"type": "text", "text": "this"},
-    ])
+    r = MCPToolResult(
+        content=[
+            {"type": "text", "text": "keep"},
+            {"type": "image", "url": "http://img.png"},
+            {"type": "text", "text": "this"},
+        ]
+    )
     assert r.text == "keep\nthis"
 
 

@@ -26,7 +26,7 @@ from .models import ChatMessage, ChatSession
 
 logger = logging.getLogger(__name__)
 
-MIGRATIONS_PACKAGE = "orchid.persistence.migrations"
+MIGRATIONS_PACKAGE = "orchid_ai.persistence.migrations"
 
 
 class PostgresMigrationRunner(MigrationRunner):

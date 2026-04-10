@@ -8,7 +8,7 @@ dotted import paths.
 
 Usage:
     storage = build_chat_storage(
-        class_path="orchid.persistence.sqlite.SQLiteChatStorage",
+        class_path="orchid_ai.persistence.sqlite.SQLiteChatStorage",
         dsn="~/.orchid/chats.db",
     )
     await storage.init_db()
@@ -35,7 +35,7 @@ def build_chat_storage(class_path: str, dsn: str) -> ChatStorage:
     ----------
     class_path : str
         Fully-qualified dotted path to a ``ChatStorage`` subclass.
-        Example: ``"orchid.persistence.postgres.PostgresChatStorage"``
+        Example: ``"orchid_ai.persistence.postgres.PostgresChatStorage"``
     dsn : str
         Connection string (PostgreSQL DSN) or file path (SQLite).
         Passed as ``dsn=`` keyword to the constructor.

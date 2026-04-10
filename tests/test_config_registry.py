@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from orchid.config import registry as reg
+from orchid_ai.config import registry as reg
 
 
 @pytest.fixture(autouse=True)
@@ -26,13 +26,13 @@ class TestRegistry:
         assert reg.get_class("fake") is FakeAgent
 
     def test_get_class_none_returns_generic_agent(self):
-        from orchid.agents.generic_agent import GenericAgent
+        from orchid_ai.agents.generic_agent import GenericAgent
 
         assert reg.get_class(None) is GenericAgent
 
     def test_get_class_dotted_path(self):
-        cls = reg.get_class("orchid.config.schema.LLMConfig")
-        from orchid.config.schema import LLMConfig
+        cls = reg.get_class("orchid_ai.config.schema.LLMConfig")
+        from orchid_ai.config.schema import LLMConfig
 
         assert cls is LLMConfig
 

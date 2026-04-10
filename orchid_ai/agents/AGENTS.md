@@ -26,8 +26,8 @@ Most agents should use `GenericAgent` via YAML — no Python needed.
 When YAML isn't enough, create a custom agent:
 
 1. Create a file in `examples/<project>/agents/` (or your own project)
-2. Subclass `BaseAgent` from `orchid.core.agent`
-3. Use **absolute imports** (not relative): `from orchid.core.agent import BaseAgent`
+2. Subclass `BaseAgent` from `orchid_ai.core.agent`
+3. Use **absolute imports** (not relative): `from orchid_ai.core.agent import BaseAgent`
 4. Reference in `agents.yaml` with `class: examples.helpdesk.agents.support.SupportAgent`
 
 Example custom agents:
@@ -80,7 +80,7 @@ async def _agentic_loop(self, ...):
     # Agentic loop requires full response objects (tool_calls),
     # so we use litellm directly — LLMProvider.complete() only returns str.
     import litellm
-    from orchid.llm_service import get_llm_kwargs
+    from orchid_ai.llm_service import get_llm_kwargs
     
     response = await litellm.acompletion(model=model, messages=msgs, tools=tools, **get_llm_kwargs(model))
 ```
@@ -98,7 +98,7 @@ Don't merge these back into `GenericAgent`. If you need to modify skill detectio
 
 ## Common Mistakes
 
-- **Using relative imports in custom agents.** Files outside `src/` must use absolute imports (`from orchid.core.agent import BaseAgent`).
+- **Using relative imports in custom agents.** Files outside `src/` must use absolute imports (`from orchid_ai.core.agent import BaseAgent`).
 - **Not returning `messages`.** The supervisor expects an `AIMessage` from each agent.
 - **Forgetting `name=self.name` on `AIMessage`.** The supervisor uses this to track responses.
 - **Duplicating `_extract_user_query()` or `_fetch_rag_context()`.** Use the inherited `self.extract_user_query()` and `self.fetch_rag_context()`.

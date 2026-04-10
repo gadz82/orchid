@@ -61,8 +61,8 @@ def _resolve_handler(handler_path: str) -> Callable[..., Any]:
     """
     Resolve a dotted Python path to a callable.
 
-    Example: ``"orchid.tools.dates.format_date"`` →
-    ``importlib.import_module("orchid.tools.dates").format_date``
+    Example: ``"orchid_ai.tools.dates.format_date"`` →
+    ``importlib.import_module("orchid_ai.tools.dates").format_date``
     """
     module_path, _, attr_name = handler_path.rpartition(".")
     if not module_path:

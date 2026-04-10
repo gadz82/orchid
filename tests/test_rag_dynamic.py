@@ -1,14 +1,15 @@
 """Tests for src.rag.dynamic — inject_to_rag + _tool_data_to_documents."""
+
 from __future__ import annotations
 
 import json
 
 import pytest
 
-from orchid.core.repository import Document, VectorReader, VectorWriter
-from orchid.rag.dynamic import _tool_data_to_documents, inject_to_rag
-from orchid.rag.null import NullVectorReader
-from orchid.rag.scopes import RAGScope
+from orchid_ai.core.repository import Document, VectorReader, VectorWriter
+from orchid_ai.rag.dynamic import _tool_data_to_documents, inject_to_rag
+from orchid_ai.rag.null import NullVectorReader
+from orchid_ai.rag.scopes import RAGScope
 
 
 # ── Mock that implements both VectorReader and VectorWriter ─────

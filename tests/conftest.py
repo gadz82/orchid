@@ -1,16 +1,16 @@
 """Shared test fixtures for the Orchid framework."""
+
 from __future__ import annotations
 
 import pytest
 from datetime import datetime
-from typing import Any
 
-from orchid.core.state import AuthContext
-from orchid.core.repository import Document, SearchResult, VectorReader, VectorWriter, VectorStoreAdmin, VectorStoreRepository
-from orchid.core.mcp import MCPClient, MCPToolResult
-from orchid.rag.scopes import RAGScope
-from orchid.rag.null import NullVectorReader
-from orchid.persistence.models import ChatSession, ChatMessage
+from orchid_ai.core.state import AuthContext
+from orchid_ai.core.repository import VectorReader, VectorWriter, VectorStoreAdmin
+from orchid_ai.core.mcp import MCPClient, MCPToolResult
+from orchid_ai.rag.scopes import RAGScope
+from orchid_ai.rag.null import NullVectorReader
+from orchid_ai.persistence.models import ChatSession, ChatMessage
 
 
 # ── AuthContext fixtures ──

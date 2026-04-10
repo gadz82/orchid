@@ -20,8 +20,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install ruff
-      - run: ruff check orchid/
-      - run: ruff format --check orchid/
+      - run: ruff check orchid_ai/
+      - run: ruff format --check orchid_ai/
 
   commit-lint:
     name: Commit message check
@@ -53,7 +53,7 @@ jobs:
       - name: Run tests
         run: |
           pytest tests/ \
-            --cov=orchid \
+            --cov=orchid_ai \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
             --junitxml=report.xml \

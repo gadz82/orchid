@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from orchid.config.loader import _find_comment_start, _interpolate_env, load_config
+from orchid_ai.config.loader import _find_comment_start, _interpolate_env, load_config
 
 
 # ── _find_comment_start ─────────────────────────────────────

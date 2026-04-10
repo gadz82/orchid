@@ -1,9 +1,10 @@
 """Tests for Document, SearchResult, and vector store ABCs from src/core/repository.py."""
+
 from __future__ import annotations
 
 import pytest
 
-from orchid.core.repository import (
+from orchid_ai.core.repository import (
     Document,
     SearchResult,
     VectorReader,

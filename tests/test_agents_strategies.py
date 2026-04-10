@@ -1,18 +1,19 @@
 """Tests for src.agents.strategies — ToolCallStrategy implementations."""
+
 from __future__ import annotations
 
 import pytest
 
-from orchid.agents.strategies import (
+from orchid_ai.agents.strategies import (
     STRATEGY_REGISTRY,
     CallAllStrategy,
     LLMDecidesStrategy,
     SequentialStrategy,
     get_strategy,
 )
-from orchid.config.schema import ToolConfig
-from orchid.core.mcp import MCPClient, MCPToolResult
-from orchid.core.state import AuthContext
+from orchid_ai.config.schema import ToolConfig
+from orchid_ai.core.mcp import MCPClient, MCPToolResult
+from orchid_ai.core.state import AuthContext
 
 
 # ── Inline mock MCP client ──────────────────────────────────────
@@ -81,9 +82,11 @@ class TestCallAllStrategy:
 
     @pytest.mark.asyncio
     async def test_returns_results_keyed_by_name(self):
-        client = _MockMCPClient(results={
-            "tool_a": MCPToolResult(content=[{"type": "text", "text": "hello"}]),
-        })
+        client = _MockMCPClient(
+            results={
+                "tool_a": MCPToolResult(content=[{"type": "text", "text": "hello"}]),
+            }
+        )
         strategy = CallAllStrategy()
         results = await strategy.execute(client, _tools("tool_a"), "q", _auth())
         assert results["tool_a"] == "hello"
@@ -171,6 +174,7 @@ class TestStrategyRegistry:
         assert "llm_decides" in STRATEGY_REGISTRY
 
     def test_values_are_strategy_subclasses(self):
-        from orchid.agents.strategies import ToolCallStrategy
+        from orchid_ai.agents.strategies import ToolCallStrategy
+
         for cls in STRATEGY_REGISTRY.values():
             assert issubclass(cls, ToolCallStrategy)

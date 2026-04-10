@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from orchid.tools.math import calculate_completion_rate
+from orchid_ai.tools.math import calculate_completion_rate
 
 
 def test_normal_case():

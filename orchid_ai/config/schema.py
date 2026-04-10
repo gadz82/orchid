@@ -122,7 +122,7 @@ class ExecutionHints(BaseModel):
 class BuiltinToolConfig(BaseModel):
     """A built-in Python tool declared at the YAML top level."""
 
-    handler: str  # dotted import path, e.g. "orchid.tools.dates.format_date"
+    handler: str  # dotted import path, e.g. "orchid_ai.tools.dates.format_date"
     description: str = ""
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
