@@ -1,0 +1,65 @@
+[project]
+name = "orchid"
+version = "0.1.0"
+description = "Orchid — platform-agnostic multi-agent AI framework (LangGraph + RAG)"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=0.4.0",
+    "langchain-core>=0.3.0",
+    "litellm>=1.60.0",
+    "google-generativeai>=0.8.3",  # Gemini models
+    "httpx>=0.28.0",
+    "mcp>=1.9.0",
+    "qdrant-client>=1.13.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "pyyaml>=6.0",
+    "python-multipart>=0.0.9",
+    "pymupdf>=1.24.0",
+    "python-docx>=1.1.0",
+    "openpyxl>=3.1.0",
+    "Pillow>=10.0.0",
+    "aiosqlite>=0.20.0",
+]
+
+[project.optional-dependencies]
+postgres = ["asyncpg>=0.30.0"]
+all-storage = ["asyncpg>=0.30.0"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0",
+    "ruff>=0.9.0",
+    "gitlint>=0.19.0",
+    "asyncpg>=0.30.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["orchid"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=orchid --cov-report=term-missing"
+
+# ── Semantic Release ─────────────────────────────────────────────
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+commit_message = "chore(release): v{version} [skip ci]"
+build_command = "pip install build && python -m build"
+tag_format = "v{version}"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "perf", "refactor", "docs", "style", "test", "build", "ci", "chore"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]

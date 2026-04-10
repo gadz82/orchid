@@ -1,0 +1,95 @@
+# orchid (core library) — GitLab CI/CD Pipeline
+#
+# Stages:
+#   1. lint        — ruff check + format, commit message validation
+#   2. test        — pytest with coverage report
+#   3. build       — build wheel + sdist
+#   4. release     — semantic-release auto-tag on main
+
+stages:
+  - lint
+  - test
+  - build
+  - release
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  PYTHON_VERSION: "3.13"
+
+.python-base:
+  image: python:${PYTHON_VERSION}-slim
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-pip"
+    paths:
+      - .pip-cache/
+
+# ── Lint ────────────────────────────────────────────────────────
+
+ruff:
+  extends: .python-base
+  stage: lint
+  script:
+    - pip install --quiet ruff
+    - ruff check orchid/
+    - ruff format --check orchid/
+
+commit-lint:
+  extends: .python-base
+  stage: lint
+  script:
+    - pip install --quiet gitlint
+    - gitlint --commits "${CI_MERGE_REQUEST_DIFF_BASE_SHA}..${CI_COMMIT_SHA}"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# ── Test ────────────────────────────────────────────────────────
+
+test:
+  extends: .python-base
+  stage: test
+  script:
+    - pip install --quiet -e ".[dev]" pytest-cov
+    - >
+      pytest tests/
+      --cov=orchid
+      --cov-report=term-missing
+      --cov-report=xml:coverage.xml
+      --junitxml=report.xml
+      -x
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+  coverage: '/(?i)total.*? (100(?:\.0+)?%|[1-9]?\d(?:\.\d+)?%)$/'
+
+# ── Build ───────────────────────────────────────────────────────
+
+build:
+  extends: .python-base
+  stage: build
+  script:
+    - pip install --quiet build
+    - python -m build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 7 days
+
+# ── Release (semantic-release on main) ──────────────────────────
+
+release:
+  extends: .python-base
+  stage: release
+  script:
+    - pip install --quiet python-semantic-release
+    - git config user.name "gitlab-ci"
+    - git config user.email "ci@gitlab.com"
+    - semantic-release version
+    - semantic-release changelog
+    - semantic-release publish
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: on_success

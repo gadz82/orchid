@@ -1,0 +1,336 @@
+"""
+Pydantic v2 models for the agents.yaml configuration schema (ADR-016, ADR-017).
+
+The ``class`` YAML key is mapped to ``class_path`` to avoid the Python
+reserved word.  A model validator on ``AgentConfig`` merges in default
+values from the parent ``AgentsConfig.defaults``.
+
+ADR-017 additions: BuiltinToolConfig, AgentSkillStepConfig, AgentSkillConfig,
+OrchestratorSkillStepConfig, OrchestratorSkillConfig.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+
+# ── Leaf configs ──────────────────────────────────────────────
+
+
+class LLMConfig(BaseModel):
+    """LLM settings — can appear at defaults or agent level.
+
+    The model string uses LiteLLM's ``provider/model-name`` format:
+      - ``gemini/gemini-2.5-flash``          → Google AI Studio
+      - ``groq/llama-3.3-70b-versatile``     → Groq
+      - ``anthropic/claude-sonnet-4-20250514``  → Anthropic
+      - ``ollama/llama3.2``                  → Local Ollama
+      - ``openai/gpt-4o``                   → OpenAI
+    """
+
+    model: str = "gemini/gemini-2.5-flash"
+    temperature: float = 0.2
+
+
+class RAGDefaultsConfig(BaseModel):
+    """Default RAG settings inherited by all agents."""
+
+    k: int = 5
+    enabled: bool = True
+    rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
+
+
+class RAGConfig(BaseModel):
+    """Per-agent RAG settings."""
+
+    namespace: str = ""
+    k: int = 5
+    enabled: bool = True
+    rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
+
+
+class ToolConfig(BaseModel):
+    """A single MCP tool available to an agent."""
+
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
+    rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
+
+
+class MCPServerConfig(BaseModel):
+    """An MCP server connected to an agent.
+
+    ``tools``, ``prompts``, and ``resources`` each accept either:
+      - An explicit allow-list (e.g. ``["list_types", "create_notification"]``)
+      - The wildcard ``"*"`` to discover ALL capabilities from the server
+
+    When any of them is ``"*"``, the corresponding ``discover_all_*`` flag is
+    set and the allow-list is cleared — the agent will call ``list_tools()``,
+    ``list_prompts()``, or ``list_resources()`` at runtime.
+    """
+
+    name: str
+    type: Literal["local", "remote"] = "local"
+    transport: Literal["streamable_http", "sse"] = "streamable_http"
+    url: str  # supports ${ENV_VAR} interpolation (resolved by loader)
+    tools: list[ToolConfig] = Field(default_factory=list)
+    prompts: list[str] = Field(default_factory=list)    # prompt names to load (or "*")
+    resources: list[str] = Field(default_factory=list)  # resource URIs/names to load (or "*")
+    tool_call_strategy: Literal["all", "sequential", "llm_decides"] = "all"
+    cache_ttl: int = 300  # seconds — capabilities cache lifetime (0 = no cache)
+    discover_all_tools: bool = False
+    discover_all_prompts: bool = False
+    discover_all_resources: bool = False
+
+    @property
+    def discover_all(self) -> bool:
+        """True when ALL capabilities (tools + prompts + resources) are wildcarded."""
+        return self.discover_all_tools and self.discover_all_prompts and self.discover_all_resources
+
+    @model_validator(mode="before")
+    @classmethod
+    def _handle_wildcards(cls, data: Any) -> Any:
+        """Convert ``"*"`` / ``["*"]`` into the corresponding ``discover_all_*`` flags."""
+        if not isinstance(data, dict):
+            return data
+
+        for field, flag in [("tools", "discover_all_tools"), ("prompts", "discover_all_prompts"), ("resources", "discover_all_resources")]:
+            value = data.get(field)
+            if value == "*" or value == ["*"]:
+                data[field] = []
+                data[flag] = True
+
+        return data
+
+
+class ExecutionHints(BaseModel):
+    """Hints for the Supervisor when routing."""
+
+    parallel_safe: bool = True
+
+
+# ── Built-in tools + Skills (ADR-017) ────────────────────────
+
+
+class BuiltinToolConfig(BaseModel):
+    """A built-in Python tool declared at the YAML top level."""
+
+    handler: str  # dotted import path, e.g. "orchid.tools.dates.format_date"
+    description: str = ""
+    inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
+    rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
+
+
+class AgentSkillStepConfig(BaseModel):
+    """A single step in an agent-level skill.
+
+    A step is either a **tool call** (``tool`` + ``source``) or an
+    **agent invocation** (``agent`` + ``instruction``).  Exactly one
+    of ``tool`` or ``agent`` must be set.
+
+    Agent invocation lets a skill call another agent directly without
+    passing through the Supervisor.  The invoked agent runs its full
+    pipeline (RAG + MCP + LLM) and its results chain forward via
+    ``previous_results`` like any other step.
+    """
+
+    # ── Tool call fields (existing) ──
+    tool: str | None = None  # tool name (MCP tool or built-in tool)
+    source: str | None = None  # MCP server name, "builtin", or None (= builtin)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+    # ── Agent invocation fields (new) ──
+    agent: str | None = None  # name of another agent to invoke
+    instruction: str = ""  # query/instruction sent to the invoked agent
+
+    @property
+    def step_key(self) -> str:
+        """Canonical key for this step (tool name or agent name)."""
+        return self.tool or self.agent or "unknown"
+
+    @model_validator(mode="after")
+    def _check_step_type(self) -> AgentSkillStepConfig:
+        if self.tool and self.agent:
+            raise ValueError("A skill step must set either 'tool' or 'agent', not both")
+        if not self.tool and not self.agent:
+            raise ValueError("A skill step must set either 'tool' or 'agent'")
+        return self
+
+
+class AgentSkillConfig(BaseModel):
+    """A multi-step workflow within a single agent's domain."""
+
+    description: str = ""
+    steps: list[AgentSkillStepConfig]
+
+
+class OrchestratorSkillStepConfig(BaseModel):
+    """A single step in an orchestrator-level (cross-agent) skill."""
+
+    agent: str  # agent name to invoke
+    instruction: str = ""  # hint passed to the agent via the supervisor
+
+
+class OrchestratorSkillConfig(BaseModel):
+    """A cross-agent workflow defined at the YAML top level."""
+
+    description: str = ""
+    steps: list[OrchestratorSkillStepConfig]
+
+
+# ── Supervisor config ────────────────────────────────────────
+
+
+class SupervisorConfig(BaseModel):
+    """Supervisor prompt and behavior configuration.
+
+    Allows consumers to customize the assistant name and prompts
+    without modifying library code.  When prompt fields are ``None``,
+    the default templates in ``supervisor.py`` are used.
+    """
+
+    assistant_name: str = "AI assistant"
+    routing_system_prompt: str | None = None
+    synthesis_system_prompt: str | None = None
+    sequential_advance_prompt: str | None = None
+
+
+# ── Agent config (recursive for nesting) ─────────────────────
+
+
+class AgentConfig(BaseModel):
+    """
+    Configuration for a single agent.
+
+    When ``class_path`` is ``None``, the ``GenericAgent`` is used.
+    When set, it must be either:
+      - A dotted Python import path (e.g. ``src.agents.learning.LearningAgent``)
+      - A short name registered in the agent class registry
+    """
+
+    # Set programmatically by the loader (= the YAML dict key)
+    name: str = ""
+
+    description: str
+    prompt: str
+
+    # ``class`` in YAML → ``class_path`` in Python (reserved word)
+    class_path: str | None = Field(default=None, alias="class")
+
+    rag: RAGConfig = Field(default_factory=RAGConfig)
+    mcp_servers: list[MCPServerConfig] = Field(default_factory=list)
+    llm: LLMConfig | None = None
+    execution_hints: ExecutionHints = Field(default_factory=ExecutionHints)
+
+    # Built-in tools available to this agent (ADR-017)
+    tools: list[str] = Field(default_factory=list)
+
+    # Agent-level skills — multi-step workflows within this agent (ADR-017)
+    skills: dict[str, AgentSkillConfig] = Field(default_factory=dict)
+
+    # Recursive nesting — sub-agents under this agent
+    children: dict[str, AgentConfig] | None = None
+
+    # Computed at validation — tool names whose results are injected to RAG
+    injectable_tools: set[str] = Field(default_factory=set, exclude=True)
+
+    # Computed at validation — tool name → effective TTL (seconds) for RAG cache
+    # Only includes tools with inject_to_rag=True AND effective TTL > 0
+    injectable_tool_ttls: dict[str, int] = Field(default_factory=dict, exclude=True)
+
+    model_config = {"populate_by_name": True}
+
+
+# ── Defaults config ──────────────────────────────────────────
+
+
+class DefaultsConfig(BaseModel):
+    """Top-level defaults inherited by every agent."""
+
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    rag: RAGDefaultsConfig = Field(default_factory=RAGDefaultsConfig)
+
+
+# ── Root config ──────────────────────────────────────────────
+
+
+class AgentsConfig(BaseModel):
+    """
+    Root configuration loaded from agents.yaml.
+
+    After validation, each ``AgentConfig`` has its defaults merged in
+    and its ``name`` set from the YAML dict key.
+    """
+
+    version: str = "1"
+    defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
+
+    # Global built-in tool declarations (ADR-017)
+    tools: dict[str, BuiltinToolConfig] = Field(default_factory=dict)
+
+    # Orchestrator-level skills — cross-agent workflows (ADR-017)
+    skills: dict[str, OrchestratorSkillConfig] = Field(default_factory=dict)
+
+    # Supervisor configuration — prompt customization
+    supervisor: SupervisorConfig = Field(default_factory=SupervisorConfig)
+
+    agents: dict[str, AgentConfig] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _apply_defaults_and_names(self) -> AgentsConfig:
+        """Merge defaults into each agent and set names recursively."""
+        for agent_name, agent in self.agents.items():
+            _apply_defaults(agent, agent_name, self.defaults, self.tools)
+        return self
+
+
+def _apply_defaults(
+    agent: AgentConfig,
+    name: str,
+    defaults: DefaultsConfig,
+    global_tools: dict[str, BuiltinToolConfig] | None = None,
+) -> None:
+    """Recursively apply default values and set agent names."""
+    # Set name from dict key
+    agent.name = name
+
+    # Merge LLM defaults
+    if agent.llm is None:
+        agent.llm = defaults.llm.model_copy()
+
+    # Merge RAG defaults (only if not explicitly set to non-default)
+    if agent.rag.k == 5 and defaults.rag.k != 5:
+        agent.rag.k = defaults.rag.k
+    if agent.rag.enabled and not defaults.rag.enabled:
+        agent.rag.enabled = defaults.rag.enabled
+    if agent.rag.rag_ttl == 0 and defaults.rag.rag_ttl != 0:
+        agent.rag.rag_ttl = defaults.rag.rag_ttl
+
+    # Collect injectable MCP tool names + TTLs
+    agent_ttl = agent.rag.rag_ttl
+    for server in agent.mcp_servers:
+        for tool in server.tools:
+            if isinstance(tool, ToolConfig) and tool.inject_to_rag:
+                agent.injectable_tools.add(tool.name)
+                effective_ttl = tool.rag_ttl if tool.rag_ttl is not None else agent_ttl
+                if effective_ttl > 0:
+                    agent.injectable_tool_ttls[tool.name] = effective_ttl
+
+    # Collect injectable built-in tool names + TTLs
+    if global_tools:
+        for tool_name in agent.tools:
+            tool_cfg = global_tools.get(tool_name)
+            if tool_cfg and tool_cfg.inject_to_rag:
+                key = f"builtin_{tool_name}"
+                agent.injectable_tools.add(key)
+                effective_ttl = tool_cfg.rag_ttl if tool_cfg.rag_ttl is not None else agent_ttl
+                if effective_ttl > 0:
+                    agent.injectable_tool_ttls[key] = effective_ttl
+
+    # Recurse into children
+    if agent.children:
+        for child_name, child in agent.children.items():
+            _apply_defaults(child, child_name, defaults, global_tools)

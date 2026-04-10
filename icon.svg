@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 24 24" fill="none">
+  <rect width="24" height="24" rx="5" fill="#0D0B11"/>
+  <!-- Glow -->
+  <circle cx="12" cy="12" r="8" fill="#B06AB3" opacity="0.12"/>
+  <!-- Orchid petals -->
+  <path d="M12 2C10.5 5 9.5 7.5 12 11C14.5 7.5 13.5 5 12 2Z" fill="#D490D7"/>
+  <path d="M4 8C6.5 7.5 9 8 11 11C7.5 11.5 5.5 10.5 4 8Z" fill="#C87ECB" opacity="0.9"/>
+  <path d="M20 8C17.5 7.5 15 8 13 11C16.5 11.5 18.5 10.5 20 8Z" fill="#C87ECB" opacity="0.9"/>
+  <path d="M6 18C7.5 15.5 9.5 13.5 12 13C9 14.5 7 16 6 18Z" fill="#B06AB3" opacity="0.85"/>
+  <path d="M18 18C16.5 15.5 14.5 13.5 12 13C15 14.5 17 16 18 18Z" fill="#B06AB3" opacity="0.85"/>
+  <circle cx="12" cy="11.5" r="1.5" fill="#FFFFFF"/>
+</svg>
