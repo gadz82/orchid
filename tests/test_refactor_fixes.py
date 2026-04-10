@@ -262,15 +262,15 @@ class TestMonotonicClock:
 
 class TestPackageMetadata:
     def test_version_is_set(self):
-        import orchid
+        import orchid_ai
 
-        assert hasattr(orchid, "__version__")
-        assert orchid.__version__ == "0.1.0"
+        assert hasattr(orchid_ai, "__version__")
+        assert orchid_ai.__version__ == "1.0.0"
 
     def test_py_typed_exists(self):
         import importlib.resources
 
-        files = importlib.resources.files("orchid")
+        files = importlib.resources.files("orchid_ai")
         py_typed = files / "py.typed"
         assert py_typed.is_file()
 
