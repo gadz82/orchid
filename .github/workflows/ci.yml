@@ -1,4 +1,4 @@
-# orchid (core library) — CI + Semantic Release
+# orchid-ai (core library) — CI + Semantic Release + PyPI Publish
 
 name: CI
 
@@ -108,15 +108,16 @@ jobs:
           path: dist/
           retention-days: 7
 
-  # ── Release (semantic-release on main push) ─────────────────
+  # ── Release + PyPI Publish (on main push) ───────────────────
 
   release:
-    name: Semantic release
+    name: Release & publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: [ruff, test, build]
     permissions:
       contents: write
+      id-token: write  # required for PyPI trusted publishing
     steps:
       - uses: actions/checkout@v4
         with:
@@ -130,6 +131,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+      # 1. Bump version, commit, tag, push
       - name: Bump version & tag
         id: version
         env:
@@ -142,11 +144,17 @@ jobs:
           else
             echo "released=true" >> "$GITHUB_OUTPUT"
           fi
+      # 2. Build wheel + sdist with bumped version
       - name: Build distribution
         if: steps.version.outputs.released == 'true'
         run: python -m build
+      # 3. Create GitHub Release with changelog
       - name: Publish GitHub Release
         if: steps.version.outputs.released == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: semantic-release publish
+      # 4. Publish to PyPI via trusted publishing (OIDC)
+      - name: Publish to PyPI
+        if: steps.version.outputs.released == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
