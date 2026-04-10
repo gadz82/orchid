@@ -13,9 +13,9 @@ from dataclasses import dataclass
 class ChunkConfig:
     """Configuration for text chunking."""
 
-    chunk_size: int = 1000       # characters per chunk
-    chunk_overlap: int = 200     # overlap between consecutive chunks
-    separator: str = "\n\n"      # primary split boundary
+    chunk_size: int = 1000  # characters per chunk
+    chunk_overlap: int = 200  # overlap between consecutive chunks
+    separator: str = "\n\n"  # primary split boundary
 
 
 def chunk_text(text: str, config: ChunkConfig | None = None) -> list[str]:
@@ -48,7 +48,7 @@ def chunk_text(text: str, config: ChunkConfig | None = None) -> list[str]:
         if current and len(current) + len(para) + 2 > cfg.chunk_size:
             chunks.append(current.strip())
             # Start new chunk with overlap from the end of current
-            overlap_text = current[-cfg.chunk_overlap:] if cfg.chunk_overlap > 0 else ""
+            overlap_text = current[-cfg.chunk_overlap :] if cfg.chunk_overlap > 0 else ""
             current = overlap_text + "\n\n" + para if overlap_text else para
         else:
             current = current + "\n\n" + para if current else para
@@ -65,7 +65,7 @@ def chunk_text(text: str, config: ChunkConfig | None = None) -> list[str]:
         else:
             # Force-split long chunks by character
             for i in range(0, len(chunk), cfg.chunk_size - cfg.chunk_overlap):
-                piece = chunk[i:i + cfg.chunk_size]
+                piece = chunk[i : i + cfg.chunk_size]
                 if piece.strip():
                     final_chunks.append(piece.strip())
 

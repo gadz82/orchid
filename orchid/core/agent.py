@@ -140,9 +140,7 @@ class BaseAgent(ABC):
                     "content": r.document.content,
                     "score": round(r.score, 3),
                     "metadata": {
-                        mk: mv
-                        for mk, mv in r.document.metadata.items()
-                        if mk not in ("content", "embedding")
+                        mk: mv for mk, mv in r.document.metadata.items() if mk not in ("content", "embedding")
                     },
                 }
                 for r in results
@@ -186,9 +184,7 @@ class BaseAgent(ABC):
             rag_section = "Background knowledge (from RAG):\n" + json.dumps(rag_data, indent=2, default=str) + "\n\n"
 
         user_content = (
-            f"User query: {query}\n\n"
-            f"{rag_section}"
-            f"Live data (from API):\n{json.dumps(mcp_data, indent=2, default=str)}"
+            f"User query: {query}\n\n{rag_section}Live data (from API):\n{json.dumps(mcp_data, indent=2, default=str)}"
         )
 
         messages = [
@@ -197,7 +193,9 @@ class BaseAgent(ABC):
         ]
 
         return await self._llm_service.complete(
-            _model, messages, temperature=temperature,
+            _model,
+            messages,
+            temperature=temperature,
         )
 
     async def fetch_all_rag_context(
@@ -232,4 +230,5 @@ class BaseAgent(ABC):
         top-level ``tools:`` section or programmatic ``register_tool()``).
         """
         from ..config.tool_registry import call_tool
+
         return await call_tool(tool_name, **kwargs)

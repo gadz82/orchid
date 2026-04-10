@@ -100,7 +100,10 @@ async def ingest_document(
     await writer.upsert(documents, namespace)
     logger.info(
         "[Ingest] Indexed %d chunks from %s into '%s' (chat=%s)",
-        len(documents), filename, namespace, scope.chat_id,
+        len(documents),
+        filename,
+        namespace,
+        scope.chat_id,
     )
 
     return len(documents)

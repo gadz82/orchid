@@ -76,7 +76,14 @@ class CallAllStrategy(ToolCallStrategy):
     """Call every tool in the list concurrently and collect results."""
 
     async def execute(
-        self, client, tools, query, auth, *, agent_name="", **kwargs,
+        self,
+        client,
+        tools,
+        query,
+        auth,
+        *,
+        agent_name="",
+        **kwargs,
     ) -> dict[str, Any]:
         async def _call_one(tool):
             try:
@@ -95,7 +102,14 @@ class SequentialStrategy(ToolCallStrategy):
     """Call tools in order, passing previous results as context."""
 
     async def execute(
-        self, client, tools, query, auth, *, agent_name="", **kwargs,
+        self,
+        client,
+        tools,
+        query,
+        auth,
+        *,
+        agent_name="",
+        **kwargs,
     ) -> dict[str, Any]:
         results: dict[str, Any] = {}
         previous_results: dict[str, Any] = {}
@@ -170,7 +184,8 @@ class LLMDecidesStrategy(ToolCallStrategy):
 
         try:
             raw = await self._llm_complete(
-                llm_service, _model,
+                llm_service,
+                _model,
                 [{"role": "user", "content": decision_prompt}],
                 temperature=0,
                 response_format={"type": "json_object"},
@@ -218,11 +233,13 @@ class LLMDecidesStrategy(ToolCallStrategy):
         """Call LLM via the injected LLMProvider."""
         if not llm_service:
             raise RuntimeError(
-                "LLMDecidesStrategy requires an LLMProvider. "
-                "Pass llm_service= when constructing the agent."
+                "LLMDecidesStrategy requires an LLMProvider. Pass llm_service= when constructing the agent."
             )
         return await llm_service.complete(
-            model, messages, temperature=temperature, response_format=response_format,
+            model,
+            messages,
+            temperature=temperature,
+            response_format=response_format,
         )
 
 

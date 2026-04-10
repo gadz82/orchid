@@ -40,10 +40,7 @@ def register_tool(name: str, handler: Callable[..., Any], description: str = "")
 def get_tool(name: str) -> BuiltinToolEntry:
     """Look up a built-in tool by name. Raises ``KeyError`` if not found."""
     if name not in _REGISTRY:
-        raise KeyError(
-            f"Built-in tool '{name}' is not registered. "
-            f"Available: {list(_REGISTRY.keys())}"
-        )
+        raise KeyError(f"Built-in tool '{name}' is not registered. Available: {list(_REGISTRY.keys())}")
     return _REGISTRY[name]
 
 

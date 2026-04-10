@@ -70,7 +70,8 @@ class GenericAgent(BaseAgent):
         # ── Create collaborators ──
         if llm_service:
             self._skill_detector: SkillDetector | None = SkillDetector(
-                llm_service, config.llm.model if config.llm else llm,
+                llm_service,
+                config.llm.model if config.llm else llm,
             )
         else:
             self._skill_detector = None
@@ -134,7 +135,9 @@ class GenericAgent(BaseAgent):
         )
 
     async def _step_rag_retrieval(
-        self, query: str, scope: RAGScope,
+        self,
+        query: str,
+        scope: RAGScope,
     ) -> list[dict[str, Any]]:
         """Step 1: RAG retrieval (domain namespace + uploads)."""
         if not self._config.rag.enabled:
@@ -164,7 +167,8 @@ class GenericAgent(BaseAgent):
             # Step 3: MCP tool calls
             llm_config = self._config.llm
             mcp_data = await self._mcp_dispatcher.fetch(
-                query, auth,
+                query,
+                auth,
                 agent_name=self.name,
                 llm_model=llm_config.model if llm_config else None,
                 llm_service=self._llm_service,
@@ -172,7 +176,9 @@ class GenericAgent(BaseAgent):
             )
             # Step 4: built-in tool calls
             builtin_data = await self._run_builtin_tools(
-                query, mcp_data, skip_tools=set(cached_tools.keys()),
+                query,
+                mcp_data,
+                skip_tools=set(cached_tools.keys()),
             )
             mcp_data.update(builtin_data)
 
@@ -182,7 +188,9 @@ class GenericAgent(BaseAgent):
         return mcp_data
 
     async def _step_dynamic_injection(
-        self, mcp_data: dict[str, Any], scope: RAGScope,
+        self,
+        mcp_data: dict[str, Any],
+        scope: RAGScope,
     ) -> None:
         """Step 5: Dynamic RAG injection for tools with inject_to_rag=True."""
         if not (self._config.rag.enabled and self._config.injectable_tools):
@@ -264,9 +272,7 @@ class GenericAgent(BaseAgent):
                 logger.info("[%s] Cache hit for tool '%s' (TTL=%ds)", self.name, tool_name, ttl)
             return tool_name, result
 
-        pairs = await asyncio.gather(
-            *(_lookup(name, ttl) for name, ttl in self._config.injectable_tool_ttls.items())
-        )
+        pairs = await asyncio.gather(*(_lookup(name, ttl) for name, ttl in self._config.injectable_tool_ttls.items()))
         return {name: val for name, val in pairs if val is not None}
 
     # ── Skill detection ──────────────────────────────────────

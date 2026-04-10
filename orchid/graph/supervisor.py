@@ -118,6 +118,7 @@ Do NOT mention internal routing or agent names to the user.
 
 # ── Factory ──────────────────────────────────────────────────
 
+
 def create_supervisor_node(
     model: str,
     agent_descriptions: dict[str, str],
@@ -153,6 +154,7 @@ def create_supervisor_node(
 
 # ── Routing function (conditional edges) ─────────────────────
 
+
 def route_to_agents(state: GraphState) -> list[Send] | str:
     """
     LangGraph conditional-edge function (ADR-013).
@@ -187,6 +189,7 @@ def route_to_agents(state: GraphState) -> list[Send] | str:
 
 # ── Internal helpers ─────────────────────────────────────────
 
+
 def _to_llm_messages(
     system: str,
     state_messages: list[BaseMessage],
@@ -211,12 +214,12 @@ async def _llm_complete(
 ) -> str:
     """Call LLM via the injected LLMProvider."""
     if not llm_service:
-        raise RuntimeError(
-            "Supervisor requires an LLMProvider. "
-            "Pass llm_service= when building the graph."
-        )
+        raise RuntimeError("Supervisor requires an LLMProvider. Pass llm_service= when building the graph.")
     return await llm_service.complete(
-        model, messages, temperature=temperature, response_format=response_format,
+        model,
+        messages,
+        temperature=temperature,
+        response_format=response_format,
     )
 
 
@@ -229,15 +232,11 @@ async def _route(
     llm_service: LLMProvider | None = None,
 ) -> GraphState:
     """Analyse user intent, choose execution mode, and activate agents."""
-    desc_text = "\n".join(
-        f"- **{name}**: {desc}" for name, desc in agent_descriptions.items()
-    )
+    desc_text = "\n".join(f"- **{name}**: {desc}" for name, desc in agent_descriptions.items())
 
     skills = orchestrator_skills or {}
     if skills:
-        skill_text = "\n".join(
-            f'- "{name}": {skill.description}' for name, skill in skills.items()
-        )
+        skill_text = "\n".join(f'- "{name}": {skill.description}' for name, skill in skills.items())
     else:
         skill_text = "(none defined)"
 
@@ -252,7 +251,9 @@ async def _route(
 
     try:
         raw = await _llm_complete(
-            llm_service, model, llm_messages,
+            llm_service,
+            model,
+            llm_messages,
             temperature=0,
             response_format={"type": "json_object"},
         )
@@ -293,11 +294,7 @@ async def _route(
         if skill_name in (orchestrator_skills or {}):
             skill = orchestrator_skills[skill_name]
             skill_agents = [step.agent for step in skill.steps]
-            skill_instructions_map = {
-                step.agent: step.instruction
-                for step in skill.steps
-                if step.instruction
-            }
+            skill_instructions_map = {step.agent: step.instruction for step in skill.steps if step.instruction}
 
             # Validate all agents in the skill exist
             valid_skill_agents = [a for a in skill_agents if a in agent_descriptions]
@@ -322,12 +319,7 @@ async def _route(
                 "execution_mode": "sequential",
                 "skill_instructions": skill_instructions_map,
                 "messages": [
-                    AIMessage(
-                        content=(
-                            f"[Supervisor] Skill '{skill_name}': "
-                            f"{' → '.join(valid_skill_agents)}"
-                        )
-                    )
+                    AIMessage(content=(f"[Supervisor] Skill '{skill_name}': {' → '.join(valid_skill_agents)}"))
                 ],
             }
         else:
@@ -345,10 +337,7 @@ async def _route(
     # ── Validate agent names ──
     valid = [a for a in agents if a in agent_descriptions]
     if not valid:
-        fallback = (
-            "I'm not sure how to help with that request. "
-            "Could you rephrase or provide more details?"
-        )
+        fallback = "I'm not sure how to help with that request. Could you rephrase or provide more details?"
         return {
             "messages": [AIMessage(content=fallback)],
             "final_response": fallback,
@@ -369,14 +358,7 @@ async def _route(
             "active_agents": [first],
             "pending_agents": rest,
             "execution_mode": "sequential",
-            "messages": [
-                AIMessage(
-                    content=(
-                        f"[Supervisor] Sequential pipeline: "
-                        f"{' → '.join(valid)}"
-                    )
-                )
-            ],
+            "messages": [AIMessage(content=(f"[Supervisor] Sequential pipeline: {' → '.join(valid)}"))],
         }
     else:
         # Parallel (default): activate all at once
@@ -385,11 +367,7 @@ async def _route(
             "active_agents": valid,
             "pending_agents": [],
             "execution_mode": "parallel",
-            "messages": [
-                AIMessage(
-                    content=f"[Supervisor] Parallel dispatch: {', '.join(valid)}"
-                )
-            ],
+            "messages": [AIMessage(content=f"[Supervisor] Parallel dispatch: {', '.join(valid)}")],
         }
 
 
@@ -414,11 +392,7 @@ async def _advance_sequential(
     # Include skill instruction for the next agent if available
     skill_instructions = state.get("skill_instructions", {})
     instruction = skill_instructions.get(next_agent, "")
-    skill_instruction_section = (
-        f"\nSKILL INSTRUCTION for {next_agent}: {instruction}\n"
-        if instruction
-        else ""
-    )
+    skill_instruction_section = f"\nSKILL INSTRUCTION for {next_agent}: {instruction}\n" if instruction else ""
 
     # Generate a handoff message so the next agent has context
     sup = supervisor_config or SupervisorConfig()
@@ -436,10 +410,12 @@ async def _advance_sequential(
     mcp_ctx = state.get("mcp_context", {})
     if mcp_ctx:
         context_blob = json.dumps(mcp_ctx, indent=2, default=str)
-        llm_messages.append({
-            "role": "user",
-            "content": f"Data collected so far:\n```json\n{context_blob}\n```",
-        })
+        llm_messages.append(
+            {
+                "role": "user",
+                "content": f"Data collected so far:\n```json\n{context_blob}\n```",
+            }
+        )
 
     try:
         handoff = await _llm_complete(llm_service, model, llm_messages, temperature=0.2)
@@ -499,11 +475,13 @@ async def _synthesise(
         # Keep only last few exchanges to avoid overwhelming the LLM
         recent = history_summary[-6:]  # last 3 exchanges
         if recent:
-            llm_messages.append({
-                "role": "user",
-                "content": "Previous conversation (for context only — do NOT re-answer):\n"
-                + "\n".join(f"  {m['role']}: {m['content'][:200]}" for m in recent),
-            })
+            llm_messages.append(
+                {
+                    "role": "user",
+                    "content": "Previous conversation (for context only — do NOT re-answer):\n"
+                    + "\n".join(f"  {m['role']}: {m['content'][:200]}" for m in recent),
+                }
+            )
 
     # Add the current turn messages (this is what needs answering)
     for msg in current_turn:
@@ -516,10 +494,12 @@ async def _synthesise(
     mcp_ctx = state.get("mcp_context", {})
     if mcp_ctx:
         context_blob = json.dumps(mcp_ctx, indent=2, default=str)
-        llm_messages.append({
-            "role": "user",
-            "content": f"Sub-agent data (for reference):\n```json\n{context_blob}\n```",
-        })
+        llm_messages.append(
+            {
+                "role": "user",
+                "content": f"Sub-agent data (for reference):\n```json\n{context_blob}\n```",
+            }
+        )
 
     try:
         final = await _llm_complete(llm_service, model, llm_messages, temperature=0.3)
@@ -536,7 +516,9 @@ async def _synthesise(
         elif "rate limit" in error_msg.lower():
             final = "I've hit my rate limit. Please try again in a few moments."
         else:
-            final = f"I encountered an error while synthesizing the response: {error_msg[:200]}. Please try again later."
+            final = (
+                f"I encountered an error while synthesizing the response: {error_msg[:200]}. Please try again later."
+            )
 
     return {
         "messages": [AIMessage(content=final)],

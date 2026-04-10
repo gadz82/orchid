@@ -60,7 +60,10 @@ class MCPDiscoverable(ABC):
 
     @abstractmethod
     async def get_prompt(
-        self, name: str, arguments: dict[str, str], auth: AuthContext,
+        self,
+        name: str,
+        arguments: dict[str, str],
+        auth: AuthContext,
     ) -> list[dict[str, Any]]:
         """Render a prompt template and return its messages."""
         ...
@@ -81,11 +84,7 @@ class MCPToolResult:
     @property
     def text(self) -> str:
         """Convenience: concatenate all text content blocks."""
-        return "\n".join(
-            item.get("text", "")
-            for item in self.content
-            if item.get("type") == "text"
-        )
+        return "\n".join(item.get("text", "") for item in self.content if item.get("type") == "text")
 
 
 class MCPClient(MCPToolCaller, MCPDiscoverable, ABC):
@@ -96,4 +95,5 @@ class MCPClient(MCPToolCaller, MCPDiscoverable, ABC):
     (capability discovery).  New code that only needs tool calling should
     depend on ``MCPToolCaller`` instead for better interface segregation.
     """
+
     pass

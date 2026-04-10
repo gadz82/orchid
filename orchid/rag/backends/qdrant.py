@@ -87,9 +87,11 @@ class QdrantRepository(VectorStoreRepository):
             query_filter = build_qdrant_filter(scope)
         else:
             # Fallback: no scope → return only shared data
-            query_filter = Filter(must=[
-                FieldCondition(key="tenant_id", match=MatchAny(any=[self._default_tenant, "__shared__"])),
-            ])
+            query_filter = Filter(
+                must=[
+                    FieldCondition(key="tenant_id", match=MatchAny(any=[self._default_tenant, "__shared__"])),
+                ]
+            )
 
         async with asyncio.timeout(QDRANT_TIMEOUT):
             response = await self._client.query_points(
@@ -121,16 +123,18 @@ class QdrantRepository(VectorStoreRepository):
         """Find cached dynamic tool results by metadata (no vector search)."""
         await self._ensure_collection(namespace)
 
-        cache_filter = Filter(must=[
-            # Scope: match tenant + chat
-            FieldCondition(key="tenant_id", match=MatchValue(value=scope.tenant_id)),
-            FieldCondition(key="chat_id", match=MatchValue(value=scope.chat_id)),
-            # Dynamic injection metadata
-            FieldCondition(key="dynamic", match=MatchValue(value=True)),
-            FieldCondition(key="source_tool", match=MatchValue(value=tool_name)),
-            # TTL: only results newer than min_injected_at
-            FieldCondition(key="injected_at", range=Range(gte=min_injected_at)),
-        ])
+        cache_filter = Filter(
+            must=[
+                # Scope: match tenant + chat
+                FieldCondition(key="tenant_id", match=MatchValue(value=scope.tenant_id)),
+                FieldCondition(key="chat_id", match=MatchValue(value=scope.chat_id)),
+                # Dynamic injection metadata
+                FieldCondition(key="dynamic", match=MatchValue(value=True)),
+                FieldCondition(key="source_tool", match=MatchValue(value=tool_name)),
+                # TTL: only results newer than min_injected_at
+                FieldCondition(key="injected_at", range=Range(gte=min_injected_at)),
+            ]
+        )
 
         async with asyncio.timeout(QDRANT_TIMEOUT):
             results, _ = await self._client.scroll(
@@ -217,7 +221,9 @@ class QdrantRepository(VectorStoreRepository):
 
         logger.info(
             "[Qdrant] duplicated %d points in '%s' with new scope %s",
-            len(docs), namespace, new_scope_fields,
+            len(docs),
+            namespace,
+            new_scope_fields,
         )
         return len(docs)
 
@@ -273,16 +279,16 @@ class QdrantRepository(VectorStoreRepository):
             await self._client.delete(
                 collection_name=namespace,
                 points_selector=FilterSelector(
-                filter=Filter(
-                    must=[
-                        FieldCondition(
-                            key="doc_id",
-                            match=MatchAny(any=document_ids),
-                        ),
-                    ],
+                    filter=Filter(
+                        must=[
+                            FieldCondition(
+                                key="doc_id",
+                                match=MatchAny(any=document_ids),
+                            ),
+                        ],
+                    ),
                 ),
-            ),
-        )
+            )
         logger.info(
             "[Qdrant] deleted %d documents from '%s'",
             len(document_ids),
@@ -317,9 +323,7 @@ class QdrantRepository(VectorStoreRepository):
 
     # ── Internal helpers ──────────────────────────────────────
 
-    async def _documents_to_points(
-        self, documents: list[Document]
-    ) -> list[PointStruct]:
+    async def _documents_to_points(self, documents: list[Document]) -> list[PointStruct]:
         """Convert Documents to Qdrant PointStructs, embedding if needed."""
         texts_to_embed: list[str] = []
         embed_indices: list[int] = []

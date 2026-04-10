@@ -22,6 +22,7 @@ from ..core.state import AuthContext
 
 # ── Reducers ─────────────────────────────────────────────────
 
+
 def merge_dicts(existing: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, Any]:
     """Shallow merge — each sub-agent writes a unique key (e.g. "learning", "notifications")."""
     base = existing or {}
@@ -35,6 +36,7 @@ def replace_list(existing: list[str] | None, new: list[str] | None) -> list[str]
 
 
 # ── Graph State ──────────────────────────────────────────────
+
 
 class GraphState(TypedDict, total=False):
     """
@@ -51,8 +53,8 @@ class GraphState(TypedDict, total=False):
     """
 
     messages: Annotated[list[BaseMessage], add_messages]
-    auth_context: AuthContext   # ADR-014: tenant key = auth_context.tenant_key (installation_id)
-    chat_id: str                # chat session identifier for RAG scoping
+    auth_context: AuthContext  # ADR-014: tenant key = auth_context.tenant_key (installation_id)
+    chat_id: str  # chat session identifier for RAG scoping
     active_agents: Annotated[list[str], replace_list]
     mcp_context: Annotated[dict[str, Any], merge_dicts]
     rag_context: Annotated[dict[str, Any], merge_dicts]

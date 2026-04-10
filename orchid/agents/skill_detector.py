@@ -1,4 +1,5 @@
 """Skill detection — matches user queries to agent-level skills via LLM."""
+
 from __future__ import annotations
 
 import logging
@@ -21,9 +22,7 @@ class SkillDetector:
         if not skills:
             return None
 
-        skill_descriptions = "\n".join(
-            f'- "{name}": {skill.description}' for name, skill in skills.items()
-        )
+        skill_descriptions = "\n".join(f'- "{name}": {skill.description}' for name, skill in skills.items())
 
         prompt = (
             f"User query: {query}\n\n"

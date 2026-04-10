@@ -129,7 +129,12 @@ def _build_subgraph(
     children_agents: list[BaseAgent] = []
     for child_name, child_config in (agent_config.children or {}).items():
         child_agent = _instantiate_agent(
-            child_name, child_config, default_model, reader, llm_service, mcp_client_factory,
+            child_name,
+            child_config,
+            default_model,
+            reader,
+            llm_service,
+            mcp_client_factory,
         )
         children_agents.append(child_agent)
 
@@ -203,23 +208,29 @@ def build_graph(
     subgraph_nodes: dict[str, Any] = {}
 
     # Build agent descriptions directly from config (no proxy needed)
-    agent_descriptions: dict[str, str] = {
-        name: cfg.description for name, cfg in config.agents.items()
-    }
+    agent_descriptions: dict[str, str] = {name: cfg.description for name, cfg in config.agents.items()}
 
     for agent_name, agent_config in config.agents.items():
         if agent_config.children:
             # Agent with children → build a sub-graph
             subgraph = _build_subgraph(
-                agent_name, agent_config, default_model, reader,
-                llm_service, mcp_factory,
+                agent_name,
+                agent_config,
+                default_model,
+                reader,
+                llm_service,
+                mcp_factory,
             )
             subgraph_nodes[agent_name] = subgraph
             # No proxy needed — we already have the description from config
         else:
             agent = _instantiate_agent(
-                agent_name, agent_config, default_model, reader,
-                llm_service, mcp_factory,
+                agent_name,
+                agent_config,
+                default_model,
+                reader,
+                llm_service,
+                mcp_factory,
             )
             agents.append(agent)
 
@@ -229,16 +240,9 @@ def build_graph(
         if not isinstance(agent, GenericAgent):
             continue
         # Check if any skill step references another agent
-        needs_peers = any(
-            step.agent is not None
-            for skill in agent._config.skills.values()
-            for step in skill.steps
-        )
+        needs_peers = any(step.agent is not None for skill in agent._config.skills.values() for step in skill.steps)
         if needs_peers:
-            agent._agent_peers = {
-                name: peer for name, peer in agent_map.items()
-                if name != agent.name
-            }
+            agent._agent_peers = {name: peer for name, peer in agent_map.items() if name != agent.name}
             # Also update the skill executor's peer reference
             agent._skill_executor._agent_peers = agent._agent_peers
             logger.info(

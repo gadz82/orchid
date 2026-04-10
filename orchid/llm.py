@@ -85,6 +85,7 @@ def get_llm_kwargs(model: str) -> dict[str, str]:
 # OPENAI_API_KEY the call will fail with a confusing Vertex AI error
 # because google-generativeai is installed.  We detect this early.
 
+
 def _resolve_bare_model_api_key() -> str:
     """Return the OpenAI API key for bare model names."""
     return os.environ.get("OPENAI_API_KEY", "")

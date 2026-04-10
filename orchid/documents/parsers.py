@@ -119,7 +119,11 @@ class ImageParser(DocumentParser):
 
         logger.info(
             "[ImageParser] Parsing %s (%d bytes, mime=%s, b64_len=%d) with model=%s",
-            filename, len(file_bytes), mime, len(b64), model,
+            filename,
+            len(file_bytes),
+            mime,
+            len(b64),
+            model,
         )
 
         try:
@@ -131,7 +135,10 @@ class ImageParser(DocumentParser):
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Extract all text and describe the content of this image in detail."},
+                            {
+                                "type": "text",
+                                "text": "Extract all text and describe the content of this image in detail.",
+                            },
                             {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
                         ],
                     }
@@ -142,7 +149,8 @@ class ImageParser(DocumentParser):
             result = response.choices[0].message.content or f"[Image: {filename}]"
             logger.info(
                 "[ImageParser] Result for %s (first 300 chars): %s",
-                filename, result[:300],
+                filename,
+                result[:300],
             )
             return result
         except Exception as exc:

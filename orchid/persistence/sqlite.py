@@ -97,7 +97,10 @@ class SQLiteChatStorage(ChatStorage):
     # ── Sessions ─────────────────────────────────────────────
 
     async def create_chat(
-        self, tenant_id: str, user_id: str, title: str = "",
+        self,
+        tenant_id: str,
+        user_id: str,
+        title: str = "",
     ) -> ChatSession:
         now = datetime.utcnow()
         now_iso = now.isoformat()
@@ -118,11 +121,12 @@ class SQLiteChatStorage(ChatStorage):
         return chat
 
     async def list_chats(
-        self, tenant_id: str, user_id: str,
+        self,
+        tenant_id: str,
+        user_id: str,
     ) -> list[ChatSession]:
         cursor = await self._conn.execute(
-            "SELECT * FROM chat_sessions WHERE tenant_id = ? AND user_id = ? "
-            "ORDER BY updated_at DESC",
+            "SELECT * FROM chat_sessions WHERE tenant_id = ? AND user_id = ? ORDER BY updated_at DESC",
             (tenant_id, user_id),
         )
         rows = await cursor.fetchall()
@@ -130,7 +134,8 @@ class SQLiteChatStorage(ChatStorage):
 
     async def get_chat(self, chat_id: str) -> ChatSession | None:
         cursor = await self._conn.execute(
-            "SELECT * FROM chat_sessions WHERE id = ?", (chat_id,),
+            "SELECT * FROM chat_sessions WHERE id = ?",
+            (chat_id,),
         )
         row = await cursor.fetchone()
         return _row_to_session(row) if row else None
@@ -179,8 +184,15 @@ class SQLiteChatStorage(ChatStorage):
         await self._conn.execute(
             "INSERT INTO chat_messages (id, chat_id, role, content, agents_used, created_at, metadata) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (msg.id, msg.chat_id, msg.role, msg.content,
-             json.dumps(msg.agents_used), now_iso, json.dumps(msg.metadata)),
+            (
+                msg.id,
+                msg.chat_id,
+                msg.role,
+                msg.content,
+                json.dumps(msg.agents_used),
+                now_iso,
+                json.dumps(msg.metadata),
+            ),
         )
         await self._conn.execute(
             "UPDATE chat_sessions SET updated_at = ? WHERE id = ?",
@@ -190,11 +202,13 @@ class SQLiteChatStorage(ChatStorage):
         return msg
 
     async def get_messages(
-        self, chat_id: str, limit: int = 50, offset: int = 0,
+        self,
+        chat_id: str,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[ChatMessage]:
         cursor = await self._conn.execute(
-            "SELECT * FROM chat_messages WHERE chat_id = ? "
-            "ORDER BY created_at ASC LIMIT ? OFFSET ?",
+            "SELECT * FROM chat_messages WHERE chat_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?",
             (chat_id, limit, offset),
         )
         rows = await cursor.fetchall()
@@ -202,6 +216,7 @@ class SQLiteChatStorage(ChatStorage):
 
 
 # ── Row mappers ──────────────────────────────────────────────
+
 
 def _parse_dt(val: str | datetime) -> datetime:
     if isinstance(val, datetime):
