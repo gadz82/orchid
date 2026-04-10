@@ -8,7 +8,7 @@ Public SDK surface — import the most common types directly:
 
 from __future__ import annotations
 
-__version__ = "1.0.0"
+__version__ = "0.0.0"
 
 from .config.loader import load_config
 from .core.agent import BaseAgent

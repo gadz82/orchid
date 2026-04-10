@@ -197,12 +197,12 @@ class TestBuildGraphIntegration:
 
 
 class TestSDKSurface:
-    def test_importable_from_orchid(self):
-        from orchid import OrchidRuntime as Imported
+    def test_importable_from_orchid_ai(self):
+        from orchid_ai import OrchidRuntime as Imported
 
         assert Imported is OrchidRuntime
 
     def test_in_all(self):
-        import orchid
+        import orchid_ai
 
-        assert "OrchidRuntime" in orchid.__all__
+        assert "OrchidRuntime" in orchid_ai.__all__
