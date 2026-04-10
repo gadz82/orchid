@@ -1,4 +1,5 @@
 """Skill execution — runs multi-step agent-level skills."""
+
 from __future__ import annotations
 
 import json
@@ -59,11 +60,20 @@ class SkillExecutor:
         try:
             if step.agent:
                 return await self._run_agent_step(
-                    step.agent, step.instruction, query, auth, previous_results,
+                    step.agent,
+                    step.instruction,
+                    query,
+                    auth,
+                    previous_results,
                 )
             elif step.source and step.source != "builtin":
                 return await self._mcp_dispatcher.call_tool_by_source(
-                    step.source, step.tool, query, auth, step.arguments, previous_results,
+                    step.source,
+                    step.tool,
+                    query,
+                    auth,
+                    step.arguments,
+                    previous_results,
                 )
             else:
                 args = {"query": query, **step.arguments}
@@ -87,9 +97,7 @@ class SkillExecutor:
 
         if agent_name not in self._agent_peers:
             available = list(self._agent_peers.keys())
-            raise ValueError(
-                f"Agent '{agent_name}' not available. Available peers: {available}"
-            )
+            raise ValueError(f"Agent '{agent_name}' not available. Available peers: {available}")
 
         if self._skill_depth >= MAX_AGENT_SKILL_DEPTH:
             raise RecursionError(
@@ -120,7 +128,10 @@ class SkillExecutor:
         try:
             logger.info(
                 "[%s] Invoking peer '%s' (depth=%d): %s",
-                self._agent_name, agent_name, self._skill_depth + 1, effective_query[:120],
+                self._agent_name,
+                agent_name,
+                self._skill_depth + 1,
+                effective_query[:120],
             )
             result_state = await peer.run(mini_state)
         finally:

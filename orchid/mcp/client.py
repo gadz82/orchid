@@ -239,10 +239,7 @@ class StreamableHttpMCPClient(MCPClient):
 
         async with self._connect(auth, timeout=timeout) as session:
             result = await session.call_tool(tool_name, arguments)
-            content = [
-                {"type": c.type, "text": getattr(c, "text", "")}
-                for c in result.content
-            ]
+            content = [{"type": c.type, "text": getattr(c, "text", "")} for c in result.content]
 
             result_obj = MCPToolResult(
                 content=content,
@@ -281,7 +278,10 @@ class StreamableHttpMCPClient(MCPClient):
     # ── Prompt / Resource access ─────────────────────────────
 
     async def get_prompt(
-        self, name: str, arguments: dict[str, str], auth: AuthContext,
+        self,
+        name: str,
+        arguments: dict[str, str],
+        auth: AuthContext,
     ) -> list[dict[str, Any]]:
         """Render a prompt template (cached for zero-arg prompts)."""
         # Return from cache if pre-rendered and no arguments provided

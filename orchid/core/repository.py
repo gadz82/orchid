@@ -146,6 +146,5 @@ class VectorStoreRepository(VectorReader, VectorWriter, VectorStoreAdmin, ABC):
         Subclasses must override.  Default raises ``NotImplementedError``.
         """
         raise NotImplementedError(
-            f"{type(self).__name__} does not support promote_scope(). "
-            "Override this method to enable chat sharing."
+            f"{type(self).__name__} does not support promote_scope(). Override this method to enable chat sharing."
         )

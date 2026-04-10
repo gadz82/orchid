@@ -91,6 +91,7 @@ class AuthContext:
     @property
     def is_expired(self) -> bool:
         import time
+
         return self.expires_at > 0 and time.time() >= self.expires_at
 
     @property
@@ -124,6 +125,7 @@ class AuthContext:
 # annotation lives in the graph/ layer (which may import langgraph).
 # Here we define the *shape* only.
 
+
 class AgentState(TypedDict, total=False):
     """
     Canonical state schema for the LangGraph graph.
@@ -132,12 +134,12 @@ class AgentState(TypedDict, total=False):
     the graph entry-point fills the required ones.
     """
 
-    messages: list[Any]             # populated as Annotated[list, add_messages] in graph/
-    auth_context: AuthContext       # ADR-010: one token for the whole session
-                                    # ADR-014: tenant key = auth_context.tenant_key
-    chat_id: str                    # chat session identifier for RAG scoping
+    messages: list[Any]  # populated as Annotated[list, add_messages] in graph/
+    auth_context: AuthContext  # ADR-010: one token for the whole session
+    # ADR-014: tenant key = auth_context.tenant_key
+    chat_id: str  # chat session identifier for RAG scoping
     active_agents: list[str]
-    mcp_context: dict[str, Any]     # raw data from MCP tool calls
-    rag_context: dict[str, Any]     # chunks retrieved from vector store
+    mcp_context: dict[str, Any]  # raw data from MCP tool calls
+    rag_context: dict[str, Any]  # chunks retrieved from vector store
     final_response: str | None
     skill_instructions: dict[str, str]  # ADR-017: agent_name → instruction from orchestrator skill

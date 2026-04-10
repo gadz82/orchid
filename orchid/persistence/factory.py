@@ -55,9 +55,7 @@ def build_chat_storage(class_path: str, dsn: str) -> ChatStorage:
         ) from exc
 
     if not (isinstance(cls, type) and issubclass(cls, ChatStorage)):
-        raise TypeError(
-            f"'{class_path}' resolves to {cls!r}, which is not a ChatStorage subclass."
-        )
+        raise TypeError(f"'{class_path}' resolves to {cls!r}, which is not a ChatStorage subclass.")
 
     logger.info("[ChatStorage] Using %s", class_path)
     return cls(dsn=dsn)

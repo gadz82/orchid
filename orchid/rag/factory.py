@@ -53,8 +53,6 @@ def build_reader(
         return repo
 
     if vector_backend == "aoss":
-        raise NotImplementedError(
-            "AOSSRepository is planned for production — not yet implemented"
-        )
+        raise NotImplementedError("AOSSRepository is planned for production — not yet implemented")
 
     raise ValueError(f"Unknown vector backend: {vector_backend!r}")

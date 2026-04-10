@@ -134,10 +134,7 @@ class MigrationRunner:
         applied = await self.get_applied_versions(conn)
         all_migrations = discover_migrations(self.migrations_package)
 
-        to_rollback = [
-            m for m in reversed(all_migrations)
-            if m.version in applied and m.version > target_version
-        ]
+        to_rollback = [m for m in reversed(all_migrations) if m.version in applied and m.version > target_version]
 
         rolled_back: list[str] = []
         for m in to_rollback:

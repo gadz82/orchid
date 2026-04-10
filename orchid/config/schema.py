@@ -77,7 +77,7 @@ class MCPServerConfig(BaseModel):
     transport: Literal["streamable_http", "sse"] = "streamable_http"
     url: str  # supports ${ENV_VAR} interpolation (resolved by loader)
     tools: list[ToolConfig] = Field(default_factory=list)
-    prompts: list[str] = Field(default_factory=list)    # prompt names to load (or "*")
+    prompts: list[str] = Field(default_factory=list)  # prompt names to load (or "*")
     resources: list[str] = Field(default_factory=list)  # resource URIs/names to load (or "*")
     tool_call_strategy: Literal["all", "sequential", "llm_decides"] = "all"
     cache_ttl: int = 300  # seconds — capabilities cache lifetime (0 = no cache)
@@ -97,7 +97,11 @@ class MCPServerConfig(BaseModel):
         if not isinstance(data, dict):
             return data
 
-        for field, flag in [("tools", "discover_all_tools"), ("prompts", "discover_all_prompts"), ("resources", "discover_all_resources")]:
+        for field, flag in [
+            ("tools", "discover_all_tools"),
+            ("prompts", "discover_all_prompts"),
+            ("resources", "discover_all_resources"),
+        ]:
             value = data.get(field)
             if value == "*" or value == ["*"]:
                 data[field] = []

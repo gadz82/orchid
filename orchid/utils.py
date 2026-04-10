@@ -26,6 +26,4 @@ def import_class(class_path: str) -> type:
         module = importlib.import_module(module_path)
         return getattr(module, class_name)
     except (ValueError, ImportError, AttributeError) as exc:
-        raise ImportError(
-            f"Cannot resolve class '{class_path}': {exc}"
-        ) from exc
+        raise ImportError(f"Cannot resolve class '{class_path}': {exc}") from exc

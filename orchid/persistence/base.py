@@ -29,13 +29,18 @@ class ChatStorage(ABC):
 
     @abstractmethod
     async def create_chat(
-        self, tenant_id: str, user_id: str, title: str = "",
+        self,
+        tenant_id: str,
+        user_id: str,
+        title: str = "",
     ) -> ChatSession:
         """Create a new chat session and return it."""
 
     @abstractmethod
     async def list_chats(
-        self, tenant_id: str, user_id: str,
+        self,
+        tenant_id: str,
+        user_id: str,
     ) -> list[ChatSession]:
         """List all chats for a user, most recently updated first."""
 
@@ -70,6 +75,9 @@ class ChatStorage(ABC):
 
     @abstractmethod
     async def get_messages(
-        self, chat_id: str, limit: int = 50, offset: int = 0,
+        self,
+        chat_id: str,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[ChatMessage]:
         """Get messages for a chat, oldest first."""

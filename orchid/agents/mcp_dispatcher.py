@@ -1,4 +1,5 @@
 """MCP tool dispatch — orchestrates tool calls across MCP servers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -53,7 +54,10 @@ class MCPDispatcher:
                     or server_config.discover_all_resources
                 ):
                     discovered_tools, mcp_meta = await self._discover_capabilities(
-                        client, server_config, auth, agent_name,
+                        client,
+                        server_config,
+                        auth,
+                        agent_name,
                     )
                     if server_config.discover_all_tools:
                         effective_tools = discovered_tools
@@ -68,9 +72,14 @@ class MCPDispatcher:
 
                 strategy = get_strategy(server_config.tool_call_strategy)
                 tool_results = await strategy.execute(
-                    client, effective_tools, query, auth,
-                    agent_name=agent_name, server_config=server_config,
-                    llm_model=llm_model, llm_service=llm_service,
+                    client,
+                    effective_tools,
+                    query,
+                    auth,
+                    agent_name=agent_name,
+                    server_config=server_config,
+                    llm_model=llm_model,
+                    llm_service=llm_service,
                 )
                 server_results.update(tool_results)
             except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
@@ -79,9 +88,7 @@ class MCPDispatcher:
 
             return server_results
 
-        per_server = await asyncio.gather(
-            *(_fetch_server(i, cfg) for i, cfg in enumerate(self._configs))
-        )
+        per_server = await asyncio.gather(*(_fetch_server(i, cfg) for i, cfg in enumerate(self._configs)))
 
         merged: dict[str, Any] = {}
         for server_result in per_server:
@@ -129,7 +136,9 @@ class MCPDispatcher:
                 tools = [ToolConfig(name=t["name"]) for t in raw_tools]
                 logger.info(
                     "[%s] Discovered %d tools from '%s': %s",
-                    agent_name, len(tools), server_name,
+                    agent_name,
+                    len(tools),
+                    server_name,
                     [t.name for t in tools],
                 )
                 return tools
@@ -168,7 +177,9 @@ class MCPDispatcher:
             return None
 
         tools_result, prompts_result, resources_result = await asyncio.gather(
-            _discover_tools(), _discover_prompts(), _discover_resources(),
+            _discover_tools(),
+            _discover_prompts(),
+            _discover_resources(),
         )
 
         discovered_tools = tools_result or []
