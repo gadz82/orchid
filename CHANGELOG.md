@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.3 (2026-04-13)
+
+### Bug Fixes
+
+- Tools result context injection.
+  ([`3de8efc`](https://github.com/gadz82/orchid/commit/3de8efcd628014947d879fdbe48458ad78ec9baf))
+
+
 ## v1.2.2 (2026-04-13)
 
 ### Bug Fixes
