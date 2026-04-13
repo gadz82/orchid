@@ -99,7 +99,25 @@ def _create_agent_node(
                 }
 
         # ── Run agent ──
-        agent_result = await agent.run(state)
+        try:
+            agent_result = await agent.run(state)
+        except Exception as exc:
+            logger.error(
+                "[Graph] Agent '%s' raised an unhandled exception: %s",
+                agent.name,
+                exc,
+                exc_info=True,
+            )
+            agent_result = {
+                "messages": [
+                    AIMessage(
+                        content=(
+                            f"[{agent.name.title()} Agent] I'm temporarily unable to process "
+                            "your request. Please try again in a few moments."
+                        )
+                    )
+                ],
+            }
 
         # ── Per-agent OUTPUT guardrails ──
         if output_guardrails and not output_guardrails.empty:
