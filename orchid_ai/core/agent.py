@@ -105,6 +105,74 @@ class BaseAgent(ABC):
                 return str(msg.content)
         return ""
 
+    @staticmethod
+    def extract_conversation_history(
+        state: AgentState,
+        *,
+        max_turns: int = 10,
+        skip_prefixes: tuple[str, ...] = ("[Supervisor",),
+        strip_prefixes: tuple[str, ...] = (),
+    ) -> list[dict[str, str]]:
+        """Extract recent conversation history from graph state.
+
+        Returns a list of ``{"role": "user"|"assistant", "content": ...}``
+        dicts suitable for injection into an LLM message list.
+
+        The last user message is **excluded** — it should be appended
+        separately as the current query to avoid duplication.
+
+        Parameters
+        ----------
+        state : AgentState
+            Full graph state containing ``messages``.
+        max_turns : int
+            Maximum number of user/assistant exchanges to keep.
+            Older messages are trimmed to avoid blowing up the context window.
+        skip_prefixes : tuple[str, ...]
+            Messages whose content starts with any of these prefixes are
+            dropped entirely (e.g. internal supervisor routing messages).
+        strip_prefixes : tuple[str, ...]
+            Prefixes to strip from assistant messages (e.g. ``"[Notifications Agent]\\n"``).
+            Only the first matching prefix is stripped.
+        """
+        all_messages = state.get("messages", [])
+        if not all_messages:
+            return []
+
+        history: list[dict[str, str]] = []
+        for msg in all_messages:
+            # Duck-type: LangChain messages expose .type and .content
+            msg_type = getattr(msg, "type", None) or type(msg).__name__.lower()
+            content = str(msg.content) if hasattr(msg, "content") else str(msg)
+
+            if not content.strip():
+                continue
+
+            # Skip internal messages (e.g. supervisor routing)
+            if any(content.startswith(prefix) for prefix in skip_prefixes):
+                continue
+
+            if msg_type in ("human", "humanmessage"):
+                history.append({"role": "user", "content": content})
+            elif msg_type in ("ai", "aimessage"):
+                # Strip known agent prefixes for a clean dialogue
+                for prefix in strip_prefixes:
+                    if content.startswith(prefix):
+                        content = content[len(prefix) :]
+                        break
+                history.append({"role": "assistant", "content": content})
+
+        # Drop the last user message — it will be added separately as the current query
+        if history and history[-1]["role"] == "user":
+            history = history[:-1]
+
+        # Keep only the most recent turns to avoid exceeding context limits
+        max_messages = max_turns * 2
+        if len(history) > max_messages:
+            history = history[-max_messages:]
+
+        return history
+
     async def fetch_rag_context(
         self,
         query: str,
@@ -160,11 +228,36 @@ class BaseAgent(ABC):
         system_prompt: str,
         model: str | None = None,
         temperature: float = 0.2,
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> str:
         """
         Use LLM to produce a human-readable summary of RAG + MCP data.
 
+        When ``conversation_history`` is provided (from
+        ``extract_conversation_history``), it is injected between the
+        system prompt and the current user query so the LLM has
+        multi-turn context (e.g. knows which entity the user is
+        referring to with "tell me more about the second one").
+
         Requires an injected ``LLMProvider`` (DIP-compliant).
+
+        Parameters
+        ----------
+        query : str
+            The current user query.
+        mcp_data : dict
+            Tool call results to summarise.
+        rag_data : list[dict]
+            RAG retrieval results for background context.
+        system_prompt : str
+            System prompt for the LLM.
+        model : str | None
+            LLM model override; falls back to ``self.llm``.
+        temperature : float
+            Sampling temperature.
+        conversation_history : list[dict] | None
+            Prior conversation turns from ``extract_conversation_history()``.
+            Each entry is ``{"role": "user"|"assistant", "content": ...}``.
 
         Raises
         ------
@@ -187,10 +280,15 @@ class BaseAgent(ABC):
             f"User query: {query}\n\n{rag_section}Live data (from API):\n{json.dumps(mcp_data, indent=2, default=str)}"
         )
 
-        messages = [
+        messages: list[dict[str, str]] = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
         ]
+
+        # Inject conversation history so the LLM has multi-turn context
+        if conversation_history:
+            messages.extend(conversation_history)
+
+        messages.append({"role": "user", "content": user_content})
 
         return await self._llm_service.complete(
             _model,
