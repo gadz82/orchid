@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-04-13)
+
+### Features
+
+- Orchid version bump
+  ([`66dea75`](https://github.com/gadz82/orchid/commit/66dea75623a1898b761b81b1b870ddc28b3ff2a4))
+
+
 ## v1.0.0 (2026-04-13)
 
 - Initial Release
