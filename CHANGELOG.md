@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.2 (2026-04-13)
+
+### Bug Fixes
+
+- Coversation context optimization.
+  ([`5dfbe5f`](https://github.com/gadz82/orchid/commit/5dfbe5f2f13c86cf39090d926c8b904c6b00dc29))
+
+
 ## v1.2.1 (2026-04-13)
 
 ### Bug Fixes
