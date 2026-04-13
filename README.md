@@ -96,7 +96,6 @@ orchid/
   documents/        PDF/DOCX/XLSX/CSV/Image parsers + chunking pipeline
   persistence/      ChatStorage ABC + SQLite (default) + PostgreSQL backends + migrations
   mcp/              StreamableHttpMCPClient
-  tools/            Built-in tools (math, dates)
   llm_service.py    LiteLLMProvider (concrete LLMProvider)
   utils.py          Shared utilities
 ```

@@ -27,7 +27,6 @@ orchid/
       postgres.py         PostgresChatStorage (optional, asyncpg — `pip install orchid-ai[postgres]`)
     mcp/                  StreamableHttpMCPClient
     llm_service.py        LiteLLMProvider (concrete LLMProvider)
-    tools/                Built-in tools (math, dates)
     utils.py              import_class() shared utility
   tests/                  197+ tests
   pyproject.toml
