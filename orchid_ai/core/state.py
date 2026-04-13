@@ -143,3 +143,4 @@ class AgentState(TypedDict, total=False):
     rag_context: dict[str, Any]  # chunks retrieved from vector store
     final_response: str | None
     skill_instructions: dict[str, str]  # ADR-017: agent_name → instruction from orchestrator skill
+    _has_output_guardrails: bool  # ADR-018: sentinel for output guardrail routing

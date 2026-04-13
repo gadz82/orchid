@@ -12,6 +12,14 @@ __version__ = "0.0.0"
 
 from .config.loader import load_config
 from .core.agent import BaseAgent
+from .core.guardrails import (
+    Guardrail,
+    GuardrailAction,
+    GuardrailChain,
+    GuardrailContext,
+    GuardrailDirection,
+    GuardrailResult,
+)
 from .core.identity import IdentityError, IdentityResolver
 from .core.llm_provider import LLMProvider
 from .core.mcp import MCPClient, MCPDiscoverable, MCPToolCaller, MCPToolResult
@@ -25,6 +33,7 @@ from .core.repository import (
 )
 from .core.state import AgentState, AuthContext
 from .graph.graph import build_graph
+from .guardrails import build_guardrail_chain, register_guardrail
 from .persistence.base import ChatStorage
 from .persistence.factory import build_chat_storage
 from .persistence.sqlite import SQLiteChatStorage
@@ -41,6 +50,12 @@ __all__ = [
     "ChatStorage",
     "SQLiteChatStorage",
     "Document",
+    "Guardrail",
+    "GuardrailAction",
+    "GuardrailChain",
+    "GuardrailContext",
+    "GuardrailDirection",
+    "GuardrailResult",
     "IdentityError",
     "IdentityResolver",
     "LLMProvider",
@@ -59,7 +74,9 @@ __all__ = [
     # factories
     "build_chat_storage",
     "build_graph",
+    "build_guardrail_chain",
     "build_reader",
     "import_class",
     "load_config",
+    "register_guardrail",
 ]

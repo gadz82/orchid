@@ -17,19 +17,20 @@ Orchid lets you define AI agents via YAML configuration, orchestrate them with a
 - **Built-in tools** -- register Python functions as in-process tools
 - **Agent skills** -- multi-step workflows within agents and across agents (orchestrator skills)
 - **Per-tool RAG caching** -- opt-in `inject_to_rag` with configurable TTL per tool
+- **AI Guardrails** -- 3-tier safety layer (global input, per-agent, global output) with built-in prompt injection, PII, content safety, topic restriction, max length, and groundedness checks
 - **Pluggable persistence** -- SQLite (default) and PostgreSQL backends for chat history
 - **Document pipeline** -- PDF, DOCX, XLSX, CSV, image parsing with chunking and ingestion
 
 ## Installation
 
 ```bash
-pip install orchid
+pip install orchid-ai
 ```
 
 With PostgreSQL support:
 
 ```bash
-pip install "orchid[postgres]"
+pip install "orchid-ai[postgres]"
 ```
 
 ## Quick Start
@@ -57,7 +58,7 @@ agents:
 ### 2. Use Programmatically
 
 ```python
-from orchid import OrchidRuntime, build_graph, load_config
+from orchid_ai import OrchidRuntime, build_graph, load_config
 
 config = load_config("agents.yaml")
 runtime = OrchidRuntime(default_model="ollama/llama3.2")
@@ -133,7 +134,7 @@ dependencies needed by `build_graph()` — override only what you need, everythi
 gets a sensible default.
 
 ```python
-from orchid import OrchidRuntime, build_graph, load_config
+from orchid_ai import OrchidRuntime, build_graph, load_config
 ```
 
 ### Minimal (all defaults)
@@ -152,7 +153,7 @@ graph = build_graph(config=config, runtime=runtime)
 Plug in a Qdrant-backed reader (or any `VectorReader` implementation):
 
 ```python
-from orchid.rag.factory import build_reader
+from orchid_ai.rag.factory import build_reader
 
 reader = build_reader(vector_backend="qdrant", qdrant_url="http://localhost:6333")
 
@@ -167,7 +168,7 @@ runtime = OrchidRuntime(
 Replace the default `LiteLLMProvider` with your own `LLMProvider` implementation:
 
 ```python
-from orchid.core.llm_provider import LLMProvider
+from orchid_ai.core.llm_provider import LLMProvider
 
 class MyProvider(LLMProvider):
     async def complete(self, *, model: str, messages: list, temperature: float = 0.2) -> str:
@@ -245,6 +246,7 @@ Orchid uses two configuration files:
 | `tools` | dict | `{}` |
 | `skills` | dict | `{}` |
 | `supervisor` | object | |
+| `guardrails` | object | `{}` |
 | `agents` | dict | (required) |
 
 - **`version`** -- Schema version string. Currently always `"1"`. Reserved for future backward-compatible migrations.
@@ -252,7 +254,8 @@ Orchid uses two configuration files:
 - **`tools`** -- Global registry of built-in Python tools. Each tool is a named entry mapping to a Python function. Agents reference tools by name in their `tools` list. Tools declared here are available to any agent that includes their name.
 - **`skills`** -- Orchestrator-level (cross-agent) multi-step workflows. The supervisor detects when a user query matches a skill and runs agents in sequence, passing results forward. Useful for complex tasks that span multiple domains (e.g. "plan a trip" involving flights + hotels + activities).
 - **`supervisor`** -- Customization of the supervisor node that routes queries to agents, synthesizes multi-agent responses, and manages orchestrator skills. Override prompts here to change routing logic without modifying code.
-- **`agents`** -- The core of the config: a dictionary of agent definitions keyed by name. Each agent is a self-contained unit with its own prompt, tools, MCP connections, RAG settings, and skills. At least one agent is required.
+- **`guardrails`** -- Global input and output guardrail chains. Input guardrails run on every user message before the supervisor; output guardrails run on every response before returning to the user. See "Guardrails" section below.
+- **`agents`** -- The core of the config: a dictionary of agent definitions keyed by name. Each agent is a self-contained unit with its own prompt, tools, MCP connections, RAG settings, guardrails, and skills. At least one agent is required.
 
 #### `defaults.llm`
 
@@ -336,6 +339,7 @@ Each step:
 | `tools` | list[str] | `[]` |
 | `mcp_servers` | list | `[]` |
 | `skills` | dict | `{}` |
+| `guardrails` | object | `{}` |
 | `execution_hints` | object | |
 | `children` | dict | `null` |
 
@@ -347,6 +351,7 @@ Each step:
 - **`tools`** -- List of built-in tool names (strings) available to this agent. These reference tools declared in the root `tools` section. The agent's `GenericAgent` will call each listed tool during step 4 of its pipeline and include the results in the LLM context.
 - **`mcp_servers`** -- List of MCP server connections (see `agents.<name>.mcp_servers[]` below). Each server provides external tools, prompts, and resources via the Model Context Protocol.
 - **`skills`** -- Agent-level multi-step workflows (see `agents.<name>.skills.<name>` below). Unlike orchestrator skills (which span multiple agents), these are internal to one agent and chain tool calls or sub-agent invocations within the agent's domain.
+- **`guardrails`** -- Per-agent input and output guardrail chains. These run in addition to global guardrails when this specific agent is active. Use for domain-specific enforcement like topic restrictions. See "Guardrails" section below.
 - **`execution_hints`** -- Hints that the supervisor uses when routing. Currently only `parallel_safe` (see below).
 - **`children`** -- Recursive sub-agent definitions. Allows nesting agents under a parent. Sub-agents inherit the parent's defaults and are included in the supervisor's routing. Useful for organizing related agents hierarchically.
 
@@ -527,12 +532,12 @@ Runtime configuration consumed by orchid-api and orchid-cli. Each nested YAML ke
 
 | YAML Key | Env Var | Default |
 |----------|---------|---------|
-| `storage.class` | `CHAT_STORAGE_CLASS` | `"orchid.persistence.sqlite.SQLiteChatStorage"` |
+| `storage.class` | `CHAT_STORAGE_CLASS` | `"orchid_ai.persistence.sqlite.SQLiteChatStorage"` |
 | `storage.dsn` | `CHAT_DB_DSN` | `"~/.orchid/chats.db"` |
 
 - **`storage.class`** -- Dotted import path to the `ChatStorage` implementation. The class is dynamically imported at startup. Built-in options:
-  - `orchid.persistence.sqlite.SQLiteChatStorage` -- Default. Stores chats in a local SQLite file. Zero config, no external database needed. Best for development, demos, and single-user deployments.
-  - `orchid.persistence.postgres.PostgresChatStorage` -- PostgreSQL backend. Requires `pip install "orchid[postgres]"` and a running PostgreSQL instance. Best for production, multi-user, and Docker deployments.
+  - `orchid_ai.persistence.sqlite.SQLiteChatStorage` -- Default. Stores chats in a local SQLite file. Zero config, no external database needed. Best for development, demos, and single-user deployments.
+  - `orchid_ai.persistence.postgres.PostgresChatStorage` -- PostgreSQL backend. Requires `pip install "orchid-ai[postgres]"` and a running PostgreSQL instance. Best for production, multi-user, and Docker deployments.
   - Custom backends: implement the `ChatStorage` ABC and reference your class here.
 - **`storage.dsn`** -- Database connection string. For SQLite: a file path (e.g. `"~/.orchid/chats.db"`, `"/data/chats.db"`). The directory is created automatically. For PostgreSQL: a full DSN (e.g. `"postgresql://user:pass@localhost:5432/orchid"`).
 
@@ -589,6 +594,23 @@ supervisor:
   sequential_advance_prompt: |
     The previous agent has completed its step. Based on its output,
     decide whether to advance to the next step or respond directly.
+
+# ── Global guardrails ────────────────────────────────────────
+guardrails:
+  input:
+    - type: prompt_injection
+      fail_action: block
+    - type: content_safety
+      fail_action: block
+    - type: max_length
+      fail_action: block
+      config:
+        max_characters: 10000
+  output:
+    - type: pii_detection
+      fail_action: redact
+      config:
+        entities: [email, phone, ssn, credit_card]
 
 # ── Global built-in tools ────────────────────────────────────
 tools:
@@ -717,6 +739,14 @@ agents:
           - agent: hotels
             instruction: "Find hotels near the destination airport for the same dates"
 
+    # Per-agent guardrails (in addition to global)
+    guardrails:
+      input:
+        - type: topic_restriction
+          fail_action: warn
+          config:
+            allowed_topics: [flights, airlines, airports, travel, booking]
+
     execution_hints:
       parallel_safe: true
 
@@ -832,7 +862,7 @@ upload:
 
 # ── Chat persistence ─────────────────────────────────────────
 storage:
-  class: orchid.persistence.postgres.PostgresChatStorage
+  class: orchid_ai.persistence.postgres.PostgresChatStorage
   dsn: postgresql://user:pass@localhost:5432/orchid
 
 # ── MCP server URLs ──────────────────────────────────────────
@@ -845,6 +875,119 @@ tracing:
   langsmith_tracing: true
   langsmith_api_key: "lsv2_..."
   langsmith_project: "my-project"
+```
+
+## Guardrails
+
+Orchid includes a 3-tier guardrail system that firewalls both the orchestrator and individual agents. Guardrails are configured entirely in YAML -- no code changes needed.
+
+### Architecture
+
+```
+User message
+  → Global input guardrails (prompt injection, content safety, max length, PII)
+    → Supervisor routing
+      → Per-agent input guardrails (topic restriction)
+        → Agent execution
+      → Per-agent output guardrails
+    → Supervisor synthesis
+  → Global output guardrails (PII redaction, groundedness)
+→ Response
+```
+
+- **Global input guardrails** run on every user message before the supervisor sees it
+- **Per-agent guardrails** run only when that specific agent is active
+- **Global output guardrails** run on the final synthesized response
+
+### Configuration
+
+```yaml
+# Global guardrails (apply to all agents)
+guardrails:
+  input:
+    - type: prompt_injection
+      fail_action: block
+    - type: content_safety
+      fail_action: block
+    - type: max_length
+      fail_action: block
+      config:
+        max_characters: 10000
+    - type: pii_detection
+      fail_action: redact
+      config:
+        entities: [credit_card, ssn]
+  output:
+    - type: pii_detection
+      fail_action: redact
+      config:
+        entities: [email, phone, ssn, credit_card]
+
+agents:
+  basketball:
+    description: "Basketball expert"
+    prompt: "You are a basketball analyst."
+    # Per-agent guardrails (in addition to global)
+    guardrails:
+      input:
+        - type: topic_restriction
+          fail_action: warn
+          config:
+            allowed_topics: [basketball, NBA, players, teams, stats]
+```
+
+### Built-in Guardrail Types
+
+| Type | Purpose | Default Action |
+|------|---------|---------------|
+| `prompt_injection` | Detect instruction overrides, persona hijacks, delimiter injection | `block` |
+| `content_safety` | Block harmful content (violence, self-harm, illegal activity) | `block` |
+| `pii_detection` | Detect/redact emails, phones, credit cards, SSNs, IPs | `redact` |
+| `max_length` | Reject messages exceeding a character limit | `block` |
+| `topic_restriction` | Enforce per-agent domain boundaries via keyword matching | `warn` |
+| `groundedness` | Check response grounding against RAG context | `warn` |
+
+### Guardrail Actions
+
+| Action | Behavior |
+|--------|----------|
+| `block` | Reject the message entirely; short-circuits the chain |
+| `redact` | Replace matched content with `[REDACTED_<TYPE>]` placeholders; continues processing |
+| `warn` | Allow the message but flag it in metadata |
+| `log` | Silently log the detection; no user-visible effect |
+
+### Custom Guardrails
+
+Register custom guardrails by subclassing `Guardrail` and calling `register_guardrail()`:
+
+```python
+from orchid_ai import Guardrail, GuardrailContext, GuardrailResult, register_guardrail
+
+class MyCustomGuardrail(Guardrail):
+    @property
+    def name(self) -> str:
+        return "my_custom"
+
+    async def check(self, content: str, context: GuardrailContext) -> GuardrailResult:
+        if "forbidden" in content.lower():
+            return GuardrailResult(
+                triggered=True,
+                action=self._fail_action,
+                guardrail_name=self.name,
+                message="Forbidden content detected.",
+            )
+        return GuardrailResult.passed(self.name)
+
+register_guardrail("my_custom", MyCustomGuardrail)
+```
+
+Then use it in YAML:
+
+```yaml
+guardrails:
+  input:
+    - type: my_custom
+      fail_action: block
 ```
 
 ## RAG Hierarchy
@@ -884,7 +1027,7 @@ ruff format orchid/       # format
 
 - Python 3.11+, Ruff, line length 120
 - `from __future__ import annotations` in every file
-- Imports: `from orchid.xxx` (never `from src.xxx`)
+- Imports: `from orchid_ai.xxx` (never `from src.xxx`)
 
 ## License
 

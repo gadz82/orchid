@@ -1,5 +1,5 @@
 """
-Pydantic v2 models for the agents.yaml configuration schema (ADR-016, ADR-017).
+Pydantic v2 models for the agents.yaml configuration schema (ADR-016, ADR-017, ADR-018).
 
 The ``class`` YAML key is mapped to ``class_path`` to avoid the Python
 reserved word.  A model validator on ``AgentConfig`` merges in default
@@ -7,6 +7,9 @@ values from the parent ``AgentsConfig.defaults``.
 
 ADR-017 additions: BuiltinToolConfig, AgentSkillStepConfig, AgentSkillConfig,
 OrchestratorSkillStepConfig, OrchestratorSkillConfig.
+
+ADR-018 additions: GuardrailRuleConfig, GuardrailsConfig for global and
+per-agent input/output guardrails.
 """
 
 from __future__ import annotations
@@ -185,6 +188,61 @@ class OrchestratorSkillConfig(BaseModel):
     steps: list[OrchestratorSkillStepConfig]
 
 
+# ── Guardrails config (ADR-018) ─────────────────────────────
+
+
+class GuardrailRuleConfig(BaseModel):
+    """A single guardrail rule declaration.
+
+    Maps to a registered guardrail type in the guardrail registry.
+    The ``config`` dict is passed as keyword arguments to the guardrail
+    constructor.
+
+    Example YAML::
+
+        - type: content_safety
+          fail_action: block
+          config:
+            categories: [self_harm, violence]
+        - type: pii_detection
+          fail_action: redact
+          config:
+            entities: [email, phone, ssn]
+    """
+
+    type: str  # registered guardrail type name (e.g. "content_safety")
+    fail_action: Literal["block", "warn", "redact", "log"] = "block"
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class GuardrailsConfig(BaseModel):
+    """Input and output guardrail chains.
+
+    Used at both the global level (``orchid.yml``) and per-agent level
+    (``agents.yaml``).  Global guardrails run on every request; per-agent
+    guardrails run only when that agent is active.
+
+    Example YAML::
+
+        guardrails:
+          input:
+            - type: prompt_injection
+              fail_action: block
+            - type: max_length
+              fail_action: block
+              config:
+                max_characters: 10000
+          output:
+            - type: pii_detection
+              fail_action: redact
+              config:
+                entities: [email, ssn]
+    """
+
+    input: list[GuardrailRuleConfig] = Field(default_factory=list)
+    output: list[GuardrailRuleConfig] = Field(default_factory=list)
+
+
 # ── Supervisor config ────────────────────────────────────────
 
 
@@ -235,6 +293,9 @@ class AgentConfig(BaseModel):
     # Agent-level skills — multi-step workflows within this agent (ADR-017)
     skills: dict[str, AgentSkillConfig] = Field(default_factory=dict)
 
+    # Per-agent guardrails (ADR-018)
+    guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig)
+
     # Recursive nesting — sub-agents under this agent
     children: dict[str, AgentConfig] | None = None
 
@@ -280,6 +341,9 @@ class AgentsConfig(BaseModel):
 
     # Supervisor configuration — prompt customization
     supervisor: SupervisorConfig = Field(default_factory=SupervisorConfig)
+
+    # Global guardrails — applied to all requests (ADR-018)
+    guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig)
 
     agents: dict[str, AgentConfig] = Field(default_factory=dict)
 
