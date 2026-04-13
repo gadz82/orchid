@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.1 (2026-04-13)
+
+### Bug Fixes
+
+- Removing external dependencies and improving error handling and final outcome for the user.
+  ([`8408fe2`](https://github.com/gadz82/orchid/commit/8408fe2bed57698650da3a5a4d68897250447277))
+
+
 ## v1.2.0 (2026-04-13)
 
 ### Features
