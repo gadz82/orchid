@@ -115,7 +115,7 @@ class GenericAgent(BaseAgent):
         cached_tools = await self._step_cache_check(scope)
         mcp_data = await self._step_tool_calls(query, auth, cached_tools)
         await self._step_dynamic_injection(mcp_data, scope)
-        summary = await self._step_summarise(query, mcp_data, rag_data)
+        summary = await self._step_summarise(query, mcp_data, rag_data, state)
 
         return {
             "messages": [AIMessage(content=f"[{self.name.title()} Agent]\n{summary}")],
@@ -210,9 +210,15 @@ class GenericAgent(BaseAgent):
         query: str,
         mcp_data: dict[str, Any],
         rag_data: list[dict[str, Any]],
+        state: AgentState | None = None,
     ) -> str:
-        """Step 6: LLM summarisation."""
+        """Step 6: LLM summarisation with conversation history for multi-turn context."""
         llm_config = self._config.llm
+
+        # Extract conversation history so the LLM knows what was
+        # previously discussed (e.g. "tell me more" or "the second one").
+        history = self.extract_conversation_history(state) if state else []
+
         return await self.summarise(
             query,
             mcp_data,
@@ -220,6 +226,7 @@ class GenericAgent(BaseAgent):
             system_prompt=self._config.prompt,
             model=llm_config.model if llm_config else None,
             temperature=llm_config.temperature if llm_config else 0.2,
+            conversation_history=history or None,
         )
 
     # ── Built-in tools (ADR-017) ─────────────────────────────
