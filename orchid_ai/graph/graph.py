@@ -1,38 +1,37 @@
 """
-LangGraph graph definition — Composition Root (ADR-008, ADR-016).
+LangGraph graph definition — Composition Root (ADR-008, ADR-016, ADR-018).
 
 All dependency wiring happens here:
   - Agents are instantiated from YAML config (GenericAgent or custom class)
   - MCP clients are created from YAML ``mcp_servers`` definitions
   - The NullVectorReader is used until the RAG pipeline is ready
   - The Supervisor receives agent descriptions for dynamic routing
+  - Guardrails are wired as graph nodes (global) and agent wrappers (per-agent)
 
-Graph topology (ADR-013 — parallel vs sequential):
+Graph topology (ADR-013 — parallel vs sequential, ADR-018 — guardrails):
 
-  PARALLEL MODE                         SEQUENTIAL MODE
-  ══════════════                        ════════════════
-
-  ┌──────────────┐                      ┌──────────────┐
-  │  supervisor   │ ◀───────────┐       │  supervisor   │ ◀─────────────┐
-  └──────┬───────┘              │       └──────┬───────┘               │
-         │ Send() fan-out       │              │ single dispatch        │
-         ├───────────┐          │              ▼                        │
-         ▼           ▼          │       ┌─────────────────┐            │
-  ┌────────────┐ ┌────────┐    │       │ learning_agent   │            │
-  │ learning   │ │ notif  │    │       └────────┬─────────┘            │
-  └─────┬──────┘ └───┬────┘    │                │                      │
-        │            │         │                ▼                      │
-        └────────────┘─────────┘       ┌──────────────┐               │
-                                       │  supervisor   │ (advance)    │
-                                       └──────┬───────┘               │
-                                              │                        │
-                                              ▼                        │
-                                       ┌──────────────────────┐       │
-                                       │ notifications_agent   │       │
-                                       └──────────┬───────────┘       │
-                                                  │                    │
-                                                  └────────────────────┘
-                                       supervisor (synthesis) → END
+  ┌──────────────────────┐
+  │  input_guardrails     │  ← Global input rails (content safety, PII, injection)
+  └──────────┬───────────┘
+             │ blocked → blocked_response → END
+             ▼
+  ┌──────────────────────┐
+  │  supervisor           │ ◀───────────┐
+  └──────────┬───────────┘              │
+             │ Send() fan-out           │
+             ├───────────┐              │
+             ▼           ▼              │
+  ┌────────────┐  ┌────────────┐       │
+  │ agent A    │  │ agent B    │       │  (per-agent rails wrap each node)
+  └─────┬──────┘  └─────┬──────┘       │
+        └───────────────┘───────────────┘
+                         │
+                         ▼
+  ┌──────────────────────┐
+  │  output_guardrails    │  ← Global output rails (PII redaction, groundedness)
+  └──────────┬───────────┘
+             ▼
+            END
 
   The Supervisor decides the mode per request based on agent dependencies.
 """
@@ -43,13 +42,15 @@ import inspect
 import logging
 from typing import Any
 
-from langgraph.graph import StateGraph
+from langchain_core.messages import AIMessage
+from langgraph.graph import END, StateGraph
 
 from ..agents.generic_agent import GenericAgent
+from ..config.schema import AgentConfig, AgentsConfig, GuardrailsConfig
 from ..config.registry import get_class
-from ..config.schema import AgentConfig, AgentsConfig
 from ..config.tool_registry import load_tools_from_config
 from ..core.agent import BaseAgent
+from ..core.guardrails import GuardrailAction, GuardrailChain, GuardrailContext, GuardrailDirection
 from ..core.llm_provider import LLMProvider
 from ..core.repository import VectorReader
 from ..runtime import MCPClientFactory, OrchidRuntime
@@ -59,15 +60,78 @@ from .supervisor import create_supervisor_node, route_to_agents
 logger = logging.getLogger(__name__)
 
 
-def _create_agent_node(agent: BaseAgent):
-    """Wrap a BaseAgent into a LangGraph node function (closure)."""
+def _create_agent_node(
+    agent: BaseAgent,
+    input_guardrails: GuardrailChain | None = None,
+    output_guardrails: GuardrailChain | None = None,
+):
+    """
+    Wrap a BaseAgent into a LangGraph node function (closure).
+
+    When per-agent guardrails are configured, input is checked before
+    ``agent.run()`` and output is checked after.
+    """
 
     async def node(state: GraphState) -> GraphState:
-        result = await agent.run(state)
+        auth = state.get("auth_context")
+
+        # ── Per-agent INPUT guardrails ──
+        if input_guardrails and not input_guardrails.empty:
+            query = agent.extract_user_query(state)
+            ctx = GuardrailContext(
+                direction=GuardrailDirection.INPUT,
+                agent_name=agent.name,
+                tenant_key=auth.tenant_key if auth else "default",
+                user_id=auth.user_id if auth else "",
+                chat_id=state.get("chat_id", ""),
+            )
+            result = await input_guardrails.evaluate(query, ctx)
+            if result.blocked:
+                logger.warning(
+                    "[Guardrails] Agent '%s' input blocked by '%s': %s",
+                    agent.name,
+                    result.guardrail_name,
+                    result.message,
+                )
+                return {
+                    "messages": [AIMessage(content=f"[{agent.name.title()} Agent] {result.message}")],
+                    "active_agents": [],
+                }
+
+        # ── Run agent ──
+        agent_result = await agent.run(state)
+
+        # ── Per-agent OUTPUT guardrails ──
+        if output_guardrails and not output_guardrails.empty:
+            # Extract agent's response text from messages
+            agent_messages = agent_result.get("messages", [])
+            if agent_messages:
+                response_text = str(agent_messages[-1].content) if hasattr(agent_messages[-1], "content") else ""
+                ctx = GuardrailContext(
+                    direction=GuardrailDirection.OUTPUT,
+                    agent_name=agent.name,
+                    tenant_key=auth.tenant_key if auth else "default",
+                    user_id=auth.user_id if auth else "",
+                    chat_id=state.get("chat_id", ""),
+                    metadata={"rag_context": agent_result.get("rag_context", {}).get(agent.name, [])},
+                )
+                result = await output_guardrails.evaluate(response_text, ctx)
+                if result.blocked:
+                    logger.warning(
+                        "[Guardrails] Agent '%s' output blocked by '%s': %s",
+                        agent.name,
+                        result.guardrail_name,
+                        result.message,
+                    )
+                    agent_result["messages"] = [AIMessage(content=f"[{agent.name.title()} Agent] {result.message}")]
+                elif result.action == GuardrailAction.REDACT and result.redacted_content is not None:
+                    logger.info("[Guardrails] Agent '%s' output redacted by '%s'", agent.name, result.guardrail_name)
+                    agent_result["messages"] = [AIMessage(content=result.redacted_content)]
+
         # Clear active_agents so the supervisor knows this agent is done
         # and can proceed to synthesis or advance the sequential pipeline.
-        result["active_agents"] = []
-        return result
+        agent_result["active_agents"] = []
+        return agent_result
 
     node.__name__ = f"{agent.name}_agent"  # helps LangSmith tracing
     return node
@@ -162,6 +226,117 @@ def _build_subgraph(
     return compiled
 
 
+def _build_guardrail_chains(
+    guardrails_config: GuardrailsConfig,
+) -> tuple[GuardrailChain, GuardrailChain]:
+    """Build input and output guardrail chains from YAML config."""
+    from ..guardrails.registry import build_guardrail_chain
+
+    input_configs = [{"type": r.type, "fail_action": r.fail_action, **r.config} for r in guardrails_config.input]
+    output_configs = [{"type": r.type, "fail_action": r.fail_action, **r.config} for r in guardrails_config.output]
+
+    return (
+        build_guardrail_chain(input_configs),
+        build_guardrail_chain(output_configs),
+    )
+
+
+def _create_global_input_guardrail_node(chain: GuardrailChain):
+    """Create a LangGraph node that runs global input guardrails."""
+
+    async def input_guardrails_node(state: GraphState) -> GraphState:
+        """Global input guardrails — runs before the supervisor."""
+        from ..core.agent import BaseAgent
+
+        query = BaseAgent.extract_user_query(state)
+        if not query:
+            return state
+
+        auth = state.get("auth_context")
+        ctx = GuardrailContext(
+            direction=GuardrailDirection.INPUT,
+            tenant_key=auth.tenant_key if auth else "default",
+            user_id=auth.user_id if auth else "",
+            chat_id=state.get("chat_id", ""),
+        )
+
+        result = await chain.evaluate(query, ctx)
+        if result.blocked:
+            logger.warning("[Guardrails] Global input blocked by '%s': %s", result.guardrail_name, result.message)
+            return {
+                "messages": [AIMessage(content=result.message)],
+                "final_response": result.message,
+                "active_agents": [],
+                "pending_agents": [],
+            }
+
+        if result.action == GuardrailAction.REDACT and result.redacted_content is not None:
+            logger.info("[Guardrails] Global input redacted by '%s'", result.guardrail_name)
+            # Replace the last human message with redacted version
+            from langchain_core.messages import HumanMessage
+
+            messages = list(state.get("messages", []))
+            if messages and isinstance(messages[-1], HumanMessage):
+                messages[-1] = HumanMessage(content=result.redacted_content)
+            return {"messages": messages}
+
+        return state
+
+    return input_guardrails_node
+
+
+def _create_global_output_guardrail_node(chain: GuardrailChain):
+    """Create a LangGraph node that runs global output guardrails."""
+
+    async def output_guardrails_node(state: GraphState) -> GraphState:
+        """Global output guardrails — runs after synthesis, before END."""
+        final = state.get("final_response")
+        if not final:
+            return state
+
+        auth = state.get("auth_context")
+        ctx = GuardrailContext(
+            direction=GuardrailDirection.OUTPUT,
+            tenant_key=auth.tenant_key if auth else "default",
+            user_id=auth.user_id if auth else "",
+            chat_id=state.get("chat_id", ""),
+            metadata={"rag_context": state.get("rag_context", {})},
+        )
+
+        result = await chain.evaluate(final, ctx)
+        if result.blocked:
+            logger.warning("[Guardrails] Global output blocked by '%s': %s", result.guardrail_name, result.message)
+            return {
+                "messages": [AIMessage(content=result.message)],
+                "final_response": result.message,
+            }
+
+        if result.action == GuardrailAction.REDACT and result.redacted_content is not None:
+            logger.info("[Guardrails] Global output redacted by '%s'", result.guardrail_name)
+            return {
+                "messages": [AIMessage(content=result.redacted_content)],
+                "final_response": result.redacted_content,
+            }
+
+        return state
+
+    return output_guardrails_node
+
+
+def _route_after_input_guardrails(state: GraphState) -> str:
+    """Conditional edge: skip supervisor if input guardrails blocked."""
+    if state.get("final_response"):
+        return END
+    return "supervisor"
+
+
+def _route_after_supervisor(state: GraphState) -> str:
+    """Conditional edge: route to output guardrails or agents."""
+    if state.get("final_response"):
+        return "output_guardrails"
+    return "route_agents"
+
+
 def build_graph(
     *,
     config: AgentsConfig,
@@ -170,7 +345,7 @@ def build_graph(
     reader: VectorReader | None = None,
 ) -> Any:  # returns CompiledGraph
     """
-    Build and compile the full agent graph from YAML configuration (ADR-016).
+    Build and compile the full agent graph from YAML configuration (ADR-016, ADR-018).
 
     Parameters
     ----------
@@ -203,8 +378,19 @@ def build_graph(
         load_tools_from_config(config.tools)
         logger.info("[Graph] registered %d built-in tools", len(config.tools))
 
+    # ── Build global guardrail chains (ADR-018) ──
+    global_input_chain, global_output_chain = _build_guardrail_chains(config.guardrails)
+    has_global_input_rails = not global_input_chain.empty
+    has_global_output_rails = not global_output_chain.empty
+
+    if has_global_input_rails:
+        logger.info("[Graph] global input guardrails: %s", global_input_chain)
+    if has_global_output_rails:
+        logger.info("[Graph] global output guardrails: %s", global_output_chain)
+
     # ── Instantiate agents from config ──
     agents: list[BaseAgent] = []
+    agent_guardrails: dict[str, tuple[GuardrailChain, GuardrailChain]] = {}
     subgraph_nodes: dict[str, Any] = {}
 
     # Build agent descriptions directly from config (no proxy needed)
@@ -222,7 +408,6 @@ def build_graph(
                 mcp_factory,
             )
             subgraph_nodes[agent_name] = subgraph
-            # No proxy needed — we already have the description from config
         else:
             agent = _instantiate_agent(
                 agent_name,
@@ -233,6 +418,17 @@ def build_graph(
                 mcp_factory,
             )
             agents.append(agent)
+
+        # Build per-agent guardrail chains
+        if agent_config.guardrails.input or agent_config.guardrails.output:
+            input_chain, output_chain = _build_guardrail_chains(agent_config.guardrails)
+            agent_guardrails[agent_name] = (input_chain, output_chain)
+            logger.info(
+                "[Graph] agent '%s' guardrails: input=%s, output=%s",
+                agent_name,
+                input_chain,
+                output_chain,
+            )
 
     # ── Wire agent peers (for cross-agent skill steps) ──
     agent_map: dict[str, BaseAgent] = {a.name: a for a in agents}
@@ -262,11 +458,23 @@ def build_graph(
 
     # ── Build graph ──
     g = StateGraph(GraphState)
+
+    # Add global input guardrails node (before supervisor)
+    if has_global_input_rails:
+        g.add_node("input_guardrails", _create_global_input_guardrail_node(global_input_chain))
+
     g.add_node("supervisor", supervisor_node)
+
+    # Add global output guardrails node (after synthesis)
+    if has_global_output_rails:
+        g.add_node("output_guardrails", _create_global_output_guardrail_node(global_output_chain))
 
     for agent in agents:
         node_name = f"{agent.name}_agent"
-        g.add_node(node_name, _create_agent_node(agent))
+        ag = agent_guardrails.get(agent.name)
+        input_chain = ag[0] if ag else None
+        output_chain = ag[1] if ag else None
+        g.add_node(node_name, _create_agent_node(agent, input_chain, output_chain))
         g.add_edge(node_name, "supervisor")
 
     # Add subgraph nodes (agents with children)
@@ -275,8 +483,21 @@ def build_graph(
         g.add_node(node_name, subgraph)
         g.add_edge(node_name, "supervisor")
 
-    g.set_entry_point("supervisor")
+    # ── Wire entry point and edges ──
+    if has_global_input_rails:
+        g.set_entry_point("input_guardrails")
+        g.add_conditional_edges("input_guardrails", _route_after_input_guardrails)
+    else:
+        g.set_entry_point("supervisor")
+
+    # Supervisor routes to agents (or sets final_response for direct answers)
     g.add_conditional_edges("supervisor", route_to_agents)
+
+    # Output guardrails: intercept final_response before END
+    if has_global_output_rails:
+        # The output guardrails node is reached via route_to_agents when
+        # final_response is set.  We wire it to END.
+        g.add_edge("output_guardrails", END)
 
     compiled = g.compile()
     logger.info("[Graph] compiled with agents: %s", list(agent_descriptions.keys()))

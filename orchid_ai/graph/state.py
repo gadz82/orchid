@@ -66,3 +66,6 @@ class GraphState(TypedDict, total=False):
 
     # ── ADR-017: orchestrator skill instructions ──────────────
     skill_instructions: Annotated[dict[str, Any], merge_dicts]
+
+    # ── ADR-018: guardrail routing hint ──────────────────────
+    _has_output_guardrails: bool  # sentinel for route_to_agents()

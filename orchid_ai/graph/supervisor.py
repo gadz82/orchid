@@ -157,15 +157,21 @@ def create_supervisor_node(
 
 def route_to_agents(state: GraphState) -> list[Send] | str:
     """
-    LangGraph conditional-edge function (ADR-013).
+    LangGraph conditional-edge function (ADR-013, ADR-018).
 
     Returns:
-      - ``END`` when ``final_response`` is set.
+      - ``"output_guardrails"`` when ``final_response`` is set AND output
+        guardrails are configured (the graph wires this node).
+      - ``END`` when ``final_response`` is set and no output guardrails exist.
       - ``"supervisor"`` when there are pending agents to advance.
       - A list of ``Send`` objects for parallel fan-out.
       - A single ``Send`` for sequential execution.
     """
     if state.get("final_response"):
+        # If the graph has an output_guardrails node, route there.
+        # We use a sentinel in state to detect this (set by build_graph).
+        if state.get("_has_output_guardrails"):
+            return "output_guardrails"
         return END
 
     active = state.get("active_agents", [])
@@ -173,6 +179,8 @@ def route_to_agents(state: GraphState) -> list[Send] | str:
         # No active agents but pending → re-enter supervisor to advance
         if state.get("pending_agents"):
             return "supervisor"
+        if state.get("_has_output_guardrails"):
+            return "output_guardrails"
         return END
 
     mode = state.get("execution_mode", "parallel")
