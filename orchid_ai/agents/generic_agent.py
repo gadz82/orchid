@@ -212,12 +212,16 @@ class GenericAgent(BaseAgent):
         rag_data: list[dict[str, Any]],
         state: AgentState | None = None,
     ) -> str:
-        """Step 6: LLM summarisation with conversation history for multi-turn context."""
+        """Step 6: LLM summarisation with conversation history and prior tool context."""
         llm_config = self._config.llm
 
         # Extract conversation history so the LLM knows what was
         # previously discussed (e.g. "tell me more" or "the second one").
         history = self.extract_conversation_history(state) if state else []
+
+        # Extract prior tool results from state so the LLM has grounding
+        # on what was previously fetched or created by this agent.
+        prior_ctx = (state.get("mcp_context") or {}).get(self.name) if state else None
 
         return await self.summarise(
             query,
@@ -227,6 +231,7 @@ class GenericAgent(BaseAgent):
             model=llm_config.model if llm_config else None,
             temperature=llm_config.temperature if llm_config else 0.2,
             conversation_history=history or None,
+            prior_tool_context=prior_ctx,
         )
 
     # ── Built-in tools (ADR-017) ─────────────────────────────

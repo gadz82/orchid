@@ -229,6 +229,7 @@ class BaseAgent(ABC):
         model: str | None = None,
         temperature: float = 0.2,
         conversation_history: list[dict[str, str]] | None = None,
+        prior_tool_context: dict[str, Any] | None = None,
     ) -> str:
         """
         Use LLM to produce a human-readable summary of RAG + MCP data.
@@ -238,6 +239,11 @@ class BaseAgent(ABC):
         system prompt and the current user query so the LLM has
         multi-turn context (e.g. knows which entity the user is
         referring to with "tell me more about the second one").
+
+        When ``prior_tool_context`` is provided, it is appended to the
+        system prompt so the LLM knows what tools returned in previous
+        invocations (e.g. a ``create_notification`` response with IDs
+        and details from a prior turn).
 
         Requires an injected ``LLMProvider`` (DIP-compliant).
 
@@ -258,6 +264,11 @@ class BaseAgent(ABC):
         conversation_history : list[dict] | None
             Prior conversation turns from ``extract_conversation_history()``.
             Each entry is ``{"role": "user"|"assistant", "content": ...}``.
+        prior_tool_context : dict | None
+            Tool results from previous agent invocations (from
+            ``state["mcp_context"]``).  Injected into the system prompt
+            so the LLM has grounding on what was previously fetched or
+            created.
 
         Raises
         ------
@@ -272,6 +283,23 @@ class BaseAgent(ABC):
 
         _model = model or (self.llm if isinstance(self.llm, str) else str(self.llm))
 
+        # ── Build enriched system prompt ──
+        enriched_system = system_prompt
+
+        # Add multi-turn focus instruction when history is available
+        if conversation_history:
+            enriched_system += (
+                "\n\nIMPORTANT: The conversation history below shows prior exchanges. "
+                "Always focus on the user's LATEST message and its relationship to "
+                "the most recent topic. Do NOT change topic or introduce unrelated "
+                "content unless the user explicitly asks for something new."
+            )
+
+        # Append prior tool results so the LLM knows what was returned in earlier turns
+        if prior_tool_context:
+            prior_json = json.dumps(prior_tool_context, indent=2, default=str)[:4000]
+            enriched_system += f"\n\n--- Previous Tool Results (from prior turns) ---\n{prior_json}"
+
         rag_section = ""
         if rag_data:
             rag_section = "Background knowledge (from RAG):\n" + json.dumps(rag_data, indent=2, default=str) + "\n\n"
@@ -281,7 +309,7 @@ class BaseAgent(ABC):
         )
 
         messages: list[dict[str, str]] = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": enriched_system},
         ]
 
         # Inject conversation history so the LLM has multi-turn context
