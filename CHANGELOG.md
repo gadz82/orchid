@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.13 (2026-04-14)
+
+### Bug Fixes
+
+- Remove deprecated backward compatibility for runtime and import utilities
+  ([`b139f61`](https://github.com/gadz82/orchid/commit/b139f610e6da7d1767dad1710042ac168ad88f43))
+
+
 ## v1.2.12 (2026-04-14)
 
 ### Bug Fixes
