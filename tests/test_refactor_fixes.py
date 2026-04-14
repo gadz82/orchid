@@ -215,8 +215,13 @@ class TestSpecificExceptions:
         assert "t_error" in result
 
     @pytest.mark.asyncio
-    async def test_call_all_does_not_catch_attribute_error(self):
-        """CallAllStrategy should NOT catch AttributeError (not in our exception list)."""
+    async def test_call_all_catches_attribute_error_gracefully(self):
+        """CallAllStrategy catches any Exception (including AttributeError) at the MCP boundary.
+
+        MCP servers can fail with arbitrary exceptions (HTTP errors, protocol
+        errors, buggy implementations).  The strategy is a fault-isolation
+        boundary — it must degrade gracefully, not crash the agent.
+        """
 
         class _AttrClient(MCPClient):
             async def call_tool(self, name, args, auth):
@@ -242,8 +247,47 @@ class TestSpecificExceptions:
                 return "http://fail"
 
         strategy = CallAllStrategy()
-        with pytest.raises(AttributeError):
-            await strategy.execute(_AttrClient(), _tools("t"), "q", _auth())
+        result = await strategy.execute(_AttrClient(), _tools("t"), "q", _auth())
+        assert "t_error" in result
+        assert "unexpected" in result["t_error"]
+
+    @pytest.mark.asyncio
+    async def test_call_all_catches_http_status_error(self):
+        """CallAllStrategy catches httpx.HTTPStatusError (e.g. 401 Unauthorized).
+
+        This was the root cause of the infinite-retry crash when MCP servers
+        returned HTTP 401 — the old exception tuple did not include it.
+        """
+        import httpx
+
+        class _HttpErrorClient(MCPClient):
+            async def call_tool(self, name, args, auth):
+                response = httpx.Response(401, request=httpx.Request("POST", "http://mcp/tool"))
+                raise httpx.HTTPStatusError("401 Unauthorized", request=response.request, response=response)
+
+            async def list_tools(self, auth):
+                return []
+
+            async def list_prompts(self, auth):
+                return []
+
+            async def list_resources(self, auth):
+                return []
+
+            async def get_prompt(self, name, args, auth):
+                return []
+
+            async def read_resource(self, uri, auth):
+                return ""
+
+            @property
+            def server_url(self):
+                return "http://mcp"
+
+        strategy = CallAllStrategy()
+        result = await strategy.execute(_HttpErrorClient(), _tools("t"), "q", _auth())
+        assert "t_error" in result
+        assert "401" in result["t_error"]
 
 
 # ── Fix #8: monotonic clock for cache TTL ──────────────────────────
@@ -324,3 +368,94 @@ class TestGenericAgentDecomposition:
         assert scope.user_id == "u1"
         assert scope.chat_id == "c1"
         assert scope.agent_id == agent.name
+
+
+# ── render_capabilities HTTP error resilience ─────────────────────
+
+
+class TestRenderCapabilitiesResilience:
+    """MCPDispatcher.render_capabilities must degrade gracefully on HTTP errors."""
+
+    @pytest.mark.asyncio
+    async def test_render_capabilities_catches_http_status_error(self):
+        """401/403/500 from an MCP server should be logged, not crash the agent."""
+        import httpx
+
+        from orchid_ai.agents.mcp_dispatcher import MCPDispatcher
+        from orchid_ai.config.schema import MCPServerConfig
+
+        class _Http401Client(MCPClient):
+            async def call_tool(self, name, args, auth):
+                return MCPToolResult(text="")
+
+            async def list_tools(self, auth):
+                response = httpx.Response(401, request=httpx.Request("GET", "http://mcp/tools"))
+                raise httpx.HTTPStatusError("401 Unauthorized", request=response.request, response=response)
+
+            async def list_prompts(self, auth):
+                return []
+
+            async def list_resources(self, auth):
+                return []
+
+            async def get_prompt(self, name, args, auth):
+                return []
+
+            async def read_resource(self, uri, auth):
+                return ""
+
+            @property
+            def server_url(self):
+                return "http://mcp"
+
+        server_cfg = MCPServerConfig(name="failing-server", url="http://mcp", discover_all_tools=True)
+        dispatcher = MCPDispatcher(mcp_clients=[_Http401Client()], server_configs=[server_cfg])
+
+        # Should NOT raise — the 401 is caught and the server is skipped
+        caps = await dispatcher.render_capabilities(_auth(), agent_name="test")
+        assert caps.raw_tools == []
+        assert caps.tool_client_map == {}
+
+    @pytest.mark.asyncio
+    async def test_fetch_catches_http_status_error(self):
+        """MCPDispatcher.fetch should catch HTTP errors from MCP servers."""
+        import httpx
+
+        from orchid_ai.agents.mcp_dispatcher import MCPDispatcher
+        from orchid_ai.config.schema import MCPServerConfig, ToolConfig as TC
+
+        class _Http500Client(MCPClient):
+            async def call_tool(self, name, args, auth):
+                response = httpx.Response(500, request=httpx.Request("POST", "http://mcp/tool"))
+                raise httpx.HTTPStatusError("500 Server Error", request=response.request, response=response)
+
+            async def list_tools(self, auth):
+                return []
+
+            async def list_prompts(self, auth):
+                return []
+
+            async def list_resources(self, auth):
+                return []
+
+            async def get_prompt(self, name, args, auth):
+                return []
+
+            async def read_resource(self, uri, auth):
+                return ""
+
+            @property
+            def server_url(self):
+                return "http://mcp"
+
+        server_cfg = MCPServerConfig(
+            name="failing-server",
+            url="http://mcp",
+            tools=[TC(name="my_tool")],
+            tool_call_strategy="all",
+        )
+        dispatcher = MCPDispatcher(mcp_clients=[_Http500Client()], server_configs=[server_cfg])
+
+        # Should NOT raise — the error is caught and reported
+        result = await dispatcher.fetch("test query", _auth(), agent_name="test")
+        assert "my_tool_error" in result

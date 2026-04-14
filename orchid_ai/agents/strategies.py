@@ -100,7 +100,9 @@ class CallAllStrategy(ToolCallStrategy):
                 args = {"query": query, **tool.arguments}
                 result = await client.call_tool(tool.name, args, auth)
                 return tool.name, result.text
-            except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+            except Exception as exc:
+                # Broad catch: MCP tool calls can fail with HTTP errors (401, 500),
+                # transport errors, or protocol errors.  Report gracefully.
                 logger.error("[%s] Tool '%s' failed: %s", agent_name, tool.name, exc)
                 return f"{tool.name}_error", str(exc)
 
@@ -132,7 +134,7 @@ class SequentialStrategy(ToolCallStrategy):
                 result = await client.call_tool(tool.name, args, auth)
                 results[tool.name] = result.text
                 previous_results[tool.name] = result.text
-            except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+            except Exception as exc:
                 logger.error("[%s] Sequential tool '%s' failed: %s", agent_name, tool.name, exc)
                 results[f"{tool.name}_error"] = str(exc)
 
@@ -160,7 +162,7 @@ class LLMDecidesStrategy(ToolCallStrategy):
         # Discover available tool descriptions from the server
         try:
             available_tools = await client.list_tools(auth)
-        except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+        except Exception as exc:
             logger.warning("[%s] Could not list tools: %s", agent_name, exc)
             available_tools = []
 
@@ -200,7 +202,7 @@ class LLMDecidesStrategy(ToolCallStrategy):
                 temperature=0,
                 response_format={"type": "json_object"},
             )
-        except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+        except Exception as exc:
             logger.error("[%s] LLM API error during tool decision: %s", agent_name, exc, exc_info=True)
             # Fallback: call all tools
             fallback = CallAllStrategy()
@@ -225,7 +227,7 @@ class LLMDecidesStrategy(ToolCallStrategy):
             try:
                 result = await client.call_tool(tool_name, tool_args, auth)
                 results[tool_name] = result.text
-            except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+            except Exception as exc:
                 logger.error("[%s] LLM-decided tool '%s' failed: %s", agent_name, tool_name, exc)
                 results[f"{tool_name}_error"] = str(exc)
 
