@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.5 (2026-04-14)
+
+### Bug Fixes
+
+- Built-in tools parameter declarations in config.
+  ([`b8dc60f`](https://github.com/gadz82/orchid/commit/b8dc60f226ffb3b2e637af8501b25ef89e284ff3))
+
+
 ## v1.2.4 (2026-04-14)
 
 ### Bug Fixes
