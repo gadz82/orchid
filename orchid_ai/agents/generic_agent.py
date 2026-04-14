@@ -181,6 +181,7 @@ class GenericAgent(BaseAgent):
                 query,
                 mcp_data,
                 skip_tools=set(cached_tools.keys()),
+                auth_context=auth,
             )
             mcp_data.update(builtin_data)
 
@@ -256,8 +257,15 @@ class GenericAgent(BaseAgent):
         mcp_data: dict[str, Any],
         *,
         skip_tools: set[str] | None = None,
+        auth_context: AuthContext | None = None,
     ) -> dict[str, Any]:
-        """Run all built-in tools declared for this agent."""
+        """Run all built-in tools declared for this agent.
+
+        When ``auth_context`` is provided, it is forwarded to each tool
+        so that tools requiring authenticated API access can use the
+        resolved credentials.  Tools that don't need auth simply ignore
+        it via ``**kwargs``.
+        """
         results: dict[str, Any] = {}
         if not self._config.tools:
             return results
@@ -268,7 +276,10 @@ class GenericAgent(BaseAgent):
                 logger.info("[%s] Built-in tool '%s' skipped (cache hit)", self.name, tool_name)
                 continue
             try:
-                result = await self.call_builtin_tool(tool_name, query=query, context=mcp_data)
+                kwargs: dict[str, Any] = {"query": query, "context": mcp_data}
+                if auth_context is not None:
+                    kwargs["auth_context"] = auth_context
+                result = await self.call_builtin_tool(tool_name, **kwargs)
                 results[key] = result
                 logger.info("[%s] Built-in tool '%s' succeeded", self.name, tool_name)
             except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
