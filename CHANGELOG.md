@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.9 (2026-04-14)
+
+### Bug Fixes
+
+- Improve LLM-driven tool execution with parameter handling and test coverage
+  ([`e7cac72`](https://github.com/gadz82/orchid/commit/e7cac7254949b04e7dbbd7cafd0edb80949c2263))
+
+
 ## v1.2.8 (2026-04-14)
 
 ### Bug Fixes
