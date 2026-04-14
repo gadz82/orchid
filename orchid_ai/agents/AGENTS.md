@@ -51,12 +51,30 @@ Example custom agents:
 # GOOD — use inherited methods
 user_query = self.extract_user_query(state)
 rag_data = await self.fetch_rag_context(query, scope)
-summary = await self.summarise(query, mcp_data, rag_data, system_prompt=PROMPT)
+history = self.extract_conversation_history(state, max_turns=10, max_chars=1000)
+prior_ctx = (state.get("mcp_context") or {}).get(self.name)
+summary = await self.summarise(
+    query, mcp_data, rag_data,
+    system_prompt=PROMPT,
+    conversation_history=history or None,
+    prior_tool_context=prior_ctx,
+)
 
 # BAD — duplicated private methods
 user_query = self._extract_user_query(state)  # don't copy-paste from BaseAgent
 rag_data = await self._fetch_rag_context(...)  # use self.fetch_rag_context()
 ```
+
+### Use `extract_conversation_history()` for multi-turn context
+
+`BaseAgent.extract_conversation_history(state)` is a static method that extracts clean user/assistant pairs from the graph state. It filters out `[Supervisor` routing messages, strips agent name prefixes, excludes the current query, and caps output to `max_turns` pairs. Use it in custom agents to maintain conversation continuity across turns.
+
+### Pass `conversation_history` and `prior_tool_context` to `summarise()`
+
+`GenericAgent` automatically passes these to `summarise()`. Custom agents should do the same:
+
+- **`conversation_history`** — List of `{"role": ..., "content": ...}` dicts from `extract_conversation_history()`. Injected between system and user messages.
+- **`prior_tool_context`** — Dict from `state["mcp_context"][agent_name]`. Appended to the system prompt so the agent remembers tool results from previous invocations.
 
 ### Use `LLMProvider` for summarization
 

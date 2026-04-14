@@ -27,6 +27,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.graph import END
 from langgraph.types import Send
 
+from ..core.agent import BaseAgent
 from ..core.llm_provider import LLMProvider
 from ..config.schema import OrchestratorSkillConfig, SupervisorConfig
 from .state import GraphState
@@ -198,6 +199,22 @@ def route_to_agents(state: GraphState) -> list[Send] | str:
 # ── Internal helpers ─────────────────────────────────────────
 
 
+def _filter_internal_messages(
+    messages: list[BaseMessage],
+    *,
+    skip_prefixes: tuple[str, ...] = ("[Supervisor",),
+) -> list[BaseMessage]:
+    """Remove internal routing messages (e.g. supervisor dispatches) from a message list."""
+    filtered: list[BaseMessage] = []
+    for msg in messages:
+        if isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai"):
+            content = str(msg.content) if hasattr(msg, "content") else str(msg)
+            if any(content.startswith(prefix) for prefix in skip_prefixes):
+                continue
+        filtered.append(msg)
+    return filtered
+
+
 def _to_llm_messages(
     system: str,
     state_messages: list[BaseMessage],
@@ -255,7 +272,9 @@ async def _route(
         agent_descriptions=desc_text,
         skill_descriptions=skill_text,
     )
-    llm_messages = _to_llm_messages(system, state.get("messages", []))
+    # Filter internal messages so the routing LLM sees a clean dialogue
+    clean_messages = _filter_internal_messages(state.get("messages", []))
+    llm_messages = _to_llm_messages(system, clean_messages)
 
     try:
         raw = await _llm_complete(
@@ -412,7 +431,16 @@ async def _advance_sequential(
         remaining=remaining_str,
         skill_instruction_section=skill_instruction_section,
     )
-    llm_messages = _to_llm_messages(system, state.get("messages", []))
+
+    # Build clean history using the shared framework helper
+    llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    llm_messages.extend(
+        BaseAgent.extract_conversation_history(
+            state,
+            max_turns=sup.history_max_turns,
+            max_chars=sup.history_max_chars,
+        )
+    )
 
     # Inject current MCP data so the LLM knows what was collected
     mcp_ctx = state.get("mcp_context", {})
@@ -453,50 +481,55 @@ async def _synthesise(
     llm_service: LLMProvider | None = None,
 ) -> GraphState:
     """Combine sub-agent results into a final user-facing response."""
+    sup = supervisor_config or SupervisorConfig()
     all_messages = state.get("messages", [])
 
-    # Split messages: prior history (context) vs current turn (to answer)
-    # Current turn = last user message + all agent responses after it
+    # ── Split messages: prior history vs current turn ──
+    # Current turn = last user message + all messages after it
     last_user_idx = -1
     for i, msg in enumerate(all_messages):
         if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
             last_user_idx = i
 
     if last_user_idx > 0:
-        history = all_messages[:last_user_idx]
         current_turn = all_messages[last_user_idx:]
     else:
-        history = []
         current_turn = all_messages
 
-    # Build LLM messages: system + compressed history + current turn
-    sup = supervisor_config or SupervisorConfig()
+    # ── Build LLM messages ──
     synthesis_template = sup.synthesis_system_prompt or SYNTHESIS_SYSTEM_PROMPT
     synthesis_prompt = synthesis_template.format(assistant_name=sup.assistant_name)
     llm_messages: list[dict[str, str]] = [
         {"role": "system", "content": synthesis_prompt},
     ]
 
-    # Include recent history as a brief summary (not full messages)
+    # Use the shared framework helper for clean, configurable history.
+    # extract_conversation_history already filters [Supervisor messages,
+    # excludes the last user message, and respects turn/char limits.
+    history = BaseAgent.extract_conversation_history(
+        state,
+        max_turns=sup.history_max_turns,
+        max_chars=sup.history_max_chars,
+    )
     if history:
-        history_summary = _to_llm_messages("", history)
-        # Keep only last few exchanges to avoid overwhelming the LLM
-        recent = history_summary[-6:]  # last 3 exchanges
-        if recent:
-            llm_messages.append(
-                {
-                    "role": "user",
-                    "content": "Previous conversation (for context only — do NOT re-answer):\n"
-                    + "\n".join(f"  {m['role']}: {m['content'][:200]}" for m in recent),
-                }
-            )
+        llm_messages.append(
+            {
+                "role": "user",
+                "content": "Previous conversation (for context only — do NOT re-answer):\n"
+                + "\n".join(f"  {m['role']}: {m['content']}" for m in history),
+            }
+        )
 
-    # Add the current turn messages (this is what needs answering)
+    # Add the current turn messages, filtering out internal routing noise
     for msg in current_turn:
+        content = str(msg.content) if hasattr(msg, "content") else str(msg)
         if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
-            llm_messages.append({"role": "user", "content": str(msg.content)})
+            llm_messages.append({"role": "user", "content": content})
         elif isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai"):
-            llm_messages.append({"role": "assistant", "content": str(msg.content)})
+            # Skip internal supervisor routing messages from current turn
+            if content.startswith("[Supervisor"):
+                continue
+            llm_messages.append({"role": "assistant", "content": content})
 
     # Inject MCP context as additional grounding
     mcp_ctx = state.get("mcp_context", {})

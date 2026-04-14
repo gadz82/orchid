@@ -110,6 +110,7 @@ class BaseAgent(ABC):
         state: AgentState,
         *,
         max_turns: int = 10,
+        max_chars: int | None = None,
         skip_prefixes: tuple[str, ...] = ("[Supervisor",),
         strip_prefixes: tuple[str, ...] = (),
     ) -> list[dict[str, str]]:
@@ -128,6 +129,10 @@ class BaseAgent(ABC):
         max_turns : int
             Maximum number of user/assistant exchanges to keep.
             Older messages are trimmed to avoid blowing up the context window.
+        max_chars : int | None
+            When set, individual message content is truncated to this
+            many characters (with an ``…`` suffix).  ``None`` means
+            no truncation.
         skip_prefixes : tuple[str, ...]
             Messages whose content starts with any of these prefixes are
             dropped entirely (e.g. internal supervisor routing messages).
@@ -153,6 +158,8 @@ class BaseAgent(ABC):
                 continue
 
             if msg_type in ("human", "humanmessage"):
+                if max_chars is not None and len(content) > max_chars:
+                    content = content[:max_chars] + "…"
                 history.append({"role": "user", "content": content})
             elif msg_type in ("ai", "aimessage"):
                 # Strip known agent prefixes for a clean dialogue
@@ -160,6 +167,8 @@ class BaseAgent(ABC):
                     if content.startswith(prefix):
                         content = content[len(prefix) :]
                         break
+                if max_chars is not None and len(content) > max_chars:
+                    content = content[:max_chars] + "…"
                 history.append({"role": "assistant", "content": content})
 
         # Drop the last user message — it will be added separately as the current query

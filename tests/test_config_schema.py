@@ -193,6 +193,16 @@ class TestSupervisorConfig:
         assert cfg.synthesis_system_prompt is None
         assert cfg.sequential_advance_prompt is None
 
+    def test_default_history_limits(self):
+        cfg = SupervisorConfig()
+        assert cfg.history_max_turns == 10
+        assert cfg.history_max_chars == 1000
+
+    def test_custom_history_limits(self):
+        cfg = SupervisorConfig(history_max_turns=5, history_max_chars=500)
+        assert cfg.history_max_turns == 5
+        assert cfg.history_max_chars == 500
+
 
 # ── AgentConfig ─────────────────────────────────────────────
 

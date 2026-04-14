@@ -116,7 +116,7 @@ documents/   -> core/
 
 | ABC | File | Purpose |
 |-----|------|---------|
-| `BaseAgent` | `core/agent.py` | Agent identity, `run()`, `summarise()`, `fetch_rag_context()` |
+| `BaseAgent` | `core/agent.py` | Agent identity, `run()`, `summarise()`, `fetch_rag_context()`, `extract_conversation_history()` |
 | `IdentityResolver` | `core/identity.py` | Bearer token -> AuthContext |
 | `LLMProvider` | `core/llm_provider.py` | Abstract LLM completion |
 | `MCPToolCaller` | `core/mcp.py` | Call MCP tools |
@@ -286,11 +286,15 @@ Orchid uses two configuration files:
 | `routing_system_prompt` | str | `null` |
 | `synthesis_system_prompt` | str | `null` |
 | `sequential_advance_prompt` | str | `null` |
+| `history_max_turns` | int | `10` |
+| `history_max_chars` | int | `1000` |
 
 - **`assistant_name`** -- The name used in the supervisor's prompts when referring to itself (e.g. "You are the routing brain of **Travel Assistant**"). Appears in synthesized responses. Set this to your product's name.
 - **`routing_system_prompt`** -- Fully custom system prompt for the supervisor's routing step. The routing step analyzes the user's message and decides which agent(s) should handle it by reading each agent's `description`. When `null`, the built-in template from `supervisor.py` is used. Override this to change how agents are selected (e.g. to add domain-specific routing rules or prioritization logic).
 - **`synthesis_system_prompt`** -- Custom system prompt for the synthesis step. After all selected agents return their results, the supervisor synthesizes them into a single coherent response. Override this to control the tone, format, or structure of final responses.
 - **`sequential_advance_prompt`** -- Custom prompt used during orchestrator skill execution. After each step in a multi-agent skill completes, this prompt decides whether to advance to the next step or respond directly. Override this to change how skill steps chain together.
+- **`history_max_turns`** -- Maximum number of user-assistant conversation pairs included as context in supervisor routing, synthesis, and sequential advance steps. Each "turn" is one user message + one assistant response. Higher values give more context but consume more tokens. Default `10`.
+- **`history_max_chars`** -- Maximum characters per individual message in conversation history. Messages exceeding this limit are truncated with an ellipsis (`…`). Prevents long tool outputs or verbose responses from consuming excessive tokens in multi-turn context. Default `1000`.
 
 #### `tools.<name>` (Built-in Tools)
 
