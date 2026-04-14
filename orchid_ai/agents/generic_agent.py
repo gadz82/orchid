@@ -259,27 +259,102 @@ class GenericAgent(BaseAgent):
         skip_tools: set[str] | None = None,
         auth_context: AuthContext | None = None,
     ) -> dict[str, Any]:
-        """Run all built-in tools declared for this agent.
+        """Run built-in tools declared for this agent.
 
-        When ``auth_context`` is provided, it is forwarded to each tool
-        so that tools requiring authenticated API access can use the
-        resolved credentials.  Tools that don't need auth simply ignore
-        it via ``**kwargs``.
+        The LLM decides which tools to call and with what arguments,
+        using parameter metadata from the tool registry.  This avoids
+        blindly calling every tool with the raw query string — tools
+        that require specific parameters (e.g. ``search_text``,
+        ``course_id``) get correct values extracted by the LLM.
+
+        When ``auth_context`` is provided it is forwarded to each tool so
+        that tools requiring authenticated API access can use the resolved
+        credentials.  Tools that don't need auth simply ignore it.
         """
-        results: dict[str, Any] = {}
-        if not self._config.tools:
-            return results
+        import json as _json
 
+        from ..config.tool_registry import get_tool
+
+        if not self._config.tools:
+            return {}
+
+        if not self._llm_service:
+            logger.warning("[%s] No LLMProvider — cannot decide which built-in tools to call", self.name)
+            return {}
+
+        # Build tool descriptions from registry metadata
+        tool_descriptions: list[str] = []
+        available_names: set[str] = set()
         for tool_name in self._config.tools:
             key = f"builtin_{tool_name}"
             if skip_tools and key in skip_tools:
-                logger.info("[%s] Built-in tool '%s' skipped (cache hit)", self.name, tool_name)
                 continue
             try:
-                kwargs: dict[str, Any] = {"query": query, "context": mcp_data}
+                entry = get_tool(tool_name)
+            except KeyError:
+                continue
+            available_names.add(tool_name)
+            params_desc = ""
+            if entry.parameters:
+                param_lines = []
+                for p in entry.parameters.values():
+                    req = "required" if p.required else f"optional, default={p.default}"
+                    param_lines.append(f"    - {p.name} ({p.type}, {req}): {p.description}")
+                params_desc = "\n" + "\n".join(param_lines)
+            tool_descriptions.append(f"- {tool_name}: {entry.description}{params_desc}")
+
+        if not available_names:
+            return {}
+
+        descriptions_text = "\n".join(tool_descriptions)
+        decision_prompt = (
+            f"User query: {query}\n\n"
+            f"Available built-in tools:\n{descriptions_text}\n\n"
+            "Decide which tools to call and with what arguments based on the user query. "
+            "Respond with a JSON array of objects: "
+            '[{"tool": "tool_name", "arguments": {...}}, ...]\n'
+            "Only include tools that are relevant to the query. "
+            "If no tools are relevant, respond with an empty array [].\n"
+            "Respond ONLY with the JSON array, no other text."
+        )
+
+        llm_config = self._config.llm
+        model = llm_config.model if llm_config else ""
+
+        try:
+            raw = await self._llm_service.complete(
+                model,
+                [{"role": "user", "content": decision_prompt}],
+                temperature=0,
+                response_format={"type": "json_object"},
+            )
+        except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+            logger.error("[%s] LLM decision for built-in tools failed: %s", self.name, exc)
+            return {}
+
+        try:
+            decisions = _json.loads(raw)
+            if isinstance(decisions, dict):
+                decisions = decisions.get("tools", [])
+        except _json.JSONDecodeError:
+            logger.warning("[%s] LLM built-in tool decision was not valid JSON: %s", self.name, raw[:200])
+            return {}
+
+        logger.info("[%s] LLM decided built-in tools: %s", self.name, [d.get("tool") for d in decisions])
+
+        # Execute decided tools
+        results: dict[str, Any] = {}
+        for decision in decisions:
+            tool_name = decision.get("tool", "")
+            tool_args = decision.get("arguments", {})
+            if tool_name not in available_names:
+                logger.warning("[%s] LLM decided unknown tool '%s', skipping", self.name, tool_name)
+                continue
+            key = f"builtin_{tool_name}"
+            try:
                 if auth_context is not None:
-                    kwargs["auth_context"] = auth_context
-                result = await self.call_builtin_tool(tool_name, **kwargs)
+                    tool_args["auth_context"] = auth_context
+                result = await self.call_builtin_tool(tool_name, **tool_args)
                 results[key] = result
                 logger.info("[%s] Built-in tool '%s' succeeded", self.name, tool_name)
             except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
