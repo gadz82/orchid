@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from typing import Any, Callable, Awaitable
@@ -76,13 +77,60 @@ class SkillExecutor:
                     previous_results,
                 )
             else:
-                args = {"query": query, **step.arguments}
-                if previous_results:
-                    args["context"] = previous_results
-                return await self._builtin_tool_caller(step.tool, **args)
+                return await self._run_builtin_step(
+                    step.tool,
+                    query,
+                    auth,
+                    step.arguments,
+                    previous_results,
+                )
         except (ValueError, TypeError, KeyError, RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
             logger.error("[%s] Skill step '%s' failed: %s", self._agent_name, step_name, exc)
             return f"error: {exc}"
+
+    async def _run_builtin_step(
+        self,
+        tool_name: str,
+        query: str,
+        auth: AuthContext,
+        step_arguments: dict[str, Any],
+        previous_results: dict[str, Any],
+    ) -> Any:
+        """Execute a built-in tool skill step.
+
+        Introspects the tool handler's signature to pass only the
+        parameters it accepts, avoiding ``unexpected keyword argument``
+        errors.  Framework-provided kwargs (``query``, ``context``,
+        ``auth_context``) are offered but only forwarded when the
+        handler declares them.
+        """
+        from ..config.tool_registry import get_tool
+
+        # Build a pool of available kwargs — the handler picks what it needs
+        available: dict[str, Any] = {
+            "query": query,
+            "auth_context": auth,
+            **step_arguments,
+        }
+        if previous_results:
+            available["context"] = previous_results
+
+        # Introspect the handler to filter to accepted params only
+        try:
+            entry = get_tool(tool_name)
+            sig = inspect.signature(entry.handler)
+            accepts_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+            if accepts_var_keyword:
+                # Handler has **kwargs — pass everything
+                args = available
+            else:
+                accepted = set(sig.parameters.keys())
+                args = {k: v for k, v in available.items() if k in accepted}
+        except (KeyError, ValueError, TypeError):
+            # Fallback: pass everything and let the handler raise if needed
+            args = available
+
+        return await self._builtin_tool_caller(tool_name, **args)
 
     async def _run_agent_step(
         self,
