@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.10 (2026-04-14)
+
+### Bug Fixes
+
+- Implement multi-turn LLM tool loop with max turn limit and enhanced test coverage
+  ([`9f57288`](https://github.com/gadz82/orchid/commit/9f57288447d70a5317fe9de0070fb7670b1d7400))
+
+
 ## v1.2.9 (2026-04-14)
 
 ### Bug Fixes
