@@ -57,7 +57,15 @@ async def test_no_injection_when_no_injectable_tools():
 
     agent = _make_agent(config)
 
-    with patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject:
+    with (
+        patch.object(
+            agent,
+            "_agentic_tool_loop",
+            new_callable=AsyncMock,
+            return_value=(None, {}),
+        ),
+        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
+    ):
         await agent.run(_make_state())
         mock_inject.assert_not_called()
 
@@ -81,7 +89,6 @@ async def test_injection_only_for_opted_in_mcp_tools():
             ),
         ],
     )
-    # Simulate _apply_defaults populating injectable_tools
     config.injectable_tools = {"tool_keep"}
 
     agent = _make_agent(config)
@@ -89,7 +96,12 @@ async def test_injection_only_for_opted_in_mcp_tools():
     mcp_results = {"tool_keep": "data1", "tool_skip": "data2"}
 
     with (
-        patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value=mcp_results),
+        patch.object(
+            agent,
+            "_agentic_tool_loop",
+            new_callable=AsyncMock,
+            return_value=(None, mcp_results),
+        ),
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
@@ -109,16 +121,19 @@ async def test_injection_only_for_opted_in_builtin_tools():
         llm=LLMConfig(),
         tools=["format_date", "calc_rate"],
     )
-    # Simulate: format_date has inject_to_rag=True, calc_rate does not
     config.injectable_tools = {"builtin_format_date"}
 
     agent = _make_agent(config)
 
-    builtin_results = {"builtin_format_date": "2024-01-01", "builtin_calc_rate": "85%"}
+    tool_results = {"builtin_format_date": "2024-01-01", "builtin_calc_rate": "85%"}
 
     with (
-        patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}),
-        patch.object(agent, "_run_builtin_tools", new_callable=AsyncMock, return_value=builtin_results),
+        patch.object(
+            agent,
+            "_agentic_tool_loop",
+            new_callable=AsyncMock,
+            return_value=(None, tool_results),
+        ),
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
@@ -149,7 +164,12 @@ async def test_no_injection_when_rag_disabled():
     agent = _make_agent(config)
 
     with (
-        patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={"tool_a": "data"}),
+        patch.object(
+            agent,
+            "_agentic_tool_loop",
+            new_callable=AsyncMock,
+            return_value=(None, {"tool_a": "data"}),
+        ),
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
@@ -160,8 +180,8 @@ async def test_no_injection_when_rag_disabled():
 
 
 @pytest.mark.asyncio
-async def test_cache_hit_skips_mcp_tool_call():
-    """When cache has valid data for a tool, that tool is skipped in MCP calls."""
+async def test_cache_hit_skips_tool_in_agentic_loop():
+    """When cache has valid data for a tool, that tool is skipped in the agentic loop."""
     config = AgentConfig(
         description="d",
         prompt="p",
@@ -182,19 +202,21 @@ async def test_cache_hit_skips_mcp_tool_call():
     config.injectable_tool_ttls = {"cached_tool": 3600}
 
     agent = _make_agent(config)
-    # Mock the reader to return cached content for "cached_tool"
     agent.reader.lookup_cached_tool_results = AsyncMock(return_value="cached data")
 
     with (
         patch.object(
-            agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={"fresh_tool": "fresh data"}
-        ) as mock_fetch,
+            agent,
+            "_agentic_tool_loop",
+            new_callable=AsyncMock,
+            return_value=(None, {"fresh_tool": "fresh data"}),
+        ) as mock_loop,
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock),
     ):
         await agent.run(_make_state())
-        # fetch() should be called with skip_tools containing the cached tool
-        mock_fetch.assert_called_once()
-        assert "cached_tool" in mock_fetch.call_args.kwargs["skip_tools"]
+        mock_loop.assert_called_once()
+        # skip_tools should contain the cached tool
+        assert "cached_tool" in mock_loop.call_args.kwargs["skip_tools"]
 
 
 @pytest.mark.asyncio
@@ -217,18 +239,20 @@ async def test_cache_miss_calls_tool_normally():
     config.injectable_tool_ttls = {"tool_a": 3600}
 
     agent = _make_agent(config)
-    # Mock: cache miss
     agent.reader.lookup_cached_tool_results = AsyncMock(return_value=None)
 
     with (
         patch.object(
-            agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={"tool_a": "fresh"}
-        ) as mock_fetch,
+            agent,
+            "_agentic_tool_loop",
+            new_callable=AsyncMock,
+            return_value=(None, {"tool_a": "fresh"}),
+        ) as mock_loop,
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock),
     ):
         await agent.run(_make_state())
         # skip_tools should be empty (no cache hits)
-        assert mock_fetch.call_args.kwargs["skip_tools"] == set()
+        assert mock_loop.call_args.kwargs["skip_tools"] == set()
 
 
 @pytest.mark.asyncio
@@ -245,6 +269,11 @@ async def test_no_cache_check_when_no_ttls():
     agent = _make_agent(config)
     agent.reader.lookup_cached_tool_results = AsyncMock()
 
-    with patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}):
+    with patch.object(
+        agent,
+        "_agentic_tool_loop",
+        new_callable=AsyncMock,
+        return_value=(None, {}),
+    ):
         await agent.run(_make_state())
         agent.reader.lookup_cached_tool_results.assert_not_called()

@@ -1,27 +1,24 @@
 """
 GenericAgent — config-driven agent that requires no custom Python code.
 
-Implements the standard 6-step flow entirely from YAML configuration (ADR-016, ADR-017):
-  1. RAG retrieval (tenant-aware, ADR-014)
-  2. Skill check — if query matches an agent skill, run it and skip to step 6
-  3. MCP tool calls (per server, per strategy)
-  4. Built-in tool calls (ADR-017)
-  5. Dynamic RAG injection (ADR-005 feedback loop)
-  6. LLM summarisation using the prompt from config
-
-Tool call strategies (MCP):
-  - ``all`` — call every whitelisted tool, collect results
-  - ``sequential`` — call tools in order, chaining context forward
-  - ``llm_decides`` — ask the LLM which tools to call and with what args
+Implements the standard pipeline entirely from YAML configuration:
+  1. RAG retrieval (tenant-aware)
+  2. Skill check — if query matches an agent skill, run it and skip to step 5
+  3. Agentic tool-calling loop — unified MCP + built-in tools with native
+     ``tool_calls`` protocol, duplicate detection, and per-call error handling
+  4. Dynamic RAG injection (feedback loop)
+  5. LLM summarisation using the prompt from config (skipped when the
+     agentic loop already produced a final text response)
 
 Collaborators (SRP — each extracted into its own module):
   - ``SkillDetector``  — matches user queries to agent-level skills via LLM
-  - ``MCPDispatcher``  — orchestrates tool calls across MCP servers
+  - ``MCPDispatcher``  — discovers MCP capabilities and routes tool calls
   - ``SkillExecutor``  — runs multi-step agent-level skills
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
@@ -37,7 +34,7 @@ from ..core.state import AgentState, AuthContext
 from ..rag.dynamic import inject_to_rag
 from ..rag.scopes import RAGScope
 
-from .mcp_dispatcher import MCPDispatcher
+from .mcp_dispatcher import MCPCapabilities, MCPDispatcher
 from .skill_detector import SkillDetector
 from .skill_executor import SkillExecutor
 
@@ -52,6 +49,10 @@ class GenericAgent(BaseAgent):
 
     No subclassing needed — add agents by editing ``agents.yaml``.
     """
+
+    # ── Agentic loop safety limits ──────────────────────────────
+    _MAX_TOOL_ROUNDS: int = 15
+    _MAX_CONSECUTIVE_DUPES: int = 2
 
     def __init__(
         self,
@@ -103,7 +104,7 @@ class GenericAgent(BaseAgent):
     # ── Execution ────────────────────────────────────────────
 
     async def run(self, state: AgentState) -> AgentState:
-        """Execute the 6-step pipeline: RAG → skill → MCP → builtins → inject → summarise."""
+        """Execute the pipeline: RAG → skill check → agentic loop → inject → summarise."""
         auth: AuthContext | None = state.get("auth_context")
         if not auth:
             return {
@@ -115,9 +116,35 @@ class GenericAgent(BaseAgent):
 
         rag_data = await self._step_rag_retrieval(query, scope)
         cached_tools = await self._step_cache_check(scope)
-        mcp_data = await self._step_tool_calls(query, auth, cached_tools)
+
+        # Skill check — if matched, run the skill and skip the agentic loop
+        skill_name = await self._detect_skill(query)
+        if skill_name:
+            logger.info("[%s] Running agent skill '%s'", self.name, skill_name)
+            skill = self._config.skills[skill_name]
+            mcp_data = await self._skill_executor.run_skill(skill_name, skill.steps, query, auth)
+            final_text = None
+        else:
+            # Unified agentic loop: MCP + built-in tools in a single
+            # native tool_calls conversation with duplicate detection.
+            final_text, mcp_data = await self._agentic_tool_loop(
+                query,
+                auth,
+                state,
+                rag_data,
+                skip_tools=set(cached_tools.keys()),
+            )
+            if cached_tools:
+                mcp_data = {**cached_tools, **mcp_data}
+
         await self._step_dynamic_injection(mcp_data, scope)
-        summary = await self._step_summarise(query, mcp_data, rag_data, state)
+
+        # When the agentic loop produced a final text response the
+        # summarisation step is redundant — the LLM already synthesised.
+        if final_text:
+            summary = final_text
+        else:
+            summary = await self._step_summarise(query, mcp_data, rag_data, state)
 
         return {
             "messages": [AIMessage(content=f"[{self.name.title()} Agent]\n{summary}")],
@@ -152,50 +179,12 @@ class GenericAgent(BaseAgent):
             return {}
         return await self._check_tool_cache(scope)
 
-    async def _step_tool_calls(
-        self,
-        query: str,
-        auth: AuthContext,
-        cached_tools: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Steps 2–4: Skill check → MCP tools → built-in tools, with cache merge."""
-        # Step 2: skill check
-        skill_name = await self._detect_skill(query)
-        if skill_name:
-            logger.info("[%s] Running agent skill '%s'", self.name, skill_name)
-            skill = self._config.skills[skill_name]
-            mcp_data = await self._skill_executor.run_skill(skill_name, skill.steps, query, auth)
-        else:
-            # Step 3: MCP tool calls
-            llm_config = self._config.llm
-            mcp_data = await self._mcp_dispatcher.fetch(
-                query,
-                auth,
-                agent_name=self.name,
-                llm_model=llm_config.model if llm_config else None,
-                llm_service=self._llm_service,
-                skip_tools=set(cached_tools.keys()),
-            )
-            # Step 4: built-in tool calls
-            builtin_data = await self._run_builtin_tools(
-                query,
-                mcp_data,
-                skip_tools=set(cached_tools.keys()),
-                auth_context=auth,
-            )
-            mcp_data.update(builtin_data)
-
-        # Merge cached results
-        if cached_tools:
-            mcp_data = {**cached_tools, **mcp_data}
-        return mcp_data
-
     async def _step_dynamic_injection(
         self,
         mcp_data: dict[str, Any],
         scope: RAGScope,
     ) -> None:
-        """Step 5: Dynamic RAG injection for tools with inject_to_rag=True."""
+        """Dynamic RAG injection for tools with inject_to_rag=True."""
         if not (self._config.rag.enabled and self._config.injectable_tools):
             return
         injectable = {k: v for k, v in mcp_data.items() if k in self._config.injectable_tools}
@@ -215,17 +204,19 @@ class GenericAgent(BaseAgent):
         rag_data: list[dict[str, Any]],
         state: AgentState | None = None,
     ) -> str:
-        """Step 6: LLM summarisation with conversation history and prior tool context."""
+        """LLM summarisation with conversation history and prior tool context."""
         llm_config = self._config.llm
 
-        # Extract conversation history so the LLM knows what was
-        # previously discussed (e.g. "tell me more" or "the second one").
-        history = self.extract_conversation_history(state) if state else []
+        history = (
+            self.extract_conversation_history(
+                state,
+                strip_prefixes=self._compute_agent_prefixes(),
+            )
+            if state
+            else []
+        )
 
-        # Compress older history when sliding-window summarization is
-        # enabled in the supervisor config.  The config is not directly
-        # available here, so we accept any ``_summary_config`` injected
-        # at construction.  When absent, no compression happens.
+        # Compress older history via sliding-window summarization when enabled.
         if history and self._summary_config and self._llm_service:
             history = await self.compress_conversation_history(
                 history,
@@ -234,8 +225,6 @@ class GenericAgent(BaseAgent):
                 recent_turns=self._summary_config.get("recent_turns", 3),
             )
 
-        # Extract prior tool results from state so the LLM has grounding
-        # on what was previously fetched or created by this agent.
         prior_ctx = (state.get("mcp_context") or {}).get(self.name) if state else None
 
         return await self.summarise(
@@ -249,165 +238,354 @@ class GenericAgent(BaseAgent):
             prior_tool_context=prior_ctx,
         )
 
-    # ── Built-in tools (ADR-017) ─────────────────────────────
+    # ── Agent prefix computation ─────────────────────────────────
 
-    _MAX_BUILTIN_TOOL_TURNS: int = 5
+    def _compute_agent_prefixes(self) -> tuple[str, ...]:
+        """Generate ``[{Name} Agent]\\n`` prefixes for all known agents.
 
-    async def _run_builtin_tools(
+        Used by :meth:`extract_conversation_history` to strip internal
+        agent name tags from historical messages.
+        """
+        prefixes = [f"[{self.name.title()} Agent]\n"]
+        for peer_name in self._agent_peers:
+            prefixes.append(f"[{peer_name.title()} Agent]\n")
+        return tuple(prefixes)
+
+    # ── Agentic tool-calling loop ────────────────────────────────
+
+    async def _agentic_tool_loop(
         self,
         query: str,
-        mcp_data: dict[str, Any],
+        auth: AuthContext,
+        state: AgentState | None,
+        rag_data: list[dict[str, Any]],
         *,
         skip_tools: set[str] | None = None,
-        auth_context: AuthContext | None = None,
-    ) -> dict[str, Any]:
-        """Run built-in tools via a multi-turn LLM loop.
+    ) -> tuple[str | None, dict[str, Any]]:
+        """Unified MCP + built-in tool loop using native ``tool_calls``.
 
-        Each iteration the LLM sees the user query, available tool
-        descriptions (with parameter metadata), and results from
-        previous iterations.  It decides which tools to call next and
-        with what arguments.  The loop continues until the LLM returns
-        an empty array or ``_MAX_BUILTIN_TOOL_TURNS`` is reached.
+        Combines all available tools (MCP-discovered and built-in) into a
+        single tool list, then runs a multi-turn conversation where the LLM
+        decides which tools to call.  Includes duplicate call detection and
+        per-call error handling.
 
-        This handles dependent tool chains (e.g. search a course first,
-        then fetch enrollments using the returned course ID) without
-        requiring deterministic wiring in YAML.
+        Returns ``(final_text, tool_results)``.  ``final_text`` is the LLM's
+        final text response (or ``None`` if the loop exhausted its rounds
+        without producing one — the caller should fall back to summarisation).
+
+        .. note:: Relationship to MCP tool-call strategies
+
+           This loop **always** uses "LLM decides" semantics — the LLM
+           selects which tools to call via the native ``tool_calls``
+           protocol.  The YAML ``tool_call_strategy`` setting (``all``,
+           ``sequential``, ``llm_decides``) is **not consulted** here;
+           those strategies are honored by :meth:`MCPDispatcher.fetch`,
+           which is used only during **skill execution**
+           (:class:`SkillExecutor`).  For regular (non-skill) queries,
+           the agentic loop is the sole execution path and the strategy
+           field is effectively ignored.
         """
-        import json as _json
+        # Agentic loop requires full response objects (tool_calls),
+        # so we use litellm directly — LLMProvider.complete() only returns str.
+        import litellm
+        from ..llm import get_llm_kwargs
 
+        llm_config = self._config.llm
+        model = llm_config.model if llm_config else (self.llm if isinstance(self.llm, str) else str(self.llm))
+        tool_results: dict[str, Any] = {}
+
+        # ── Discover MCP capabilities ───────────────────────
+        caps = await self._mcp_dispatcher.render_capabilities(auth, agent_name=self.name)
+
+        # ── Build unified tool list (litellm format) ────────
+        # Built-in tools win over MCP tools with the same name.
+        builtin_tool_names, builtin_tool_defs = self._builtin_tools_to_litellm(skip_tools)
+
+        mcp_tool_defs = MCPDispatcher.mcp_tools_to_litellm(
+            [
+                t
+                for t in caps.raw_tools
+                if t["name"] not in builtin_tool_names and not (skip_tools and t["name"] in skip_tools)
+            ],
+        )
+
+        litellm_tools = mcp_tool_defs + builtin_tool_defs
+
+        if not litellm_tools:
+            # No tools available — return immediately, summarisation will handle it.
+            return None, tool_results
+
+        # ── Build system prompt ─────────────────────────────
+        system_prompt = self._build_agentic_system_prompt(caps, rag_data, state)
+
+        # ── Build conversation messages ─────────────────────
+        messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+        if state:
+            messages.extend(
+                self.extract_conversation_history(
+                    state,
+                    strip_prefixes=self._compute_agent_prefixes(),
+                )
+            )
+        messages.append({"role": "user", "content": query})
+
+        # ── Duplicate call tracking ─────────────────────────
+        seen_calls: dict[str, str] = {}  # "name|args_json" → cached result text
+        consecutive_dupes = 0
+
+        # ── Loop ────────────────────────────────────────────
+        for round_num in range(self._MAX_TOOL_ROUNDS):
+            call_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": llm_config.temperature if llm_config else 0.2,
+                **get_llm_kwargs(model),
+            }
+
+            # Strip tools after too many consecutive duplicate calls
+            # to force the LLM to produce a text response.
+            if consecutive_dupes >= self._MAX_CONSECUTIVE_DUPES:
+                logger.warning(
+                    "[%s] %d consecutive duplicate calls — forcing text-only response",
+                    self.name,
+                    consecutive_dupes,
+                )
+            elif litellm_tools:
+                call_kwargs["tools"] = litellm_tools
+                call_kwargs["tool_choice"] = "auto"
+
+            # ── LLM call with error handling ────────────────
+            try:
+                response = await litellm.acompletion(**call_kwargs)
+            except Exception as exc:
+                error_msg = str(exc)
+                logger.error(
+                    "[%s] LLM API error in round %d: %s",
+                    self.name,
+                    round_num,
+                    error_msg,
+                    exc_info=True,
+                )
+                if "503" in error_msg or "high demand" in error_msg.lower():
+                    return (
+                        "Currently experiencing high demand. Please try again shortly.",
+                        tool_results,
+                    )
+                if "rate limit" in error_msg.lower():
+                    return (
+                        "Rate limit reached. Please try again in a few moments.",
+                        tool_results,
+                    )
+                return (
+                    f"Error processing request: {error_msg[:200]}. Please try again later.",
+                    tool_results,
+                )
+
+            choice = response.choices[0]
+            assistant_msg = choice.message
+            messages.append(assistant_msg.model_dump(exclude_none=True))
+
+            # ── No tool calls → final text response ─────────
+            tool_calls = getattr(assistant_msg, "tool_calls", None)
+            if not tool_calls:
+                final_text = assistant_msg.content or ""
+                logger.info("[%s] LLM responded after %d tool round(s)", self.name, round_num)
+                return final_text, tool_results
+
+            # ── Execute tool calls ──────────────────────────
+            for tc in tool_calls:
+                fn_name = tc.function.name
+                try:
+                    fn_args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    fn_args = {}
+                    logger.warning("[%s] Failed to parse arguments for tool '%s'", self.name, fn_name)
+
+                logger.info(
+                    "[%s] Tool call #%d → %s | args: %s",
+                    self.name,
+                    round_num + 1,
+                    fn_name,
+                    fn_args,
+                )
+
+                # ── Duplicate detection ─────────────────────
+                call_key = f"{fn_name}|{json.dumps(fn_args, sort_keys=True)}"
+                if call_key in seen_calls:
+                    consecutive_dupes += 1
+                    result_text = (
+                        "You already called this tool with the same parameters. "
+                        "Here is the previous result (do NOT call it again — "
+                        "summarise this data for the user instead):\n\n" + seen_calls[call_key]
+                    )
+                    logger.warning(
+                        "[%s] Duplicate tool call #%d → %s (%d consecutive)",
+                        self.name,
+                        round_num + 1,
+                        fn_name,
+                        consecutive_dupes,
+                    )
+                # ── Route to built-in tool ──────────────────
+                elif fn_name in builtin_tool_names:
+                    consecutive_dupes = 0
+                    result_text = await self._call_builtin_tool(fn_name, fn_args, auth)
+                    seen_calls[call_key] = result_text
+                # ── Route to MCP tool ───────────────────────
+                elif fn_name in caps.tool_client_map:
+                    consecutive_dupes = 0
+                    client, _server_cfg = caps.tool_client_map[fn_name]
+                    try:
+                        result = await client.call_tool(fn_name, fn_args, auth)
+                        result_text = result.text
+                        if result.is_error:
+                            result_text = f"[Tool error] {result_text}"
+                            logger.warning(
+                                "[%s] Tool #%d ← %s ERROR: %s", self.name, round_num + 1, fn_name, result_text[:300]
+                            )
+                        else:
+                            seen_calls[call_key] = result_text
+                    except Exception as exc:
+                        result_text = f"[Tool error] {exc}"
+                        logger.error(
+                            "[%s] Tool #%d ← %s EXCEPTION: %s", self.name, round_num + 1, fn_name, exc, exc_info=True
+                        )
+                else:
+                    result_text = f"[Error] Unknown tool '{fn_name}'"
+                    logger.error("[%s] Unknown tool '%s' in agentic loop", self.name, fn_name)
+
+                tool_results[fn_name] = result_text
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result_text,
+                    }
+                )
+
+        # Safety: max rounds exceeded
+        logger.warning("[%s] Hit max tool rounds (%d)", self.name, self._MAX_TOOL_ROUNDS)
+        return None, tool_results
+
+    # ── System prompt builder for the agentic loop ──────────────
+
+    def _build_agentic_system_prompt(
+        self,
+        caps: MCPCapabilities,
+        rag_data: list[dict[str, Any]],
+        state: AgentState | None,
+    ) -> str:
+        """Build a rich system prompt from config + MCP metadata + RAG context."""
+        parts = [self._config.prompt]
+
+        # Prior tool results from previous turns
+        prior_ctx = (state.get("mcp_context") or {}).get(self.name) if state else None
+        if prior_ctx:
+            parts.append("\n--- Previous Tool Results (from prior turns) ---")
+            parts.append(json.dumps(prior_ctx, indent=2, default=str)[:4000])
+
+        # Rendered MCP prompts (zero-arg prompts evaluated at discovery time)
+        if caps.rendered_prompts:
+            for prompt in caps.rendered_prompts:
+                parts.append(f"\n--- MCP Prompt: {prompt['name']} ---\n{prompt['text']}")
+
+        # Prompts that require arguments — listed so the LLM knows they exist
+        if caps.skipped_prompts:
+            for sp in caps.skipped_prompts:
+                parts.append(
+                    f"\n[Available prompt: {sp['name']}] {sp['description']} "
+                    f"(requires: {', '.join(sp['required_args'])})"
+                )
+
+        # MCP resource contents
+        if caps.resource_contents:
+            parts.append("\n--- Available Resources ---")
+            for name, content in caps.resource_contents.items():
+                parts.append(f"\n[{name}]\n{content[:2000]}")
+
+        # RAG context
+        if rag_data:
+            parts.append("\n--- Background Knowledge (RAG) ---")
+            parts.append(json.dumps(rag_data, indent=2, default=str)[:3000])
+
+        return "\n".join(parts)
+
+    # ── Built-in tools → litellm format ──────────────────────────
+
+    def _builtin_tools_to_litellm(
+        self,
+        skip_tools: set[str] | None = None,
+    ) -> tuple[set[str], list[dict[str, Any]]]:
+        """Convert registered built-in tools to litellm function-calling format.
+
+        Returns ``(builtin_tool_names, litellm_tool_defs)``.
+        """
         from ..config.tool_registry import get_tool
 
-        if not self._config.tools:
-            return {}
+        names: set[str] = set()
+        defs: list[dict[str, Any]] = []
 
-        if not self._llm_service:
-            logger.warning("[%s] No LLMProvider — cannot decide which built-in tools to call", self.name)
-            return {}
-
-        # Build tool descriptions from registry metadata
-        tool_descriptions: list[str] = []
-        available_names: set[str] = set()
         for tool_name in self._config.tools:
-            key = f"builtin_{tool_name}"
-            if skip_tools and key in skip_tools:
+            if skip_tools and (tool_name in skip_tools or f"builtin_{tool_name}" in skip_tools):
                 continue
             try:
                 entry = get_tool(tool_name)
             except KeyError:
                 continue
-            available_names.add(tool_name)
-            params_desc = ""
-            if entry.parameters:
-                param_lines = []
-                for p in entry.parameters.values():
-                    req = "required" if p.required else f"optional, default={p.default}"
-                    param_lines.append(f"    - {p.name} ({p.type}, {req}): {p.description}")
-                params_desc = "\n" + "\n".join(param_lines)
-            tool_descriptions.append(f"- {tool_name}: {entry.description}{params_desc}")
 
-        if not available_names:
-            return {}
+            names.add(tool_name)
 
-        descriptions_text = "\n".join(tool_descriptions)
-        llm_config = self._config.llm
-        model = llm_config.model if llm_config else ""
+            # Build JSON Schema properties from ToolParameter metadata
+            properties: dict[str, Any] = {}
+            required: list[str] = []
+            for p in entry.parameters.values():
+                prop: dict[str, str] = {
+                    "type": _tool_param_type_to_json_schema(p.type),
+                    "description": p.description,
+                }
+                properties[p.name] = prop
+                if p.required:
+                    required.append(p.name)
 
-        results: dict[str, Any] = {}
-        messages: list[dict[str, str]] = []
+            schema: dict[str, Any] = {"type": "object", "properties": properties}
+            if required:
+                schema["required"] = required
 
-        for turn in range(self._MAX_BUILTIN_TOOL_TURNS):
-            # Build the decision prompt — first turn gets the full context,
-            # subsequent turns get tool results appended.
-            if turn == 0:
-                prompt = (
-                    f"User query: {query}\n\n"
-                    f"Available built-in tools:\n{descriptions_text}\n\n"
-                    "Decide which tools to call and with what arguments based on the user query. "
-                    "Respond with a JSON array of objects: "
-                    '[{"tool": "tool_name", "arguments": {...}}, ...]\n'
-                    "Only include tools that are relevant to the query. "
-                    "If no tools are relevant, respond with an empty array [].\n"
-                    "You can call tools whose arguments depend on results from previous calls "
-                    "— when you do, I will show you the results and ask again.\n"
-                    "Respond ONLY with the JSON array, no other text."
-                )
-                messages.append({"role": "user", "content": prompt})
-            # else: messages already has the tool results appended below
-
-            try:
-                raw = await self._llm_service.complete(
-                    model,
-                    messages,
-                    temperature=0,
-                    response_format={"type": "json_object"},
-                )
-            except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
-                logger.error("[%s] LLM decision for built-in tools failed (turn %d): %s", self.name, turn, exc)
-                break
-
-            try:
-                decisions = _json.loads(raw)
-                if isinstance(decisions, dict):
-                    decisions = decisions.get("tools", [])
-            except _json.JSONDecodeError:
-                logger.warning("[%s] LLM built-in tool decision was not valid JSON: %s", self.name, raw[:200])
-                break
-
-            if not decisions:
-                logger.info("[%s] LLM decided no more built-in tools (turn %d)", self.name, turn)
-                break
-
-            logger.info(
-                "[%s] LLM decided built-in tools (turn %d): %s", self.name, turn, [d.get("tool") for d in decisions]
-            )
-
-            # Append the LLM's response to the conversation
-            messages.append({"role": "assistant", "content": raw})
-
-            # Execute decided tools and collect results for next turn
-            turn_results_text: list[str] = []
-            for decision in decisions:
-                tool_name = decision.get("tool", "")
-                tool_args = decision.get("arguments", {})
-                if tool_name not in available_names:
-                    logger.warning("[%s] LLM decided unknown tool '%s', skipping", self.name, tool_name)
-                    continue
-                key = f"builtin_{tool_name}"
-                try:
-                    if auth_context is not None:
-                        tool_args["auth_context"] = auth_context
-                    result = await self.call_builtin_tool(tool_name, **tool_args)
-                    results[key] = result
-                    logger.info("[%s] Built-in tool '%s' succeeded", self.name, tool_name)
-                    turn_results_text.append(
-                        f"Tool '{tool_name}' returned:\n{_json.dumps(result, indent=2, default=str)}"
-                    )
-                except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
-                    logger.error("[%s] Built-in tool '%s' failed: %s", self.name, tool_name, exc)
-                    results[f"{key}_error"] = str(exc)
-                    turn_results_text.append(f"Tool '{tool_name}' failed: {exc}")
-
-            # Feed results back and ask LLM if more tools are needed
-            feedback = "\n\n".join(turn_results_text)
-            messages.append(
+            defs.append(
                 {
-                    "role": "user",
-                    "content": (
-                        f"Here are the tool results:\n\n{feedback}\n\n"
-                        f"Available tools:\n{descriptions_text}\n\n"
-                        "Based on these results and the original query, decide if any more tools "
-                        "should be called. Respond with a JSON array (empty [] if done)."
-                    ),
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "description": entry.description,
+                        "parameters": schema,
+                    },
                 }
             )
 
-        return results
+        return names, defs
+
+    # ── Built-in tool call helper ────────────────────────────────
+
+    async def _call_builtin_tool(
+        self,
+        fn_name: str,
+        fn_args: dict[str, Any],
+        auth: AuthContext,
+    ) -> str:
+        """Call a built-in tool, injecting auth_context, and return JSON result."""
+        try:
+            result = await self.call_builtin_tool(fn_name, auth_context=auth, **fn_args)
+            result_text = json.dumps(result, indent=2, default=str)
+            logger.info("[%s] Built-in tool '%s' succeeded", self.name, fn_name)
+            return result_text
+        except Exception as exc:
+            logger.error("[%s] Built-in tool '%s' error: %s", self.name, fn_name, exc, exc_info=True)
+            return f"[Tool error] {exc}"
 
     # ── RAG tool cache ────────────────────────────────────────
 
     async def _check_tool_cache(self, scope: RAGScope) -> dict[str, Any]:
         """Check RAG for cached tool results within TTL. Returns {tool_name: content}."""
-        import asyncio
+        import asyncio as _asyncio
 
         if not self._config.injectable_tool_ttls:
             return {}
@@ -424,30 +602,35 @@ class GenericAgent(BaseAgent):
                 logger.info("[%s] Cache hit for tool '%s' (TTL=%ds)", self.name, tool_name, ttl)
             return tool_name, result
 
-        pairs = await asyncio.gather(*(_lookup(name, ttl) for name, ttl in self._config.injectable_tool_ttls.items()))
+        pairs = await _asyncio.gather(*(_lookup(name, ttl) for name, ttl in self._config.injectable_tool_ttls.items()))
         return {name: val for name, val in pairs if val is not None}
 
     # ── Skill detection ──────────────────────────────────────
 
     async def _detect_skill(self, query: str) -> str | None:
-        """
-        Determine if the query matches an agent-level skill.
-
-        Requires ``SkillDetector`` (backed by ``LLMProvider``).
-        """
+        """Determine if the query matches an agent-level skill."""
         if not self._config.skills:
             return None
-
         if not self._skill_detector:
             logger.warning("[%s] No SkillDetector available — skill detection skipped", self.name)
             return None
-
         return await self._skill_detector.detect(query, self._config.skills)
 
-    # Tool call strategies (_call_all_tools, _call_tools_sequential,
-    # _call_tools_llm_decides) have been extracted to agents/strategies.py
-    # following the Strategy pattern (OCP).  See ``get_strategy()``.
 
-    # MCP interaction, skill execution, and capability discovery have been
-    # extracted to MCPDispatcher, SkillExecutor, and SkillDetector
-    # following the Single Responsibility Principle (SRP).
+# ── Module-level helpers ─────────────────────────────────────────
+
+_PARAM_TYPE_MAP: dict[str, str] = {
+    "string": "string",
+    "str": "string",
+    "int": "integer",
+    "integer": "integer",
+    "float": "number",
+    "number": "number",
+    "bool": "boolean",
+    "boolean": "boolean",
+}
+
+
+def _tool_param_type_to_json_schema(param_type: str) -> str:
+    """Map a ``ToolParameter.type`` string to a JSON Schema type."""
+    return _PARAM_TYPE_MAP.get(param_type.lower(), "string")

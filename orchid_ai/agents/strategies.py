@@ -10,6 +10,16 @@ Adding a new strategy:
   1. Subclass ``ToolCallStrategy``
   2. Register it in ``STRATEGY_REGISTRY``
   3. Reference by name in ``agents.yaml`` → ``tool_call_strategy: my_strategy``
+
+.. note:: When strategies are used
+
+   These strategies are executed by :meth:`MCPDispatcher.fetch`, which
+   is called during **skill execution** (:class:`SkillExecutor`).  For
+   regular (non-skill) queries, :class:`GenericAgent` uses its own
+   agentic tool-calling loop (:meth:`GenericAgent._agentic_tool_loop`)
+   that always uses "LLM decides" semantics via native ``tool_calls``.
+   In that path, the ``tool_call_strategy`` YAML field is not
+   consulted — the LLM directly selects which tools to call.
 """
 
 from __future__ import annotations
