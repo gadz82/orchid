@@ -114,7 +114,10 @@ class MCPDispatcher:
                     llm_service=llm_service,
                 )
                 server_results.update(tool_results)
-            except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+            except Exception as exc:
+                # Broad catch: MCP servers can fail with HTTP errors (401, 500),
+                # transport errors, protocol errors, etc.  This is a fault-isolation
+                # boundary — one failing server must not crash the entire agent.
                 logger.error("[%s] MCP server '%s' failed: %s", agent_name, server_config.name, exc)
                 server_results[f"{server_config.name}_error"] = str(exc)
 
@@ -174,7 +177,9 @@ class MCPDispatcher:
                     [t.name for t in tools],
                 )
                 return tools
-            except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+            except Exception as exc:
+                # Broad catch: MCP servers can fail with HTTP errors (401, 500),
+                # transport errors, or protocol errors.  Degrade gracefully.
                 logger.warning("[%s] Could not discover tools from '%s': %s", agent_name, server_name, exc)
                 return []
 
@@ -189,7 +194,7 @@ class MCPDispatcher:
                 if prompts:
                     logger.info("[%s] Loaded %d prompts from '%s'", agent_name, len(prompts), server_name)
                     return prompts
-            except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+            except Exception as exc:
                 logger.warning("[%s] Could not load prompts from '%s': %s", agent_name, server_name, exc)
             return None
 
@@ -204,7 +209,7 @@ class MCPDispatcher:
                 if resources:
                     logger.info("[%s] Loaded %d resources from '%s'", agent_name, len(resources), server_name)
                     return resources
-            except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+            except Exception as exc:
                 logger.warning("[%s] Could not load resources from '%s': %s", agent_name, server_name, exc)
             return None
 
@@ -274,7 +279,9 @@ class MCPDispatcher:
                         len(raw_tools),
                         server_name,
                     )
-                except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+                except Exception as exc:
+                    # Broad catch: MCP servers can fail with HTTP errors (401, 500),
+                    # transport errors, or protocol errors.  Degrade gracefully.
                     logger.warning("[%s] Could not discover tools from '%s': %s", agent_name, server_name, exc)
 
             # ── Prompts ────────────────────────────────────────
@@ -314,7 +321,7 @@ class MCPDispatcher:
                                 server_name,
                                 exc,
                             )
-                except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+                except Exception as exc:
                     logger.warning("[%s] Could not list prompts from '%s': %s", agent_name, server_name, exc)
 
             # ── Resources ──────────────────────────────────────
@@ -337,7 +344,7 @@ class MCPDispatcher:
                                 server_name,
                                 exc,
                             )
-                except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+                except Exception as exc:
                     logger.warning("[%s] Could not list resources from '%s': %s", agent_name, server_name, exc)
 
         # asyncio.gather runs coroutines on a single thread; they only
