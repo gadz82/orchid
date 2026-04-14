@@ -1,6 +1,6 @@
 [project]
 name = "orchid-ai"
-version = "1.2.12"
+version = "1.2.13"
 description = "Orchid — platform-agnostic multi-agent AI framework (LangGraph + RAG)"
 readme = "README.md"
 license = "MIT"
