@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.12 (2026-04-14)
+
+### Bug Fixes
+
+- Enhance error handling across MCP tools and servers with graceful degradation
+  ([`f66d204`](https://github.com/gadz82/orchid/commit/f66d20477277f552f0e09a7285b4d6ae5c03d93a))
+
+
 ## v1.2.11 (2026-04-14)
 
 ### Bug Fixes
