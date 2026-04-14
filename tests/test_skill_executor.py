@@ -182,3 +182,69 @@ class TestBuiltinStepSignatureFiltering:
         )
         assert result["query"] == "user question"
         assert result["limit"] == 5
+
+
+class TestNoAutoMapping:
+    """Verify that no implicit query-to-parameter mapping occurs.
+
+    Tools that need specific parameters must receive them via
+    step_arguments in YAML.  For workflows requiring LLM-driven
+    parameter extraction, use orchestrator-level skills with
+    agent steps instead of deterministic tool chaining.
+    """
+
+    @pytest.mark.asyncio
+    async def test_explicit_step_arguments_are_forwarded(self):
+        """step_arguments values reach the handler correctly."""
+        received = {}
+
+        async def search_courses(*, auth_context, search_text: str, **_kw):
+            received["search_text"] = search_text
+            return {"courses": []}
+
+        treg.register_tool("search_courses", search_courses, "Search courses")
+
+        async def caller(name: str, **kwargs):
+            return await treg.call_tool(name, **kwargs)
+
+        executor = SkillExecutor(
+            agent_name="test",
+            mcp_dispatcher=None,
+            builtin_tool_caller=caller,
+        )
+
+        await executor._run_builtin_step(
+            "search_courses",
+            query="user said something",
+            auth=_make_auth(),
+            step_arguments={"search_text": "Course C1"},
+            previous_results={},
+        )
+        assert received["search_text"] == "Course C1"
+
+    @pytest.mark.asyncio
+    async def test_missing_required_param_raises(self):
+        """Without step_arguments, required params cause a TypeError."""
+
+        async def tool_with_required(*, auth_context, course_id: int, **_kw):
+            return {"course_id": course_id}
+
+        treg.register_tool("strict_tool", tool_with_required, "Strict tool")
+
+        async def caller(name: str, **kwargs):
+            return await treg.call_tool(name, **kwargs)
+
+        executor = SkillExecutor(
+            agent_name="test",
+            mcp_dispatcher=None,
+            builtin_tool_caller=caller,
+        )
+
+        with pytest.raises(TypeError, match="course_id"):
+            await executor._run_builtin_step(
+                "strict_tool",
+                query="some text",
+                auth=_make_auth(),
+                step_arguments={},
+                previous_results={},
+            )

@@ -103,6 +103,13 @@ class SkillExecutor:
         errors.  Framework-provided kwargs (``query``, ``context``,
         ``auth_context``) are offered but only forwarded when the
         handler declares them.
+
+        No automatic parameter name mapping is performed — if a tool
+        requires a specific parameter (e.g. ``search_text``), it must
+        be provided via ``step_arguments`` in the YAML skill definition.
+        For workflows that need LLM-driven parameter extraction, use
+        orchestrator-level skills with agent steps instead of
+        deterministic tool chaining.
         """
         from ..config.tool_registry import get_tool
 
@@ -119,15 +126,36 @@ class SkillExecutor:
         try:
             entry = get_tool(tool_name)
             sig = inspect.signature(entry.handler)
+
+            # Explicit parameter names (excluding **kwargs itself)
+            explicit_params = {
+                name
+                for name, p in sig.parameters.items()
+                if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            }
+
             accepts_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
             if accepts_var_keyword:
                 # Handler has **kwargs — pass everything
                 args = available
             else:
-                accepted = set(sig.parameters.keys())
-                args = {k: v for k, v in available.items() if k in accepted}
-        except (KeyError, ValueError, TypeError):
+                args = {k: v for k, v in available.items() if k in explicit_params}
+
+            logger.debug(
+                "[%s] Builtin step '%s': handler accepts %s, passing %s",
+                self._agent_name,
+                tool_name,
+                sorted(explicit_params),
+                sorted(args.keys()),
+            )
+        except (KeyError, ValueError, TypeError) as exc:
             # Fallback: pass everything and let the handler raise if needed
+            logger.warning(
+                "[%s] Could not introspect tool '%s' (%s), passing all kwargs",
+                self._agent_name,
+                tool_name,
+                exc,
+            )
             args = available
 
         return await self._builtin_tool_caller(tool_name, **args)
