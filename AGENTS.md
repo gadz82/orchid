@@ -28,7 +28,7 @@ orchid/
     mcp/                  StreamableHttpMCPClient
     llm_service.py        LiteLLMProvider (concrete LLMProvider)
     utils.py              import_class() shared utility
-  tests/                  338+ tests
+  tests/                  384+ tests
   pyproject.toml
 ```
 
@@ -92,7 +92,9 @@ documents/   → core/  (standalone)
 
 9. **Multi-turn conversation context is handled at framework level.** `BaseAgent.extract_conversation_history()` extracts clean dialogue from graph state. `summarise()` accepts `conversation_history` and `prior_tool_context` parameters. The supervisor uses configurable `history_max_turns` (default 20) and `history_max_chars` (default 1000) from `SupervisorConfig`. Opt-in **sliding-window summarization** (`history_summary_enabled`) compresses older turns via a cheap LLM call, keeping the most recent `history_summary_recent_turns` (default 10) exchanges verbatim.
 
-10. **Built-in tool parameters are declared in YAML or auto-extracted.** The `tools:` section in `agents.yaml` supports an optional `parameters:` block per tool. When declared, YAML parameters take precedence. When omitted, parameters are auto-extracted from the Python function signature via `inspect`. Framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. Parameter metadata is used by the CLI skill generator to produce accurate documentation.
+10. **MCP communication boundaries use broad exception handling.** `mcp_dispatcher.py` and `strategies.py` catch `Exception` (not a narrow tuple) at server/tool call boundaries. This is intentional fault isolation — MCP servers can fail with HTTP errors (401, 500), transport errors, or protocol errors, and one failing server must not crash the entire agent. Always use `except Exception` at these boundaries; never narrow it to a specific tuple.
+
+11. **Built-in tool parameters are declared in YAML or auto-extracted.** The `tools:` section in `agents.yaml` supports an optional `parameters:` block per tool. When declared, YAML parameters take precedence. When omitted, parameters are auto-extracted from the Python function signature via `inspect`. Framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. Parameter metadata is used by the CLI skill generator to produce accurate documentation.
 
 ## Key Patterns
 
@@ -132,7 +134,7 @@ runtime = OrchidRuntime(
 graph = build_graph(config=load_config("agents.yaml"), runtime=runtime)
 ```
 
-Integrators override only what they need. All fields have sensible defaults. The old `build_graph(config=..., default_model=..., reader=...)` kwargs API still works (backward compat).
+Integrators override only what they need. All fields have sensible defaults.
 
 ### Strategy Pattern (Tool Calls)
 
@@ -173,3 +175,4 @@ Switching models requires wiping and re-indexing Qdrant collections.
 - **Not handling `_reader` being `None`** — vector backend can be `null` in tests.
 - **Mutating `AuthContext`** — it's subclass-friendly but treat as immutable in framework code.
 - **Adding API/CLI code here** — those belong in `orchid-api/` and `orchid-cli/`.
+- **Catching only specific exceptions at MCP boundaries** — always use `except Exception` at server communication boundaries in `mcp_dispatcher.py` and `strategies.py`. HTTP libraries (httpx) raise exception types like `httpx.HTTPStatusError` (for 401/500) that are not subclasses of `ConnectionError`/`TimeoutError`/`OSError`. A narrow exception tuple lets these propagate and crash the agent.

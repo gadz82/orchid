@@ -210,19 +210,6 @@ graph = build_graph(config=config, runtime=runtime)
 | `llm_service` | `LLMProvider \| None` | `LiteLLMProvider()` |
 | `mcp_client_factory` | `MCPClientFactory \| None` | `StreamableHttpMCPClient` factory |
 
-### Backward Compatibility
-
-The old kwargs-based API still works — it is auto-wrapped into an `OrchidRuntime` internally:
-
-```python
-# Legacy API (still supported)
-graph = build_graph(config=config, default_model="ollama/llama3.2", reader=reader)
-
-# Equivalent new API
-runtime = OrchidRuntime(default_model="ollama/llama3.2", reader=reader)
-graph = build_graph(config=config, runtime=runtime)
-```
-
 ## Configuration
 
 Orchid uses two configuration files:
@@ -415,6 +402,8 @@ Each step:
   - `"llm_decides"` -- Ask the LLM to decide which tools to call and with what arguments. The LLM sees all available tools and the user query, then generates tool calls. Most flexible but slower and uses more tokens.
 - **`cache_ttl`** -- How long (in seconds) to cache the results of capability discovery (`list_tools()`, `list_prompts()`, `list_resources()`). When using wildcard discovery (`"*"`), the framework calls the server's discovery endpoints and caches the results for this duration. `0` = re-discover on every request. `300` (5 min default) is a good balance for development. Increase in production where capabilities rarely change.
 
+> **Fault isolation:** MCP server communication boundaries use broad exception handling. If a server returns HTTP errors (401 Unauthorized, 500 Internal Server Error), connection failures, or protocol errors, the agent logs a warning and continues with the remaining servers and tools -- it does not crash or retry endlessly. This applies to tool execution (strategies), capability discovery (`render_capabilities`), and the `fetch()` dispatcher. One failing MCP server never takes down the entire agent.
+
 #### `agents.<name>.mcp_servers[].tools[]`
 
 | Field | Type | Default |
@@ -498,6 +487,8 @@ Runtime configuration consumed by orchid-api and orchid-cli. Each nested YAML ke
 - **`auth.dev_bypass`** -- When `true`, the API skips Bearer token validation and uses a dummy `AuthContext` with tenant `"99999"` and user `"dev-user-00000000"`. All requests are allowed without authentication. **Never enable in production.** Useful for local development and testing without an OAuth provider.
 - **`auth.identity_resolver_class`** -- Dotted import path to a custom `IdentityResolver` subclass (e.g. `"myapp.identity.MyIdentityResolver"`). The resolver receives the Bearer token from the `Authorization` header and returns an `AuthContext` with tenant/user information. When empty, only `dev_auth_bypass` works -- all other requests get a 503.
 - **`auth.domain`** -- Default platform domain passed to the identity resolver when the `x-auth-domain` header is missing from the request. Used by resolvers that need to know which tenant instance to authenticate against. When empty, the resolver must get the domain from another source.
+
+> **CLI OAuth support:** `orchid-cli` extends the `auth` section with an `auth.cli` subsection for OAuth 2.0 Authorization Code + PKCE login. This is a CLI-only feature -- the API uses its own FastAPI dependency injection for auth. See the [orchid-cli README](../orchid-cli/README.md#authentication) for details.
 
 #### `startup`
 
