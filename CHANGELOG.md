@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.4 (2026-04-14)
+
+### Bug Fixes
+
+- Prompt chain optimization and configuration parameters.
+  ([`ef72430`](https://github.com/gadz82/orchid/commit/ef7243058f7a3e021c81cb5774037848ad057751))
+
+
 ## v1.2.3 (2026-04-13)
 
 ### Bug Fixes
