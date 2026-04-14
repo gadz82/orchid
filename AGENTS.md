@@ -28,7 +28,7 @@ orchid/
     mcp/                  StreamableHttpMCPClient
     llm_service.py        LiteLLMProvider (concrete LLMProvider)
     utils.py              import_class() shared utility
-  tests/                  197+ tests
+  tests/                  328+ tests
   pyproject.toml
 ```
 
@@ -48,7 +48,7 @@ documents/   → core/  (standalone)
 
 | ABC | File | Purpose |
 |-----|------|---------|
-| `BaseAgent` | `agent.py` | Agent identity + `run()`, `summarise()`, `fetch_rag_context()`, `extract_user_query()` |
+| `BaseAgent` | `agent.py` | Agent identity + `run()`, `summarise()`, `fetch_rag_context()`, `extract_user_query()`, `extract_conversation_history()` |
 | `IdentityResolver` | `identity.py` | Bearer token -> AuthContext |
 | `LLMProvider` | `llm_provider.py` | Abstract LLM completion (`complete()`) |
 | `MCPToolCaller` | `mcp.py` | Call MCP tools |
@@ -88,7 +88,9 @@ documents/   → core/  (standalone)
 
 7. **No vendor-specific code.** Platform integrations belong in consumer projects.
 
-8. **Consumer agents inherit from `BaseAgent`** and use `self.summarise()`, `self.fetch_rag_context()`, `self.extract_user_query()` — don't duplicate these methods.
+8. **Consumer agents inherit from `BaseAgent`** and use `self.summarise()`, `self.fetch_rag_context()`, `self.extract_user_query()`, `self.extract_conversation_history()` — don't duplicate these methods.
+
+9. **Multi-turn conversation context is handled at framework level.** `BaseAgent.extract_conversation_history()` extracts clean dialogue from graph state. `summarise()` accepts `conversation_history` and `prior_tool_context` parameters. The supervisor uses configurable `history_max_turns` (default 10) and `history_max_chars` (default 1000) from `SupervisorConfig`.
 
 ## Key Patterns
 
@@ -144,7 +146,7 @@ Integrators override only what they need. All fields have sensible defaults. The
 
 ```bash
 cd orchid && source .venv/bin/activate
-pytest tests/ -x              # all tests (197+)
+pytest tests/ -x              # all tests (328+)
 pytest tests/ -k "test_scopes"  # specific
 ruff check orchid_ai/         # lint
 ruff format orchid_ai/        # format

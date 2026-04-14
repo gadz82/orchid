@@ -160,3 +160,77 @@ class TestExtractConversationHistory:
         assert len(result) == 2
         assert result[0] == {"role": "user", "content": "Question"}
         assert result[1] == {"role": "assistant", "content": "Answer"}
+
+
+class TestMaxChars:
+    """Tests for the max_chars truncation parameter."""
+
+    def test_no_truncation_by_default(self) -> None:
+        long_content = "x" * 5000
+        state = {
+            "messages": [
+                AIMessage(content=long_content),
+                HumanMessage(content="current"),
+            ]
+        }
+        result = BaseAgent.extract_conversation_history(state)
+        assert len(result) == 1
+        assert result[0]["content"] == long_content  # not truncated
+
+    def test_truncation_with_max_chars(self) -> None:
+        state = {
+            "messages": [
+                HumanMessage(content="short"),
+                AIMessage(content="a" * 2000),
+                HumanMessage(content="current"),
+            ]
+        }
+        result = BaseAgent.extract_conversation_history(state, max_chars=100)
+        assert len(result) == 2
+        # Short message untouched
+        assert result[0]["content"] == "short"
+        # Long message truncated with ellipsis
+        assert len(result[1]["content"]) == 101  # 100 chars + "…"
+        assert result[1]["content"].endswith("…")
+
+    def test_truncation_applies_to_user_messages(self) -> None:
+        state = {
+            "messages": [
+                HumanMessage(content="b" * 500),
+                AIMessage(content="response"),
+                HumanMessage(content="current"),
+            ]
+        }
+        result = BaseAgent.extract_conversation_history(state, max_chars=50)
+        assert len(result[0]["content"]) == 51  # 50 + "…"
+        assert result[0]["content"].endswith("…")
+
+    def test_exact_limit_not_truncated(self) -> None:
+        """Message at exactly max_chars is NOT truncated."""
+        content = "x" * 100
+        state = {
+            "messages": [
+                AIMessage(content=content),
+                HumanMessage(content="current"),
+            ]
+        }
+        result = BaseAgent.extract_conversation_history(state, max_chars=100)
+        assert result[0]["content"] == content  # no ellipsis
+
+    def test_truncation_after_strip_prefix(self) -> None:
+        """Truncation is applied AFTER stripping agent prefixes."""
+        state = {
+            "messages": [
+                AIMessage(content="[Agent]\n" + "x" * 200),
+                HumanMessage(content="current"),
+            ]
+        }
+        result = BaseAgent.extract_conversation_history(
+            state,
+            max_chars=50,
+            strip_prefixes=("[Agent]\n",),
+        )
+        # Prefix stripped first, then truncated
+        assert not result[0]["content"].startswith("[Agent]")
+        assert result[0]["content"].endswith("…")
+        assert len(result[0]["content"]) == 51

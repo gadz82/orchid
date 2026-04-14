@@ -64,8 +64,29 @@ BaseAgent(ABC)
   .run(state) → AgentState # the main agent logic
   .extract_user_query(state) → str
   .fetch_rag_context(query, scope, namespace, k) → list[dict]
-  .summarise(state, system_prompt, context_str, model) → str
+  .summarise(query, mcp_data, rag_data, *, system_prompt, model, temperature,
+             conversation_history, prior_tool_context) → str
+  @staticmethod
+  .extract_conversation_history(state, *, max_turns, max_chars,
+                                skip_prefixes, strip_prefixes) → list[dict]
 ```
+
+#### `extract_conversation_history()` — Framework-level History Extraction
+
+Static method that extracts clean `[{"role": "user"|"assistant", "content": "..."}]` pairs from the LangGraph state's `messages` list. Used by `GenericAgent`, the supervisor, and custom agents to build multi-turn context.
+
+- **Filters out** internal supervisor messages (any `AIMessage` starting with `skip_prefixes`, default `("[Supervisor",)`)
+- **Strips agent prefixes** from AI messages (e.g. `"[MyAgent]\nActual content"` → `"Actual content"`)
+- **Excludes** the last `HumanMessage` (it's the current query, added separately)
+- **Caps** output to `max_turns * 2` messages (default `max_turns=10`)
+- **Truncates** individual messages to `max_chars` characters with `…` suffix (default `None` = no truncation)
+- Uses **duck-typing** for message type detection to maintain zero-dependency rule in `core/`
+
+#### `summarise()` — Conversation-Aware Summarization
+
+When `conversation_history` (list of dicts) is provided, `summarise()` injects the history between the system prompt and user message, and appends a focus instruction telling the LLM to prioritize the latest query.
+
+When `prior_tool_context` (dict) is provided, it appends `--- Previous Tool Results ---` JSON to the system prompt (truncated to 4000 chars). This carries tool results from previous invocations so agents don't re-ask for information already gathered.
 
 ### `mcp.py` — MCPClient ABC
 

@@ -249,15 +249,28 @@ class GuardrailsConfig(BaseModel):
 class SupervisorConfig(BaseModel):
     """Supervisor prompt and behavior configuration.
 
-    Allows consumers to customize the assistant name and prompts
-    without modifying library code.  When prompt fields are ``None``,
-    the default templates in ``supervisor.py`` are used.
+    Allows consumers to customize the assistant name, prompts, and
+    conversation history limits without modifying library code.
+    When prompt fields are ``None``, the default templates in
+    ``supervisor.py`` are used.
+
+    History settings control how much prior conversation context is
+    passed to the LLM during routing, synthesis, and sequential
+    handoff steps:
+
+    - ``history_max_turns``: maximum user/assistant exchange pairs
+      to include.  Default 10 (= up to 20 messages).
+    - ``history_max_chars``: maximum characters per individual
+      message before truncation.  Default 1000.  Truncated messages
+      get an ``…`` suffix.
     """
 
     assistant_name: str = "AI assistant"
     routing_system_prompt: str | None = None
     synthesis_system_prompt: str | None = None
     sequential_advance_prompt: str | None = None
+    history_max_turns: int = 10
+    history_max_chars: int = 1000
 
 
 # ── Agent config (recursive for nesting) ─────────────────────

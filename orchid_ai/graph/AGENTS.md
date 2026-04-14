@@ -84,8 +84,31 @@ Steps:
 
 New agents are added by YAML config — `build_graph()` handles the wiring automatically. You should NOT manually edit `graph.py` to add nodes unless changing the graph topology itself (e.g., adding a new routing strategy).
 
+## Conversation History in the Supervisor
+
+The supervisor uses `BaseAgent.extract_conversation_history()` to build clean multi-turn context for routing, synthesis, and sequential advance steps. This filters out internal `[Supervisor` messages and truncates per-message content.
+
+### Configurable History Limits
+
+Configured via `SupervisorConfig` in `agents.yaml`:
+
+```yaml
+supervisor:
+  history_max_turns: 10    # max user-assistant pairs (default: 10)
+  history_max_chars: 1000  # max chars per message before truncation (default: 1000)
+```
+
+### `_filter_internal_messages()`
+
+Helper that removes supervisor routing noise (`[Supervisor] Parallel dispatch:`, `[Supervisor → agent]` handoffs, etc.) from the current turn's messages before passing them to the LLM. Used in `_route()`, `_synthesise()`, and `_advance_sequential()`.
+
+### Prior Tool Context
+
+The supervisor's `_advance_sequential()` injects `mcp_context` from previous agent invocations into the history, so downstream agents in a sequential pipeline have access to earlier tool results.
+
 ## Common Mistakes
 
 - **Using `list` annotation instead of `replace_list` for `pending_agents`.** Default list annotation appends, but sequential routing needs full replacement.
 - **Not returning to supervisor.** Every agent node must have an edge back to `supervisor`. The supervisor decides when to end.
 - **Mutating state in-place.** Always return a new dict from nodes. LangGraph handles merging via annotations.
+- **Hardcoding history limits.** Use `SupervisorConfig.history_max_turns` and `history_max_chars` instead of magic numbers.
