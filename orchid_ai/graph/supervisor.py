@@ -433,14 +433,23 @@ async def _advance_sequential(
     )
 
     # Build clean history using the shared framework helper
-    llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    llm_messages.extend(
-        BaseAgent.extract_conversation_history(
-            state,
-            max_turns=sup.history_max_turns,
-            max_chars=sup.history_max_chars,
-        )
+    history = BaseAgent.extract_conversation_history(
+        state,
+        max_turns=sup.history_max_turns,
+        max_chars=sup.history_max_chars,
     )
+
+    # Compress older turns when sliding-window summarization is enabled
+    if history and sup.history_summary_enabled and llm_service:
+        history = await BaseAgent.compress_conversation_history(
+            history,
+            llm_service=llm_service,
+            model=sup.history_summary_model or model,
+            recent_turns=sup.history_summary_recent_turns,
+        )
+
+    llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    llm_messages.extend(history)
 
     # Inject current MCP data so the LLM knows what was collected
     mcp_ctx = state.get("mcp_context", {})
@@ -511,6 +520,16 @@ async def _synthesise(
         max_turns=sup.history_max_turns,
         max_chars=sup.history_max_chars,
     )
+
+    # Compress older turns when sliding-window summarization is enabled
+    if history and sup.history_summary_enabled and llm_service:
+        history = await BaseAgent.compress_conversation_history(
+            history,
+            llm_service=llm_service,
+            model=sup.history_summary_model or model,
+            recent_turns=sup.history_summary_recent_turns,
+        )
+
     if history:
         llm_messages.append(
             {

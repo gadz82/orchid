@@ -17,7 +17,7 @@ orchid/
       llm_provider.py     LLMProvider ABC
       mcp.py              MCPToolCaller / MCPDiscoverable ABCs
       repository.py       VectorReader / VectorWriter / VectorStoreAdmin ABCs
-    config/               YAML config loader + schema + registries
+    config/               YAML config loader + schema + tool registry (parameter metadata)
     agents/               GenericAgent + strategies (SkillDetector, MCPDispatcher, SkillExecutor)
     graph/                LangGraph wiring: supervisor.py, graph.py, state.py
     rag/                  Scopes, indexer, embeddings, factory, backends/qdrant.py
@@ -28,7 +28,7 @@ orchid/
     mcp/                  StreamableHttpMCPClient
     llm_service.py        LiteLLMProvider (concrete LLMProvider)
     utils.py              import_class() shared utility
-  tests/                  328+ tests
+  tests/                  338+ tests
   pyproject.toml
 ```
 
@@ -90,7 +90,9 @@ documents/   → core/  (standalone)
 
 8. **Consumer agents inherit from `BaseAgent`** and use `self.summarise()`, `self.fetch_rag_context()`, `self.extract_user_query()`, `self.extract_conversation_history()` — don't duplicate these methods.
 
-9. **Multi-turn conversation context is handled at framework level.** `BaseAgent.extract_conversation_history()` extracts clean dialogue from graph state. `summarise()` accepts `conversation_history` and `prior_tool_context` parameters. The supervisor uses configurable `history_max_turns` (default 10) and `history_max_chars` (default 1000) from `SupervisorConfig`.
+9. **Multi-turn conversation context is handled at framework level.** `BaseAgent.extract_conversation_history()` extracts clean dialogue from graph state. `summarise()` accepts `conversation_history` and `prior_tool_context` parameters. The supervisor uses configurable `history_max_turns` (default 20) and `history_max_chars` (default 1000) from `SupervisorConfig`. Opt-in **sliding-window summarization** (`history_summary_enabled`) compresses older turns via a cheap LLM call, keeping the most recent `history_summary_recent_turns` (default 10) exchanges verbatim.
+
+10. **Built-in tool parameters are declared in YAML or auto-extracted.** The `tools:` section in `agents.yaml` supports an optional `parameters:` block per tool. When declared, YAML parameters take precedence. When omitted, parameters are auto-extracted from the Python function signature via `inspect`. Framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. Parameter metadata is used by the CLI skill generator to produce accurate documentation.
 
 ## Key Patterns
 

@@ -122,11 +122,36 @@ class ExecutionHints(BaseModel):
 # ── Built-in tools + Skills (ADR-017) ────────────────────────
 
 
+class BuiltinToolParameter(BaseModel):
+    """A single parameter of a built-in tool.
+
+    Declared in YAML to document the tool's interface for LLM-based
+    invocation and Claude Code skill generation.  When omitted in YAML,
+    parameters are auto-extracted from the Python function signature
+    at registration time.
+
+    Example YAML::
+
+        parameters:
+          player_name:
+            type: string
+            description: "Full or partial player name"
+            required: false
+            default: ""
+    """
+
+    type: str = "string"  # string, int, float, bool
+    description: str = ""
+    required: bool = True
+    default: Any = None
+
+
 class BuiltinToolConfig(BaseModel):
     """A built-in Python tool declared at the YAML top level."""
 
     handler: str  # dotted import path, e.g. "myproject.tools.dates.format_date"
     description: str = ""
+    parameters: dict[str, BuiltinToolParameter] = Field(default_factory=dict)
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
 
@@ -259,7 +284,7 @@ class SupervisorConfig(BaseModel):
     handoff steps:
 
     - ``history_max_turns``: maximum user/assistant exchange pairs
-      to include.  Default 10 (= up to 20 messages).
+      to include.  Default 20 (= up to 40 messages).
     - ``history_max_chars``: maximum characters per individual
       message before truncation.  Default 1000.  Truncated messages
       get an ``…`` suffix.
@@ -269,8 +294,13 @@ class SupervisorConfig(BaseModel):
     routing_system_prompt: str | None = None
     synthesis_system_prompt: str | None = None
     sequential_advance_prompt: str | None = None
-    history_max_turns: int = 10
+    history_max_turns: int = 20
     history_max_chars: int = 1000
+
+    # ── Sliding-window summarization (context compression) ──
+    history_summary_enabled: bool = True
+    history_summary_model: str | None = None  # None = use the supervisor model
+    history_summary_recent_turns: int = 10  # keep last N turns verbatim
 
 
 # ── Agent config (recursive for nesting) ─────────────────────

@@ -162,6 +162,7 @@ def _instantiate_agent(
     reader: VectorReader,
     llm_service: LLMProvider | None = None,
     mcp_client_factory: MCPClientFactory | None = None,
+    summary_config: dict[str, Any] | None = None,
 ) -> BaseAgent:
     """
     Create an agent instance from its YAML config.
@@ -184,12 +185,15 @@ def _instantiate_agent(
     sig = inspect.signature(cls.__init__)
     accepts_config = "config" in sig.parameters
     accepts_llm_service = "llm_service" in sig.parameters
+    accepts_summary_config = "summary_config" in sig.parameters
 
     kwargs: dict[str, Any] = {"llm": model, "reader": reader, "mcp_clients": mcp_clients}
     if accepts_config:
         kwargs["config"] = agent_config
     if accepts_llm_service and llm_service:
         kwargs["llm_service"] = llm_service
+    if accepts_summary_config and summary_config:
+        kwargs["summary_config"] = summary_config
 
     return cls(**kwargs)
 
@@ -414,6 +418,15 @@ def build_graph(
     # Build agent descriptions directly from config (no proxy needed)
     agent_descriptions: dict[str, str] = {name: cfg.description for name, cfg in config.agents.items()}
 
+    # Build summary config dict from SupervisorConfig (passed to GenericAgent)
+    sup = config.supervisor
+    summary_cfg: dict[str, Any] | None = None
+    if sup.history_summary_enabled:
+        summary_cfg = {
+            "model": sup.history_summary_model or default_model,
+            "recent_turns": sup.history_summary_recent_turns,
+        }
+
     for agent_name, agent_config in config.agents.items():
         if agent_config.children:
             # Agent with children → build a sub-graph
@@ -434,6 +447,7 @@ def build_graph(
                 reader,
                 llm_service,
                 mcp_factory,
+                summary_config=summary_cfg,
             )
             agents.append(agent)
 

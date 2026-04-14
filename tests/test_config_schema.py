@@ -195,7 +195,7 @@ class TestSupervisorConfig:
 
     def test_default_history_limits(self):
         cfg = SupervisorConfig()
-        assert cfg.history_max_turns == 10
+        assert cfg.history_max_turns == 20
         assert cfg.history_max_chars == 1000
 
     def test_custom_history_limits(self):

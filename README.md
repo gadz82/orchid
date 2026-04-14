@@ -286,15 +286,21 @@ Orchid uses two configuration files:
 | `routing_system_prompt` | str | `null` |
 | `synthesis_system_prompt` | str | `null` |
 | `sequential_advance_prompt` | str | `null` |
-| `history_max_turns` | int | `10` |
+| `history_max_turns` | int | `20` |
 | `history_max_chars` | int | `1000` |
+| `history_summary_enabled` | bool | `true` |
+| `history_summary_model` | str | `null` |
+| `history_summary_recent_turns` | int | `10` |
 
 - **`assistant_name`** -- The name used in the supervisor's prompts when referring to itself (e.g. "You are the routing brain of **Travel Assistant**"). Appears in synthesized responses. Set this to your product's name.
 - **`routing_system_prompt`** -- Fully custom system prompt for the supervisor's routing step. The routing step analyzes the user's message and decides which agent(s) should handle it by reading each agent's `description`. When `null`, the built-in template from `supervisor.py` is used. Override this to change how agents are selected (e.g. to add domain-specific routing rules or prioritization logic).
 - **`synthesis_system_prompt`** -- Custom system prompt for the synthesis step. After all selected agents return their results, the supervisor synthesizes them into a single coherent response. Override this to control the tone, format, or structure of final responses.
 - **`sequential_advance_prompt`** -- Custom prompt used during orchestrator skill execution. After each step in a multi-agent skill completes, this prompt decides whether to advance to the next step or respond directly. Override this to change how skill steps chain together.
-- **`history_max_turns`** -- Maximum number of user-assistant conversation pairs included as context in supervisor routing, synthesis, and sequential advance steps. Each "turn" is one user message + one assistant response. Higher values give more context but consume more tokens. Default `10`.
+- **`history_max_turns`** -- Maximum number of user-assistant conversation pairs included as context in supervisor routing, synthesis, and sequential advance steps. Each "turn" is one user message + one assistant response. Higher values give more context but consume more tokens. Default `20`.
 - **`history_max_chars`** -- Maximum characters per individual message in conversation history. Messages exceeding this limit are truncated with an ellipsis (`…`). Prevents long tool outputs or verbose responses from consuming excessive tokens in multi-turn context. Default `1000`.
+- **`history_summary_enabled`** -- Enables sliding-window conversation summarization. When `true`, conversation turns older than `history_summary_recent_turns` are compressed into a single LLM-generated summary paragraph, while the most recent turns are kept verbatim. This dramatically reduces token usage for long conversations. Default `true`. Set to `false` to disable.
+- **`history_summary_model`** -- LLM model used for the history summarization call. Use a cheap/fast model here since the summarization input is small. When `null`, the supervisor's default model is used. Example: `"gemini/gemini-2.5-flash-lite"`.
+- **`history_summary_recent_turns`** -- Number of recent user-assistant exchange pairs to keep verbatim when summarization is enabled. Older turns are condensed into a summary. Default `10` (the last 10 exchanges are preserved word-for-word, everything older is summarized).
 
 #### `tools.<name>` (Built-in Tools)
 
@@ -302,11 +308,13 @@ Orchid uses two configuration files:
 |-------|------|---------|
 | `handler` | str | (required) |
 | `description` | str | `""` |
+| `parameters` | dict | `{}` |
 | `inject_to_rag` | bool | `false` |
 | `rag_ttl` | int\|null | `null` |
 
 - **`handler`** -- Dotted Python import path to the tool function (e.g. `"myapp.tools.weather.get_weather"`). The function is imported via `importlib` at graph build time. It must be callable with keyword arguments `query` and `context`, and must be importable from the working directory.
 - **`description`** -- Human-readable description of what the tool does. This is included in the LLM prompt so the model understands when and how to use the tool. A good description helps the LLM decide whether to call this tool for a given query. Be specific: "Get current weather temperature and conditions for a city name" is better than "Weather tool".
+- **`parameters`** -- Optional parameter declarations for the tool. When provided, these take precedence over auto-extracted parameters from the function signature. Each parameter is a dict with `type` (string/int/float/bool), `description`, `required` (bool), and `default`. When omitted, parameters are auto-extracted from the Python function signature via `inspect` — framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. This metadata is used by the CLI skill generator (`orchid skill generate`) to produce accurate Claude Code skill documentation.
 - **`inject_to_rag`** -- When `true`, the tool's return value is stored as a document in the Qdrant vector store after execution. This creates a cache: on future queries, the framework can retrieve the cached result from RAG instead of re-calling the tool (if `rag_ttl > 0`). Useful for expensive API calls whose results don't change frequently (e.g. course catalogs, product listings). Default `false` means results are used once and discarded.
 - **`rag_ttl`** -- Per-tool override for the RAG cache time-to-live (in seconds). When `null`, the agent's `rag.rag_ttl` is used. When set to a positive integer, this tool's cached results expire after that many seconds. Set to `0` to disable caching for this specific tool even if the agent has a default TTL. Useful when different tools have different freshness requirements (e.g. exchange rates: 300s, restaurant menus: 86400s).
 
@@ -622,12 +630,31 @@ tools:
     description: "Format a date string into a specified format"
     inject_to_rag: false             # results NOT cached (default)
     rag_ttl: null                    # use agent default (default)
+    parameters:                      # optional — auto-extracted from function signature when omitted
+      value:
+        type: string
+        description: "Date string to parse (ISO-8601 or common formats)"
+        required: true
+      fmt:
+        type: string
+        description: "Output format using strftime pattern"
+        required: false
+        default: "%Y-%m-%d"
 
   get_exchange_rate:
     handler: "myapp.tools.finance.get_exchange_rate"
     description: "Get current exchange rate between two currencies"
     inject_to_rag: true              # results cached in RAG
     rag_ttl: 600                     # override: 10 min (rates change often)
+    parameters:
+      from_currency:
+        type: string
+        description: "Source currency code (e.g. USD, EUR)"
+        required: true
+      to_currency:
+        type: string
+        description: "Target currency code (e.g. GBP, JPY)"
+        required: true
 
   calculate_budget:
     handler: "myapp.tools.finance.calculate_budget"
