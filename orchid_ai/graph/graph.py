@@ -362,9 +362,7 @@ def _route_after_supervisor(state: GraphState) -> str:
 def build_graph(
     *,
     config: AgentsConfig,
-    runtime: OrchidRuntime | None = None,
-    default_model: str = "",
-    reader: VectorReader | None = None,
+    runtime: OrchidRuntime,
 ) -> Any:  # returns CompiledGraph
     """
     Build and compile the full agent graph from YAML configuration (ADR-016, ADR-018).
@@ -373,23 +371,10 @@ def build_graph(
     ----------
     config : AgentsConfig
         Parsed and validated YAML configuration.
-    runtime : OrchidRuntime | None
-        Pre-configured runtime with all dependencies.  When provided,
-        ``default_model`` and ``reader`` kwargs are ignored.
-    default_model : str
-        LiteLLM model identifier.  Ignored when ``runtime`` is provided.
-        Deprecated — prefer passing ``OrchidRuntime``.
-    reader : VectorReader | None
-        Vector store reader.  Ignored when ``runtime`` is provided.
-        Deprecated — prefer passing ``OrchidRuntime``.
+    runtime : OrchidRuntime
+        Pre-configured runtime with all dependencies (reader, LLM provider,
+        MCP client factory).
     """
-    # Resolve runtime — build from kwargs for backward compatibility
-    if runtime is None:
-        runtime = OrchidRuntime(
-            default_model=default_model or "ollama/llama3.2",
-            reader=reader,
-        )
-
     reader = runtime.get_reader()
     default_model = runtime.default_model
     llm_service: LLMProvider = runtime.get_llm_service()

@@ -111,27 +111,8 @@ class TestBuildGraphIntegration:
         graph = build_graph(config=config, runtime=runtime)
         assert graph is not None
 
-    def test_build_graph_backward_compat_kwargs(self):
-        """build_graph() should still work with the old kwargs API."""
-        from orchid_ai.config.schema import AgentConfig, AgentsConfig, LLMConfig, RAGConfig
-        from orchid_ai.graph.graph import build_graph
-
-        config = AgentsConfig(
-            agents={
-                "test": AgentConfig(
-                    description="test agent",
-                    prompt="You are a test agent",
-                    rag=RAGConfig(enabled=False),
-                    llm=LLMConfig(model="test-model"),
-                ),
-            },
-        )
-        # Old API — no runtime, just kwargs
-        graph = build_graph(config=config, default_model="test-model")
-        assert graph is not None
-
-    def test_build_graph_runtime_overrides_kwargs(self):
-        """When runtime is provided, kwargs are ignored."""
+    def test_build_graph_with_custom_reader(self):
+        """build_graph() should use the reader from OrchidRuntime."""
         from orchid_ai.config.schema import AgentConfig, AgentsConfig, LLMConfig, RAGConfig
         from orchid_ai.graph.graph import build_graph
 
@@ -150,13 +131,7 @@ class TestBuildGraphIntegration:
                 ),
             },
         )
-        # Pass both runtime and kwargs — runtime should win
-        graph = build_graph(
-            config=config,
-            runtime=runtime,
-            default_model="should-be-ignored",
-            reader=MagicMock(),
-        )
+        graph = build_graph(config=config, runtime=runtime)
         assert graph is not None
 
     def test_build_graph_uses_custom_mcp_factory(self):

@@ -89,10 +89,10 @@ class MCPToolResult:
 
 class MCPClient(MCPToolCaller, MCPDiscoverable, ABC):
     """
-    Combined MCP client interface (backward compatible).
+    Combined MCP client interface.
 
     Extends both ``MCPToolCaller`` (tool invocation) and ``MCPDiscoverable``
-    (capability discovery).  New code that only needs tool calling should
+    (capability discovery).  Code that only needs tool calling should
     depend on ``MCPToolCaller`` instead for better interface segregation.
     """
 

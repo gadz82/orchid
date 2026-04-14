@@ -50,11 +50,7 @@ The supervisor decides routing via LLM:
 ## Graph Construction
 
 ```python
-# Preferred — pass OrchidRuntime with all dependencies
 def build_graph(config: AgentsConfig, runtime: OrchidRuntime) -> CompiledGraph:
-
-# Backward compat — kwargs are wrapped into an OrchidRuntime internally
-def build_graph(config: AgentsConfig, default_model: str, reader: VectorReader) -> CompiledGraph:
 ```
 
 `OrchidRuntime` holds the resolved dependencies (reader, LLM provider, MCP client factory). Integrators override only what they need:

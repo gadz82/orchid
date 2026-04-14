@@ -23,9 +23,6 @@ from .base import ChatStorage
 
 logger = logging.getLogger(__name__)
 
-# Backward-compat alias for any code importing _import_class from here
-_import_class = import_class
-
 
 def build_chat_storage(class_path: str, dsn: str) -> ChatStorage:
     """

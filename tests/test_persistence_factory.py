@@ -4,19 +4,20 @@ from __future__ import annotations
 
 import pytest
 
-from orchid_ai.persistence.factory import _import_class, build_chat_storage
+from orchid_ai.persistence.factory import build_chat_storage
+from orchid_ai.utils import import_class
 
 
 class TestImportClass:
     def test_valid_dotted_path(self):
-        cls = _import_class("orchid_ai.persistence.models.ChatSession")
+        cls = import_class("orchid_ai.persistence.models.ChatSession")
         from orchid_ai.persistence.models import ChatSession
 
         assert cls is ChatSession
 
     def test_invalid_path_raises(self):
         with pytest.raises(ImportError, match="Cannot resolve class"):
-            _import_class("nonexistent.module.ClassName")
+            import_class("nonexistent.module.ClassName")
 
 
 class TestBuildChatStorage:
