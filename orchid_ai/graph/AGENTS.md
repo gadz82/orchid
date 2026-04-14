@@ -94,9 +94,22 @@ Configured via `SupervisorConfig` in `agents.yaml`:
 
 ```yaml
 supervisor:
-  history_max_turns: 10    # max user-assistant pairs (default: 10)
+  history_max_turns: 20    # max user-assistant pairs (default: 20)
   history_max_chars: 1000  # max chars per message before truncation (default: 1000)
 ```
+
+### Sliding-Window Summarization (Context Compression)
+
+When `history_summary_enabled: true`, history exceeding the recent window is compressed into a summary paragraph via an LLM call. This dramatically reduces token usage for long conversations while preserving key context.
+
+```yaml
+supervisor:
+  history_summary_enabled: true
+  history_summary_model: gemini/gemini-2.5-flash-lite  # cheap model for summaries
+  history_summary_recent_turns: 10  # keep last 10 exchanges verbatim
+```
+
+The supervisor calls `BaseAgent.compress_conversation_history()` in both `_synthesise()` and `_advance_sequential()`. `GenericAgent` also compresses in `_step_summarise()` when the config is present. On LLM failure, the system falls back to using only the recent turns (no crash).
 
 ### `_filter_internal_messages()`
 

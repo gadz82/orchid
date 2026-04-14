@@ -182,6 +182,84 @@ class BaseAgent(ABC):
 
         return history
 
+    @staticmethod
+    async def compress_conversation_history(
+        history: list[dict[str, str]],
+        *,
+        llm_service: LLMProvider,
+        model: str,
+        recent_turns: int = 3,
+    ) -> list[dict[str, str]]:
+        """Compress older conversation turns into a summary, keeping recent ones verbatim.
+
+        Implements the **sliding-window with summarization** pattern:
+        messages older than ``recent_turns`` are condensed into a single
+        system-style summary paragraph by calling the LLM, while the
+        most recent ``recent_turns`` exchanges are preserved as-is.
+
+        If the history fits within ``recent_turns * 2`` messages, it is
+        returned unchanged (no LLM call).
+
+        Parameters
+        ----------
+        history : list[dict[str, str]]
+            Full conversation history from ``extract_conversation_history()``.
+        llm_service : LLMProvider
+            LLM provider for the summarization call.
+        model : str
+            Model identifier for the summarization call (can be a cheap/fast
+            model like ``gemini/gemini-2.5-flash-lite``).
+        recent_turns : int
+            Number of recent user/assistant exchange pairs to keep verbatim.
+            Default ``10`` (= 20 messages).
+
+        Returns
+        -------
+        list[dict[str, str]]
+            Compressed history: one ``{"role": "assistant", "content":
+            "Conversation summary: ..."}`` entry followed by the recent
+            verbatim messages.  If no compression was needed, returns the
+            original history unchanged.
+        """
+        recent_count = recent_turns * 2
+        if len(history) <= recent_count:
+            return history
+
+        older = history[:-recent_count]
+        recent = history[-recent_count:]
+
+        # Build a simple transcript for the LLM to summarize
+        transcript_lines = [f"{m['role'].upper()}: {m['content']}" for m in older]
+        transcript = "\n".join(transcript_lines)
+
+        summary_prompt = (
+            "Summarize the following conversation excerpt in 2-4 sentences. "
+            "Focus on: (1) the key topics discussed, (2) any entities or "
+            "names mentioned, (3) actions taken or decisions made, (4) any "
+            "outstanding questions. Be factual and concise.\n\n"
+            f"{transcript}"
+        )
+
+        try:
+            summary_text = await llm_service.complete(
+                model,
+                [
+                    {"role": "system", "content": "You are a conversation summarizer. Output only the summary."},
+                    {"role": "user", "content": summary_prompt},
+                ],
+                temperature=0.0,
+            )
+        except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+            logger.warning("History compression failed (%s), falling back to truncation", exc)
+            # Fallback: just keep the recent turns (no summary)
+            return recent
+
+        compressed: list[dict[str, str]] = [
+            {"role": "assistant", "content": f"[Conversation summary]\n{summary_text.strip()}"},
+        ]
+        compressed.extend(recent)
+        return compressed
+
     async def fetch_rag_context(
         self,
         query: str,

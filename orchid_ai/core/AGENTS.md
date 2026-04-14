@@ -82,6 +82,25 @@ Static method that extracts clean `[{"role": "user"|"assistant", "content": "...
 - **Truncates** individual messages to `max_chars` characters with `…` suffix (default `None` = no truncation)
 - Uses **duck-typing** for message type detection to maintain zero-dependency rule in `core/`
 
+#### `compress_conversation_history()` — Sliding-Window Summarization
+
+Async static method that implements the **sliding-window with summarization** pattern. When conversation history exceeds `recent_turns * 2` messages, older turns are compressed into a single LLM-generated summary paragraph, while the most recent `recent_turns` exchanges are preserved verbatim.
+
+```python
+compressed = await BaseAgent.compress_conversation_history(
+    history,
+    llm_service=llm_provider,
+    model="gemini/gemini-2.5-flash-lite",  # use a cheap/fast model
+    recent_turns=10,                        # keep last 10 exchanges verbatim
+)
+# Result: [{"role": "assistant", "content": "[Conversation summary]\n..."}, ...recent messages]
+```
+
+- If history fits within the window, returns it **unchanged** (no LLM call)
+- On LLM failure, **falls back** to returning only the recent turns (no summary, no crash)
+- Uses `temperature=0.0` for deterministic summaries
+- The summary prompt asks the LLM to focus on: key topics, entities, actions taken, outstanding questions
+
 #### `summarise()` — Conversation-Aware Summarization
 
 When `conversation_history` (list of dicts) is provided, `summarise()` injects the history between the system prompt and user message, and appends a focus instruction telling the LLM to prioritize the latest query.

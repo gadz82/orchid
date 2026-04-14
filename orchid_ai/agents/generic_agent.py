@@ -62,10 +62,12 @@ class GenericAgent(BaseAgent):
         mcp_clients: list[MCPClient] | None = None,
         agent_peers: dict[str, Any] | None = None,
         llm_service: LLMProvider | None = None,
+        summary_config: dict[str, Any] | None = None,
     ):
         super().__init__(llm=llm, reader=reader, mcp_clients=mcp_clients, llm_service=llm_service)
         self._config = config
         self._agent_peers: dict[str, Any] = agent_peers or {}
+        self._summary_config: dict[str, Any] | None = summary_config
 
         # ── Create collaborators ──
         if llm_service:
@@ -218,6 +220,18 @@ class GenericAgent(BaseAgent):
         # Extract conversation history so the LLM knows what was
         # previously discussed (e.g. "tell me more" or "the second one").
         history = self.extract_conversation_history(state) if state else []
+
+        # Compress older history when sliding-window summarization is
+        # enabled in the supervisor config.  The config is not directly
+        # available here, so we accept any ``_summary_config`` injected
+        # at construction.  When absent, no compression happens.
+        if history and self._summary_config and self._llm_service:
+            history = await self.compress_conversation_history(
+                history,
+                llm_service=self._llm_service,
+                model=self._summary_config.get("model") or (llm_config.model if llm_config else ""),
+                recent_turns=self._summary_config.get("recent_turns", 3),
+            )
 
         # Extract prior tool results from state so the LLM has grounding
         # on what was previously fetched or created by this agent.
