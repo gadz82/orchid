@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.6 (2026-04-14)
+
+### Bug Fixes
+
+- Built-in tools auth context propagation.
+  ([`9633a12`](https://github.com/gadz82/orchid/commit/9633a12155a66a01c69063fb094b4d4b348edf58))
+
+
 ## v1.2.5 (2026-04-14)
 
 ### Bug Fixes
