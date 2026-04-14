@@ -286,7 +286,7 @@ class TestGenericAgentDecomposition:
         assert hasattr(GenericAgent, "_build_scope")
         assert hasattr(GenericAgent, "_step_rag_retrieval")
         assert hasattr(GenericAgent, "_step_cache_check")
-        assert hasattr(GenericAgent, "_step_tool_calls")
+        assert hasattr(GenericAgent, "_agentic_tool_loop")
         assert hasattr(GenericAgent, "_step_dynamic_injection")
         assert hasattr(GenericAgent, "_step_summarise")
 
