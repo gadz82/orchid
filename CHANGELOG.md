@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.11 (2026-04-14)
+
+### Bug Fixes
+
+- Restructure GenericAgent tool-calling pipeline to enhance agentic loop consolidation
+  ([`c0188a3`](https://github.com/gadz82/orchid/commit/c0188a3714e000bd5c18369285d1ebbe9a99146f))
+
+
 ## v1.2.10 (2026-04-14)
 
 ### Bug Fixes
