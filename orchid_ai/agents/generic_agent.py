@@ -251,6 +251,8 @@ class GenericAgent(BaseAgent):
 
     # ── Built-in tools (ADR-017) ─────────────────────────────
 
+    _MAX_BUILTIN_TOOL_TURNS: int = 5
+
     async def _run_builtin_tools(
         self,
         query: str,
@@ -259,17 +261,17 @@ class GenericAgent(BaseAgent):
         skip_tools: set[str] | None = None,
         auth_context: AuthContext | None = None,
     ) -> dict[str, Any]:
-        """Run built-in tools declared for this agent.
+        """Run built-in tools via a multi-turn LLM loop.
 
-        The LLM decides which tools to call and with what arguments,
-        using parameter metadata from the tool registry.  This avoids
-        blindly calling every tool with the raw query string — tools
-        that require specific parameters (e.g. ``search_text``,
-        ``course_id``) get correct values extracted by the LLM.
+        Each iteration the LLM sees the user query, available tool
+        descriptions (with parameter metadata), and results from
+        previous iterations.  It decides which tools to call next and
+        with what arguments.  The loop continues until the LLM returns
+        an empty array or ``_MAX_BUILTIN_TOOL_TURNS`` is reached.
 
-        When ``auth_context`` is provided it is forwarded to each tool so
-        that tools requiring authenticated API access can use the resolved
-        credentials.  Tools that don't need auth simply ignore it.
+        This handles dependent tool chains (e.g. search a course first,
+        then fetch enrollments using the returned course ID) without
+        requiring deterministic wiring in YAML.
         """
         import json as _json
 
@@ -307,59 +309,97 @@ class GenericAgent(BaseAgent):
             return {}
 
         descriptions_text = "\n".join(tool_descriptions)
-        decision_prompt = (
-            f"User query: {query}\n\n"
-            f"Available built-in tools:\n{descriptions_text}\n\n"
-            "Decide which tools to call and with what arguments based on the user query. "
-            "Respond with a JSON array of objects: "
-            '[{"tool": "tool_name", "arguments": {...}}, ...]\n'
-            "Only include tools that are relevant to the query. "
-            "If no tools are relevant, respond with an empty array [].\n"
-            "Respond ONLY with the JSON array, no other text."
-        )
-
         llm_config = self._config.llm
         model = llm_config.model if llm_config else ""
 
-        try:
-            raw = await self._llm_service.complete(
-                model,
-                [{"role": "user", "content": decision_prompt}],
-                temperature=0,
-                response_format={"type": "json_object"},
-            )
-        except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
-            logger.error("[%s] LLM decision for built-in tools failed: %s", self.name, exc)
-            return {}
-
-        try:
-            decisions = _json.loads(raw)
-            if isinstance(decisions, dict):
-                decisions = decisions.get("tools", [])
-        except _json.JSONDecodeError:
-            logger.warning("[%s] LLM built-in tool decision was not valid JSON: %s", self.name, raw[:200])
-            return {}
-
-        logger.info("[%s] LLM decided built-in tools: %s", self.name, [d.get("tool") for d in decisions])
-
-        # Execute decided tools
         results: dict[str, Any] = {}
-        for decision in decisions:
-            tool_name = decision.get("tool", "")
-            tool_args = decision.get("arguments", {})
-            if tool_name not in available_names:
-                logger.warning("[%s] LLM decided unknown tool '%s', skipping", self.name, tool_name)
-                continue
-            key = f"builtin_{tool_name}"
+        messages: list[dict[str, str]] = []
+
+        for turn in range(self._MAX_BUILTIN_TOOL_TURNS):
+            # Build the decision prompt — first turn gets the full context,
+            # subsequent turns get tool results appended.
+            if turn == 0:
+                prompt = (
+                    f"User query: {query}\n\n"
+                    f"Available built-in tools:\n{descriptions_text}\n\n"
+                    "Decide which tools to call and with what arguments based on the user query. "
+                    "Respond with a JSON array of objects: "
+                    '[{"tool": "tool_name", "arguments": {...}}, ...]\n'
+                    "Only include tools that are relevant to the query. "
+                    "If no tools are relevant, respond with an empty array [].\n"
+                    "You can call tools whose arguments depend on results from previous calls "
+                    "— when you do, I will show you the results and ask again.\n"
+                    "Respond ONLY with the JSON array, no other text."
+                )
+                messages.append({"role": "user", "content": prompt})
+            # else: messages already has the tool results appended below
+
             try:
-                if auth_context is not None:
-                    tool_args["auth_context"] = auth_context
-                result = await self.call_builtin_tool(tool_name, **tool_args)
-                results[key] = result
-                logger.info("[%s] Built-in tool '%s' succeeded", self.name, tool_name)
-            except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
-                logger.error("[%s] Built-in tool '%s' failed: %s", self.name, tool_name, exc)
-                results[f"{key}_error"] = str(exc)
+                raw = await self._llm_service.complete(
+                    model,
+                    messages,
+                    temperature=0,
+                    response_format={"type": "json_object"},
+                )
+            except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+                logger.error("[%s] LLM decision for built-in tools failed (turn %d): %s", self.name, turn, exc)
+                break
+
+            try:
+                decisions = _json.loads(raw)
+                if isinstance(decisions, dict):
+                    decisions = decisions.get("tools", [])
+            except _json.JSONDecodeError:
+                logger.warning("[%s] LLM built-in tool decision was not valid JSON: %s", self.name, raw[:200])
+                break
+
+            if not decisions:
+                logger.info("[%s] LLM decided no more built-in tools (turn %d)", self.name, turn)
+                break
+
+            logger.info(
+                "[%s] LLM decided built-in tools (turn %d): %s", self.name, turn, [d.get("tool") for d in decisions]
+            )
+
+            # Append the LLM's response to the conversation
+            messages.append({"role": "assistant", "content": raw})
+
+            # Execute decided tools and collect results for next turn
+            turn_results_text: list[str] = []
+            for decision in decisions:
+                tool_name = decision.get("tool", "")
+                tool_args = decision.get("arguments", {})
+                if tool_name not in available_names:
+                    logger.warning("[%s] LLM decided unknown tool '%s', skipping", self.name, tool_name)
+                    continue
+                key = f"builtin_{tool_name}"
+                try:
+                    if auth_context is not None:
+                        tool_args["auth_context"] = auth_context
+                    result = await self.call_builtin_tool(tool_name, **tool_args)
+                    results[key] = result
+                    logger.info("[%s] Built-in tool '%s' succeeded", self.name, tool_name)
+                    turn_results_text.append(
+                        f"Tool '{tool_name}' returned:\n{_json.dumps(result, indent=2, default=str)}"
+                    )
+                except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
+                    logger.error("[%s] Built-in tool '%s' failed: %s", self.name, tool_name, exc)
+                    results[f"{key}_error"] = str(exc)
+                    turn_results_text.append(f"Tool '{tool_name}' failed: {exc}")
+
+            # Feed results back and ask LLM if more tools are needed
+            feedback = "\n\n".join(turn_results_text)
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"Here are the tool results:\n\n{feedback}\n\n"
+                        f"Available tools:\n{descriptions_text}\n\n"
+                        "Based on these results and the original query, decide if any more tools "
+                        "should be called. Respond with a JSON array (empty [] if done)."
+                    ),
+                }
+            )
 
         return results
 
