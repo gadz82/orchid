@@ -33,8 +33,9 @@ from qdrant_client.models import (
     VectorParams,
 )
 
+from langchain_core.embeddings import Embeddings
+
 from ...core.repository import Document, SearchResult, VectorStoreRepository
-from ..embeddings import Embedder
 from ..scopes import RAGScope, build_qdrant_filter
 
 logger = logging.getLogger(__name__)
@@ -55,11 +56,13 @@ class QdrantRepository(VectorStoreRepository):
         self,
         *,
         url: str,
-        embedder: Embedder,
+        embeddings: Embeddings,
+        embedding_dimension: int = 1536,
         default_tenant: str = "default",
     ):
         self._client = AsyncQdrantClient(url=url)
-        self._embedder = embedder
+        self._embeddings = embeddings
+        self._embedding_dimension = embedding_dimension
         self._default_tenant = default_tenant
 
     # ── VectorReader ──────────────────────────────────────────
@@ -80,7 +83,7 @@ class QdrantRepository(VectorStoreRepository):
         """
         await self._ensure_collection(namespace)
 
-        query_vector = await self._embedder.embed_query(query)
+        query_vector = await self._embeddings.aembed_query(query)
 
         # Build hierarchical filter from scope
         if scope:
@@ -311,14 +314,14 @@ class QdrantRepository(VectorStoreRepository):
         await self._client.create_collection(
             collection_name=namespace,
             vectors_config=VectorParams(
-                size=self._embedder.dimension,
+                size=self._embedding_dimension,
                 distance=Distance.COSINE,
             ),
         )
         logger.info(
             "[Qdrant] created collection '%s' (dim=%d)",
             namespace,
-            self._embedder.dimension,
+            self._embedding_dimension,
         )
 
     # ── Internal helpers ──────────────────────────────────────
@@ -334,7 +337,7 @@ class QdrantRepository(VectorStoreRepository):
                 embed_indices.append(i)
 
         if texts_to_embed:
-            embeddings = await self._embedder.embed(texts_to_embed)
+            embeddings = await self._embeddings.aembed_documents(texts_to_embed)
             for idx, emb in zip(embed_indices, embeddings):
                 documents[idx].embedding = emb
 
