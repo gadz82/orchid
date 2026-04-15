@@ -63,6 +63,39 @@ class ToolConfig(BaseModel):
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
 
 
+class MCPAuthConfig(BaseModel):
+    """Per-server authentication configuration.
+
+    Determines how the MCP client authenticates with the server:
+
+    - ``none`` (default): no authentication headers are sent.  Suitable
+      for local MCP servers or remote servers that do not require auth.
+    - ``passthrough``: forwards the graph's ``AuthContext`` bearer token
+      unchanged — the MCP server shares the same identity provider.
+    - ``oauth``: the server requires its own OAuth 2.0 flow with a
+      third-party identity provider.  Tokens are stored per-user,
+      per-server in the ``MCPTokenStore``.
+
+    For ``oauth`` mode, provide either ``issuer`` (OIDC auto-discovery)
+    or explicit ``authorization_endpoint`` + ``token_endpoint``.
+
+    Example YAML::
+
+        auth:
+          mode: oauth
+          client_id: orchid-crm-integration
+          issuer: https://auth.crm-provider.com
+          scopes: "openid crm.read crm.write"
+    """
+
+    mode: Literal["none", "passthrough", "oauth"] = "none"
+    client_id: str = ""
+    authorization_endpoint: str = ""  # explicit, OR use issuer for OIDC discovery
+    token_endpoint: str = ""
+    scopes: str = "openid"
+    issuer: str = ""  # OIDC auto-discovery endpoint
+
+
 class MCPServerConfig(BaseModel):
     """An MCP server connected to an agent.
 
@@ -79,6 +112,7 @@ class MCPServerConfig(BaseModel):
     type: Literal["local", "remote"] = "local"
     transport: Literal["streamable_http", "sse"] = "streamable_http"
     url: str  # supports ${ENV_VAR} interpolation (resolved by loader)
+    auth: MCPAuthConfig = Field(default_factory=MCPAuthConfig)
     tools: list[ToolConfig] = Field(default_factory=list)
     prompts: list[str] = Field(default_factory=list)  # prompt names to load (or "*")
     resources: list[str] = Field(default_factory=list)  # resource URIs/names to load (or "*")
