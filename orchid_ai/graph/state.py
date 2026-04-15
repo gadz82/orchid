@@ -69,3 +69,6 @@ class GraphState(TypedDict, total=False):
 
     # ── ADR-018: guardrail routing hint ──────────────────────
     _has_output_guardrails: bool  # sentinel for route_to_agents()
+
+    # ── MCP per-server OAuth status (per-request) ────────────
+    mcp_auth_status: Annotated[dict[str, Any], merge_dicts]  # {server_name: authorized_bool}
