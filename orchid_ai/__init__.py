@@ -45,6 +45,8 @@ from .guardrails import build_guardrail_chain, register_guardrail
 from .mcp.auth_registry import MCPAuthRegistry, MCPOAuthServerInfo
 from .persistence.base import ChatStorage
 from .persistence.factory import build_chat_storage
+from .persistence.mcp_token_factory import build_mcp_token_store
+from .persistence.mcp_token_sqlite import SQLiteMCPTokenStore
 from .persistence.sqlite import SQLiteChatStorage
 from .rag.factory import build_reader
 from .rag.scopes import RAGScope
@@ -63,6 +65,7 @@ __all__ = [
     "MCPTokenRecord",
     "MCPTokenStore",
     "SQLiteChatStorage",
+    "SQLiteMCPTokenStore",
     "Document",
     "Guardrail",
     "GuardrailAction",
@@ -87,6 +90,7 @@ __all__ = [
     "OrchidRuntime",
     # factories
     "build_chat_storage",
+    "build_mcp_token_store",
     "build_graph",
     "build_guardrail_chain",
     "build_reader",
