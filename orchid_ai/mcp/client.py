@@ -49,6 +49,10 @@ class StreamableHttpMCPClient(MCPClient):
     """MCP client that connects via Streamable HTTP or SSE transport.
 
     Capabilities are discovered once and cached for ``cache_ttl`` seconds.
+
+    When ``auth_mode`` is ``"oauth"``, the client resolves per-user
+    tokens from the ``token_store`` instead of using the graph's
+    ``AuthContext`` bearer token (passthrough).
     """
 
     def __init__(
@@ -57,12 +61,24 @@ class StreamableHttpMCPClient(MCPClient):
         server_type: str = "local",
         transport: str = "streamable_http",
         cache_ttl: float = DEFAULT_CACHE_TTL,
+        *,
+        server_name: str = "",
+        auth_mode: str = "passthrough",
+        token_store: Any | None = None,  # MCPTokenStore (lazy import to avoid circular)
+        token_endpoint: str = "",
+        client_id: str = "",
     ) -> None:
         self._url = url
         self._server_type = server_type
         self._transport = transport
         self._cache_ttl = cache_ttl
         self._cache = _CapabilitiesCache()
+        # Per-server OAuth fields
+        self._server_name = server_name or url
+        self._auth_mode = auth_mode
+        self._token_store = token_store
+        self._token_endpoint = token_endpoint
+        self._client_id = client_id
 
     @property
     def server_url(self) -> str:
@@ -187,15 +203,93 @@ class StreamableHttpMCPClient(MCPClient):
 
     # ── Auth ─────────────────────────────────────────────────
 
-    def _auth_headers(self, auth: AuthContext) -> dict[str, str]:
-        """
-        Build Authorization header.
+    async def _resolve_auth_headers(self, auth: AuthContext) -> dict[str, str]:
+        """Resolve the Authorization header based on auth mode.
 
-        Always uses the original OAuth token (Bearer Passthrough) — both local
-        and remote MCP servers forward it to the platform APIs.  The SSO JWT
-        (if any) is only used for identity resolution, not for MCP calls.
+        - **none** (default): no auth headers — suitable for local or
+          unauthenticated MCP servers.
+        - **passthrough**: forwards the graph's ``AuthContext`` bearer
+          token unchanged — zero overhead.
+        - **oauth**: looks up the per-user token from the token store,
+          auto-refreshes if expired, or raises ``MCPAuthRequiredError``
+          when the user has not authorized this server.
         """
-        return auth.bearer_header
+        if self._auth_mode == "none":
+            return {}
+
+        if self._auth_mode == "passthrough":
+            return auth.bearer_header
+
+        from ..core.mcp import MCPAuthRequiredError, MCPTokenRecord
+
+        if not self._token_store:
+            raise MCPAuthRequiredError(self._server_name)
+
+        record: MCPTokenRecord | None = await self._token_store.get_token(
+            auth.tenant_key,
+            auth.user_id,
+            self._server_name,
+        )
+
+        if record is None:
+            raise MCPAuthRequiredError(self._server_name)
+
+        # Auto-refresh expired tokens when a refresh_token is available
+        if record.is_expired and record.is_refresh_available:
+            record = await self._refresh_oauth_token(record)
+
+        if record.is_expired:
+            raise MCPAuthRequiredError(self._server_name)
+
+        return record.bearer_header
+
+    async def _refresh_oauth_token(self, record: Any) -> Any:
+        """Exchange a refresh token for a new access token.
+
+        On failure, returns the stale record unchanged — the caller
+        checks ``is_expired`` and raises ``MCPAuthRequiredError``.
+        """
+        import time as _time
+
+        if not self._token_endpoint:
+            logger.warning("[MCP] No token_endpoint for '%s' — cannot refresh", self._server_name)
+            return record
+
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=15.0) as http:
+                resp = await http.post(
+                    self._token_endpoint,
+                    data={
+                        "grant_type": "refresh_token",
+                        "refresh_token": record.refresh_token,
+                        "client_id": self._client_id,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+            from ..core.mcp import MCPTokenRecord
+
+            new_record = MCPTokenRecord(
+                server_name=record.server_name,
+                tenant_id=record.tenant_id,
+                user_id=record.user_id,
+                access_token=data["access_token"],
+                refresh_token=data.get("refresh_token", record.refresh_token),
+                expires_at=_time.time() + data.get("expires_in", 3600),
+                scopes=record.scopes,
+                created_at=record.created_at,
+                updated_at=_time.time(),
+            )
+            await self._token_store.save_token(new_record)
+            logger.info("[MCP] Refreshed OAuth token for server '%s'", self._server_name)
+            return new_record
+
+        except Exception as exc:
+            logger.warning("[MCP] Token refresh failed for '%s': %s", self._server_name, exc)
+            return record
 
     # ── Transport ────────────────────────────────────────────
 
@@ -204,7 +298,7 @@ class StreamableHttpMCPClient(MCPClient):
         """Open a transport connection and yield an initialized ClientSession."""
         import asyncio
 
-        headers = self._auth_headers(auth)
+        headers = await self._resolve_auth_headers(auth)
 
         async with asyncio.timeout(timeout):
             if self._transport == "sse":
