@@ -83,7 +83,7 @@ async def ingest_document(
         documents.append(
             Document(
                 id=doc_id,
-                content=chunk,
+                page_content=chunk,
                 metadata={
                     "tenant_id": scope.tenant_id,
                     "user_id": scope.user_id,
