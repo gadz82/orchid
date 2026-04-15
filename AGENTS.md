@@ -22,10 +22,16 @@ orchid/
     graph/                LangGraph wiring: supervisor.py, graph.py, state.py
     rag/                  Scopes, indexer, embeddings, factory, backends/qdrant.py
     documents/            Parsers (PDF/DOCX/XLSX/CSV/Image), chunker, pipeline
-    persistence/          ChatStorage ABC + factory + models + migrations + built-in backends:
+    persistence/          ChatStorage + MCPTokenStore ABCs + factories + shared migrations:
       sqlite.py           SQLiteChatStorage (default, aiosqlite — core dep)
       postgres.py         PostgresChatStorage (optional, asyncpg — `pip install orchid-ai[postgres]`)
-    mcp/                  StreamableHttpMCPClient
+      mcp_token_sqlite.py SQLiteMCPTokenStore (per-server OAuth tokens, same DB)
+      mcp_token_postgres.py PostgresMCPTokenStore (per-server OAuth tokens, same DB)
+      mcp_token_factory.py  build_mcp_token_store() factory
+      migrations/         Shared migrations (v001 = chat schema, v002 = token schema)
+    mcp/                  StreamableHttpMCPClient + MCPAuthRegistry
+      client.py           StreamableHttpMCPClient (dual-mode: none/passthrough/oauth)
+      auth_registry.py    MCPAuthRegistry — scans config for OAuth-requiring servers
     llm_service.py        LiteLLMProvider (concrete LLMProvider)
     utils.py              import_class() shared utility
   tests/                  384+ tests
@@ -56,6 +62,7 @@ documents/   → core/  (standalone)
 | `VectorReader` | `repository.py` | Vector store retrieval |
 | `VectorWriter` | `repository.py` | Vector store indexing |
 | `VectorStoreAdmin` | `repository.py` | Collection management |
+| `MCPTokenStore` | `mcp.py` | Per-server OAuth token persistence |
 | `ChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
 
 ## Key Dependencies
@@ -78,7 +85,7 @@ documents/   → core/  (standalone)
 
 2. **No Qdrant imports outside `rag/backends/`.** All vector access goes through `VectorReader`/`VectorWriter`/`VectorStoreAdmin` ABCs in `core/repository.py`.
 
-3. **No OAuth in agents or MCP clients.** Token obtained ONCE at entry point, propagated via `AuthContext` (ADR-010).
+3. **Graph-level auth uses passthrough only.** The graph's `AuthContext` token is obtained ONCE at the API entry point (ADR-010). MCP servers with `auth.mode: passthrough` forward this token. MCP servers with `auth.mode: oauth` resolve their own per-user tokens from `MCPTokenStore`. MCP servers with `auth.mode: none` (default) send no auth headers.
 
 4. **RAG always uses `RAGScope`.** Never pass raw `tenant_id` filters. 5-level hierarchy: root -> tenant -> user -> chat -> agent.
 
@@ -94,7 +101,9 @@ documents/   → core/  (standalone)
 
 10. **MCP communication boundaries use broad exception handling.** `mcp_dispatcher.py` and `strategies.py` catch `Exception` (not a narrow tuple) at server/tool call boundaries. This is intentional fault isolation — MCP servers can fail with HTTP errors (401, 500), transport errors, or protocol errors, and one failing server must not crash the entire agent. Always use `except Exception` at these boundaries; never narrow it to a specific tuple.
 
-11. **Built-in tool parameters are declared in YAML or auto-extracted.** The `tools:` section in `agents.yaml` supports an optional `parameters:` block per tool. When declared, YAML parameters take precedence. When omitted, parameters are auto-extracted from the Python function signature via `inspect`. Framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. Parameter metadata is used by the CLI skill generator to produce accurate documentation.
+11. **MCP servers support three auth modes** configured via `auth.mode` in `MCPServerConfig`: `none` (default — no auth headers, for local/unauthenticated servers), `passthrough` (forwards graph AuthContext bearer token), `oauth` (per-user tokens from MCPTokenStore with auto-refresh). The `MCPAuthRegistry` is built once at graph startup from `AgentsConfig` and exposes which servers require OAuth. `mcp_auth_status` is injected into graph state per-request so the supervisor can make auth-aware routing decisions.
+
+12. **Built-in tool parameters are declared in YAML or auto-extracted.** The `tools:` section in `agents.yaml` supports an optional `parameters:` block per tool. When declared, YAML parameters take precedence. When omitted, parameters are auto-extracted from the Python function signature via `inspect`. Framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. Parameter metadata is used by the CLI skill generator to produce accurate documentation.
 
 ## Key Patterns
 
