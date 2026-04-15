@@ -162,7 +162,8 @@ def _instantiate_agent(
     agent_config: AgentConfig,
     default_model: str,
     reader: VectorReader,
-    chat_model: BaseChatModel | None = None,
+    default_chat_model: BaseChatModel | None = None,
+    default_fallback: str | None = None,
     mcp_client_factory: MCPClientFactory | None = None,
     summary_config: dict[str, Any] | None = None,
 ) -> BaseAgent:
@@ -171,7 +172,13 @@ def _instantiate_agent(
 
     If ``class_path`` is set, the referenced class is used.
     Otherwise, ``GenericAgent`` handles the standard flow.
+
+    Each agent gets its own ``BaseChatModel`` when its ``llm`` config
+    differs from the default (different model or fallback).  Otherwise,
+    the shared ``default_chat_model`` is reused.
     """
+    from ..llm_factory import build_chat_model
+
     # Create MCP clients from config via the pluggable factory
     factory = mcp_client_factory or OrchidRuntime().get_mcp_client_factory()
     mcp_clients = [factory(server) for server in agent_config.mcp_servers]
@@ -179,8 +186,20 @@ def _instantiate_agent(
     # Resolve the agent class
     cls = get_class(agent_config.class_path)
 
-    # Determine the LLM model
-    model = agent_config.llm.model if agent_config.llm else default_model
+    # Determine the LLM model and fallback for this agent
+    agent_llm = agent_config.llm
+    agent_model = agent_llm.model if agent_llm else default_model
+    agent_fallback = (agent_llm.fallback_model if agent_llm else None) or default_fallback
+
+    # Build per-agent chat model if it differs from default, otherwise reuse shared one
+    if agent_llm and (agent_model != default_model or agent_fallback != default_fallback):
+        agent_chat_model = build_chat_model(
+            agent_model,
+            temperature=agent_llm.temperature if agent_llm else 0.2,
+            fallback_model=agent_fallback,
+        )
+    else:
+        agent_chat_model = default_chat_model
 
     # Check which parameters the class accepts (GenericAgent accepts config + chat_model,
     # custom classes may not)
@@ -189,11 +208,11 @@ def _instantiate_agent(
     accepts_chat_model = "chat_model" in sig.parameters
     accepts_summary_config = "summary_config" in sig.parameters
 
-    kwargs: dict[str, Any] = {"llm": model, "reader": reader, "mcp_clients": mcp_clients}
+    kwargs: dict[str, Any] = {"llm": agent_model, "reader": reader, "mcp_clients": mcp_clients}
     if accepts_config:
         kwargs["config"] = agent_config
-    if accepts_chat_model and chat_model:
-        kwargs["chat_model"] = chat_model
+    if accepts_chat_model and agent_chat_model:
+        kwargs["chat_model"] = agent_chat_model
     if accepts_summary_config and summary_config:
         kwargs["summary_config"] = summary_config
 
@@ -205,7 +224,8 @@ def _build_subgraph(
     agent_config: AgentConfig,
     default_model: str,
     reader: VectorReader,
-    chat_model: BaseChatModel | None = None,
+    default_chat_model: BaseChatModel | None = None,
+    default_fallback: str | None = None,
     mcp_client_factory: MCPClientFactory | None = None,
 ) -> Any:
     """
@@ -221,14 +241,15 @@ def _build_subgraph(
             child_config,
             default_model,
             reader,
-            chat_model,
+            default_chat_model,
+            default_fallback,
             mcp_client_factory,
         )
         children_agents.append(child_agent)
 
     # Build sub-graph with its own supervisor
     child_descriptions = {a.name: a.description for a in children_agents}
-    sub_supervisor = create_supervisor_node(default_model, child_descriptions, chat_model=chat_model)
+    sub_supervisor = create_supervisor_node(default_model, child_descriptions, chat_model=default_chat_model)
 
     sg = StateGraph(GraphState)
     sg.add_node("supervisor", sub_supervisor)
@@ -377,9 +398,21 @@ def build_graph(
         Pre-configured runtime with all dependencies (reader, LLM provider,
         MCP client factory).
     """
+    from ..llm_factory import build_chat_model as _build_chat_model
+
     reader = runtime.get_reader()
     default_model = runtime.default_model
-    chat_model: BaseChatModel = runtime.get_chat_model()
+
+    # ── Resolve default LLM fallback from config ──
+    default_fallback = config.defaults.llm.fallback_model
+    if runtime.chat_model is not None:
+        # User provided a pre-built chat model — use it as-is
+        default_chat_model: BaseChatModel = runtime.chat_model
+    else:
+        default_chat_model = _build_chat_model(
+            default_model,
+            fallback_model=default_fallback,
+        )
 
     # ── Build MCP auth registry (scans all agents for OAuth servers) ──
     auth_registry = MCPAuthRegistry.from_config(config)
@@ -436,7 +469,8 @@ def build_graph(
                 agent_config,
                 default_model,
                 reader,
-                chat_model,
+                default_chat_model,
+                default_fallback,
                 mcp_factory,
             )
             subgraph_nodes[agent_name] = subgraph
@@ -446,7 +480,8 @@ def build_graph(
                 agent_config,
                 default_model,
                 reader,
-                chat_model,
+                default_chat_model,
+                default_fallback,
                 mcp_factory,
                 summary_config=summary_cfg,
             )
@@ -480,11 +515,18 @@ def build_graph(
                 list(agent._agent_peers.keys()),
             )
 
+    # ── Supervisor chat model (may have its own fallback) ──
+    sup_fallback = sup.fallback_model or default_fallback
+    if sup.fallback_model and sup.fallback_model != default_fallback:
+        supervisor_chat_model = _build_chat_model(default_model, fallback_model=sup_fallback)
+    else:
+        supervisor_chat_model = default_chat_model
+
     # ── Supervisor ──
     supervisor_node = create_supervisor_node(
         default_model,
         agent_descriptions,
-        chat_model=chat_model,
+        chat_model=supervisor_chat_model,
         orchestrator_skills=config.skills or None,
         supervisor_config=config.supervisor,
     )
