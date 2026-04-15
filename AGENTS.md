@@ -14,7 +14,7 @@ orchid/
       agent.py            BaseAgent ABC
       state.py            AuthContext + AgentState
       identity.py         IdentityResolver ABC
-      llm_provider.py     LLMProvider ABC
+      llm_provider.py     (REMOVED — use BaseChatModel from langchain-core)
       mcp.py              MCPToolCaller / MCPDiscoverable ABCs
       repository.py       VectorReader / VectorWriter / VectorStoreAdmin ABCs
     config/               YAML config loader + schema + tool registry (parameter metadata)
@@ -32,7 +32,7 @@ orchid/
     mcp/                  StreamableHttpMCPClient + MCPAuthRegistry
       client.py           StreamableHttpMCPClient (dual-mode: none/passthrough/oauth)
       auth_registry.py    MCPAuthRegistry — scans config for OAuth-requiring servers
-    llm_service.py        LiteLLMProvider (concrete LLMProvider)
+    llm_factory.py        build_chat_model() — provider-first, ChatLiteLLM fallback
     utils.py              import_class() shared utility
   tests/                  384+ tests
   pyproject.toml
@@ -48,7 +48,7 @@ persistence/ → core/  (standalone)
 documents/   → core/  (standalone)
 ```
 
-`core/` is the leaf — depends on NOTHING external. Never add `import qdrant_client`, `import asyncpg`, `import litellm`, or any third-party library to files in `core/`.
+`core/` depends only on `langchain-core` (for `Document` and message types). No concrete backend imports (`qdrant_client`, `asyncpg`, `litellm`) are allowed.
 
 ## Core ABCs (`orchid/core/`)
 
@@ -56,24 +56,36 @@ documents/   → core/  (standalone)
 |-----|------|---------|
 | `BaseAgent` | `agent.py` | Agent identity + `run()`, `summarise()`, `fetch_rag_context()`, `extract_user_query()`, `extract_conversation_history()` |
 | `IdentityResolver` | `identity.py` | Bearer token -> AuthContext |
-| `LLMProvider` | `llm_provider.py` | Abstract LLM completion (`complete()`) |
 | `MCPToolCaller` | `mcp.py` | Call MCP tools |
 | `MCPDiscoverable` | `mcp.py` | Discover MCP capabilities |
+| `MCPTokenStore` | `mcp.py` | Per-server OAuth token persistence |
 | `VectorReader` | `repository.py` | Vector store retrieval |
 | `VectorWriter` | `repository.py` | Vector store indexing |
 | `VectorStoreAdmin` | `repository.py` | Collection management |
-| `MCPTokenStore` | `mcp.py` | Per-server OAuth token persistence |
 | `ChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
+
+**LLM abstraction:** Orchid uses LangChain's `BaseChatModel` directly (no custom ABC). Use `build_chat_model(model_string)` factory to create one from a LiteLLM-style model string.
+
+**Document model:** Uses `langchain_core.documents.Document` (re-exported from `core/repository.py`). Fields: `page_content`, `metadata`, `id`.
+
+**Embeddings:** Uses `langchain_core.embeddings.Embeddings`. Use `build_embeddings(model_string)` factory.
 
 ## Key Dependencies
 
 | Package | Role | Required? |
 |---------|------|-----------|
 | langgraph | Agent graph framework | Core |
-| litellm | Multi-provider LLM abstraction | Core |
+| langchain-core | ABCs: BaseChatModel, Embeddings, Document | Core |
+| langchain-litellm | ChatLiteLLM fallback (wraps litellm) | Core |
+| langchain-community | Community integrations | Core |
+| langchain-text-splitters | RecursiveCharacterTextSplitter | Core |
+| litellm | Multi-provider LLM routing (fallback) | Core |
 | qdrant-client | Vector DB client | Core |
 | aiosqlite | SQLite async driver (default storage) | Core |
 | asyncpg | PostgreSQL async driver | Optional (`orchid-ai[postgres]`) |
+| langchain-openai | OpenAI provider (optional, improves perf) | Optional |
+| langchain-google-genai | Google AI provider (optional) | Optional |
+| langchain-ollama | Ollama provider (optional) | Optional |
 | mcp | MCP protocol client | Core |
 | pymupdf | PDF parsing | Core |
 | python-docx | DOCX parsing | Core |
@@ -137,7 +149,7 @@ from orchid_ai import OrchidRuntime, build_graph, load_config
 runtime = OrchidRuntime(
     default_model="gemini/gemini-2.5-flash",
     reader=my_qdrant_reader,           # or None → NullVectorReader
-    llm_service=MyCustomProvider(),     # or None → LiteLLMProvider
+    chat_model=ChatOpenAI(model="gpt-4o"),  # or None → build_chat_model(default_model)
     mcp_client_factory=my_factory,      # or None → StreamableHttpMCPClient
 )
 graph = build_graph(config=load_config("agents.yaml"), runtime=runtime)
@@ -151,7 +163,7 @@ Integrators override only what they need. All fields have sensible defaults.
 
 ### LLM Usage
 
-- **Simple completions** (summarization, routing): Use `self.summarise()` or `self._llm_service` (routes through `LLMProvider` ABC). An `LLMProvider` **must** be injected — there is no litellm fallback.
+- **Simple completions** (summarization, routing): Use `self.summarise()` which calls `self._chat_model.ainvoke()`. A `BaseChatModel` must be injected via `chat_model=` — there is no fallback.
 - **Agentic tool-calling loops** (need `tool_calls` response): Use `litellm` directly with lazy import inside the method. Add a comment explaining why.
 - **Never import `litellm` at module level** in consumer agents.
 
