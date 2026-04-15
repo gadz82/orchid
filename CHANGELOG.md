@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v1.2.14 (2026-04-15)
+
+### Bug Fixes
+
+- Add MCPTokenStore implementation for OAuth token persistence
+  ([`8938d33`](https://github.com/gadz82/orchid/commit/8938d336cfbe9d6109e772c45de11a4e07ffad8b))
+
+- Add support for per-server MCP authentication configuration
+  ([`87c0bb9`](https://github.com/gadz82/orchid/commit/87c0bb900ab72a308d67aa88e26f5e4d68950692))
+
+- Add support for per-server MCP authentication configuration
+  ([`15d1ca2`](https://github.com/gadz82/orchid/commit/15d1ca2da18d62271823a79c76ad59af2e457f86))
+
+- Handle MCPAuthRequiredError for improved OAuth error isolation
+  ([`3171508`](https://github.com/gadz82/orchid/commit/3171508c258548717e5ac85a76fc407fff16b8aa))
+
+- Inject MCP auth status into routing logic for improved agent routing decisions
+  ([`33b424b`](https://github.com/gadz82/orchid/commit/33b424bafaf8accb364ee4653ecf496797eb4bf0))
+
+- Introduce MCPAuthRegistry for OAuth server management
+  ([`e9bb5f4`](https://github.com/gadz82/orchid/commit/e9bb5f4809f578a4c563643b68f840e635440456))
+
+- Managed per-server OAuth token management and tests
+  ([`62ebba2`](https://github.com/gadz82/orchid/commit/62ebba2613dc3081f238c3b46a613b8a13b74521))
+
+
 ## v1.2.13 (2026-04-14)
 
 ### Bug Fixes
