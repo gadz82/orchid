@@ -27,7 +27,6 @@ from langchain_core.messages import AIMessage
 
 from ..config.schema import AgentConfig
 from ..core.agent import BaseAgent
-from ..core.llm_provider import LLMProvider
 from ..core.mcp import MCPClient
 from ..core.repository import VectorReader
 from ..core.state import AgentState, AuthContext
@@ -62,20 +61,17 @@ class GenericAgent(BaseAgent):
         reader: VectorReader,
         mcp_clients: list[MCPClient] | None = None,
         agent_peers: dict[str, Any] | None = None,
-        llm_service: LLMProvider | None = None,
+        chat_model: Any | None = None,
         summary_config: dict[str, Any] | None = None,
     ):
-        super().__init__(llm=llm, reader=reader, mcp_clients=mcp_clients, llm_service=llm_service)
+        super().__init__(llm=llm, reader=reader, mcp_clients=mcp_clients, chat_model=chat_model)
         self._config = config
         self._agent_peers: dict[str, Any] = agent_peers or {}
         self._summary_config: dict[str, Any] | None = summary_config
 
         # ── Create collaborators ──
-        if llm_service:
-            self._skill_detector: SkillDetector | None = SkillDetector(
-                llm_service,
-                config.llm.model if config.llm else llm,
-            )
+        if chat_model:
+            self._skill_detector: SkillDetector | None = SkillDetector(chat_model)
         else:
             self._skill_detector = None
 
@@ -217,11 +213,10 @@ class GenericAgent(BaseAgent):
         )
 
         # Compress older history via sliding-window summarization when enabled.
-        if history and self._summary_config and self._llm_service:
+        if history and self._summary_config and self._chat_model:
             history = await self.compress_conversation_history(
                 history,
-                llm_service=self._llm_service,
-                model=self._summary_config.get("model") or (llm_config.model if llm_config else ""),
+                chat_model=self._chat_model,
                 recent_turns=self._summary_config.get("recent_turns", 3),
             )
 
@@ -285,19 +280,20 @@ class GenericAgent(BaseAgent):
            the agentic loop is the sole execution path and the strategy
            field is effectively ignored.
         """
-        # Agentic loop requires full response objects (tool_calls),
-        # so we use litellm directly — LLMProvider.complete() only returns str.
-        import litellm
-        from ..llm import get_llm_kwargs
+        # Agentic loop uses BaseChatModel.bind_tools() + ainvoke() for
+        # native tool-calling with duplicate detection and max-round safety.
+        from langchain_core.messages import AIMessage as LCAIMessage, ToolMessage
 
         llm_config = self._config.llm
-        model = llm_config.model if llm_config else (self.llm if isinstance(self.llm, str) else str(self.llm))
         tool_results: dict[str, Any] = {}
+
+        if not self._chat_model:
+            return None, tool_results
 
         # ── Discover MCP capabilities ───────────────────────
         caps = await self._mcp_dispatcher.render_capabilities(auth, agent_name=self.name)
 
-        # ── Build unified tool list (litellm format) ────────
+        # ── Build unified tool list (litellm/OpenAI format) ──
         # Built-in tools win over MCP tools with the same name.
         builtin_tool_names, builtin_tool_defs = self._builtin_tools_to_litellm(skip_tools)
 
@@ -309,9 +305,9 @@ class GenericAgent(BaseAgent):
             ],
         )
 
-        litellm_tools = mcp_tool_defs + builtin_tool_defs
+        all_tool_defs = mcp_tool_defs + builtin_tool_defs
 
-        if not litellm_tools:
+        if not all_tool_defs:
             # No tools available — return immediately, summarisation will handle it.
             return None, tool_results
 
@@ -333,15 +329,11 @@ class GenericAgent(BaseAgent):
         seen_calls: dict[str, str] = {}  # "name|args_json" → cached result text
         consecutive_dupes = 0
 
+        # ── Bind tools to chat model ────────────────────────
+        model_with_tools = self._chat_model.bind_tools(all_tool_defs)
+
         # ── Loop ────────────────────────────────────────────
         for round_num in range(self._MAX_TOOL_ROUNDS):
-            call_kwargs: dict[str, Any] = {
-                "model": model,
-                "messages": messages,
-                "temperature": llm_config.temperature if llm_config else 0.2,
-                **get_llm_kwargs(model),
-            }
-
             # Strip tools after too many consecutive duplicate calls
             # to force the LLM to produce a text response.
             if consecutive_dupes >= self._MAX_CONSECUTIVE_DUPES:
@@ -350,13 +342,16 @@ class GenericAgent(BaseAgent):
                     self.name,
                     consecutive_dupes,
                 )
-            elif litellm_tools:
-                call_kwargs["tools"] = litellm_tools
-                call_kwargs["tool_choice"] = "auto"
+                active_model = self._chat_model  # no tools bound
+            else:
+                active_model = model_with_tools
 
             # ── LLM call with error handling ────────────────
             try:
-                response = await litellm.acompletion(**call_kwargs)
+                ai_msg: LCAIMessage = await active_model.ainvoke(
+                    messages,
+                    temperature=llm_config.temperature if llm_config else 0.2,
+                )
             except Exception as exc:
                 error_msg = str(exc)
                 logger.error(
@@ -381,25 +376,21 @@ class GenericAgent(BaseAgent):
                     tool_results,
                 )
 
-            choice = response.choices[0]
-            assistant_msg = choice.message
-            messages.append(assistant_msg.model_dump(exclude_none=True))
+            # Append the AI message to conversation (LangChain message object)
+            messages.append(ai_msg)
 
             # ── No tool calls → final text response ─────────
-            tool_calls = getattr(assistant_msg, "tool_calls", None)
+            tool_calls = ai_msg.tool_calls
             if not tool_calls:
-                final_text = assistant_msg.content or ""
+                final_text = ai_msg.content or ""
                 logger.info("[%s] LLM responded after %d tool round(s)", self.name, round_num)
                 return final_text, tool_results
 
             # ── Execute tool calls ──────────────────────────
             for tc in tool_calls:
-                fn_name = tc.function.name
-                try:
-                    fn_args = json.loads(tc.function.arguments)
-                except json.JSONDecodeError:
-                    fn_args = {}
-                    logger.warning("[%s] Failed to parse arguments for tool '%s'", self.name, fn_name)
+                fn_name = tc["name"]
+                fn_args = tc.get("args", {})
+                tc_id = tc.get("id", "")
 
                 logger.info(
                     "[%s] Tool call #%d → %s | args: %s",
@@ -454,13 +445,8 @@ class GenericAgent(BaseAgent):
                     logger.error("[%s] Unknown tool '%s' in agentic loop", self.name, fn_name)
 
                 tool_results[fn_name] = result_text
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": result_text,
-                    }
-                )
+                # Append tool result as a ToolMessage (LangChain format)
+                messages.append(ToolMessage(content=result_text, tool_call_id=tc_id))
 
         # Safety: max rounds exceeded
         logger.warning("[%s] Hit max tool rounds (%d)", self.name, self._MAX_TOOL_ROUNDS)

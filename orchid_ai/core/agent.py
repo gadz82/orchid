@@ -4,9 +4,11 @@ Base agent abstraction — Open/Closed Principle (ADR-008).
 Adding a new agent = subclass BaseAgent + register in Composition Root.
 Nothing else needs to change.
 
-This module uses ONLY stdlib types.  The `llm` parameter is typed as
-`Any` because the concrete LLM wrapper (LiteLLM) is a third-party
-dependency that must not leak into core/.
+This module uses ONLY stdlib types for its own definitions.  The
+``chat_model`` parameter is typed as ``Any`` because the concrete
+LangChain ``BaseChatModel`` is an external dependency that must not
+leak into ``core/``.  At runtime the field holds a ``BaseChatModel``
+that supports ``ainvoke(messages) -> AIMessage``.
 
 Shared helpers (``extract_user_query``, ``fetch_rag_context``,
 ``summarise``) are provided as concrete methods so that both
@@ -23,7 +25,6 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .llm_provider import LLMProvider
 from .mcp import MCPClient
 from .repository import VectorReader
 from .state import AgentState
@@ -46,12 +47,12 @@ class BaseAgent(ABC):
         llm: Any,
         reader: VectorReader,
         mcp_clients: list[MCPClient] | None = None,
-        llm_service: LLMProvider | None = None,
+        chat_model: Any | None = None,
     ):
         self.llm = llm
         self.reader = reader
         self.mcp_clients = mcp_clients or []
-        self._llm_service = llm_service
+        self._chat_model = chat_model  # BaseChatModel (duck-typed to avoid core/ deps)
 
     # ── Identity ────────────────────────────────────────────
 
@@ -186,8 +187,7 @@ class BaseAgent(ABC):
     async def compress_conversation_history(
         history: list[dict[str, str]],
         *,
-        llm_service: LLMProvider,
-        model: str,
+        chat_model: Any,
         recent_turns: int = 3,
     ) -> list[dict[str, str]]:
         """Compress older conversation turns into a summary, keeping recent ones verbatim.
@@ -204,11 +204,8 @@ class BaseAgent(ABC):
         ----------
         history : list[dict[str, str]]
             Full conversation history from ``extract_conversation_history()``.
-        llm_service : LLMProvider
-            LLM provider for the summarization call.
-        model : str
-            Model identifier for the summarization call (can be a cheap/fast
-            model like ``gemini/gemini-2.5-flash-lite``).
+        chat_model : BaseChatModel
+            LangChain chat model for the summarization call (duck-typed).
         recent_turns : int
             Number of recent user/assistant exchange pairs to keep verbatim.
             Default ``10`` (= 20 messages).
@@ -241,14 +238,14 @@ class BaseAgent(ABC):
         )
 
         try:
-            summary_text = await llm_service.complete(
-                model,
+            result = await chat_model.ainvoke(
                 [
                     {"role": "system", "content": "You are a conversation summarizer. Output only the summary."},
                     {"role": "user", "content": summary_prompt},
                 ],
                 temperature=0.0,
             )
+            summary_text = result.content or ""
         except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
             logger.warning("History compression failed (%s), falling back to truncation", exc)
             # Fallback: just keep the recent turns (no summary)
@@ -332,7 +329,7 @@ class BaseAgent(ABC):
         invocations (e.g. a ``create_notification`` response with IDs
         and details from a prior turn).
 
-        Requires an injected ``LLMProvider`` (DIP-compliant).
+        Requires an injected ``BaseChatModel`` (via ``chat_model=``).
 
         Parameters
         ----------
@@ -362,10 +359,9 @@ class BaseAgent(ABC):
         RuntimeError
             If no ``LLMProvider`` was injected during construction.
         """
-        if not self._llm_service:
+        if not self._chat_model:
             raise RuntimeError(
-                f"[{self.name}] Cannot summarise: no LLMProvider injected. "
-                "Pass llm_service= when constructing the agent."
+                f"[{self.name}] Cannot summarise: no chat model injected. Pass chat_model= when constructing the agent."
             )
 
         _model = model or (self.llm if isinstance(self.llm, str) else str(self.llm))
@@ -405,11 +401,11 @@ class BaseAgent(ABC):
 
         messages.append({"role": "user", "content": user_content})
 
-        return await self._llm_service.complete(
-            _model,
-            messages,
-            temperature=temperature,
-        )
+        # BaseChatModel.ainvoke() accepts list[dict] and returns AIMessage.
+        # The chat model is pre-configured with its model name at construction
+        # time, so we don't need to pass the model string here.
+        result = await self._chat_model.ainvoke(messages, temperature=temperature)
+        return result.content or ""
 
     async def fetch_all_rag_context(
         self,

@@ -51,8 +51,9 @@ from ..config.registry import get_class
 from ..config.tool_registry import load_tools_from_config
 from ..core.agent import BaseAgent
 from ..core.guardrails import GuardrailAction, GuardrailChain, GuardrailContext, GuardrailDirection
-from ..core.llm_provider import LLMProvider
 from ..core.repository import VectorReader
+
+from langchain_core.language_models import BaseChatModel
 from ..mcp.auth_registry import MCPAuthRegistry
 from ..runtime import MCPClientFactory, OrchidRuntime
 from .state import GraphState
@@ -161,7 +162,7 @@ def _instantiate_agent(
     agent_config: AgentConfig,
     default_model: str,
     reader: VectorReader,
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
     mcp_client_factory: MCPClientFactory | None = None,
     summary_config: dict[str, Any] | None = None,
 ) -> BaseAgent:
@@ -181,18 +182,18 @@ def _instantiate_agent(
     # Determine the LLM model
     model = agent_config.llm.model if agent_config.llm else default_model
 
-    # Check which parameters the class accepts (GenericAgent accepts config + llm_service,
+    # Check which parameters the class accepts (GenericAgent accepts config + chat_model,
     # custom classes may not)
     sig = inspect.signature(cls.__init__)
     accepts_config = "config" in sig.parameters
-    accepts_llm_service = "llm_service" in sig.parameters
+    accepts_chat_model = "chat_model" in sig.parameters
     accepts_summary_config = "summary_config" in sig.parameters
 
     kwargs: dict[str, Any] = {"llm": model, "reader": reader, "mcp_clients": mcp_clients}
     if accepts_config:
         kwargs["config"] = agent_config
-    if accepts_llm_service and llm_service:
-        kwargs["llm_service"] = llm_service
+    if accepts_chat_model and chat_model:
+        kwargs["chat_model"] = chat_model
     if accepts_summary_config and summary_config:
         kwargs["summary_config"] = summary_config
 
@@ -204,7 +205,7 @@ def _build_subgraph(
     agent_config: AgentConfig,
     default_model: str,
     reader: VectorReader,
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
     mcp_client_factory: MCPClientFactory | None = None,
 ) -> Any:
     """
@@ -220,14 +221,14 @@ def _build_subgraph(
             child_config,
             default_model,
             reader,
-            llm_service,
+            chat_model,
             mcp_client_factory,
         )
         children_agents.append(child_agent)
 
     # Build sub-graph with its own supervisor
     child_descriptions = {a.name: a.description for a in children_agents}
-    sub_supervisor = create_supervisor_node(default_model, child_descriptions, llm_service=llm_service)
+    sub_supervisor = create_supervisor_node(default_model, child_descriptions, chat_model=chat_model)
 
     sg = StateGraph(GraphState)
     sg.add_node("supervisor", sub_supervisor)
@@ -378,7 +379,7 @@ def build_graph(
     """
     reader = runtime.get_reader()
     default_model = runtime.default_model
-    llm_service: LLMProvider = runtime.get_llm_service()
+    chat_model: BaseChatModel = runtime.get_chat_model()
 
     # ── Build MCP auth registry (scans all agents for OAuth servers) ──
     auth_registry = MCPAuthRegistry.from_config(config)
@@ -435,7 +436,7 @@ def build_graph(
                 agent_config,
                 default_model,
                 reader,
-                llm_service,
+                chat_model,
                 mcp_factory,
             )
             subgraph_nodes[agent_name] = subgraph
@@ -445,7 +446,7 @@ def build_graph(
                 agent_config,
                 default_model,
                 reader,
-                llm_service,
+                chat_model,
                 mcp_factory,
                 summary_config=summary_cfg,
             )
@@ -483,7 +484,7 @@ def build_graph(
     supervisor_node = create_supervisor_node(
         default_model,
         agent_descriptions,
-        llm_service=llm_service,
+        chat_model=chat_model,
         orchestrator_skills=config.skills or None,
         supervisor_config=config.supervisor,
     )

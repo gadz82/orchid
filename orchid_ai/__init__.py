@@ -21,7 +21,7 @@ from .core.guardrails import (
     GuardrailResult,
 )
 from .core.identity import IdentityError, IdentityResolver
-from .core.llm_provider import LLMProvider
+from .llm_factory import build_chat_model
 from .core.mcp import (
     MCPAuthRequiredError,
     MCPClient,
@@ -75,7 +75,7 @@ __all__ = [
     "GuardrailResult",
     "IdentityError",
     "IdentityResolver",
-    "LLMProvider",
+    "build_chat_model",
     "MCPClient",
     "MCPDiscoverable",
     "MCPToolCaller",
