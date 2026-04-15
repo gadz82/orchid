@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..config.schema import MCPServerConfig, ToolConfig
-from ..core.mcp import MCPClient
+from ..core.mcp import MCPAuthRequiredError, MCPClient
 from ..core.state import AuthContext
 
 logger = logging.getLogger(__name__)
@@ -118,8 +118,14 @@ class MCPDispatcher:
                 # Broad catch: MCP servers can fail with HTTP errors (401, 500),
                 # transport errors, protocol errors, etc.  This is a fault-isolation
                 # boundary — one failing server must not crash the entire agent.
-                logger.error("[%s] MCP server '%s' failed: %s", agent_name, server_config.name, exc)
-                server_results[f"{server_config.name}_error"] = str(exc)
+                if isinstance(exc, MCPAuthRequiredError):
+                    logger.info(
+                        "[%s] MCP server '%s' skipped — OAuth authorization required", agent_name, server_config.name
+                    )
+                    server_results[f"{server_config.name}_auth_required"] = True
+                else:
+                    logger.error("[%s] MCP server '%s' failed: %s", agent_name, server_config.name, exc)
+                    server_results[f"{server_config.name}_error"] = str(exc)
 
             return server_results
 

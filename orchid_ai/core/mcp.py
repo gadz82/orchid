@@ -1,7 +1,7 @@
 """
 MCP client abstraction.
 
-Concrete implementations live in agents/src/mcp/:
+Concrete implementations live in ``mcp/``:
   - StreamableHttpMCPClient (production)
 
 Domain types for per-server OAuth token management:
