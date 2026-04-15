@@ -22,7 +22,15 @@ from .core.guardrails import (
 )
 from .core.identity import IdentityError, IdentityResolver
 from .core.llm_provider import LLMProvider
-from .core.mcp import MCPClient, MCPDiscoverable, MCPToolCaller, MCPToolResult
+from .core.mcp import (
+    MCPAuthRequiredError,
+    MCPClient,
+    MCPDiscoverable,
+    MCPTokenRecord,
+    MCPTokenStore,
+    MCPToolCaller,
+    MCPToolResult,
+)
 from .core.repository import (
     Document,
     SearchResult,
@@ -48,6 +56,9 @@ __all__ = [
     "AuthContext",
     "BaseAgent",
     "ChatStorage",
+    "MCPAuthRequiredError",
+    "MCPTokenRecord",
+    "MCPTokenStore",
     "SQLiteChatStorage",
     "Document",
     "Guardrail",
