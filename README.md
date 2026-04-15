@@ -383,6 +383,7 @@ Each step:
 | `type` | `"local"` / `"remote"` | `"local"` |
 | `transport` | `"streamable_http"` / `"sse"` | `"streamable_http"` |
 | `url` | str | (required) |
+| `auth` | object | `{mode: "none"}` |
 | `tools` | list / `"*"` | `[]` |
 | `prompts` | list / `"*"` | `[]` |
 | `resources` | list / `"*"` | `[]` |
@@ -400,6 +401,7 @@ Each step:
   - `"all"` -- Call every tool in the list simultaneously and collect all results. Fastest, but tools run independently without seeing each other's output.
   - `"sequential"` -- Call tools one by one in order. Each tool receives the accumulated results from previous tools as a `previous_results` argument. Use when tools depend on each other (e.g. search then filter then sort).
   - `"llm_decides"` -- Ask the LLM to decide which tools to call and with what arguments. The LLM sees all available tools and the user query, then generates tool calls. Most flexible but slower and uses more tokens.
+- **`auth`** -- Per-server authentication configuration (see `agents.<name>.mcp_servers[].auth` below). Determines how the client authenticates with this MCP server. Defaults to `mode: "none"` (no auth headers).
 - **`cache_ttl`** -- How long (in seconds) to cache the results of capability discovery (`list_tools()`, `list_prompts()`, `list_resources()`). When using wildcard discovery (`"*"`), the framework calls the server's discovery endpoints and caches the results for this duration. `0` = re-discover on every request. `300` (5 min default) is a good balance for development. Increase in production where capabilities rarely change.
 
 > **Fault isolation:** MCP server communication boundaries use broad exception handling. If a server returns HTTP errors (401 Unauthorized, 500 Internal Server Error), connection failures, or protocol errors, the agent logs a warning and continues with the remaining servers and tools -- it does not crash or retry endlessly. This applies to tool execution (strategies), capability discovery (`render_capabilities`), and the `fetch()` dispatcher. One failing MCP server never takes down the entire agent.
@@ -417,6 +419,54 @@ Each step:
 - **`arguments`** -- Default arguments passed to this tool on every invocation. These are merged with the query and any strategy-specific arguments. Useful for tools that always need a fixed parameter (e.g. `currency: USD`, `language: en`, `max_results: 10`). The agent can't override these at runtime -- they're baked into the config.
 - **`inject_to_rag`** -- When `true`, the tool's return value is stored as a document in Qdrant after execution. This enables the RAG cache: on subsequent queries within the same chat scope, the framework checks if cached results exist before re-calling the tool. Default `false` -- results are used once for the LLM response and then discarded. Enable for tools whose results are expensive to compute and don't change frequently.
 - **`rag_ttl`** -- Per-tool override for the cache TTL (seconds). When `null`, uses the agent's `rag.rag_ttl`. When set to a positive integer, cached results from this tool expire after that many seconds. Set to `0` to disable caching for this tool even if the agent has a default TTL. Useful when tools have different freshness requirements within the same agent.
+
+#### `agents.<name>.mcp_servers[].auth` (MCP Auth)
+
+| Field | Type | Default |
+|-------|------|---------|
+| `mode` | `"none"` / `"passthrough"` / `"oauth"` | `"none"` |
+| `client_id` | str | `""` |
+| `authorization_endpoint` | str | `""` |
+| `token_endpoint` | str | `""` |
+| `scopes` | str | `"openid"` |
+| `issuer` | str | `""` |
+
+- **`mode`** -- How the MCP client authenticates with this server:
+  - `"none"` (default) -- No authentication headers. Use for local MCP servers or remote servers without auth.
+  - `"passthrough"` -- Forwards the graph's `AuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider as the main application.
+  - `"oauth"` -- Per-user OAuth 2.0 flow with a third-party identity provider. Tokens are stored per-user, per-server in the `MCPTokenStore`. The frontend prompts users to authorize, and the framework handles token refresh automatically.
+- **`client_id`** -- OAuth client ID registered with the third-party provider. Required when `mode: "oauth"`.
+- **`authorization_endpoint`** -- OAuth authorization URL. Required for `mode: "oauth"` unless `issuer` is set for OIDC auto-discovery.
+- **`token_endpoint`** -- OAuth token exchange URL. Required for `mode: "oauth"` unless `issuer` is set.
+- **`scopes`** -- Space-separated OAuth scopes. Default `"openid"`.
+- **`issuer`** -- OIDC issuer URL for auto-discovery. When set, `authorization_endpoint` and `token_endpoint` are resolved automatically from the `.well-known/openid-configuration` document.
+
+Example:
+
+```yaml
+mcp_servers:
+  # No auth (default) -- local MCP server
+  - name: local-tools
+    url: http://localhost:3001/mcp
+    tools: "*"
+
+  # Passthrough -- forwards the platform bearer token
+  - name: internal-api
+    url: ${INTERNAL_MCP_URL}
+    tools: "*"
+    auth:
+      mode: passthrough
+
+  # OAuth -- third-party provider with OIDC discovery
+  - name: external-crm
+    url: ${CRM_MCP_URL}
+    tools: "*"
+    auth:
+      mode: oauth
+      client_id: orchid-crm-integration
+      issuer: https://auth.crm-provider.com
+      scopes: "openid crm.read crm.write"
+```
 
 #### `agents.<name>.skills.<name>` (Agent Skills)
 
