@@ -41,6 +41,7 @@ from .core.repository import (
 )
 from .core.state import AgentState, AuthContext
 from .graph.graph import build_graph
+from .graph.supervisor import RoutingDecision
 from .guardrails import build_guardrail_chain, register_guardrail
 from .mcp.auth_registry import MCPAuthRegistry, MCPOAuthServerInfo
 from .persistence.base import ChatStorage
@@ -92,6 +93,7 @@ __all__ = [
     "build_chat_storage",
     "build_mcp_token_store",
     "build_graph",
+    "RoutingDecision",
     "build_guardrail_chain",
     "build_reader",
     "import_class",

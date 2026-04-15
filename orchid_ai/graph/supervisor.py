@@ -27,11 +27,40 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.graph import END
 from langgraph.types import Send
 
+from typing import Literal as TypingLiteral
+
 from langchain_core.language_models import BaseChatModel
+from pydantic import BaseModel, Field
 
 from ..core.agent import BaseAgent
 from ..config.schema import OrchestratorSkillConfig, SupervisorConfig
 from .state import GraphState
+
+
+# ── Structured output model for routing ──────────────────────
+
+
+class RoutingDecision(BaseModel):
+    """LLM-generated routing decision — guaranteed valid via structured output."""
+
+    reasoning: str = Field(description="Brief analysis of the user's intent")
+    execution: TypingLiteral["parallel", "sequential", "skill"] = Field(
+        default="parallel",
+        description="Execution mode: parallel (independent agents), sequential (dependent), or skill (pre-defined workflow)",
+    )
+    agents: list[str] = Field(
+        default_factory=list,
+        description="Agent names to activate (empty if direct_response or skill)",
+    )
+    skill: str | None = Field(
+        default=None,
+        description="Skill name to invoke (only when execution='skill')",
+    )
+    direct_response: str | None = Field(
+        default=None,
+        description="Direct response to the user (only when no agent is needed)",
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -59,34 +88,7 @@ RULES:
 - Route to one or more agents when the request requires domain-specific data or actions.
 - Choose the right execution mode based on agent dependencies.
 - If a pre-defined SKILL matches the user's request, prefer it over manual routing.
-- If you can answer directly (greeting, general question), do so.
-
-Respond ONLY with a JSON object (no markdown fences):
-
-To invoke a pre-defined skill:
-{{
-  "reasoning": "brief analysis of the user's intent",
-  "execution": "skill",
-  "skill": "skill_name",
-  "agents": [],
-  "direct_response": null
-}}
-
-To route to agents manually:
-{{
-  "reasoning": "brief analysis of the user's intent and why this execution mode",
-  "execution": "parallel" or "sequential",
-  "agents": ["agent_name_1", "agent_name_2"],
-  "direct_response": null
-}}
-
-If no agent is needed:
-{{
-  "reasoning": "...",
-  "execution": "parallel",
-  "agents": [],
-  "direct_response": "Your direct answer here"
-}}
+- If you can answer directly (greeting, general question), set direct_response.
 """
 
 SEQUENTIAL_ADVANCE_SYSTEM_PROMPT = """\
@@ -291,14 +293,12 @@ async def _route(
     llm_messages = _to_llm_messages(system, clean_messages)
 
     try:
-        raw = await _llm_complete(
-            chat_model,
-            model,
-            llm_messages,
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-        logger.info("[Supervisor] routing decision: %s", raw)
+        if not chat_model:
+            raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
+
+        structured_model = chat_model.with_structured_output(RoutingDecision)
+        decision: RoutingDecision = await structured_model.ainvoke(llm_messages, temperature=0)
+        logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
         # Handle LLM API failures gracefully
         logger.error("[Supervisor] LLM API error during routing: %s", exc, exc_info=True)
@@ -320,18 +320,13 @@ async def _route(
             "routing_metadata": {"error": "llm_api_failure", "details": error_msg},
         }
 
-    try:
-        decision = json.loads(raw)
-    except json.JSONDecodeError:
-        decision = {"agents": [], "direct_response": raw, "reasoning": "JSON parse error"}
-
-    agents: list[str] = decision.get("agents", [])
-    direct: str | None = decision.get("direct_response")
-    execution: str = decision.get("execution", "parallel")
+    agents: list[str] = decision.agents
+    direct: str | None = decision.direct_response
+    execution: str = decision.execution
 
     # ── Orchestrator skill activation ──
     if execution == "skill":
-        skill_name = decision.get("skill", "")
+        skill_name = decision.skill or ""
         if skill_name in (orchestrator_skills or {}):
             skill = orchestrator_skills[skill_name]
             skill_agents = [step.agent for step in skill.steps]
