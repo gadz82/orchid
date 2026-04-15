@@ -125,7 +125,7 @@ def _tool_data_to_documents(
         docs.append(
             Document(
                 id=doc_id,
-                content=text,
+                page_content=text,
                 metadata={
                     "tenant_id": scope.tenant_id,
                     "user_id": scope.user_id,
