@@ -34,8 +34,6 @@ from ..config.schema import MCPServerConfig, ToolConfig
 from ..core.mcp import MCPClient
 from ..core.state import AuthContext
 
-# Note: get_llm_kwargs is imported lazily inside LLMDecidesStrategy._llm_complete()
-# because litellm should not be imported at module level (see Architecture Rules).
 
 logger = logging.getLogger(__name__)
 
