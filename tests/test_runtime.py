@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 
-from orchid_ai.core.llm_provider import LLMProvider
 from orchid_ai.core.mcp import MCPClient
 from orchid_ai.core.repository import VectorReader
 from orchid_ai.runtime import OrchidRuntime
@@ -35,17 +34,19 @@ class TestDefaults:
         rt = OrchidRuntime(reader=mock_reader)
         assert rt.get_reader() is mock_reader
 
-    def test_get_llm_service_returns_litellm_when_none(self):
-        from orchid_ai.llm_service import LiteLLMProvider
+    def test_get_chat_model_returns_default_when_none(self):
+        from langchain_core.language_models import BaseChatModel
 
         rt = OrchidRuntime()
-        svc = rt.get_llm_service()
-        assert isinstance(svc, LiteLLMProvider)
+        model = rt.get_chat_model()
+        assert isinstance(model, BaseChatModel)
 
-    def test_get_llm_service_returns_provided_service(self):
-        mock_svc = MagicMock(spec=LLMProvider)
-        rt = OrchidRuntime(llm_service=mock_svc)
-        assert rt.get_llm_service() is mock_svc
+    def test_get_chat_model_returns_provided_model(self):
+        from langchain_core.language_models import BaseChatModel
+
+        mock_model = MagicMock(spec=BaseChatModel)
+        rt = OrchidRuntime(chat_model=mock_model)
+        assert rt.get_chat_model() is mock_model
 
     def test_get_mcp_client_factory_returns_default_callable(self):
         rt = OrchidRuntime()

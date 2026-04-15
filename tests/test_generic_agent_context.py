@@ -22,14 +22,14 @@ def _make_agent() -> GenericAgent:
     )
     reader = MagicMock()
     reader.retrieve = AsyncMock(return_value=[])
-    llm_service = MagicMock()
-    llm_service.complete = AsyncMock(return_value="summary response")
+    chat_model = MagicMock()
+    chat_model.ainvoke = AsyncMock(return_value=MagicMock(content="summary response"))
     return GenericAgent(
         config=config,
         llm="test-model",
         reader=reader,
         mcp_clients=[],
-        llm_service=llm_service,
+        chat_model=chat_model,
     )
 
 
@@ -71,9 +71,9 @@ async def test_summarise_receives_conversation_history() -> None:
     with patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}):
         await agent.run(state)
 
-    # Check that summarise was called with conversation_history
-    call_kwargs = agent._llm_service.complete.call_args
-    messages = call_kwargs.args[1]
+    # Check that ainvoke was called with conversation_history
+    call_args = agent._chat_model.ainvoke.call_args
+    messages = call_args.args[0]
 
     # Should have: system + 2 history + user = 4 messages
     assert len(messages) == 4
@@ -100,7 +100,7 @@ async def test_summarise_receives_prior_tool_context() -> None:
     with patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}):
         await agent.run(state)
 
-    system_content = agent._llm_service.complete.call_args.args[1][0]["content"]
+    system_content = agent._chat_model.ainvoke.call_args.args[0][0]["content"]
     assert "Previous Tool Results" in system_content
     assert "Python 101" in system_content
 
@@ -115,7 +115,7 @@ async def test_no_prior_context_when_mcp_context_empty() -> None:
     with patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}):
         await agent.run(state)
 
-    system_content = agent._llm_service.complete.call_args.args[1][0]["content"]
+    system_content = agent._chat_model.ainvoke.call_args.args[0][0]["content"]
     assert "Previous Tool Results" not in system_content
 
 
@@ -133,6 +133,6 @@ async def test_no_prior_context_for_different_agent() -> None:
     with patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}):
         await agent.run(state)
 
-    system_content = agent._llm_service.complete.call_args.args[1][0]["content"]
+    system_content = agent._chat_model.ainvoke.call_args.args[0][0]["content"]
     # Should NOT contain notifications data — it belongs to a different agent
     assert "Previous Tool Results" not in system_content

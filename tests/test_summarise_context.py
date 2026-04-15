@@ -27,10 +27,10 @@ class _StubAgent(BaseAgent):
 
 
 def _make_agent() -> _StubAgent:
-    llm_service = MagicMock()
-    llm_service.complete = AsyncMock(return_value="summary text")
+    chat_model = MagicMock()
+    chat_model.ainvoke = AsyncMock(return_value=MagicMock(content="summary text"))
     reader = MagicMock()
-    return _StubAgent(llm="test-model", reader=reader, llm_service=llm_service)
+    return _StubAgent(llm="test-model", reader=reader, chat_model=chat_model)
 
 
 # ── Tests ──────────────────────────────────────────────────
@@ -48,8 +48,8 @@ async def test_summarise_no_history_no_prior_context() -> None:
     )
     assert result == "summary text"
 
-    call_args = agent._llm_service.complete.call_args
-    messages = call_args.args[1]
+    call_args = agent._chat_model.ainvoke.call_args
+    messages = call_args.args[0]
 
     # system + user only (no history injected)
     assert len(messages) == 2
@@ -78,7 +78,7 @@ async def test_summarise_with_conversation_history() -> None:
         conversation_history=history,
     )
 
-    messages = agent._llm_service.complete.call_args.args[1]
+    messages = agent._chat_model.ainvoke.call_args.args[0]
 
     # system + 2 history + user = 4
     assert len(messages) == 4
@@ -107,7 +107,7 @@ async def test_summarise_with_prior_tool_context() -> None:
         prior_tool_context=prior,
     )
 
-    messages = agent._llm_service.complete.call_args.args[1]
+    messages = agent._chat_model.ainvoke.call_args.args[0]
     system_content = messages[0]["content"]
 
     assert "Previous Tool Results" in system_content
@@ -134,7 +134,7 @@ async def test_summarise_with_both_history_and_prior_context() -> None:
         prior_tool_context=prior,
     )
 
-    messages = agent._llm_service.complete.call_args.args[1]
+    messages = agent._chat_model.ainvoke.call_args.args[0]
 
     # system + 2 history + user = 4
     assert len(messages) == 4
@@ -160,7 +160,7 @@ async def test_summarise_prior_context_truncated() -> None:
         prior_tool_context=prior,
     )
 
-    system_content = agent._llm_service.complete.call_args.args[1][0]["content"]
+    system_content = agent._chat_model.ainvoke.call_args.args[0][0]["content"]
     # The prior context section should exist but be capped
     assert "Previous Tool Results" in system_content
     # Total system prompt should not contain the full 10000 chars

@@ -10,11 +10,11 @@ Example — using all defaults::
     runtime = OrchidRuntime(default_model="gemini/gemini-2.5-flash")
     graph = build_graph(config=config, runtime=runtime)
 
-Example — custom LLM provider and MCP factory::
+Example — custom chat model and MCP factory::
 
     runtime = OrchidRuntime(
         default_model="openai/gpt-4o",
-        llm_service=MyCustomLLMProvider(),
+        chat_model=ChatOpenAI(model="gpt-4o"),
         reader=my_qdrant_reader,
         mcp_client_factory=lambda cfg: MyMCPClient(cfg.url),
     )
@@ -27,7 +27,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
-from .core.llm_provider import LLMProvider
+from langchain_core.language_models import BaseChatModel
+
 from .core.mcp import MCPClient, MCPTokenStore
 from .core.repository import VectorReader
 
@@ -69,11 +70,11 @@ def _default_mcp_client_factory(
     )
 
 
-def _default_llm_service() -> LLMProvider:
-    """Create the default LiteLLM-backed provider."""
-    from .llm_service import LiteLLMProvider
+def _default_chat_model(model: str = "ollama/llama3.2", **kwargs) -> BaseChatModel:
+    """Create the default LangChain chat model via the factory."""
+    from .llm_factory import build_chat_model
 
-    return LiteLLMProvider()
+    return build_chat_model(model, **kwargs)
 
 
 @dataclass
@@ -90,8 +91,8 @@ class OrchidRuntime:
         LiteLLM model identifier (e.g. ``"gemini/gemini-2.5-flash"``).
     reader : VectorReader | None
         Vector store backend.  ``None`` → ``NullVectorReader`` (no RAG).
-    llm_service : LLMProvider | None
-        LLM abstraction.  ``None`` → ``LiteLLMProvider()`` (default).
+    chat_model : BaseChatModel | None
+        LangChain chat model.  ``None`` → built via ``build_chat_model(default_model)``.
     mcp_client_factory : MCPClientFactory | None
         Factory for creating MCP clients from server config.
         ``None`` → ``StreamableHttpMCPClient`` (default).
@@ -99,7 +100,7 @@ class OrchidRuntime:
 
     default_model: str = "ollama/llama3.2"
     reader: VectorReader | None = None
-    llm_service: LLMProvider | None = None
+    chat_model: BaseChatModel | None = None
     mcp_client_factory: MCPClientFactory | None = None
     mcp_token_store: MCPTokenStore | None = None
     mcp_auth_registry: MCPAuthRegistry | None = field(default=None)
@@ -114,11 +115,11 @@ class OrchidRuntime:
 
         return NullVectorReader()
 
-    def get_llm_service(self) -> LLMProvider:
-        """Return the configured LLM provider, falling back to LiteLLMProvider."""
-        if self.llm_service is not None:
-            return self.llm_service
-        return _default_llm_service()
+    def get_chat_model(self) -> BaseChatModel:
+        """Return the configured chat model, falling back to ChatLiteLLM."""
+        if self.chat_model is not None:
+            return self.chat_model
+        return _default_chat_model(self.default_model)
 
     def get_mcp_client_factory(self) -> MCPClientFactory:
         """Return the configured MCP factory, falling back to StreamableHttpMCPClient."""

@@ -128,13 +128,13 @@ class TestFetchAllRagConcurrency:
         assert result == []
 
 
-# ── Fix #5: litellm fallback removed — RuntimeError on missing LLMProvider ──
+# ── Fix #5: litellm fallback removed — RuntimeError on missing BaseChatModel ──
 
 
 class TestNoLitellmFallback:
     @pytest.mark.asyncio
-    async def test_summarise_raises_without_llm_service(self):
-        """BaseAgent.summarise() should raise RuntimeError when no LLMProvider injected."""
+    async def test_summarise_raises_without_chat_model(self):
+        """BaseAgent.summarise() should raise RuntimeError when no BaseChatModel injected."""
         from orchid_ai.core.agent import BaseAgent
 
         class _TestAgent(BaseAgent):
@@ -150,9 +150,9 @@ class TestNoLitellmFallback:
                 return state
 
         agent = _TestAgent(llm="model", reader=MagicMock())
-        # No llm_service injected
+        # No chat_model injected
 
-        with pytest.raises(RuntimeError, match="no LLMProvider injected"):
+        with pytest.raises(RuntimeError, match="no chat model injected"):
             await agent.summarise(
                 "query",
                 {},
@@ -161,9 +161,9 @@ class TestNoLitellmFallback:
             )
 
     @pytest.mark.asyncio
-    async def test_llm_decides_raises_without_llm_service(self):
-        """LLMDecidesStrategy._llm_complete raises RuntimeError without LLMProvider."""
-        with pytest.raises(RuntimeError, match="requires an LLMProvider"):
+    async def test_llm_decides_raises_without_chat_model(self):
+        """LLMDecidesStrategy._llm_complete raises RuntimeError without BaseChatModel."""
+        with pytest.raises(RuntimeError, match="requires a BaseChatModel"):
             await LLMDecidesStrategy._llm_complete(
                 None,
                 "model",
@@ -172,10 +172,10 @@ class TestNoLitellmFallback:
 
     @pytest.mark.asyncio
     async def test_supervisor_llm_complete_raises_without_service(self):
-        """supervisor._llm_complete raises RuntimeError without LLMProvider."""
+        """supervisor._llm_complete raises RuntimeError without BaseChatModel."""
         from orchid_ai.graph.supervisor import _llm_complete
 
-        with pytest.raises(RuntimeError, match="requires an LLMProvider"):
+        with pytest.raises(RuntimeError, match="requires a BaseChatModel"):
             await _llm_complete(None, "model", [{"role": "user", "content": "test"}])
 
 
@@ -349,15 +349,15 @@ class TestGenericAgentDecomposition:
         )
         reader = MagicMock()
         reader.retrieve = AsyncMock(return_value=[])
-        llm_service = MagicMock()
-        llm_service.complete = AsyncMock(return_value="summary")
+        chat_model = MagicMock()
+        chat_model.ainvoke = AsyncMock(return_value=MagicMock(content="summary"))
 
         agent = GenericAgent(
             config=config,
             llm="test-model",
             reader=reader,
             mcp_clients=[],
-            llm_service=llm_service,
+            chat_model=chat_model,
         )
         auth = AuthContext(access_token="tok", tenant_key="t1", user_id="u1")
         state = {"chat_id": "c1"}

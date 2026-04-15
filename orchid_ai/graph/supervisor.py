@@ -27,8 +27,9 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.graph import END
 from langgraph.types import Send
 
+from langchain_core.language_models import BaseChatModel
+
 from ..core.agent import BaseAgent
-from ..core.llm_provider import LLMProvider
 from ..config.schema import OrchestratorSkillConfig, SupervisorConfig
 from .state import GraphState
 
@@ -123,13 +124,13 @@ Do NOT mention internal routing or agent names to the user.
 def create_supervisor_node(
     model: str,
     agent_descriptions: dict[str, str],
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
     orchestrator_skills: dict[str, OrchestratorSkillConfig] | None = None,
     supervisor_config: SupervisorConfig | None = None,
 ):
     """
     Return a LangGraph node function with *model*, *agent_descriptions*,
-    *llm_service*, and *orchestrator_skills* captured via closure — no
+    *chat_model*, and *orchestrator_skills* captured via closure — no
     module-level globals (ADR-008 Composition Root).
     """
     skills = orchestrator_skills or {}
@@ -141,14 +142,14 @@ def create_supervisor_node(
 
         # ── Case 1: Sequential pipeline in progress — advance to next agent ──
         if pending and has_mcp_data:
-            return await _advance_sequential(state, model, agent_descriptions, pending, sup_config, llm_service)
+            return await _advance_sequential(state, model, agent_descriptions, pending, sup_config, chat_model)
 
         # ── Case 2: All agents done (no pending) + data collected → synthesise ──
         if has_mcp_data and not pending and not state.get("active_agents"):
-            return await _synthesise(state, model, sup_config, llm_service)
+            return await _synthesise(state, model, sup_config, chat_model)
 
         # ── Case 3: First entry — analyse intent and route ──
-        return await _route(state, model, agent_descriptions, skills, sup_config, llm_service)
+        return await _route(state, model, agent_descriptions, skills, sup_config, chat_model)
 
     return supervisor_node
 
@@ -219,7 +220,7 @@ def _to_llm_messages(
     system: str,
     state_messages: list[BaseMessage],
 ) -> list[dict[str, str]]:
-    """Convert LangGraph messages to the [{role, content}] format used by LLMProvider."""
+    """Convert LangGraph messages to the [{role, content}] format used by BaseChatModel."""
     llm_msgs: list[dict[str, str]] = [{"role": "system", "content": system}]
     for msg in state_messages:
         if isinstance(msg, HumanMessage):
@@ -230,22 +231,23 @@ def _to_llm_messages(
 
 
 async def _llm_complete(
-    llm_service: LLMProvider | None,
+    chat_model: BaseChatModel | None,
     model: str,
     messages: list[dict[str, str]],
     *,
     temperature: float = 0.0,
     response_format: dict[str, str] | None = None,
 ) -> str:
-    """Call LLM via the injected LLMProvider."""
-    if not llm_service:
-        raise RuntimeError("Supervisor requires an LLMProvider. Pass llm_service= when building the graph.")
-    return await llm_service.complete(
-        model,
-        messages,
-        temperature=temperature,
-        response_format=response_format,
-    )
+    """Call LLM via the injected BaseChatModel."""
+    if not chat_model:
+        raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
+    kwargs: dict = {"temperature": temperature}
+    if response_format:
+        # Use with_structured_output for json_object format if supported,
+        # otherwise pass as model_kwargs
+        kwargs["response_format"] = response_format
+    result = await chat_model.ainvoke(messages, **kwargs)
+    return result.content or ""
 
 
 async def _route(
@@ -254,7 +256,7 @@ async def _route(
     agent_descriptions: dict[str, str],
     orchestrator_skills: dict[str, OrchestratorSkillConfig] | None = None,
     supervisor_config: SupervisorConfig | None = None,
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
 ) -> GraphState:
     """Analyse user intent, choose execution mode, and activate agents."""
     desc_text = "\n".join(f"- **{name}**: {desc}" for name, desc in agent_descriptions.items())
@@ -290,7 +292,7 @@ async def _route(
 
     try:
         raw = await _llm_complete(
-            llm_service,
+            chat_model,
             model,
             llm_messages,
             temperature=0,
@@ -416,7 +418,7 @@ async def _advance_sequential(
     agent_descriptions: dict[str, str],
     pending: list[str],
     supervisor_config: SupervisorConfig | None = None,
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
 ) -> GraphState:
     """
     Advance the sequential pipeline: activate the next agent,
@@ -452,11 +454,10 @@ async def _advance_sequential(
     )
 
     # Compress older turns when sliding-window summarization is enabled
-    if history and sup.history_summary_enabled and llm_service:
+    if history and sup.history_summary_enabled and chat_model:
         history = await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm_service,
-            model=sup.history_summary_model or model,
+            chat_model=chat_model,
             recent_turns=sup.history_summary_recent_turns,
         )
 
@@ -475,7 +476,7 @@ async def _advance_sequential(
         )
 
     try:
-        handoff = await _llm_complete(llm_service, model, llm_messages, temperature=0.2)
+        handoff = await _llm_complete(chat_model, model, llm_messages, temperature=0.2)
         logger.info(
             "[Supervisor] sequential advance → %s (pending: %s): %s",
             next_agent,
@@ -499,7 +500,7 @@ async def _synthesise(
     state: GraphState,
     model: str,
     supervisor_config: SupervisorConfig | None = None,
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
 ) -> GraphState:
     """Combine sub-agent results into a final user-facing response."""
     sup = supervisor_config or SupervisorConfig()
@@ -534,11 +535,10 @@ async def _synthesise(
     )
 
     # Compress older turns when sliding-window summarization is enabled
-    if history and sup.history_summary_enabled and llm_service:
+    if history and sup.history_summary_enabled and chat_model:
         history = await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm_service,
-            model=sup.history_summary_model or model,
+            chat_model=chat_model,
             recent_turns=sup.history_summary_recent_turns,
         )
 
@@ -574,7 +574,7 @@ async def _synthesise(
         )
 
     try:
-        final = await _llm_complete(llm_service, model, llm_messages, temperature=0.3)
+        final = await _llm_complete(chat_model, model, llm_messages, temperature=0.3)
         logger.info("[Supervisor] synthesis complete (%d chars)", len(final))
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
         # Handle LLM API failures gracefully
