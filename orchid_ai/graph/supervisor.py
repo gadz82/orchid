@@ -267,9 +267,21 @@ async def _route(
 
     sup = supervisor_config or SupervisorConfig()
     routing_template = sup.routing_system_prompt or ROUTING_SYSTEM_PROMPT
+
+    # Inject MCP auth status hint so the supervisor can make informed routing decisions
+    mcp_auth_status = state.get("mcp_auth_status", {})
+    unauthorized = [name for name, ok in mcp_auth_status.items() if not ok]
+    auth_hint = ""
+    if unauthorized:
+        auth_hint = (
+            f"\n\nNOTE: The following external services require user authorization "
+            f"and are currently unavailable: {', '.join(unauthorized)}. "
+            f"Agents that depend solely on these services may have limited capabilities."
+        )
+
     system = routing_template.format(
         assistant_name=sup.assistant_name,
-        agent_descriptions=desc_text,
+        agent_descriptions=desc_text + auth_hint,
         skill_descriptions=skill_text,
     )
     # Filter internal messages so the routing LLM sees a clean dialogue
