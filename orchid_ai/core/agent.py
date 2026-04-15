@@ -357,7 +357,7 @@ class BaseAgent(ABC):
         Raises
         ------
         RuntimeError
-            If no ``LLMProvider`` was injected during construction.
+            If no ``chat_model`` was injected during construction.
         """
         if not self._chat_model:
             raise RuntimeError(
