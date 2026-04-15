@@ -31,10 +31,29 @@ class LLMConfig(BaseModel):
       - ``anthropic/claude-sonnet-4-20250514``  → Anthropic
       - ``ollama/llama3.2``                  → Local Ollama
       - ``openai/gpt-4o``                   → OpenAI
+
+    The optional ``fallback_model`` is tried automatically when the
+    primary model fails (503, rate limit, timeout).  When set at
+    ``defaults.llm`` level, it applies to all agents and the supervisor
+    unless overridden per-agent or per-supervisor.
+
+    Example YAML::
+
+        defaults:
+          llm:
+            model: gemini/gemini-2.5-flash
+            fallback_model: ollama/llama3.2
+
+        agents:
+          critical-agent:
+            llm:
+              model: openai/gpt-4o
+              fallback_model: anthropic/claude-sonnet-4-20250514
     """
 
     model: str = "gemini/gemini-2.5-flash"
     temperature: float = 0.2
+    fallback_model: str | None = None
 
 
 class RAGDefaultsConfig(BaseModel):
@@ -325,6 +344,7 @@ class SupervisorConfig(BaseModel):
     """
 
     assistant_name: str = "AI assistant"
+    fallback_model: str | None = None  # fallback LLM for supervisor (overrides defaults.llm.fallback_model)
     routing_system_prompt: str | None = None
     synthesis_system_prompt: str | None = None
     sequential_advance_prompt: str | None = None
