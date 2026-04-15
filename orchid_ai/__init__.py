@@ -42,6 +42,7 @@ from .core.repository import (
 from .core.state import AgentState, AuthContext
 from .graph.graph import build_graph
 from .guardrails import build_guardrail_chain, register_guardrail
+from .mcp.auth_registry import MCPAuthRegistry, MCPOAuthServerInfo
 from .persistence.base import ChatStorage
 from .persistence.factory import build_chat_storage
 from .persistence.sqlite import SQLiteChatStorage
@@ -56,7 +57,9 @@ __all__ = [
     "AuthContext",
     "BaseAgent",
     "ChatStorage",
+    "MCPAuthRegistry",
     "MCPAuthRequiredError",
+    "MCPOAuthServerInfo",
     "MCPTokenRecord",
     "MCPTokenStore",
     "SQLiteChatStorage",

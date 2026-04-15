@@ -53,6 +53,7 @@ from ..core.agent import BaseAgent
 from ..core.guardrails import GuardrailAction, GuardrailChain, GuardrailContext, GuardrailDirection
 from ..core.llm_provider import LLMProvider
 from ..core.repository import VectorReader
+from ..mcp.auth_registry import MCPAuthRegistry
 from ..runtime import MCPClientFactory, OrchidRuntime
 from .state import GraphState
 from .supervisor import create_supervisor_node, route_to_agents
@@ -378,7 +379,21 @@ def build_graph(
     reader = runtime.get_reader()
     default_model = runtime.default_model
     llm_service: LLMProvider = runtime.get_llm_service()
-    mcp_factory: MCPClientFactory = runtime.get_mcp_client_factory()
+
+    # ── Build MCP auth registry (scans all agents for OAuth servers) ──
+    auth_registry = MCPAuthRegistry.from_config(config)
+    runtime.mcp_auth_registry = auth_registry
+
+    # ── Build MCP factory (enhanced with token_store for OAuth servers) ──
+    if runtime.mcp_client_factory:
+        mcp_factory: MCPClientFactory = runtime.mcp_client_factory
+    else:
+        from ..runtime import _default_mcp_client_factory
+
+        token_store = runtime.mcp_token_store
+
+        def mcp_factory(cfg):  # type: ignore[misc]
+            return _default_mcp_client_factory(cfg, token_store=token_store)
 
     # ── Register built-in tools from config ──
     if config.tools:

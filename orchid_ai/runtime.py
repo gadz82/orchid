@@ -24,15 +24,16 @@ Example — custom LLM provider and MCP factory::
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
 from .core.llm_provider import LLMProvider
-from .core.mcp import MCPClient
+from .core.mcp import MCPClient, MCPTokenStore
 from .core.repository import VectorReader
 
 if TYPE_CHECKING:
     from .config.schema import MCPServerConfig
+    from .mcp.auth_registry import MCPAuthRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,18 @@ logger = logging.getLogger(__name__)
 MCPClientFactory = Callable[["MCPServerConfig"], MCPClient]
 
 
-def _default_mcp_client_factory(server_config: MCPServerConfig) -> MCPClient:
-    """Create a StreamableHttpMCPClient from server config (default factory)."""
+def _default_mcp_client_factory(
+    server_config: MCPServerConfig,
+    *,
+    token_store: MCPTokenStore | None = None,
+) -> MCPClient:
+    """Create a StreamableHttpMCPClient from server config (default factory).
+
+    Auth modes:
+      - ``none`` (default): no auth headers sent.
+      - ``passthrough``: forwards graph AuthContext bearer token.
+      - ``oauth``: resolves per-user tokens from the *token_store*.
+    """
     from .mcp.client import StreamableHttpMCPClient
 
     return StreamableHttpMCPClient(
@@ -50,6 +61,11 @@ def _default_mcp_client_factory(server_config: MCPServerConfig) -> MCPClient:
         server_type=server_config.type,
         transport=server_config.transport,
         cache_ttl=server_config.cache_ttl,
+        server_name=server_config.name,
+        auth_mode=server_config.auth.mode,
+        token_store=token_store,
+        token_endpoint=server_config.auth.token_endpoint,
+        client_id=server_config.auth.client_id,
     )
 
 
@@ -85,6 +101,8 @@ class OrchidRuntime:
     reader: VectorReader | None = None
     llm_service: LLMProvider | None = None
     mcp_client_factory: MCPClientFactory | None = None
+    mcp_token_store: MCPTokenStore | None = None
+    mcp_auth_registry: MCPAuthRegistry | None = field(default=None)
 
     # ── Resolved accessors (lazy defaults) ──────────────────────
 
