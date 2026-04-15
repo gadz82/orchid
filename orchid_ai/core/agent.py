@@ -289,7 +289,7 @@ class BaseAgent(ABC):
             )
             rag_docs = [
                 {
-                    "content": r.document.content,
+                    "content": r.document.page_content,
                     "score": round(r.score, 3),
                     "metadata": {
                         mk: mv for mk, mv in r.document.metadata.items() if mk not in ("content", "embedding")
