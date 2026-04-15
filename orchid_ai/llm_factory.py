@@ -71,6 +71,7 @@ def build_chat_model(
     model: str,
     *,
     temperature: float = 0.2,
+    fallback_model: str | None = None,
     **kwargs: Any,
 ) -> BaseChatModel:
     """
@@ -80,6 +81,9 @@ def build_chat_model(
     then falls back to ``ChatLiteLLM`` (which wraps litellm and supports
     all providers).
 
+    When ``fallback_model`` is provided, the returned model automatically
+    tries the fallback if the primary fails (503, rate limit, timeout).
+
     Parameters
     ----------
     model : str
@@ -87,14 +91,34 @@ def build_chat_model(
         ``"openai/gpt-4o"``, ``"ollama/llama3.2"``).
     temperature : float
         Default sampling temperature.
+    fallback_model : str | None
+        Optional fallback model string. When the primary model fails,
+        the fallback is tried automatically. Disabled by default.
     **kwargs
         Additional keyword arguments passed to the model constructor.
 
     Returns
     -------
     BaseChatModel
-        A ready-to-use LangChain chat model.
+        A ready-to-use LangChain chat model (with fallback if configured).
     """
+    primary = _build_single_model(model, temperature=temperature, **kwargs)
+
+    if fallback_model:
+        fallback = _build_single_model(fallback_model, temperature=temperature, **kwargs)
+        logger.info("[LLM] Fallback configured: '%s' → '%s'", model, fallback_model)
+        return primary.with_fallbacks([fallback])
+
+    return primary
+
+
+def _build_single_model(
+    model: str,
+    *,
+    temperature: float = 0.2,
+    **kwargs: Any,
+) -> BaseChatModel:
+    """Build a single BaseChatModel without fallbacks."""
     # Try provider-specific package first
     for prefix, module_path, class_name, strip_prefix in _PROVIDER_MAP:
         if not model.startswith(prefix):
@@ -126,7 +150,7 @@ def build_chat_model(
             continue
         except Exception as exc:
             logger.debug(
-                "[LLM] Failed to create %s.%s for '%s': %s — trying fallback",
+                "[LLM] Failed to create %s.%s for '%s': %s — trying ChatLiteLLM",
                 module_path,
                 class_name,
                 model,
