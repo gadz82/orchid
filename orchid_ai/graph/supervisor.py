@@ -89,6 +89,18 @@ RULES:
 - Choose the right execution mode based on agent dependencies.
 - If a pre-defined SKILL matches the user's request, prefer it over manual routing.
 - If you can answer directly (greeting, general question), set direct_response.
+- For follow-up messages like "yes", "tell me more", "go ahead", ALWAYS re-route
+  to the SAME agent(s) that handled the previous turn.  Never return empty agents
+  for a follow-up question.
+
+FIELD INSTRUCTIONS (you MUST follow these):
+- "reasoning": Explain WHY you chose these agents (1-2 sentences).
+- "execution": One of "parallel", "sequential", or "skill".
+- "agents": List of agent NAMES to activate. MUST NOT be empty unless you set
+  direct_response. Example: ["menu"] or ["menu", "orders"].
+- "skill": Skill name ONLY when execution="skill". Otherwise null.
+- "direct_response": Your answer ONLY when no agent is needed (greetings,
+  general knowledge). Otherwise null.
 """
 
 SEQUENTIAL_ADVANCE_SYSTEM_PROMPT = """\
@@ -372,6 +384,20 @@ async def _route(
 
     # ── Validate agent names ──
     valid = [a for a in agents if a in agent_descriptions]
+
+    # Recovery: if the LLM returned empty agents but mentioned an agent name
+    # in the reasoning (common with small models), extract it.
+    if not valid and not direct:
+        reasoning_lower = decision.reasoning.lower()
+        for name in agent_descriptions:
+            if name in reasoning_lower:
+                valid.append(name)
+        if valid:
+            logger.warning(
+                "[Supervisor] Recovered agent names from reasoning: %s (original agents list was empty)",
+                valid,
+            )
+
     if not valid:
         fallback = "I'm not sure how to help with that request. Could you rephrase or provide more details?"
         return {
