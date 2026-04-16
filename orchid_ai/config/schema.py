@@ -431,10 +431,24 @@ class AgentConfig(BaseModel):
 
 
 class DefaultsConfig(BaseModel):
-    """Top-level defaults inherited by every agent."""
+    """Top-level defaults inherited by every agent.
+
+    ``cache_enabled`` activates a global in-memory LLM response cache
+    via LangChain's ``set_llm_cache(InMemoryCache())``.  Identical
+    prompts return cached results, reducing latency and cost.  Cache
+    lives for the process lifetime (reset on restart).
+
+    Example YAML::
+
+        defaults:
+          cache_enabled: true
+          llm:
+            model: gemini/gemini-2.5-flash
+    """
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     rag: RAGDefaultsConfig = Field(default_factory=RAGDefaultsConfig)
+    cache_enabled: bool = False
 
 
 # ── Root config ──────────────────────────────────────────────
