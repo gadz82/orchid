@@ -300,9 +300,36 @@ async def _route(
         agent_descriptions=desc_text + auth_hint,
         skill_descriptions=skill_text,
     )
-    # Filter internal messages so the routing LLM sees a clean dialogue
-    clean_messages = _filter_internal_messages(state.get("messages", []))
-    llm_messages = _to_llm_messages(system, clean_messages)
+
+    # Use extract_conversation_history for clean, bounded context.
+    # This respects max_turns/max_chars limits and filters supervisor noise.
+    history = BaseAgent.extract_conversation_history(
+        state,
+        max_turns=sup.history_max_turns,
+        max_chars=sup.history_max_chars,
+    )
+
+    # Compress older turns when sliding-window summarization is enabled
+    if history and sup.history_summary_enabled and chat_model:
+        history = await BaseAgent.compress_conversation_history(
+            history,
+            chat_model=chat_model,
+            recent_turns=sup.history_summary_recent_turns,
+        )
+
+    # Filter conversation summaries — internal compression artifacts
+    clean_history = (
+        [m for m in history if not m.get("content", "").startswith("[Conversation summary]")] if history else []
+    )
+
+    llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    if clean_history:
+        llm_messages.extend(clean_history)
+
+    # Add the current user query
+    user_query = BaseAgent.extract_user_query(state)
+    if user_query:
+        llm_messages.append({"role": "user", "content": user_query})
 
     try:
         if not chat_model:
@@ -482,8 +509,13 @@ async def _advance_sequential(
             recent_turns=sup.history_summary_recent_turns,
         )
 
+    # Filter conversation summaries from history — they're internal
+    clean_history = (
+        [m for m in history if not m.get("content", "").startswith("[Conversation summary]")] if history else []
+    )
+
     llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    llm_messages.extend(history)
+    llm_messages.extend(clean_history)
 
     # Inject current MCP data so the LLM knows what was collected
     mcp_ctx = state.get("mcp_context", {})
@@ -564,13 +596,17 @@ async def _synthesise(
         )
 
     if history:
-        llm_messages.append(
-            {
-                "role": "user",
-                "content": "Previous conversation (for context only — do NOT re-answer):\n"
-                + "\n".join(f"  {m['role']}: {m['content']}" for m in history),
-            }
-        )
+        # Filter out conversation summaries — they're for context compression,
+        # not for reproduction in the final response.
+        visible_history = [m for m in history if not m.get("content", "").startswith("[Conversation summary]")]
+        if visible_history:
+            llm_messages.append(
+                {
+                    "role": "user",
+                    "content": "Previous conversation (for context only — do NOT re-answer or reproduce any of this):\n"
+                    + "\n".join(f"  {m['role']}: {m['content']}" for m in visible_history),
+                }
+            )
 
     # Add the current turn messages, filtering out internal routing noise
     for msg in current_turn:
@@ -578,8 +614,8 @@ async def _synthesise(
         if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
             llm_messages.append({"role": "user", "content": content})
         elif isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai"):
-            # Skip internal supervisor routing messages from current turn
-            if content.startswith("[Supervisor"):
+            # Skip internal supervisor messages and conversation summaries
+            if content.startswith("[Supervisor") or content.startswith("[Conversation summary]"):
                 continue
             llm_messages.append({"role": "assistant", "content": content})
 
