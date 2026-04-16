@@ -358,6 +358,20 @@ class GenericAgent(BaseAgent):
             # No tools available — return immediately, summarisation will handle it.
             return None, tool_results
 
+        # ── Build LangChain tool wrappers (for ToolNode dispatch) ──
+        from .tools import build_langchain_tools
+
+        lc_tools = build_langchain_tools(
+            builtin_names=builtin_tool_names,
+            builtin_tool_defs=builtin_tool_defs,
+            mcp_tool_defs=mcp_tool_defs,
+            mcp_tool_client_map=caps.tool_client_map,
+            auth=auth,
+            agent_name=self.name,
+            approval_tools=self._config.approval_tools or None,
+        )
+        tool_map: dict[str, Any] = {t.name: t for t in lc_tools}
+
         # ── Build system prompt ─────────────────────────────
         system_prompt = self._build_agentic_system_prompt(caps, rag_data, state)
 
@@ -463,30 +477,38 @@ class GenericAgent(BaseAgent):
                         fn_name,
                         consecutive_dupes,
                     )
-                # ── Route to built-in tool ──────────────────
-                elif fn_name in builtin_tool_names:
+                # ── Dispatch via tool wrapper (MCP or built-in) ──
+                elif fn_name in tool_map:
                     consecutive_dupes = 0
-                    result_text = await self._call_builtin_tool(fn_name, fn_args, auth)
-                    seen_calls[call_key] = result_text
-                # ── Route to MCP tool ───────────────────────
-                elif fn_name in caps.tool_client_map:
-                    consecutive_dupes = 0
-                    client, _server_cfg = caps.tool_client_map[fn_name]
-                    try:
-                        result = await client.call_tool(fn_name, fn_args, auth)
-                        result_text = result.text
-                        if result.is_error:
-                            result_text = f"[Tool error] {result_text}"
-                            logger.warning(
-                                "[%s] Tool #%d ← %s ERROR: %s", self.name, round_num + 1, fn_name, result_text[:300]
-                            )
-                        else:
-                            seen_calls[call_key] = result_text
-                    except Exception as exc:
-                        result_text = f"[Tool error] {exc}"
-                        logger.error(
-                            "[%s] Tool #%d ← %s EXCEPTION: %s", self.name, round_num + 1, fn_name, exc, exc_info=True
+                    tool = tool_map[fn_name]
+
+                    # ── HITL: interrupt for human approval ─────
+                    if tool.requires_approval:
+                        from langgraph.types import interrupt
+
+                        logger.info(
+                            "[%s] Tool '%s' requires approval — interrupting",
+                            self.name,
+                            fn_name,
                         )
+                        decision = interrupt(
+                            {
+                                "type": "tool_approval",
+                                "tool": fn_name,
+                                "args": fn_args,
+                                "agent": self.name,
+                            }
+                        )
+                        if not decision.get("approved"):
+                            result_text = "Tool execution cancelled by user."
+                            tool_results[fn_name] = result_text
+                            messages.append(ToolMessage(content=result_text, tool_call_id=tc_id))
+                            continue
+
+                    result_text = await tool.ainvoke(fn_args)
+                    # Only cache successful results (not errors)
+                    if not result_text.startswith("[Tool error]"):
+                        seen_calls[call_key] = result_text
                 else:
                     result_text = f"[Error] Unknown tool '{fn_name}'"
                     logger.error("[%s] Unknown tool '%s' in agentic loop", self.name, fn_name)

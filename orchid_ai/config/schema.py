@@ -94,6 +94,7 @@ class ToolConfig(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
+    requires_approval: bool = False  # pause and ask user before executing (HITL)
 
 
 class MCPAuthConfig(BaseModel):
@@ -221,6 +222,7 @@ class BuiltinToolConfig(BaseModel):
     parameters: dict[str, BuiltinToolParameter] = Field(default_factory=dict)
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
+    requires_approval: bool = False  # pause and ask user before executing (HITL)
 
 
 class AgentSkillStepConfig(BaseModel):
@@ -418,6 +420,9 @@ class AgentConfig(BaseModel):
     # Only includes tools with inject_to_rag=True AND effective TTL > 0
     injectable_tool_ttls: dict[str, int] = Field(default_factory=dict, exclude=True)
 
+    # Computed at validation — tool names that require human approval (HITL)
+    approval_tools: set[str] = Field(default_factory=set, exclude=True)
+
     model_config = {"populate_by_name": True}
 
 
@@ -513,6 +518,17 @@ def _apply_defaults(
                 effective_ttl = tool_cfg.rag_ttl if tool_cfg.rag_ttl is not None else agent_ttl
                 if effective_ttl > 0:
                     agent.injectable_tool_ttls[key] = effective_ttl
+
+    # Collect tools requiring human approval (HITL)
+    for server in agent.mcp_servers:
+        for tool in server.tools:
+            if isinstance(tool, ToolConfig) and tool.requires_approval:
+                agent.approval_tools.add(tool.name)
+    if global_tools:
+        for tool_name in agent.tools:
+            tool_cfg = global_tools.get(tool_name)
+            if tool_cfg and tool_cfg.requires_approval:
+                agent.approval_tools.add(tool_name)
 
     # Recurse into children
     if agent.children:
