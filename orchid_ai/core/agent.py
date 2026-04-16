@@ -349,16 +349,23 @@ class BaseAgent(ABC):
                 k=k,
                 scope=scope,
             )
-            rag_docs = [
-                {
-                    "content": r.document.page_content,
-                    "score": round(r.score, 3),
-                    "metadata": {
-                        mk: mv for mk, mv in r.document.metadata.items() if mk not in ("content", "embedding")
-                    },
-                }
-                for r in results
-            ]
+            rag_docs = []
+            for r in results:
+                # Parent Document Retriever: when parent_content is stored
+                # in metadata (dual-granularity chunking), prefer it over
+                # the child chunk for richer LLM context.
+                content = r.document.metadata.get("parent_content", r.document.page_content)
+                rag_docs.append(
+                    {
+                        "content": content,
+                        "score": round(r.score, 3),
+                        "metadata": {
+                            mk: mv
+                            for mk, mv in r.document.metadata.items()
+                            if mk not in ("content", "embedding", "parent_content")
+                        },
+                    }
+                )
             logger.info("[%s] RAG retrieved %d docs (scope=%s)", self.name, len(rag_docs), scope.tenant_id)
             return rag_docs
         except (ConnectionError, TimeoutError, OSError, ValueError) as exc:
