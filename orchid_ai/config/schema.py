@@ -345,6 +345,7 @@ class SupervisorConfig(BaseModel):
 
     assistant_name: str = "AI assistant"
     fallback_model: str | None = None  # fallback LLM for supervisor (overrides defaults.llm.fallback_model)
+    streaming_enabled: bool = True  # enable SSE streaming for responses (default: on)
     routing_system_prompt: str | None = None
     synthesis_system_prompt: str | None = None
     sequential_advance_prompt: str | None = None
