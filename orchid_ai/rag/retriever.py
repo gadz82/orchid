@@ -103,12 +103,13 @@ async def _generate_query_variations(
 ) -> list[str]:
     """Use the LLM to generate *n* alternative search queries."""
     try:
-        result = await chat_model.ainvoke(
-            [
-                SystemMessage(content=_MULTI_QUERY_PROMPT.format(n=n)),
-                HumanMessage(content=query),
-            ]
-        )
+        async with asyncio.timeout(15):
+            result = await chat_model.ainvoke(
+                [
+                    SystemMessage(content=_MULTI_QUERY_PROMPT.format(n=n)),
+                    HumanMessage(content=query),
+                ]
+            )
         lines = [line.strip() for line in (result.content or "").split("\n") if line.strip()]
         return lines[:n]
     except Exception as exc:
@@ -163,9 +164,18 @@ async def multi_query_retrieve(
         len(variations),
     )
 
-    # Retrieve in parallel for all queries
+    # Retrieve in parallel for all queries (with timeout to avoid hanging)
     tasks = [reader.retrieve(query=q, namespace=namespace, k=k, scope=scope) for q in all_queries]
-    all_results = await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        async with asyncio.timeout(30):
+            all_results = await asyncio.gather(*tasks, return_exceptions=True)
+    except TimeoutError:
+        logger.warning("[MultiQuery] Retrieval timed out after 30s — falling back to original query")
+        try:
+            all_results = [await reader.retrieve(query=query, namespace=namespace, k=k, scope=scope)]
+        except Exception as exc:
+            logger.warning("[MultiQuery] Fallback retrieval also failed: %s", exc)
+            return []
 
     # Merge and deduplicate by document ID, keeping highest score
     seen: dict[str, SearchResult] = {}
