@@ -12,6 +12,7 @@ __version__ = "0.0.0"
 
 from .checkpointing.factory import build_checkpointer, shutdown_checkpointer
 from .config.loader import load_config
+from .observability.callbacks import OrchidMetricsHandler
 from .core.agent import BaseAgent
 from .core.guardrails import (
     Guardrail,
