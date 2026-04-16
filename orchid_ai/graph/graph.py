@@ -38,7 +38,6 @@ Graph topology (ADR-013 — parallel vs sequential, ADR-018 — guardrails):
 
 from __future__ import annotations
 
-import inspect
 import logging
 from typing import Any
 
@@ -207,19 +206,17 @@ def _instantiate_agent(
     else:
         agent_chat_model = default_chat_model
 
-    # Check which parameters the class accepts (GenericAgent accepts config + chat_model,
-    # custom classes may not)
-    sig = inspect.signature(cls.__init__)
-    accepts_config = "config" in sig.parameters
-    accepts_chat_model = "chat_model" in sig.parameters
-    accepts_summary_config = "summary_config" in sig.parameters
-
-    kwargs: dict[str, Any] = {"llm": agent_model, "reader": reader, "mcp_clients": mcp_clients}
-    if accepts_config:
-        kwargs["config"] = agent_config
-    if accepts_chat_model and agent_chat_model:
+    # All kwargs are passed — BaseAgent accepts **_kwargs so subclasses
+    # pick what they need and ignore the rest.  No inspect.signature sniffing.
+    kwargs: dict[str, Any] = {
+        "model_id": agent_model,
+        "reader": reader,
+        "mcp_clients": mcp_clients,
+        "config": agent_config,
+    }
+    if agent_chat_model:
         kwargs["chat_model"] = agent_chat_model
-    if accepts_summary_config and summary_config:
+    if summary_config:
         kwargs["summary_config"] = summary_config
 
     return cls(**kwargs)
@@ -526,13 +523,12 @@ def build_graph(
         # Check if any skill step references another agent
         needs_peers = any(step.agent is not None for skill in agent._config.skills.values() for step in skill.steps)
         if needs_peers:
-            agent._agent_peers = {name: peer for name, peer in agent_map.items() if name != agent.name}
-            # Also update the skill executor's peer reference
-            agent._skill_executor._agent_peers = agent._agent_peers
+            peers = {name: peer for name, peer in agent_map.items() if name != agent.name}
+            agent.set_agent_peers(peers)
             logger.info(
                 "[Graph] agent '%s' wired with peers: %s",
                 agent.name,
-                list(agent._agent_peers.keys()),
+                list(peers.keys()),
             )
 
     # ── Supervisor chat model (may have its own fallback) ──

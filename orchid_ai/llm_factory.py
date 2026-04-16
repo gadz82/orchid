@@ -28,6 +28,9 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
+from .llm import _PREFIX_TO_API_BASE_ENV as _LLM_BASE_MAP
+from .llm import _PREFIX_TO_API_KEY_ENV as _LLM_KEY_MAP
+
 logger = logging.getLogger(__name__)
 
 # ── Provider prefix → (package, class_name, model_key_strip) ──
@@ -49,22 +52,50 @@ _PROVIDER_MAP: list[tuple[str, str, str, str | None]] = [
     ("bedrock/", "langchain_aws", "ChatBedrock", "bedrock/"),
 ]
 
-# ── API key env var mapping (for provider-specific classes) ──
+# ── API key / base URL env var mapping ──
+# Built from llm.py's litellm maps + extra aliases for LangChain providers.
 
-_PROVIDER_API_KEY_ENV: dict[str, str] = {
-    "openai/": "OPENAI_API_KEY",
-    "anthropic/": "ANTHROPIC_API_KEY",
-    "claude-": "ANTHROPIC_API_KEY",
-    "gemini/": "GEMINI_API_KEY",
-    "google/": "GEMINI_API_KEY",
-    "groq/": "GROQ_API_KEY",
-    "mistral/": "MISTRAL_API_KEY",
-}
+_PROVIDER_API_KEY_ENV: dict[str, str] = {prefix: env for prefix, env in _LLM_KEY_MAP}
+_PROVIDER_API_KEY_ENV["google/"] = "GEMINI_API_KEY"  # alias not in litellm map
 
-_PROVIDER_API_BASE_ENV: dict[str, str] = {
-    "ollama/": "OLLAMA_API_BASE",
-    "ollama_chat/": "OLLAMA_API_BASE",
-}
+_PROVIDER_API_BASE_ENV: dict[str, str] = {prefix: env for prefix, env in _LLM_BASE_MAP}
+
+
+def register_provider(
+    prefix: str,
+    module_path: str,
+    class_name: str,
+    strip_prefix: str | None = None,
+    *,
+    api_key_env: str = "",
+    api_base_env: str = "",
+) -> None:
+    """Register a custom LLM provider for ``build_chat_model()``.
+
+    Allows integrators to add new providers without modifying the framework.
+
+    Parameters
+    ----------
+    prefix : str
+        Model string prefix (e.g. ``"cohere/"``).
+    module_path : str
+        Python module containing the LangChain chat model class.
+    class_name : str
+        Class name to import from the module.
+    strip_prefix : str | None
+        Prefix to strip from the model string before passing to the
+        constructor. ``None`` means keep the full string.
+    api_key_env : str
+        Environment variable name for the API key (optional).
+    api_base_env : str
+        Environment variable name for the API base URL (optional).
+    """
+    _PROVIDER_MAP.append((prefix, module_path, class_name, strip_prefix))
+    if api_key_env:
+        _PROVIDER_API_KEY_ENV[prefix] = api_key_env
+    if api_base_env:
+        _PROVIDER_API_BASE_ENV[prefix] = api_base_env
+    logger.info("[LLM] Registered custom provider: %s → %s.%s", prefix, module_path, class_name)
 
 
 def build_chat_model(
@@ -172,8 +203,8 @@ def _build_single_model(
             )
             continue
         except Exception as exc:
-            logger.debug(
-                "[LLM] Failed to create %s.%s for '%s': %s — trying ChatLiteLLM",
+            logger.warning(
+                "[LLM] Failed to create %s.%s for '%s': %s — trying next provider",
                 module_path,
                 class_name,
                 model,

@@ -19,6 +19,7 @@ from .repository import (
     VectorWriter,
     VectorStoreRepository,
 )
+from .scopes import RAGScope
 from .mcp import MCPClient, MCPDiscoverable, MCPToolCaller, MCPToolResult
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "AuthContext",
     "BaseAgent",
     "Document",
+    "RAGScope",
     "SearchResult",
     "VectorReader",
     "VectorWriter",
