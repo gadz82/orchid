@@ -62,6 +62,7 @@ class RAGDefaultsConfig(BaseModel):
     k: int = 5
     enabled: bool = True
     rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
+    reformulate_queries: bool = True  # rewrite queries using conversation history
 
 
 class RAGConfig(BaseModel):
@@ -70,6 +71,7 @@ class RAGConfig(BaseModel):
     namespace: str = ""
     k: int = 5
     enabled: bool = True
+    reformulate_queries: bool = True  # rewrite queries using conversation history
     rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
 
 
@@ -474,6 +476,8 @@ def _apply_defaults(
         agent.rag.enabled = defaults.rag.enabled
     if agent.rag.rag_ttl == 0 and defaults.rag.rag_ttl != 0:
         agent.rag.rag_ttl = defaults.rag.rag_ttl
+    if not defaults.rag.reformulate_queries:
+        agent.rag.reformulate_queries = False
 
     # Collect injectable MCP tool names + TTLs
     agent_ttl = agent.rag.rag_ttl
