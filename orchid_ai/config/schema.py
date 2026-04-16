@@ -63,15 +63,27 @@ class RAGDefaultsConfig(BaseModel):
     enabled: bool = True
     rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
     reformulate_queries: bool = True  # rewrite queries using conversation history
+    retriever_type: Literal["simple", "multi_query"] = "simple"
 
 
 class RAGConfig(BaseModel):
-    """Per-agent RAG settings."""
+    """Per-agent RAG settings.
+
+    ``retriever_type`` controls the retrieval strategy:
+    - ``simple`` (default) — single vector similarity search per query.
+    - ``multi_query`` — LLM generates query variations for broader
+      recall, then results are merged and deduplicated.
+
+    When ``retriever_type`` is ``None`` (the YAML default), the value
+    is inherited from ``defaults.rag.retriever_type``.  Set it
+    explicitly to override the default.
+    """
 
     namespace: str = ""
     k: int = 5
     enabled: bool = True
     reformulate_queries: bool = True  # rewrite queries using conversation history
+    retriever_type: Literal["simple", "multi_query"] | None = None  # None = inherit from defaults
     rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
 
 
@@ -478,6 +490,8 @@ def _apply_defaults(
         agent.rag.rag_ttl = defaults.rag.rag_ttl
     if not defaults.rag.reformulate_queries:
         agent.rag.reformulate_queries = False
+    if agent.rag.retriever_type is None:
+        agent.rag.retriever_type = defaults.rag.retriever_type
 
     # Collect injectable MCP tool names + TTLs
     agent_ttl = agent.rag.rag_ttl

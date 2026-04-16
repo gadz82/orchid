@@ -11,7 +11,7 @@ import logging
 
 from ..core.repository import Document, VectorWriter
 from ..rag.scopes import RAGScope
-from .chunker import ChunkConfig, chunk_text
+from .chunker import ChunkConfig, chunk_text, parent_child_chunk_text
 from .parsers import get_parser
 
 logger = logging.getLogger(__name__)
@@ -67,34 +67,69 @@ async def ingest_document(
 
     logger.info("[Ingest] Using %d chars from %s", len(text), filename)
 
-    # 2. Chunk
-    chunks = chunk_text(text, chunk_config)
-    if not chunks:
-        return 0
-
-    logger.info("[Ingest] Split %s into %d chunks", filename, len(chunks))
-
-    # 3. Create Documents with scope metadata
+    # 2. Chunk — use parent/child strategy when parent_chunk_size > 0
+    cfg = chunk_config or ChunkConfig()
     file_hash = hashlib.sha256(file_bytes).hexdigest()[:12]
     documents: list[Document] = []
 
-    for i, chunk in enumerate(chunks):
-        doc_id = f"upload-{file_hash}-{i}"
-        documents.append(
-            Document(
-                id=doc_id,
-                page_content=chunk,
-                metadata={
-                    "tenant_id": scope.tenant_id,
-                    "user_id": scope.user_id,
-                    "chat_id": scope.chat_id,
-                    "scope": "chat_shared",
-                    "source_file": filename,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                },
-            )
+    if cfg.parent_chunk_size > 0:
+        # Parent Document Retriever: child chunks for precise embedding,
+        # parent content stored in metadata for richer LLM context.
+        pc_chunks = parent_child_chunk_text(text, cfg)
+        if not pc_chunks:
+            return 0
+
+        logger.info(
+            "[Ingest] Split %s into %d child chunks (parent_chunk_size=%d)",
+            filename,
+            len(pc_chunks),
+            cfg.parent_chunk_size,
         )
+
+        for i, pc in enumerate(pc_chunks):
+            doc_id = f"upload-{file_hash}-p{pc.parent_index}c{pc.child_index}"
+            documents.append(
+                Document(
+                    id=doc_id,
+                    page_content=pc.child_text,
+                    metadata={
+                        "tenant_id": scope.tenant_id,
+                        "user_id": scope.user_id,
+                        "chat_id": scope.chat_id,
+                        "scope": "chat_shared",
+                        "source_file": filename,
+                        "chunk_index": i,
+                        "total_chunks": len(pc_chunks),
+                        "parent_content": pc.parent_text,
+                        "parent_index": pc.parent_index,
+                    },
+                )
+            )
+    else:
+        # Standard chunking (existing behavior)
+        chunks = chunk_text(text, cfg)
+        if not chunks:
+            return 0
+
+        logger.info("[Ingest] Split %s into %d chunks", filename, len(chunks))
+
+        for i, chunk in enumerate(chunks):
+            doc_id = f"upload-{file_hash}-{i}"
+            documents.append(
+                Document(
+                    id=doc_id,
+                    page_content=chunk,
+                    metadata={
+                        "tenant_id": scope.tenant_id,
+                        "user_id": scope.user_id,
+                        "chat_id": scope.chat_id,
+                        "scope": "chat_shared",
+                        "source_file": filename,
+                        "chunk_index": i,
+                        "total_chunks": len(chunks),
+                    },
+                )
+            )
 
     # 4. Index (embeddings generated lazily by the writer)
     await writer.upsert(documents, namespace)

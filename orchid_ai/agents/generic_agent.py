@@ -171,10 +171,50 @@ class GenericAgent(BaseAgent):
         query: str,
         scope: RAGScope,
     ) -> list[dict[str, Any]]:
-        """Step 1: RAG retrieval (domain namespace + uploads)."""
+        """Step 1: RAG retrieval (domain namespace + uploads).
+
+        When ``retriever_type`` is ``multi_query``, the LLM generates
+        query variations for broader recall before merging results.
+        """
         if not self._config.rag.enabled:
             return []
+
+        if self._config.rag.retriever_type == "multi_query" and self._chat_model:
+            return await self._multi_query_rag(query, scope, k=self._config.rag.k)
+
         return await self.fetch_all_rag_context(query, scope, k=self._config.rag.k)
+
+    async def _multi_query_rag(
+        self,
+        query: str,
+        scope: RAGScope,
+        *,
+        k: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Multi-query RAG: generate query variations, retrieve in parallel, merge."""
+        import asyncio as _asyncio
+
+        from ..rag.retriever import multi_query_retrieve
+
+        domain_results, upload_results = await _asyncio.gather(
+            multi_query_retrieve(query, self.reader, self.rag_namespace, scope, self._chat_model, k=k),
+            multi_query_retrieve(query, self.reader, "uploads", scope, self._chat_model, k=k),
+        )
+
+        combined = []
+        for r in domain_results + upload_results:
+            combined.append(
+                {
+                    "content": r.document.page_content,
+                    "score": round(r.score, 3),
+                    "metadata": {
+                        mk: mv for mk, mv in r.document.metadata.items() if mk not in ("content", "embedding")
+                    },
+                }
+            )
+
+        combined.sort(key=lambda d: d.get("score", 0), reverse=True)
+        return combined[:k]
 
     async def _step_cache_check(self, scope: RAGScope) -> dict[str, Any]:
         """Step 1.5: Check RAG for cached tool results within TTL."""
