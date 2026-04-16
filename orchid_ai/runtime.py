@@ -33,6 +33,8 @@ from .core.mcp import MCPClient, MCPTokenStore
 from .core.repository import VectorReader
 
 if TYPE_CHECKING:
+    from langgraph.checkpoint.base import BaseCheckpointSaver
+
     from .config.schema import MCPServerConfig
     from .mcp.auth_registry import MCPAuthRegistry
 
@@ -96,6 +98,12 @@ class OrchidRuntime:
     mcp_client_factory : MCPClientFactory | None
         Factory for creating MCP clients from server config.
         ``None`` → ``StreamableHttpMCPClient`` (default).
+    checkpointer : BaseCheckpointSaver | None
+        LangGraph checkpointer for graph state persistence.
+        ``None`` → no checkpointing (current request replays full history).
+        When set, the compiled graph persists state keyed by ``thread_id``
+        (= ``chat_id``).  Use :func:`orchid_ai.checkpointing.build_checkpointer`
+        to create one from a type string or dotted class path.
     """
 
     default_model: str = "ollama/llama3.2"
@@ -104,6 +112,7 @@ class OrchidRuntime:
     mcp_client_factory: MCPClientFactory | None = None
     mcp_token_store: MCPTokenStore | None = None
     mcp_auth_registry: MCPAuthRegistry | None = field(default=None)
+    checkpointer: BaseCheckpointSaver | None = None
 
     # ── Resolved accessors (lazy defaults) ──────────────────────
 
