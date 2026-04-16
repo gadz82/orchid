@@ -39,7 +39,7 @@ from .skill_executor import SkillExecutor
 
 logger = logging.getLogger(__name__)
 
-_monotonic = time.monotonic  # cache TTL uses monotonic clock (not wall clock)
+_wall_clock = time.time  # cache TTL must use wall clock — dynamic.py stores time.time()
 
 
 class GenericAgent(BaseAgent):
@@ -49,22 +49,18 @@ class GenericAgent(BaseAgent):
     No subclassing needed — add agents by editing ``agents.yaml``.
     """
 
-    # ── Agentic loop safety limits ──────────────────────────────
-    _MAX_TOOL_ROUNDS: int = 15
-    _MAX_CONSECUTIVE_DUPES: int = 2
-
     def __init__(
         self,
         *,
         config: AgentConfig,
-        llm: Any,
         reader: VectorReader,
         mcp_clients: list[MCPClient] | None = None,
         agent_peers: dict[str, Any] | None = None,
         chat_model: Any | None = None,
         summary_config: dict[str, Any] | None = None,
+        **kwargs: Any,
     ):
-        super().__init__(llm=llm, reader=reader, mcp_clients=mcp_clients, chat_model=chat_model)
+        super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
         self._config = config
         self._agent_peers: dict[str, Any] = agent_peers or {}
         self._summary_config: dict[str, Any] | None = summary_config
@@ -82,6 +78,15 @@ class GenericAgent(BaseAgent):
             builtin_tool_caller=self.call_builtin_tool,
             agent_peers=self._agent_peers,
         )
+
+    def set_agent_peers(self, peers: dict[str, Any]) -> None:
+        """Set peer agents for cross-agent skill steps.
+
+        Called by the graph builder after all agents are instantiated.
+        Propagates to the internal ``SkillExecutor`` automatically.
+        """
+        self._agent_peers = peers
+        self._skill_executor._agent_peers = peers
 
     # ── Identity (from YAML config) ──────────────────────────
 
@@ -274,7 +279,6 @@ class GenericAgent(BaseAgent):
             mcp_data,
             rag_data,
             system_prompt=self._config.prompt,
-            model=llm_config.model if llm_config else None,
             temperature=llm_config.temperature if llm_config else 0.2,
             conversation_history=history or None,
             prior_tool_context=prior_ctx,
@@ -306,44 +310,25 @@ class GenericAgent(BaseAgent):
     ) -> tuple[str | None, dict[str, Any]]:
         """Unified MCP + built-in tool loop using native ``tool_calls``.
 
-        Combines all available tools (MCP-discovered and built-in) into a
-        single tool list, then runs a multi-turn conversation where the LLM
-        decides which tools to call.  Includes duplicate call detection and
-        per-call error handling.
+        Delegates to :class:`AgenticLoop` which owns the multi-round
+        lifecycle (duplicate tracking, max-round safety, HITL interrupts).
 
-        Returns ``(final_text, tool_results)``.  ``final_text`` is the LLM's
-        final text response (or ``None`` if the loop exhausted its rounds
-        without producing one — the caller should fall back to summarisation).
-
-        .. note:: Relationship to MCP tool-call strategies
-
-           This loop **always** uses "LLM decides" semantics — the LLM
-           selects which tools to call via the native ``tool_calls``
-           protocol.  The YAML ``tool_call_strategy`` setting (``all``,
-           ``sequential``, ``llm_decides``) is **not consulted** here;
-           those strategies are honored by :meth:`MCPDispatcher.fetch`,
-           which is used only during **skill execution**
-           (:class:`SkillExecutor`).  For regular (non-skill) queries,
-           the agentic loop is the sole execution path and the strategy
-           field is effectively ignored.
+        Returns ``(final_text, tool_results)``.  ``final_text`` is ``None``
+        when the loop exhausted rounds without producing text (caller
+        should fall back to summarisation).
         """
-        # Agentic loop uses BaseChatModel.bind_tools() + ainvoke() for
-        # native tool-calling with duplicate detection and max-round safety.
-        from langchain_core.messages import AIMessage as LCAIMessage, ToolMessage
+        from .agentic_loop import AgenticLoop
+        from .tools import build_langchain_tools
 
         llm_config = self._config.llm
-        tool_results: dict[str, Any] = {}
-
         if not self._chat_model:
-            return None, tool_results
+            return None, {}
 
         # ── Discover MCP capabilities ───────────────────────
         caps = await self._mcp_dispatcher.render_capabilities(auth, agent_name=self.name)
 
-        # ── Build unified tool list (litellm/OpenAI format) ──
-        # Built-in tools win over MCP tools with the same name.
+        # ── Build unified tool list ─────────────────────────
         builtin_tool_names, builtin_tool_defs = self._builtin_tools_to_litellm(skip_tools)
-
         mcp_tool_defs = MCPDispatcher.mcp_tools_to_litellm(
             [
                 t
@@ -351,16 +336,11 @@ class GenericAgent(BaseAgent):
                 if t["name"] not in builtin_tool_names and not (skip_tools and t["name"] in skip_tools)
             ],
         )
-
         all_tool_defs = mcp_tool_defs + builtin_tool_defs
-
         if not all_tool_defs:
-            # No tools available — return immediately, summarisation will handle it.
-            return None, tool_results
+            return None, {}
 
-        # ── Build LangChain tool wrappers (for ToolNode dispatch) ──
-        from .tools import build_langchain_tools
-
+        # ── Build LangChain tool wrappers ───────────────────
         lc_tools = build_langchain_tools(
             builtin_names=builtin_tool_names,
             builtin_tool_defs=builtin_tool_defs,
@@ -372,10 +352,8 @@ class GenericAgent(BaseAgent):
         )
         tool_map: dict[str, Any] = {t.name: t for t in lc_tools}
 
-        # ── Build system prompt ─────────────────────────────
+        # ── Build messages ──────────────────────────────────
         system_prompt = self._build_agentic_system_prompt(caps, rag_data, state)
-
-        # ── Build conversation messages ─────────────────────
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         if state:
             messages.extend(
@@ -386,140 +364,15 @@ class GenericAgent(BaseAgent):
             )
         messages.append({"role": "user", "content": query})
 
-        # ── Duplicate call tracking ─────────────────────────
-        seen_calls: dict[str, str] = {}  # "name|args_json" → cached result text
-        consecutive_dupes = 0
-
-        # ── Bind tools to chat model ────────────────────────
-        model_with_tools = self._chat_model.bind_tools(all_tool_defs)
-
-        # ── Loop ────────────────────────────────────────────
-        for round_num in range(self._MAX_TOOL_ROUNDS):
-            # Strip tools after too many consecutive duplicate calls
-            # to force the LLM to produce a text response.
-            if consecutive_dupes >= self._MAX_CONSECUTIVE_DUPES:
-                logger.warning(
-                    "[%s] %d consecutive duplicate calls — forcing text-only response",
-                    self.name,
-                    consecutive_dupes,
-                )
-                active_model = self._chat_model  # no tools bound
-            else:
-                active_model = model_with_tools
-
-            # ── LLM call with error handling ────────────────
-            try:
-                ai_msg: LCAIMessage = await active_model.ainvoke(
-                    messages,
-                    temperature=llm_config.temperature if llm_config else 0.2,
-                )
-            except Exception as exc:
-                error_msg = str(exc)
-                logger.error(
-                    "[%s] LLM API error in round %d: %s",
-                    self.name,
-                    round_num,
-                    error_msg,
-                    exc_info=True,
-                )
-                if "503" in error_msg or "high demand" in error_msg.lower():
-                    return (
-                        "Currently experiencing high demand. Please try again shortly.",
-                        tool_results,
-                    )
-                if "rate limit" in error_msg.lower():
-                    return (
-                        "Rate limit reached. Please try again in a few moments.",
-                        tool_results,
-                    )
-                return (
-                    f"Error processing request: {error_msg[:200]}. Please try again later.",
-                    tool_results,
-                )
-
-            # Append the AI message to conversation (LangChain message object)
-            messages.append(ai_msg)
-
-            # ── No tool calls → final text response ─────────
-            tool_calls = ai_msg.tool_calls
-            if not tool_calls:
-                final_text = ai_msg.content or ""
-                logger.info("[%s] LLM responded after %d tool round(s)", self.name, round_num)
-                return final_text, tool_results
-
-            # ── Execute tool calls ──────────────────────────
-            for tc in tool_calls:
-                fn_name = tc["name"]
-                fn_args = tc.get("args", {})
-                tc_id = tc.get("id", "")
-
-                logger.info(
-                    "[%s] Tool call #%d → %s | args: %s",
-                    self.name,
-                    round_num + 1,
-                    fn_name,
-                    fn_args,
-                )
-
-                # ── Duplicate detection ─────────────────────
-                call_key = f"{fn_name}|{json.dumps(fn_args, sort_keys=True)}"
-                if call_key in seen_calls:
-                    consecutive_dupes += 1
-                    result_text = (
-                        "You already called this tool with the same parameters. "
-                        "Here is the previous result (do NOT call it again — "
-                        "summarise this data for the user instead):\n\n" + seen_calls[call_key]
-                    )
-                    logger.warning(
-                        "[%s] Duplicate tool call #%d → %s (%d consecutive)",
-                        self.name,
-                        round_num + 1,
-                        fn_name,
-                        consecutive_dupes,
-                    )
-                # ── Dispatch via tool wrapper (MCP or built-in) ──
-                elif fn_name in tool_map:
-                    consecutive_dupes = 0
-                    tool = tool_map[fn_name]
-
-                    # ── HITL: interrupt for human approval ─────
-                    if tool.requires_approval:
-                        from langgraph.types import interrupt
-
-                        logger.info(
-                            "[%s] Tool '%s' requires approval — interrupting",
-                            self.name,
-                            fn_name,
-                        )
-                        decision = interrupt(
-                            {
-                                "type": "tool_approval",
-                                "tool": fn_name,
-                                "args": fn_args,
-                                "agent": self.name,
-                            }
-                        )
-                        if not decision.get("approved"):
-                            result_text = "Tool execution cancelled by user."
-                            tool_results[fn_name] = result_text
-                            messages.append(ToolMessage(content=result_text, tool_call_id=tc_id))
-                            continue
-
-                    result_text = await tool.ainvoke(fn_args)
-                    # Only cache successful results (not errors)
-                    if not result_text.startswith("[Tool error]"):
-                        seen_calls[call_key] = result_text
-                else:
-                    result_text = f"[Error] Unknown tool '{fn_name}'"
-                    logger.error("[%s] Unknown tool '%s' in agentic loop", self.name, fn_name)
-
-                tool_results[fn_name] = result_text
-                # Append tool result as a ToolMessage (LangChain format)
-                messages.append(ToolMessage(content=result_text, tool_call_id=tc_id))
-
-        # Safety: max rounds exceeded
-        logger.warning("[%s] Hit max tool rounds (%d)", self.name, self._MAX_TOOL_ROUNDS)
-        return None, tool_results
+        # ── Run the loop ────────────────────────────────────
+        loop = AgenticLoop(
+            agent_name=self.name,
+            chat_model=self._chat_model,
+            tool_map=tool_map,
+            all_tool_defs=all_tool_defs,
+            temperature=llm_config.temperature if llm_config else 0.2,
+        )
+        return await loop.run(messages)
 
     # ── System prompt builder for the agentic loop ──────────────
 
@@ -646,7 +499,7 @@ class GenericAgent(BaseAgent):
             return {}
 
         async def _lookup(tool_name: str, ttl: int) -> tuple[str, Any]:
-            min_time = _monotonic() - ttl
+            min_time = _wall_clock() - ttl
             result = await self.reader.lookup_cached_tool_results(
                 namespace=self._config.rag.namespace,
                 scope=scope,
