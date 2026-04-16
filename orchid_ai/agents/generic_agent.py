@@ -107,7 +107,14 @@ class GenericAgent(BaseAgent):
                 "messages": [AIMessage(content=f"[{self.name}] Error: no auth context")],
             }
 
-        query = self.extract_user_query(state)
+        raw_query = self.extract_user_query(state)
+
+        # Reformulate query using conversation history for better search/tool precision
+        if self._config.rag.reformulate_queries and self._chat_model:
+            query = await self.reformulate_query(raw_query, state)
+        else:
+            query = raw_query
+
         scope = self._build_scope(auth, state)
 
         rag_data = await self._step_rag_retrieval(query, scope)
