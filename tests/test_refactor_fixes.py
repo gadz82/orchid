@@ -290,15 +290,15 @@ class TestSpecificExceptions:
         assert "401" in result["t_error"]
 
 
-# ── Fix #8: monotonic clock for cache TTL ──────────────────────────
+# ── Fix #8: wall clock for cache TTL (matches dynamic.py) ──────────
 
 
-class TestMonotonicClock:
-    def test_monotonic_reference_exists(self):
-        """GenericAgent module should use time.monotonic for cache checks."""
+class TestWallClock:
+    def test_wall_clock_reference_exists(self):
+        """GenericAgent module should use time.time for cache checks (matches dynamic.py)."""
         from orchid_ai.agents import generic_agent
 
-        assert generic_agent._monotonic is __import__("time").monotonic
+        assert generic_agent._wall_clock is __import__("time").time
 
 
 # ── Fix #9: py.typed and __version__ ──────────────────────────────

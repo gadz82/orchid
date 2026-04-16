@@ -40,11 +40,38 @@ from __future__ import annotations
 import logging
 import os
 
+from typing import Any, Callable, Coroutine
+
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from ..utils import import_class
 
 logger = logging.getLogger(__name__)
+
+# Registry for custom built-in checkpointer types.
+# Maps type string → async factory callable(dsn) -> BaseCheckpointSaver
+_CHECKPOINTER_REGISTRY: dict[str, Callable[..., Coroutine[Any, Any, BaseCheckpointSaver]]] = {}
+
+
+def register_checkpointer(
+    type_name: str,
+    factory: Callable[..., Coroutine[Any, Any, BaseCheckpointSaver]],
+) -> None:
+    """Register a custom checkpointer type for ``build_checkpointer()``.
+
+    The factory is an async callable ``(dsn: str) -> BaseCheckpointSaver``.
+
+    Example::
+
+        async def build_redis(dsn: str) -> BaseCheckpointSaver:
+            from myproject.checkpointing import RedisCheckpointer
+            return RedisCheckpointer(dsn)
+
+        register_checkpointer("redis", build_redis)
+        saver = await build_checkpointer("redis", dsn="redis://localhost")
+    """
+    _CHECKPOINTER_REGISTRY[type_name] = factory
+    logger.info("[Checkpointer] Registered custom type: %s", type_name)
 
 
 async def build_checkpointer(
@@ -79,6 +106,12 @@ async def build_checkpointer(
         When ``dsn`` is missing for types that require it.
     """
     resolved_dsn = os.path.expanduser(dsn) if dsn else dsn
+
+    # Check custom registry first (integrators can register types)
+    if checkpointer_type in _CHECKPOINTER_REGISTRY:
+        factory_fn = _CHECKPOINTER_REGISTRY[checkpointer_type]
+        logger.info("[Checkpointer] Using registered type: %s", checkpointer_type)
+        return await factory_fn(resolved_dsn)
 
     if checkpointer_type == "memory":
         from langgraph.checkpoint.memory import MemorySaver
