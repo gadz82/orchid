@@ -54,6 +54,7 @@ class LLMConfig(BaseModel):
     model: str = "gemini/gemini-2.5-flash"
     temperature: float = 0.2
     fallback_model: str | None = None
+    retry_attempts: int = 0  # 0 = disabled; when > 0, transient errors retry with exponential backoff
 
 
 class RAGDefaultsConfig(BaseModel):
