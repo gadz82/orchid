@@ -10,6 +10,7 @@ from __future__ import annotations
 
 __version__ = "0.0.0"
 
+from .checkpointing.factory import build_checkpointer, shutdown_checkpointer
 from .config.loader import load_config
 from .core.agent import BaseAgent
 from .core.guardrails import (
@@ -89,6 +90,11 @@ __all__ = [
     "VectorWriter",
     # runtime
     "OrchidRuntime",
+    # observability
+    "OrchidMetricsHandler",
+    # checkpointing
+    "build_checkpointer",
+    "shutdown_checkpointer",
     # factories
     "build_chat_storage",
     "build_mcp_token_store",
