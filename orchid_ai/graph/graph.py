@@ -408,6 +408,14 @@ def build_graph(
     """
     from ..llm_factory import build_chat_model as _build_chat_model
 
+    # ── Enable LLM response caching if configured ──
+    if config.defaults.cache_enabled:
+        from langchain_core.caches import InMemoryCache
+        from langchain_core.globals import set_llm_cache
+
+        set_llm_cache(InMemoryCache())
+        logger.info("[Graph] LLM response caching enabled (InMemoryCache)")
+
     reader = runtime.get_reader()
     default_model = runtime.default_model
 
