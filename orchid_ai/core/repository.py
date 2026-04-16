@@ -18,14 +18,16 @@ Architectural rule:
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
 from langchain_core.documents import Document
 
-if TYPE_CHECKING:
-    from ..rag.scopes import RAGScope
+from .scopes import RAGScope  # noqa: F401 — used in type annotations
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -140,8 +142,9 @@ class VectorStoreRepository(VectorReader, VectorWriter, VectorStoreAdmin, ABC):
         int
             Number of points promoted.
 
-        Subclasses must override.  Default raises ``NotImplementedError``.
+        Subclasses should override.  Default returns 0 (no-op) so that
+        callers can safely call ``promote_scope()`` on any implementation
+        without type-checking (LSP compliance).
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support promote_scope(). Override this method to enable chat sharing."
-        )
+        logger.debug("[%s] promote_scope() not implemented — returning 0", type(self).__name__)
+        return 0

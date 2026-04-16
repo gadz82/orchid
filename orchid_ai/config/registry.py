@@ -27,6 +27,11 @@ def register(name: str, cls: type[BaseAgent]) -> None:
     logger.debug("[Registry] registered '%s' → %s", name, cls.__name__)
 
 
+def clear_registry() -> None:
+    """Remove all registered agent classes (useful for test isolation)."""
+    _REGISTRY.clear()
+
+
 def get_class(class_path: str | None) -> type[BaseAgent]:
     """
     Resolve a class_path to a Python class.

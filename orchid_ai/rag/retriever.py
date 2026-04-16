@@ -42,7 +42,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.retrievers import BaseRetriever
 
 from ..core.repository import SearchResult, VectorReader
-from ..rag.scopes import RAGScope
+from ..core.scopes import RAGScope
 
 logger = logging.getLogger(__name__)
 

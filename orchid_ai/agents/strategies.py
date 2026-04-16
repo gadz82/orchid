@@ -31,7 +31,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ..config.schema import MCPServerConfig, ToolConfig
-from ..core.mcp import MCPClient
+from ..core.mcp import MCPToolCaller
 from ..core.state import AuthContext
 
 
@@ -44,7 +44,7 @@ class ToolCallStrategy(ABC):
     @abstractmethod
     async def execute(
         self,
-        client: MCPClient,
+        client: MCPToolCaller,
         tools: list[ToolConfig],
         query: str,
         auth: AuthContext,
@@ -256,6 +256,24 @@ STRATEGY_REGISTRY: dict[str, type[ToolCallStrategy]] = {
     "sequential": SequentialStrategy,
     "llm_decides": LLMDecidesStrategy,
 }
+
+
+def register_strategy(name: str, cls: type[ToolCallStrategy]) -> None:
+    """Register a custom tool call strategy by name."""
+    STRATEGY_REGISTRY[name] = cls
+    logger.info("[Strategies] Registered '%s' → %s", name, cls.__name__)
+
+
+def clear_strategies() -> None:
+    """Reset to built-in strategies (useful for test isolation)."""
+    STRATEGY_REGISTRY.clear()
+    STRATEGY_REGISTRY.update(
+        {
+            "all": CallAllStrategy,
+            "sequential": SequentialStrategy,
+            "llm_decides": LLMDecidesStrategy,
+        }
+    )
 
 
 def get_strategy(name: str) -> ToolCallStrategy:

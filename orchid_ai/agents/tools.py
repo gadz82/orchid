@@ -30,7 +30,7 @@ from typing import Any
 
 from langchain_core.tools import BaseTool
 
-from ..core.mcp import MCPClient
+from ..core.mcp import MCPToolCaller
 from ..core.state import AuthContext
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class MCPToolWrapper(BaseTool):
     without custom config wiring.
     """
 
-    mcp_client: Any  # MCPClient — Any to avoid Pydantic ABC issues
+    mcp_client: Any  # MCPToolCaller — Any to avoid Pydantic ABC issues
     auth: Any  # AuthContext
     agent_name: str = ""
     requires_approval: bool = False  # HITL: pause and ask user before executing
@@ -112,7 +112,7 @@ def build_langchain_tools(
     builtin_names: set[str],
     builtin_tool_defs: list[dict[str, Any]],
     mcp_tool_defs: list[dict[str, Any]],
-    mcp_tool_client_map: dict[str, tuple[MCPClient, Any]],
+    mcp_tool_client_map: dict[str, tuple[MCPToolCaller, Any]],
     auth: AuthContext,
     agent_name: str = "",
     approval_tools: set[str] | None = None,
@@ -128,7 +128,7 @@ def build_langchain_tools(
     mcp_tool_defs : list[dict]
         OpenAI-format tool definitions for MCP tools.
     mcp_tool_client_map : dict
-        Maps tool name -> (MCPClient, MCPServerConfig).
+        Maps tool name -> (MCPToolCaller, MCPServerConfig).
     auth : AuthContext
         Auth context baked into each wrapper.
     agent_name : str
