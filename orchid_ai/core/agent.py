@@ -106,6 +106,68 @@ class BaseAgent(ABC):
                 return str(msg.content)
         return ""
 
+    async def reformulate_query(self, query: str, state: AgentState) -> str:
+        """Rewrite the user's query as a standalone search query.
+
+        Uses conversation history to resolve pronouns, references, and
+        implicit context.  For example:
+
+          History: "What vegan dishes do you have?" → "We have..."
+          Query: "yes, list them"
+          Reformulated: "list all vegan dishes on the menu"
+
+        Returns the original query unchanged when:
+          - No chat model is available
+          - No conversation history exists
+          - The reformulation fails
+
+        This is called BEFORE RAG retrieval and tool calls so that
+        vector search and tool arguments use precise, standalone terms.
+        """
+        if not self._chat_model:
+            return query
+
+        history = self.extract_conversation_history(state, max_turns=5, max_chars=500)
+        if not history:
+            return query
+
+        try:
+            _REFORMULATE_PROMPT = (
+                "You are a query reformulation assistant. Given the conversation history "
+                "and the user's latest message, rewrite the message as a clear, standalone "
+                "search query that can be used to search a database or menu.\n\n"
+                "RULES:\n"
+                "- Resolve pronouns and references ('it', 'that', 'the first one', 'yes')\n"
+                "- Extract the core intent (what the user actually wants)\n"
+                "- Keep it short and specific (under 20 words)\n"
+                "- If the query is already clear and standalone, return it unchanged\n"
+                "- Return ONLY the reformulated query, nothing else"
+            )
+
+            messages: list[dict[str, str]] = [
+                {"role": "system", "content": _REFORMULATE_PROMPT},
+                *history,
+                {"role": "user", "content": query},
+            ]
+
+            result = await self._chat_model.ainvoke(messages, temperature=0)
+            reformulated = (result.content or "").strip()
+
+            if reformulated and len(reformulated) < 200:
+                import logging
+
+                logging.getLogger(__name__).info(
+                    "[%s] Query reformulated: '%s' → '%s'",
+                    self.name,
+                    query[:80],
+                    reformulated[:80],
+                )
+                return reformulated
+        except Exception:
+            pass  # Fallback to original query on any error
+
+        return query
+
     @staticmethod
     def extract_conversation_history(
         state: AgentState,
