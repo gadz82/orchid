@@ -72,6 +72,7 @@ def build_chat_model(
     *,
     temperature: float = 0.2,
     fallback_model: str | None = None,
+    retry_attempts: int = 0,
     **kwargs: Any,
 ) -> BaseChatModel:
     """
@@ -84,6 +85,11 @@ def build_chat_model(
     When ``fallback_model`` is provided, the returned model automatically
     tries the fallback if the primary fails (503, rate limit, timeout).
 
+    When ``retry_attempts`` > 0, each model (primary and fallback) is
+    wrapped with ``.with_retry()`` using exponential backoff with jitter.
+    Retries are applied per-model so that transient errors on the primary
+    are retried before falling through to the fallback.
+
     Parameters
     ----------
     model : str
@@ -94,18 +100,35 @@ def build_chat_model(
     fallback_model : str | None
         Optional fallback model string. When the primary model fails,
         the fallback is tried automatically. Disabled by default.
+    retry_attempts : int
+        Max retry attempts on transient errors (rate limits, 503s, timeouts).
+        0 = disabled (default). When > 0, retries use exponential backoff
+        with jitter.
     **kwargs
         Additional keyword arguments passed to the model constructor.
 
     Returns
     -------
     BaseChatModel
-        A ready-to-use LangChain chat model (with fallback if configured).
+        A ready-to-use LangChain chat model (with retry and/or fallback
+        if configured).
     """
     primary = _build_single_model(model, temperature=temperature, **kwargs)
 
+    if retry_attempts > 0:
+        primary = primary.with_retry(
+            stop_after_attempt=retry_attempts,
+            wait_exponential_jitter=True,
+        )
+        logger.info("[LLM] Retry configured for '%s': %d attempts", model, retry_attempts)
+
     if fallback_model:
         fallback = _build_single_model(fallback_model, temperature=temperature, **kwargs)
+        if retry_attempts > 0:
+            fallback = fallback.with_retry(
+                stop_after_attempt=retry_attempts,
+                wait_exponential_jitter=True,
+            )
         logger.info("[LLM] Fallback configured: '%s' → '%s'", model, fallback_model)
         return primary.with_fallbacks([fallback])
 

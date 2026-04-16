@@ -164,6 +164,7 @@ def _instantiate_agent(
     reader: VectorReader,
     default_chat_model: BaseChatModel | None = None,
     default_fallback: str | None = None,
+    default_retry: int = 0,
     mcp_client_factory: MCPClientFactory | None = None,
     summary_config: dict[str, Any] | None = None,
 ) -> BaseAgent:
@@ -174,8 +175,8 @@ def _instantiate_agent(
     Otherwise, ``GenericAgent`` handles the standard flow.
 
     Each agent gets its own ``BaseChatModel`` when its ``llm`` config
-    differs from the default (different model or fallback).  Otherwise,
-    the shared ``default_chat_model`` is reused.
+    differs from the default (different model, fallback, or retry).
+    Otherwise, the shared ``default_chat_model`` is reused.
     """
     from ..llm_factory import build_chat_model
 
@@ -186,17 +187,22 @@ def _instantiate_agent(
     # Resolve the agent class
     cls = get_class(agent_config.class_path)
 
-    # Determine the LLM model and fallback for this agent
+    # Determine the LLM model, fallback, and retry for this agent
     agent_llm = agent_config.llm
     agent_model = agent_llm.model if agent_llm else default_model
     agent_fallback = (agent_llm.fallback_model if agent_llm else None) or default_fallback
+    agent_retry = agent_llm.retry_attempts if agent_llm else default_retry
 
     # Build per-agent chat model if it differs from default, otherwise reuse shared one
-    if agent_llm and (agent_model != default_model or agent_fallback != default_fallback):
+    needs_own_model = agent_llm and (
+        agent_model != default_model or agent_fallback != default_fallback or agent_retry != default_retry
+    )
+    if needs_own_model:
         agent_chat_model = build_chat_model(
             agent_model,
             temperature=agent_llm.temperature if agent_llm else 0.2,
             fallback_model=agent_fallback,
+            retry_attempts=agent_retry,
         )
     else:
         agent_chat_model = default_chat_model
@@ -226,6 +232,7 @@ def _build_subgraph(
     reader: VectorReader,
     default_chat_model: BaseChatModel | None = None,
     default_fallback: str | None = None,
+    default_retry: int = 0,
     mcp_client_factory: MCPClientFactory | None = None,
 ) -> Any:
     """
@@ -243,6 +250,7 @@ def _build_subgraph(
             reader,
             default_chat_model,
             default_fallback,
+            default_retry,
             mcp_client_factory,
         )
         children_agents.append(child_agent)
@@ -403,8 +411,9 @@ def build_graph(
     reader = runtime.get_reader()
     default_model = runtime.default_model
 
-    # ── Resolve default LLM fallback from config ──
+    # ── Resolve default LLM config from YAML ──
     default_fallback = config.defaults.llm.fallback_model
+    default_retry = config.defaults.llm.retry_attempts
     if runtime.chat_model is not None:
         # User provided a pre-built chat model — use it as-is
         default_chat_model: BaseChatModel = runtime.chat_model
@@ -412,6 +421,7 @@ def build_graph(
         default_chat_model = _build_chat_model(
             default_model,
             fallback_model=default_fallback,
+            retry_attempts=default_retry,
         )
 
     # ── Build MCP auth registry (scans all agents for OAuth servers) ──
@@ -471,6 +481,7 @@ def build_graph(
                 reader,
                 default_chat_model,
                 default_fallback,
+                default_retry,
                 mcp_factory,
             )
             subgraph_nodes[agent_name] = subgraph
@@ -482,6 +493,7 @@ def build_graph(
                 reader,
                 default_chat_model,
                 default_fallback,
+                default_retry,
                 mcp_factory,
                 summary_config=summary_cfg,
             )
@@ -518,7 +530,11 @@ def build_graph(
     # ── Supervisor chat model (may have its own fallback) ──
     sup_fallback = sup.fallback_model or default_fallback
     if sup.fallback_model and sup.fallback_model != default_fallback:
-        supervisor_chat_model = _build_chat_model(default_model, fallback_model=sup_fallback)
+        supervisor_chat_model = _build_chat_model(
+            default_model,
+            fallback_model=sup_fallback,
+            retry_attempts=default_retry,
+        )
     else:
         supervisor_chat_model = default_chat_model
 
@@ -574,6 +590,13 @@ def build_graph(
         # final_response is set.  We wire it to END.
         g.add_edge("output_guardrails", END)
 
-    compiled = g.compile()
-    logger.info("[Graph] compiled with agents: %s", list(agent_descriptions.keys()))
+    compiled = g.compile(checkpointer=runtime.checkpointer)
+    if runtime.checkpointer:
+        logger.info(
+            "[Graph] compiled with checkpointer=%s, agents=%s",
+            type(runtime.checkpointer).__name__,
+            list(agent_descriptions.keys()),
+        )
+    else:
+        logger.info("[Graph] compiled with agents: %s", list(agent_descriptions.keys()))
     return compiled
