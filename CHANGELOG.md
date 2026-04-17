@@ -2,6 +2,97 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-04-17)
+
+### Bug Fixes
+
+- Improve structured output routing for small models
+  ([`ca5f591`](https://github.com/gadz82/orchid/commit/ca5f5919efbfee263ce0e6e62ecd5bf68b4348e7))
+
+### Continuous Integration
+
+- Grant pull-requests: write permission to the test job
+  ([`d097460`](https://github.com/gadz82/orchid/commit/d097460c793ba27e296560c3a29c0d7f650f2bcd))
+
+### Features
+
+- Add configurable LLM fallback models
+  ([`5eccf9c`](https://github.com/gadz82/orchid/commit/5eccf9cfc451c4d164af973938980a4ed746a90f))
+
+- Add HITL tool approval and LangChain tool wrappers
+  ([`6e09f6b`](https://github.com/gadz82/orchid/commit/6e09f6bc540891fb530ea30ea9b2f3be82ccc452))
+
+- Add LangGraph checkpointer integration for state persistence
+  ([`18cc43c`](https://github.com/gadz82/orchid/commit/18cc43cfc2d6493b9101a1246175408cfef8c8ba))
+
+- Add LLM retry_attempts for transient error handling
+  ([`735c410`](https://github.com/gadz82/orchid/commit/735c410ee08f6313fcdd9dce7b1e7c619bf87709))
+
+- Add multi-query RAG and parent-child chunking
+  ([`eccfd78`](https://github.com/gadz82/orchid/commit/eccfd78f56fbbd62bbf832ef90b6b13e75136ecb))
+
+- Add OrchidMetricsHandler for observability
+  ([`2bd283a`](https://github.com/gadz82/orchid/commit/2bd283a5bb813de4c6ffc4d406efc430a410fa4c))
+
+- Add query reformulation for better RAG and tool search
+  ([`58076d4`](https://github.com/gadz82/orchid/commit/58076d45ed9a60808dfbe6bd7a2c5444f5308f5b))
+
+- Add resume endpoint to support HITL tool approval
+  ([`2aec667`](https://github.com/gadz82/orchid/commit/2aec6670d1c95a414286cf78dd2685ca866f7eaf))
+
+- Add shared hooks and utilities for CLI and frontend
+  ([`d587e1e`](https://github.com/gadz82/orchid/commit/d587e1e4cff2cff256a8eb37fc752079c03a7ab7))
+
+- Add streaming_enabled config to SupervisorConfig
+  ([`c08b562`](https://github.com/gadz82/orchid/commit/c08b562c53bb0eadd357f88315dbe10a7a163fc8))
+
+- Enable LLM response caching and add configuration tests
+  ([`27835f2`](https://github.com/gadz82/orchid/commit/27835f26567a537940a95f322a74829209592243))
+
+- Remove dead LLMProvider and LiteLLMProvider files
+  ([`8585799`](https://github.com/gadz82/orchid/commit/8585799b2c9f1397ecd83284cc7ca935a1db92f5))
+
+- Replace custom chunker with LangChain splitter
+  ([`c06fc16`](https://github.com/gadz82/orchid/commit/c06fc1684782fd4aac97320d52e4c03930c042ef))
+
+- Replace Embedder ABC with LangChain Embeddings
+  ([`efaeaf6`](https://github.com/gadz82/orchid/commit/efaeaf63707a2a2ca5960561ceed4e5b607a654a))
+
+- Replace LLMProvider with LangChain BaseChatModel
+  ([`b489c78`](https://github.com/gadz82/orchid/commit/b489c78e8f231f4a67bc5b9aa3f2ee890e1995cc))
+
+- Replace Orchid Document with LangChain Document
+  ([`4154364`](https://github.com/gadz82/orchid/commit/4154364b59fd95236503767804f959e6025c0fa6))
+
+- Update AGENTS.md docs for LangChain integration
+  ([`0bec1d0`](https://github.com/gadz82/orchid/commit/0bec1d0b6fef09ddbaf180f4f16e747924369010))
+
+- Use structured output for supervisor routing decisions
+  ([`7b61fc1`](https://github.com/gadz82/orchid/commit/7b61fc12d4f3e755d92e5a68f2f55540d1bf98ad))
+
+- **client**: Add OrchidClient with invoke/resume/stream
+  ([`bc5b268`](https://github.com/gadz82/orchid/commit/bc5b268c006d3c6fc9f8c9a85ce1ce5f7f2f8af6))
+
+### Refactoring
+
+- Centralize helpers and streamline PKCE OAuth flow
+  ([`a39798b`](https://github.com/gadz82/orchid/commit/a39798b9a2f5bce8b2f727423a186301c546e4fd))
+
+- Delegate GenericAgent tool loop to AgenticLoop
+  ([`bbf6cc1`](https://github.com/gadz82/orchid/commit/bbf6cc1b4aa18d0ad26deabbdfe9884fa7f5a8e0))
+
+- Improve history handling, timeouts, and RAG robustness
+  ([`b1dba20`](https://github.com/gadz82/orchid/commit/b1dba20836cb281b1c6e9c3bc844c054039fba86))
+
+- Streamline client/bootstrap and expand test coverage
+  ([`683c4c0`](https://github.com/gadz82/orchid/commit/683c4c07f60140aca57af8403e39c2eca6f18c2c))
+
+### Testing
+
+- Add HITL tool approval tests
+  ([`2aec667`](https://github.com/gadz82/orchid/commit/2aec6670d1c95a414286cf78dd2685ca866f7eaf))
+
+
 ## v1.2.14 (2026-04-15)
 
 ### Bug Fixes
