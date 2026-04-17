@@ -42,6 +42,13 @@ jobs:
   test:
     name: Tests + coverage
     runs-on: ubuntu-latest
+    # Needed so ``marocchino/sticky-pull-request-comment`` below can post /
+    # update the coverage comment on the PR.  GITHUB_TOKEN is read-only by
+    # default for forked PRs and when the repo's default workflow
+    # permissions are set to "Read repository contents".
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
