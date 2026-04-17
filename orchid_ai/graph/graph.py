@@ -434,15 +434,7 @@ def build_graph(
     runtime.mcp_auth_registry = auth_registry
 
     # ── Build MCP factory (enhanced with token_store for OAuth servers) ──
-    if runtime.mcp_client_factory:
-        mcp_factory: MCPClientFactory = runtime.mcp_client_factory
-    else:
-        from ..runtime import _default_mcp_client_factory
-
-        token_store = runtime.mcp_token_store
-
-        def mcp_factory(cfg):  # type: ignore[misc]
-            return _default_mcp_client_factory(cfg, token_store=token_store)
+    mcp_factory: MCPClientFactory = runtime.get_mcp_client_factory()
 
     # ── Register built-in tools from config ──
     if config.tools:

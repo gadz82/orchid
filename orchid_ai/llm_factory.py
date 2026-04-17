@@ -26,6 +26,8 @@ import logging
 import os
 from typing import Any
 
+from dataclasses import dataclass
+
 from langchain_core.language_models import BaseChatModel
 
 from .llm import _PREFIX_TO_API_BASE_ENV as _LLM_BASE_MAP
@@ -33,24 +35,43 @@ from .llm import _PREFIX_TO_API_KEY_ENV as _LLM_KEY_MAP
 
 logger = logging.getLogger(__name__)
 
-# ── Provider prefix → (package, class_name, model_key_strip) ──
-# Tried in order; first match wins.  If the import fails (package not
-# installed), we fall through to ChatLiteLLM.
 
-_PROVIDER_MAP: list[tuple[str, str, str, str | None]] = [
-    # (prefix, module_path, class_name, strip_prefix_for_model_name)
-    # strip_prefix=None means pass the full model string as-is
-    ("openai/", "langchain_openai", "ChatOpenAI", "openai/"),
-    ("anthropic/", "langchain_anthropic", "ChatAnthropic", "anthropic/"),
-    ("claude-", "langchain_anthropic", "ChatAnthropic", None),  # keep full name
-    ("gemini/", "langchain_google_genai", "ChatGoogleGenerativeAI", "gemini/"),
-    ("google/", "langchain_google_genai", "ChatGoogleGenerativeAI", "google/"),
-    ("ollama/", "langchain_ollama", "ChatOllama", "ollama/"),
-    ("ollama_chat/", "langchain_ollama", "ChatOllama", "ollama_chat/"),
-    ("groq/", "langchain_groq", "ChatGroq", "groq/"),
-    ("mistral/", "langchain_mistralai", "ChatMistralAI", "mistral/"),
-    ("bedrock/", "langchain_aws", "ChatBedrock", "bedrock/"),
-]
+@dataclass(frozen=True)
+class ProviderEntry:
+    """A registered LangChain chat-model provider.
+
+    Attributes
+    ----------
+    prefix : str
+        Model string prefix (e.g. ``"openai/"``, ``"claude-"``).
+    module_path, class_name : str
+        LangChain class to import when the prefix matches.
+    strip_prefix : str | None
+        Prefix to strip from the model name before passing to the
+        constructor.  ``None`` keeps the full string.
+    """
+
+    prefix: str
+    module_path: str
+    class_name: str
+    strip_prefix: str | None
+
+
+# Provider prefix → entry.  Looked up by prefix when ``build_chat_model``
+# needs to resolve a model string.  A dict prevents duplicate registrations
+# from silently stacking and makes override semantics explicit.
+_PROVIDER_MAP: dict[str, ProviderEntry] = {
+    "openai/": ProviderEntry("openai/", "langchain_openai", "ChatOpenAI", "openai/"),
+    "anthropic/": ProviderEntry("anthropic/", "langchain_anthropic", "ChatAnthropic", "anthropic/"),
+    "claude-": ProviderEntry("claude-", "langchain_anthropic", "ChatAnthropic", None),
+    "gemini/": ProviderEntry("gemini/", "langchain_google_genai", "ChatGoogleGenerativeAI", "gemini/"),
+    "google/": ProviderEntry("google/", "langchain_google_genai", "ChatGoogleGenerativeAI", "google/"),
+    "ollama/": ProviderEntry("ollama/", "langchain_ollama", "ChatOllama", "ollama/"),
+    "ollama_chat/": ProviderEntry("ollama_chat/", "langchain_ollama", "ChatOllama", "ollama_chat/"),
+    "groq/": ProviderEntry("groq/", "langchain_groq", "ChatGroq", "groq/"),
+    "mistral/": ProviderEntry("mistral/", "langchain_mistralai", "ChatMistralAI", "mistral/"),
+    "bedrock/": ProviderEntry("bedrock/", "langchain_aws", "ChatBedrock", "bedrock/"),
+}
 
 # ── API key / base URL env var mapping ──
 # Built from llm.py's litellm maps + extra aliases for LangChain providers.
@@ -90,7 +111,17 @@ def register_provider(
     api_base_env : str
         Environment variable name for the API base URL (optional).
     """
-    _PROVIDER_MAP.append((prefix, module_path, class_name, strip_prefix))
+    if prefix in _PROVIDER_MAP:
+        existing = _PROVIDER_MAP[prefix]
+        logger.warning(
+            "[LLM] Replacing provider for prefix %r: %s.%s → %s.%s",
+            prefix,
+            existing.module_path,
+            existing.class_name,
+            module_path,
+            class_name,
+        )
+    _PROVIDER_MAP[prefix] = ProviderEntry(prefix, module_path, class_name, strip_prefix)
     if api_key_env:
         _PROVIDER_API_KEY_ENV[prefix] = api_key_env
     if api_base_env:
@@ -173,40 +204,44 @@ def _build_single_model(
     **kwargs: Any,
 ) -> BaseChatModel:
     """Build a single BaseChatModel without fallbacks."""
-    # Try provider-specific package first
-    for prefix, module_path, class_name, strip_prefix in _PROVIDER_MAP:
-        if not model.startswith(prefix):
-            continue
-
+    # Try provider-specific package first.  Longest matching prefix wins so
+    # ``"openai/"`` takes priority over a bare ``"gpt-"`` were someone to add it.
+    matching_prefixes = sorted(
+        (p for p in _PROVIDER_MAP if model.startswith(p)),
+        key=len,
+        reverse=True,
+    )
+    for prefix in matching_prefixes:
+        entry = _PROVIDER_MAP[prefix]
         try:
             import importlib
 
-            mod = importlib.import_module(module_path)
-            cls = getattr(mod, class_name)
+            mod = importlib.import_module(entry.module_path)
+            cls = getattr(mod, entry.class_name)
 
-            model_name = model[len(strip_prefix) :] if strip_prefix else model
+            model_name = model[len(entry.strip_prefix) :] if entry.strip_prefix else model
             provider_kwargs = _resolve_provider_kwargs(prefix, model_name, temperature, **kwargs)
 
             instance = cls(**provider_kwargs)
             logger.info(
                 "[LLM] Using %s.%s for model '%s'",
-                module_path,
-                class_name,
+                entry.module_path,
+                entry.class_name,
                 model,
             )
             return instance
         except ImportError:
             logger.debug(
                 "[LLM] %s not installed, trying next provider for '%s'",
-                module_path,
+                entry.module_path,
                 model,
             )
             continue
         except Exception as exc:
             logger.warning(
                 "[LLM] Failed to create %s.%s for '%s': %s — trying next provider",
-                module_path,
-                class_name,
+                entry.module_path,
+                entry.class_name,
                 model,
                 exc,
             )

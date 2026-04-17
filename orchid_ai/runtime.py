@@ -45,33 +45,6 @@ logger = logging.getLogger(__name__)
 MCPClientFactory = Callable[["MCPServerConfig"], MCPClient]
 
 
-def _default_mcp_client_factory(
-    server_config: MCPServerConfig,
-    *,
-    token_store: MCPTokenStore | None = None,
-) -> MCPClient:
-    """Create a StreamableHttpMCPClient from server config (default factory).
-
-    Auth modes:
-      - ``none`` (default): no auth headers sent.
-      - ``passthrough``: forwards graph AuthContext bearer token.
-      - ``oauth``: resolves per-user tokens from the *token_store*.
-    """
-    from .mcp.client import StreamableHttpMCPClient
-
-    return StreamableHttpMCPClient(
-        server_config.url,
-        server_type=server_config.type,
-        transport=server_config.transport,
-        cache_ttl=server_config.cache_ttl,
-        server_name=server_config.name,
-        auth_mode=server_config.auth.mode,
-        token_store=token_store,
-        token_endpoint=server_config.auth.token_endpoint,
-        client_id=server_config.auth.client_id,
-    )
-
-
 def _default_chat_model(model: str = "ollama/llama3.2", **kwargs) -> BaseChatModel:
     """Create the default LangChain chat model via the factory."""
     from .llm_factory import build_chat_model
@@ -131,7 +104,45 @@ class OrchidRuntime:
         return _default_chat_model(self.default_model)
 
     def get_mcp_client_factory(self) -> MCPClientFactory:
-        """Return the configured MCP factory, falling back to StreamableHttpMCPClient."""
+        """Return the configured MCP factory, falling back to the default.
+
+        When no explicit ``mcp_client_factory`` was supplied, returns a
+        callable bound to this runtime's :attr:`mcp_token_store`, so
+        ``oauth`` servers can resolve per-user tokens.
+        """
         if self.mcp_client_factory is not None:
             return self.mcp_client_factory
-        return _default_mcp_client_factory
+        token_store = self.mcp_token_store
+        return lambda cfg: self.default_mcp_client_factory(cfg, token_store=token_store)
+
+    # ── Default MCP factory (override in subclasses) ────────────
+
+    @staticmethod
+    def default_mcp_client_factory(
+        server_config: MCPServerConfig,
+        *,
+        token_store: MCPTokenStore | None = None,
+    ) -> MCPClient:
+        """Create a ``StreamableHttpMCPClient`` from the server config.
+
+        Override in a subclass to change the default transport / client
+        without having to supply a full ``mcp_client_factory`` callable.
+
+        Auth modes:
+          - ``none`` (default): no auth headers sent.
+          - ``passthrough``: forwards the graph ``AuthContext`` bearer token.
+          - ``oauth``: resolves per-user tokens from the *token_store*.
+        """
+        from .mcp.client import StreamableHttpMCPClient
+
+        return StreamableHttpMCPClient(
+            server_config.url,
+            server_type=server_config.type,
+            transport=server_config.transport,
+            cache_ttl=server_config.cache_ttl,
+            server_name=server_config.name,
+            auth_mode=server_config.auth.mode,
+            token_store=token_store,
+            token_endpoint=server_config.auth.token_endpoint,
+            client_id=server_config.auth.client_id,
+        )
