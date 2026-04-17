@@ -15,14 +15,13 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime
 from typing import Any
 
 import asyncpg
 
 from .base import ChatStorage
 from .migrations.runner import MigrationRunner
-from .models import ChatMessage, ChatSession
+from .models import ChatMessage, ChatSession, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +91,7 @@ class PostgresChatStorage(ChatStorage):
         user_id: str,
         title: str = "",
     ) -> ChatSession:
-        now = datetime.utcnow()
+        now = utcnow()
         chat = ChatSession(
             id=str(uuid.uuid4()),
             tenant_id=tenant_id,
@@ -140,7 +139,7 @@ class PostgresChatStorage(ChatStorage):
             await conn.execute("DELETE FROM chat_sessions WHERE id = $1", chat_id)
 
     async def update_title(self, chat_id: str, title: str) -> None:
-        now = datetime.utcnow()
+        now = utcnow()
         async with self._pool.acquire() as conn:
             await conn.execute(
                 "UPDATE chat_sessions SET title = $1, updated_at = $2 WHERE id = $3",
@@ -150,7 +149,7 @@ class PostgresChatStorage(ChatStorage):
             )
 
     async def mark_shared(self, chat_id: str) -> None:
-        now = datetime.utcnow()
+        now = utcnow()
         async with self._pool.acquire() as conn:
             await conn.execute(
                 "UPDATE chat_sessions SET is_shared = TRUE, updated_at = $1 WHERE id = $2",
@@ -168,7 +167,7 @@ class PostgresChatStorage(ChatStorage):
         agents_used: list[str] | None = None,
         metadata: dict | None = None,
     ) -> ChatMessage:
-        now = datetime.utcnow()
+        now = utcnow()
         msg = ChatMessage(
             id=str(uuid.uuid4()),
             chat_id=chat_id,

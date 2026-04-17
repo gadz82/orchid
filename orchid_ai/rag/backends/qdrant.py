@@ -52,6 +52,8 @@ class QdrantRepository(VectorStoreRepository):
     point, and all reads filter on ``[tenant_id, "__shared__"]``.
     """
 
+    supports_scope_promotion = True
+
     def __init__(
         self,
         *,

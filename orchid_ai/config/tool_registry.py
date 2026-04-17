@@ -154,7 +154,7 @@ def _extract_parameters_from_handler(handler: Callable[..., Any]) -> dict[str, T
         default = param.default if has_default else None
 
         # Try to find description in docstring
-        desc = _find_param_doc(docstring, param_name) or param_type
+        desc = find_param_doc(docstring, param_name) or param_type
 
         params[param_name] = ToolParameter(
             name=param_name,
@@ -167,8 +167,15 @@ def _extract_parameters_from_handler(handler: Callable[..., Any]) -> dict[str, T
     return params
 
 
-def _find_param_doc(docstring: str, param_name: str) -> str:
-    """Extract a parameter description from a NumPy/Google-style docstring."""
+def find_param_doc(docstring: str, param_name: str) -> str:
+    """Extract a parameter description from a NumPy/Google-style docstring.
+
+    Handles both formats:
+    - NumPy: ``param : str`` followed by an indented description line.
+    - Google: ``param: description`` on the same line.
+
+    Returns an empty string when the parameter is not documented.
+    """
     lines = docstring.splitlines()
     in_params = False
     found_param = False

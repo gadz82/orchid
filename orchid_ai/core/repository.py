@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from langchain_core.documents import Document
 
@@ -118,6 +118,11 @@ class VectorStoreRepository(VectorReader, VectorWriter, VectorStoreAdmin, ABC):
     capabilities (e.g. the Qdrant backend).
     """
 
+    #: Set to ``True`` in subclasses that implement :meth:`promote_scope`.
+    #: Callers use this to distinguish "promoted 0 points" from
+    #: "backend doesn't support promotion" without introspecting the class.
+    supports_scope_promotion: ClassVar[bool] = False
+
     async def promote_scope(
         self,
         *,
@@ -142,9 +147,11 @@ class VectorStoreRepository(VectorReader, VectorWriter, VectorStoreAdmin, ABC):
         int
             Number of points promoted.
 
-        Subclasses should override.  Default returns 0 (no-op) so that
-        callers can safely call ``promote_scope()`` on any implementation
-        without type-checking (LSP compliance).
+        The base implementation is a no-op returning ``0`` so callers can
+        safely invoke it on any :class:`VectorStoreRepository` (LSP
+        compliance).  Check :attr:`supports_scope_promotion` beforehand
+        when the caller must distinguish "no points matched" from
+        "backend does not support promotion".
         """
         logger.debug("[%s] promote_scope() not implemented — returning 0", type(self).__name__)
         return 0

@@ -5,7 +5,7 @@ Covers:
   - ToolParameter dataclass in the registry
   - Auto-extraction of parameters from function signatures
   - YAML-declared parameters taking precedence over auto-extraction
-  - _find_param_doc docstring extraction
+  - find_param_doc docstring extraction
   - _get_yaml_parameters conversion
   - Framework parameter filtering
 """
@@ -16,7 +16,7 @@ import pytest
 
 from orchid_ai.config import tool_registry as treg
 from orchid_ai.config.schema import AgentsConfig, BuiltinToolConfig, BuiltinToolParameter
-from orchid_ai.config.tool_registry import ToolParameter, _extract_parameters_from_handler, _find_param_doc
+from orchid_ai.config.tool_registry import ToolParameter, _extract_parameters_from_handler, find_param_doc
 
 
 @pytest.fixture(autouse=True)
@@ -145,8 +145,8 @@ class TestFindParamDoc:
             query: Keyword to search for
             dietary_filter: Dietary restriction
         """
-        assert _find_param_doc(doc, "query") == "Keyword to search for"
-        assert _find_param_doc(doc, "dietary_filter") == "Dietary restriction"
+        assert find_param_doc(doc, "query") == "Keyword to search for"
+        assert find_param_doc(doc, "dietary_filter") == "Dietary restriction"
 
     def test_numpy_style(self):
         doc = """Search the menu.
@@ -158,13 +158,13 @@ class TestFindParamDoc:
         dietary_filter : str
             Dietary restriction
         """
-        assert _find_param_doc(doc, "query") == "Keyword to search for"
+        assert find_param_doc(doc, "query") == "Keyword to search for"
 
     def test_not_found(self):
-        assert _find_param_doc("No params here", "missing") == ""
+        assert find_param_doc("No params here", "missing") == ""
 
     def test_empty_docstring(self):
-        assert _find_param_doc("", "anything") == ""
+        assert find_param_doc("", "anything") == ""
 
 
 # ── YAML precedence tests ─────────────────────────────────────
