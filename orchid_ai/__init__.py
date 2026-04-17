@@ -11,6 +11,7 @@ from __future__ import annotations
 __version__ = "0.0.0"
 
 from .checkpointing.factory import build_checkpointer, shutdown_checkpointer
+from .client import InvokeResult, OrchidClient, PendingApproval
 from .config.loader import load_config
 from .observability.callbacks import OrchidMetricsHandler
 from .core.agent import BaseAgent
@@ -78,6 +79,9 @@ __all__ = [
     "GuardrailResult",
     "IdentityError",
     "IdentityResolver",
+    "InvokeResult",
+    "OrchidClient",
+    "PendingApproval",
     "build_chat_model",
     "MCPClient",
     "MCPDiscoverable",
