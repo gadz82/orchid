@@ -38,7 +38,6 @@ Graph topology (ADR-013 — parallel vs sequential, ADR-018 — guardrails):
 
 from __future__ import annotations
 
-import inspect
 import logging
 from typing import Any
 
@@ -51,8 +50,9 @@ from ..config.registry import get_class
 from ..config.tool_registry import load_tools_from_config
 from ..core.agent import BaseAgent
 from ..core.guardrails import GuardrailAction, GuardrailChain, GuardrailContext, GuardrailDirection
-from ..core.llm_provider import LLMProvider
 from ..core.repository import VectorReader
+
+from langchain_core.language_models import BaseChatModel
 from ..mcp.auth_registry import MCPAuthRegistry
 from ..runtime import MCPClientFactory, OrchidRuntime
 from .state import GraphState
@@ -161,7 +161,9 @@ def _instantiate_agent(
     agent_config: AgentConfig,
     default_model: str,
     reader: VectorReader,
-    llm_service: LLMProvider | None = None,
+    default_chat_model: BaseChatModel | None = None,
+    default_fallback: str | None = None,
+    default_retry: int = 0,
     mcp_client_factory: MCPClientFactory | None = None,
     summary_config: dict[str, Any] | None = None,
 ) -> BaseAgent:
@@ -170,7 +172,13 @@ def _instantiate_agent(
 
     If ``class_path`` is set, the referenced class is used.
     Otherwise, ``GenericAgent`` handles the standard flow.
+
+    Each agent gets its own ``BaseChatModel`` when its ``llm`` config
+    differs from the default (different model, fallback, or retry).
+    Otherwise, the shared ``default_chat_model`` is reused.
     """
+    from ..llm_factory import build_chat_model
+
     # Create MCP clients from config via the pluggable factory
     factory = mcp_client_factory or OrchidRuntime().get_mcp_client_factory()
     mcp_clients = [factory(server) for server in agent_config.mcp_servers]
@@ -178,22 +186,37 @@ def _instantiate_agent(
     # Resolve the agent class
     cls = get_class(agent_config.class_path)
 
-    # Determine the LLM model
-    model = agent_config.llm.model if agent_config.llm else default_model
+    # Determine the LLM model, fallback, and retry for this agent
+    agent_llm = agent_config.llm
+    agent_model = agent_llm.model if agent_llm else default_model
+    agent_fallback = (agent_llm.fallback_model if agent_llm else None) or default_fallback
+    agent_retry = agent_llm.retry_attempts if agent_llm else default_retry
 
-    # Check which parameters the class accepts (GenericAgent accepts config + llm_service,
-    # custom classes may not)
-    sig = inspect.signature(cls.__init__)
-    accepts_config = "config" in sig.parameters
-    accepts_llm_service = "llm_service" in sig.parameters
-    accepts_summary_config = "summary_config" in sig.parameters
+    # Build per-agent chat model if it differs from default, otherwise reuse shared one
+    needs_own_model = agent_llm and (
+        agent_model != default_model or agent_fallback != default_fallback or agent_retry != default_retry
+    )
+    if needs_own_model:
+        agent_chat_model = build_chat_model(
+            agent_model,
+            temperature=agent_llm.temperature if agent_llm else 0.2,
+            fallback_model=agent_fallback,
+            retry_attempts=agent_retry,
+        )
+    else:
+        agent_chat_model = default_chat_model
 
-    kwargs: dict[str, Any] = {"llm": model, "reader": reader, "mcp_clients": mcp_clients}
-    if accepts_config:
-        kwargs["config"] = agent_config
-    if accepts_llm_service and llm_service:
-        kwargs["llm_service"] = llm_service
-    if accepts_summary_config and summary_config:
+    # All kwargs are passed — BaseAgent accepts **_kwargs so subclasses
+    # pick what they need and ignore the rest.  No inspect.signature sniffing.
+    kwargs: dict[str, Any] = {
+        "model_id": agent_model,
+        "reader": reader,
+        "mcp_clients": mcp_clients,
+        "config": agent_config,
+    }
+    if agent_chat_model:
+        kwargs["chat_model"] = agent_chat_model
+    if summary_config:
         kwargs["summary_config"] = summary_config
 
     return cls(**kwargs)
@@ -204,7 +227,9 @@ def _build_subgraph(
     agent_config: AgentConfig,
     default_model: str,
     reader: VectorReader,
-    llm_service: LLMProvider | None = None,
+    default_chat_model: BaseChatModel | None = None,
+    default_fallback: str | None = None,
+    default_retry: int = 0,
     mcp_client_factory: MCPClientFactory | None = None,
 ) -> Any:
     """
@@ -220,14 +245,16 @@ def _build_subgraph(
             child_config,
             default_model,
             reader,
-            llm_service,
+            default_chat_model,
+            default_fallback,
+            default_retry,
             mcp_client_factory,
         )
         children_agents.append(child_agent)
 
     # Build sub-graph with its own supervisor
     child_descriptions = {a.name: a.description for a in children_agents}
-    sub_supervisor = create_supervisor_node(default_model, child_descriptions, llm_service=llm_service)
+    sub_supervisor = create_supervisor_node(default_model, child_descriptions, chat_model=default_chat_model)
 
     sg = StateGraph(GraphState)
     sg.add_node("supervisor", sub_supervisor)
@@ -376,24 +403,38 @@ def build_graph(
         Pre-configured runtime with all dependencies (reader, LLM provider,
         MCP client factory).
     """
+    from ..llm_factory import build_chat_model as _build_chat_model
+
+    # ── Enable LLM response caching if configured ──
+    if config.defaults.cache_enabled:
+        from langchain_core.caches import InMemoryCache
+        from langchain_core.globals import set_llm_cache
+
+        set_llm_cache(InMemoryCache())
+        logger.info("[Graph] LLM response caching enabled (InMemoryCache)")
+
     reader = runtime.get_reader()
     default_model = runtime.default_model
-    llm_service: LLMProvider = runtime.get_llm_service()
+
+    # ── Resolve default LLM config from YAML ──
+    default_fallback = config.defaults.llm.fallback_model
+    default_retry = config.defaults.llm.retry_attempts
+    if runtime.chat_model is not None:
+        # User provided a pre-built chat model — use it as-is
+        default_chat_model: BaseChatModel = runtime.chat_model
+    else:
+        default_chat_model = _build_chat_model(
+            default_model,
+            fallback_model=default_fallback,
+            retry_attempts=default_retry,
+        )
 
     # ── Build MCP auth registry (scans all agents for OAuth servers) ──
     auth_registry = MCPAuthRegistry.from_config(config)
     runtime.mcp_auth_registry = auth_registry
 
     # ── Build MCP factory (enhanced with token_store for OAuth servers) ──
-    if runtime.mcp_client_factory:
-        mcp_factory: MCPClientFactory = runtime.mcp_client_factory
-    else:
-        from ..runtime import _default_mcp_client_factory
-
-        token_store = runtime.mcp_token_store
-
-        def mcp_factory(cfg):  # type: ignore[misc]
-            return _default_mcp_client_factory(cfg, token_store=token_store)
+    mcp_factory: MCPClientFactory = runtime.get_mcp_client_factory()
 
     # ── Register built-in tools from config ──
     if config.tools:
@@ -435,7 +476,9 @@ def build_graph(
                 agent_config,
                 default_model,
                 reader,
-                llm_service,
+                default_chat_model,
+                default_fallback,
+                default_retry,
                 mcp_factory,
             )
             subgraph_nodes[agent_name] = subgraph
@@ -445,7 +488,9 @@ def build_graph(
                 agent_config,
                 default_model,
                 reader,
-                llm_service,
+                default_chat_model,
+                default_fallback,
+                default_retry,
                 mcp_factory,
                 summary_config=summary_cfg,
             )
@@ -470,20 +515,30 @@ def build_graph(
         # Check if any skill step references another agent
         needs_peers = any(step.agent is not None for skill in agent._config.skills.values() for step in skill.steps)
         if needs_peers:
-            agent._agent_peers = {name: peer for name, peer in agent_map.items() if name != agent.name}
-            # Also update the skill executor's peer reference
-            agent._skill_executor._agent_peers = agent._agent_peers
+            peers = {name: peer for name, peer in agent_map.items() if name != agent.name}
+            agent.set_agent_peers(peers)
             logger.info(
                 "[Graph] agent '%s' wired with peers: %s",
                 agent.name,
-                list(agent._agent_peers.keys()),
+                list(peers.keys()),
             )
+
+    # ── Supervisor chat model (may have its own fallback) ──
+    sup_fallback = sup.fallback_model or default_fallback
+    if sup.fallback_model and sup.fallback_model != default_fallback:
+        supervisor_chat_model = _build_chat_model(
+            default_model,
+            fallback_model=sup_fallback,
+            retry_attempts=default_retry,
+        )
+    else:
+        supervisor_chat_model = default_chat_model
 
     # ── Supervisor ──
     supervisor_node = create_supervisor_node(
         default_model,
         agent_descriptions,
-        llm_service=llm_service,
+        chat_model=supervisor_chat_model,
         orchestrator_skills=config.skills or None,
         supervisor_config=config.supervisor,
     )
@@ -531,6 +586,13 @@ def build_graph(
         # final_response is set.  We wire it to END.
         g.add_edge("output_guardrails", END)
 
-    compiled = g.compile()
-    logger.info("[Graph] compiled with agents: %s", list(agent_descriptions.keys()))
+    compiled = g.compile(checkpointer=runtime.checkpointer)
+    if runtime.checkpointer:
+        logger.info(
+            "[Graph] compiled with checkpointer=%s, agents=%s",
+            type(runtime.checkpointer).__name__,
+            list(agent_descriptions.keys()),
+        )
+    else:
+        logger.info("[Graph] compiled with agents: %s", list(agent_descriptions.keys()))
     return compiled

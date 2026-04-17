@@ -2,10 +2,10 @@
 
 ## Golden Rule
 
-**This package must have ZERO external dependencies.** Only Python stdlib imports are allowed. Every other package in the project depends on `core/`. Adding a third-party import here is an architectural bug (ADR-008).
+**This package depends only on `langchain-core`** (for `Document` and message types). No concrete backend imports are allowed.
 
-Allowed: `dataclasses`, `typing`, `abc`, `enum`, `datetime`, `collections`, etc.
-Forbidden: `qdrant_client`, `litellm`, `asyncpg`, `langchain`, `pydantic`, etc.
+Allowed: `dataclasses`, `typing`, `abc`, `enum`, `datetime`, `collections`, `langchain_core.*`
+Forbidden: `qdrant_client`, `litellm`, `asyncpg`, `pydantic` (except via langchain_core)
 
 ## Files
 

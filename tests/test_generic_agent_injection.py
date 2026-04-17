@@ -33,14 +33,14 @@ def _make_state(query: str = "test query") -> dict[str, Any]:
 def _make_agent(config: AgentConfig) -> GenericAgent:
     reader = MagicMock()
     reader.retrieve = AsyncMock(return_value=[])
-    llm_service = MagicMock()
-    llm_service.complete = AsyncMock(return_value="summary")
+    chat_model = MagicMock()
+    chat_model.ainvoke = AsyncMock(return_value=MagicMock(content="summary"))
     return GenericAgent(
         config=config,
         llm="test-model",
         reader=reader,
         mcp_clients=[],
-        llm_service=llm_service,
+        chat_model=chat_model,
     )
 
 

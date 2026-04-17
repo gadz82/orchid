@@ -27,10 +27,40 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.graph import END
 from langgraph.types import Send
 
+from typing import Literal as TypingLiteral
+
+from langchain_core.language_models import BaseChatModel
+from pydantic import BaseModel, Field
+
 from ..core.agent import BaseAgent
-from ..core.llm_provider import LLMProvider
 from ..config.schema import OrchestratorSkillConfig, SupervisorConfig
 from .state import GraphState
+
+
+# ── Structured output model for routing ──────────────────────
+
+
+class RoutingDecision(BaseModel):
+    """LLM-generated routing decision — guaranteed valid via structured output."""
+
+    reasoning: str = Field(description="Brief analysis of the user's intent")
+    execution: TypingLiteral["parallel", "sequential", "skill"] = Field(
+        default="parallel",
+        description="Execution mode: parallel (independent agents), sequential (dependent), or skill (pre-defined workflow)",
+    )
+    agents: list[str] = Field(
+        default_factory=list,
+        description="Agent names to activate (empty if direct_response or skill)",
+    )
+    skill: str | None = Field(
+        default=None,
+        description="Skill name to invoke (only when execution='skill')",
+    )
+    direct_response: str | None = Field(
+        default=None,
+        description="Direct response to the user (only when no agent is needed)",
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -58,34 +88,19 @@ RULES:
 - Route to one or more agents when the request requires domain-specific data or actions.
 - Choose the right execution mode based on agent dependencies.
 - If a pre-defined SKILL matches the user's request, prefer it over manual routing.
-- If you can answer directly (greeting, general question), do so.
+- If you can answer directly (greeting, general question), set direct_response.
+- For follow-up messages like "yes", "tell me more", "go ahead", ALWAYS re-route
+  to the SAME agent(s) that handled the previous turn.  Never return empty agents
+  for a follow-up question.
 
-Respond ONLY with a JSON object (no markdown fences):
-
-To invoke a pre-defined skill:
-{{
-  "reasoning": "brief analysis of the user's intent",
-  "execution": "skill",
-  "skill": "skill_name",
-  "agents": [],
-  "direct_response": null
-}}
-
-To route to agents manually:
-{{
-  "reasoning": "brief analysis of the user's intent and why this execution mode",
-  "execution": "parallel" or "sequential",
-  "agents": ["agent_name_1", "agent_name_2"],
-  "direct_response": null
-}}
-
-If no agent is needed:
-{{
-  "reasoning": "...",
-  "execution": "parallel",
-  "agents": [],
-  "direct_response": "Your direct answer here"
-}}
+FIELD INSTRUCTIONS (you MUST follow these):
+- "reasoning": Explain WHY you chose these agents (1-2 sentences).
+- "execution": One of "parallel", "sequential", or "skill".
+- "agents": List of agent NAMES to activate. MUST NOT be empty unless you set
+  direct_response. Example: ["menu"] or ["menu", "orders"].
+- "skill": Skill name ONLY when execution="skill". Otherwise null.
+- "direct_response": Your answer ONLY when no agent is needed (greetings,
+  general knowledge). Otherwise null.
 """
 
 SEQUENTIAL_ADVANCE_SYSTEM_PROMPT = """\
@@ -123,13 +138,13 @@ Do NOT mention internal routing or agent names to the user.
 def create_supervisor_node(
     model: str,
     agent_descriptions: dict[str, str],
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
     orchestrator_skills: dict[str, OrchestratorSkillConfig] | None = None,
     supervisor_config: SupervisorConfig | None = None,
 ):
     """
     Return a LangGraph node function with *model*, *agent_descriptions*,
-    *llm_service*, and *orchestrator_skills* captured via closure — no
+    *chat_model*, and *orchestrator_skills* captured via closure — no
     module-level globals (ADR-008 Composition Root).
     """
     skills = orchestrator_skills or {}
@@ -141,14 +156,14 @@ def create_supervisor_node(
 
         # ── Case 1: Sequential pipeline in progress — advance to next agent ──
         if pending and has_mcp_data:
-            return await _advance_sequential(state, model, agent_descriptions, pending, sup_config, llm_service)
+            return await _advance_sequential(state, model, agent_descriptions, pending, sup_config, chat_model)
 
         # ── Case 2: All agents done (no pending) + data collected → synthesise ──
         if has_mcp_data and not pending and not state.get("active_agents"):
-            return await _synthesise(state, model, sup_config, llm_service)
+            return await _synthesise(state, model, sup_config, chat_model)
 
         # ── Case 3: First entry — analyse intent and route ──
-        return await _route(state, model, agent_descriptions, skills, sup_config, llm_service)
+        return await _route(state, model, agent_descriptions, skills, sup_config, chat_model)
 
     return supervisor_node
 
@@ -219,7 +234,7 @@ def _to_llm_messages(
     system: str,
     state_messages: list[BaseMessage],
 ) -> list[dict[str, str]]:
-    """Convert LangGraph messages to the [{role, content}] format used by LLMProvider."""
+    """Convert LangGraph messages to the [{role, content}] format used by BaseChatModel."""
     llm_msgs: list[dict[str, str]] = [{"role": "system", "content": system}]
     for msg in state_messages:
         if isinstance(msg, HumanMessage):
@@ -230,22 +245,23 @@ def _to_llm_messages(
 
 
 async def _llm_complete(
-    llm_service: LLMProvider | None,
+    chat_model: BaseChatModel | None,
     model: str,
     messages: list[dict[str, str]],
     *,
     temperature: float = 0.0,
     response_format: dict[str, str] | None = None,
 ) -> str:
-    """Call LLM via the injected LLMProvider."""
-    if not llm_service:
-        raise RuntimeError("Supervisor requires an LLMProvider. Pass llm_service= when building the graph.")
-    return await llm_service.complete(
-        model,
-        messages,
-        temperature=temperature,
-        response_format=response_format,
-    )
+    """Call LLM via the injected BaseChatModel."""
+    if not chat_model:
+        raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
+    kwargs: dict = {"temperature": temperature}
+    if response_format:
+        # Use with_structured_output for json_object format if supported,
+        # otherwise pass as model_kwargs
+        kwargs["response_format"] = response_format
+    result = await chat_model.ainvoke(messages, **kwargs)
+    return result.content or ""
 
 
 async def _route(
@@ -254,7 +270,7 @@ async def _route(
     agent_descriptions: dict[str, str],
     orchestrator_skills: dict[str, OrchestratorSkillConfig] | None = None,
     supervisor_config: SupervisorConfig | None = None,
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
 ) -> GraphState:
     """Analyse user intent, choose execution mode, and activate agents."""
     desc_text = "\n".join(f"- **{name}**: {desc}" for name, desc in agent_descriptions.items())
@@ -284,19 +300,44 @@ async def _route(
         agent_descriptions=desc_text + auth_hint,
         skill_descriptions=skill_text,
     )
-    # Filter internal messages so the routing LLM sees a clean dialogue
-    clean_messages = _filter_internal_messages(state.get("messages", []))
-    llm_messages = _to_llm_messages(system, clean_messages)
+
+    # Use extract_conversation_history for clean, bounded context.
+    # This respects max_turns/max_chars limits and filters supervisor noise.
+    history = BaseAgent.extract_conversation_history(
+        state,
+        max_turns=sup.history_max_turns,
+        max_chars=sup.history_max_chars,
+    )
+
+    # Compress older turns when sliding-window summarization is enabled
+    if history and sup.history_summary_enabled and chat_model:
+        history = await BaseAgent.compress_conversation_history(
+            history,
+            chat_model=chat_model,
+            recent_turns=sup.history_summary_recent_turns,
+        )
+
+    # Filter conversation summaries — internal compression artifacts
+    clean_history = (
+        [m for m in history if not m.get("content", "").startswith("[Conversation summary]")] if history else []
+    )
+
+    llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    if clean_history:
+        llm_messages.extend(clean_history)
+
+    # Add the current user query
+    user_query = BaseAgent.extract_user_query(state)
+    if user_query:
+        llm_messages.append({"role": "user", "content": user_query})
 
     try:
-        raw = await _llm_complete(
-            llm_service,
-            model,
-            llm_messages,
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-        logger.info("[Supervisor] routing decision: %s", raw)
+        if not chat_model:
+            raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
+
+        structured_model = chat_model.with_structured_output(RoutingDecision)
+        decision: RoutingDecision = await structured_model.ainvoke(llm_messages, temperature=0)
+        logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
         # Handle LLM API failures gracefully
         logger.error("[Supervisor] LLM API error during routing: %s", exc, exc_info=True)
@@ -318,18 +359,13 @@ async def _route(
             "routing_metadata": {"error": "llm_api_failure", "details": error_msg},
         }
 
-    try:
-        decision = json.loads(raw)
-    except json.JSONDecodeError:
-        decision = {"agents": [], "direct_response": raw, "reasoning": "JSON parse error"}
-
-    agents: list[str] = decision.get("agents", [])
-    direct: str | None = decision.get("direct_response")
-    execution: str = decision.get("execution", "parallel")
+    agents: list[str] = decision.agents
+    direct: str | None = decision.direct_response
+    execution: str = decision.execution
 
     # ── Orchestrator skill activation ──
     if execution == "skill":
-        skill_name = decision.get("skill", "")
+        skill_name = decision.skill or ""
         if skill_name in (orchestrator_skills or {}):
             skill = orchestrator_skills[skill_name]
             skill_agents = [step.agent for step in skill.steps]
@@ -375,6 +411,20 @@ async def _route(
 
     # ── Validate agent names ──
     valid = [a for a in agents if a in agent_descriptions]
+
+    # Recovery: if the LLM returned empty agents but mentioned an agent name
+    # in the reasoning (common with small models), extract it.
+    if not valid and not direct:
+        reasoning_lower = decision.reasoning.lower()
+        for name in agent_descriptions:
+            if name in reasoning_lower:
+                valid.append(name)
+        if valid:
+            logger.warning(
+                "[Supervisor] Recovered agent names from reasoning: %s (original agents list was empty)",
+                valid,
+            )
+
     if not valid:
         fallback = "I'm not sure how to help with that request. Could you rephrase or provide more details?"
         return {
@@ -416,7 +466,7 @@ async def _advance_sequential(
     agent_descriptions: dict[str, str],
     pending: list[str],
     supervisor_config: SupervisorConfig | None = None,
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
 ) -> GraphState:
     """
     Advance the sequential pipeline: activate the next agent,
@@ -452,16 +502,20 @@ async def _advance_sequential(
     )
 
     # Compress older turns when sliding-window summarization is enabled
-    if history and sup.history_summary_enabled and llm_service:
+    if history and sup.history_summary_enabled and chat_model:
         history = await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm_service,
-            model=sup.history_summary_model or model,
+            chat_model=chat_model,
             recent_turns=sup.history_summary_recent_turns,
         )
 
+    # Filter conversation summaries from history — they're internal
+    clean_history = (
+        [m for m in history if not m.get("content", "").startswith("[Conversation summary]")] if history else []
+    )
+
     llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    llm_messages.extend(history)
+    llm_messages.extend(clean_history)
 
     # Inject current MCP data so the LLM knows what was collected
     mcp_ctx = state.get("mcp_context", {})
@@ -475,7 +529,7 @@ async def _advance_sequential(
         )
 
     try:
-        handoff = await _llm_complete(llm_service, model, llm_messages, temperature=0.2)
+        handoff = await _llm_complete(chat_model, model, llm_messages, temperature=0.2)
         logger.info(
             "[Supervisor] sequential advance → %s (pending: %s): %s",
             next_agent,
@@ -499,7 +553,7 @@ async def _synthesise(
     state: GraphState,
     model: str,
     supervisor_config: SupervisorConfig | None = None,
-    llm_service: LLMProvider | None = None,
+    chat_model: BaseChatModel | None = None,
 ) -> GraphState:
     """Combine sub-agent results into a final user-facing response."""
     sup = supervisor_config or SupervisorConfig()
@@ -534,22 +588,25 @@ async def _synthesise(
     )
 
     # Compress older turns when sliding-window summarization is enabled
-    if history and sup.history_summary_enabled and llm_service:
+    if history and sup.history_summary_enabled and chat_model:
         history = await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm_service,
-            model=sup.history_summary_model or model,
+            chat_model=chat_model,
             recent_turns=sup.history_summary_recent_turns,
         )
 
     if history:
-        llm_messages.append(
-            {
-                "role": "user",
-                "content": "Previous conversation (for context only — do NOT re-answer):\n"
-                + "\n".join(f"  {m['role']}: {m['content']}" for m in history),
-            }
-        )
+        # Filter out conversation summaries — they're for context compression,
+        # not for reproduction in the final response.
+        visible_history = [m for m in history if not m.get("content", "").startswith("[Conversation summary]")]
+        if visible_history:
+            llm_messages.append(
+                {
+                    "role": "user",
+                    "content": "Previous conversation (for context only — do NOT re-answer or reproduce any of this):\n"
+                    + "\n".join(f"  {m['role']}: {m['content']}" for m in visible_history),
+                }
+            )
 
     # Add the current turn messages, filtering out internal routing noise
     for msg in current_turn:
@@ -557,8 +614,8 @@ async def _synthesise(
         if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
             llm_messages.append({"role": "user", "content": content})
         elif isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai"):
-            # Skip internal supervisor routing messages from current turn
-            if content.startswith("[Supervisor"):
+            # Skip internal supervisor messages and conversation summaries
+            if content.startswith("[Supervisor") or content.startswith("[Conversation summary]"):
                 continue
             llm_messages.append({"role": "assistant", "content": content})
 
@@ -574,7 +631,7 @@ async def _synthesise(
         )
 
     try:
-        final = await _llm_complete(llm_service, model, llm_messages, temperature=0.3)
+        final = await _llm_complete(chat_model, model, llm_messages, temperature=0.3)
         logger.info("[Supervisor] synthesis complete (%d chars)", len(final))
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
         # Handle LLM API failures gracefully

@@ -18,24 +18,23 @@ from orchid_ai.core.repository import (
 
 
 def test_document_defaults():
-    doc = Document(id="d-1", content="hello")
+    doc = Document(id="d-1", page_content="hello")
     assert doc.id == "d-1"
-    assert doc.content == "hello"
+    assert doc.page_content == "hello"
     assert doc.metadata == {}
-    assert doc.embedding is None
 
 
 def test_document_all_fields():
-    doc = Document(id="d-2", content="world", metadata={"k": "v"}, embedding=[0.1, 0.2])
+    doc = Document(id="d-2", page_content="world", metadata={"k": "v"})
     assert doc.metadata == {"k": "v"}
-    assert doc.embedding == [0.1, 0.2]
+    assert doc.id == "d-2"
 
 
 # ── SearchResult ──
 
 
 def test_search_result():
-    doc = Document(id="d-1", content="hello")
+    doc = Document(id="d-1", page_content="hello")
     sr = SearchResult(document=doc, score=0.95)
     assert sr.document is doc
     assert sr.score == 0.95
@@ -79,7 +78,7 @@ async def test_mock_reader_records_calls(mock_reader):
 
 @pytest.mark.asyncio
 async def test_mock_writer_records_index(mock_writer):
-    docs = [Document(id="d-1", content="hi")]
+    docs = [Document(id="d-1", page_content="hi")]
     await mock_writer.index(docs, "ns")
     assert len(mock_writer.indexed) == 1
     assert mock_writer.indexed[0] == (docs, "ns")
@@ -87,7 +86,7 @@ async def test_mock_writer_records_index(mock_writer):
 
 @pytest.mark.asyncio
 async def test_mock_writer_records_upsert(mock_writer):
-    docs = [Document(id="d-1", content="hi")]
+    docs = [Document(id="d-1", page_content="hi")]
     await mock_writer.upsert(docs, "ns")
     assert len(mock_writer.upserted) == 1
 
@@ -103,7 +102,7 @@ async def test_mock_writer_records_delete(mock_writer):
 async def test_mock_repository_has_reader_and_writer(mock_repository):
     results = await mock_repository.retrieve("q", "ns")
     assert results == []
-    docs = [Document(id="d-1", content="hi")]
+    docs = [Document(id="d-1", page_content="hi")]
     await mock_repository.upsert(docs, "ns")
     assert len(mock_repository.upserted) == 1
     await mock_repository.ensure_collections(["ns"])

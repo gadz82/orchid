@@ -10,11 +10,11 @@ Example — using all defaults::
     runtime = OrchidRuntime(default_model="gemini/gemini-2.5-flash")
     graph = build_graph(config=config, runtime=runtime)
 
-Example — custom LLM provider and MCP factory::
+Example — custom chat model and MCP factory::
 
     runtime = OrchidRuntime(
         default_model="openai/gpt-4o",
-        llm_service=MyCustomLLMProvider(),
+        chat_model=ChatOpenAI(model="gpt-4o"),
         reader=my_qdrant_reader,
         mcp_client_factory=lambda cfg: MyMCPClient(cfg.url),
     )
@@ -27,11 +27,14 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
-from .core.llm_provider import LLMProvider
+from langchain_core.language_models import BaseChatModel
+
 from .core.mcp import MCPClient, MCPTokenStore
 from .core.repository import VectorReader
 
 if TYPE_CHECKING:
+    from langgraph.checkpoint.base import BaseCheckpointSaver
+
     from .config.schema import MCPServerConfig
     from .mcp.auth_registry import MCPAuthRegistry
 
@@ -42,38 +45,11 @@ logger = logging.getLogger(__name__)
 MCPClientFactory = Callable[["MCPServerConfig"], MCPClient]
 
 
-def _default_mcp_client_factory(
-    server_config: MCPServerConfig,
-    *,
-    token_store: MCPTokenStore | None = None,
-) -> MCPClient:
-    """Create a StreamableHttpMCPClient from server config (default factory).
+def _default_chat_model(model: str = "ollama/llama3.2", **kwargs) -> BaseChatModel:
+    """Create the default LangChain chat model via the factory."""
+    from .llm_factory import build_chat_model
 
-    Auth modes:
-      - ``none`` (default): no auth headers sent.
-      - ``passthrough``: forwards graph AuthContext bearer token.
-      - ``oauth``: resolves per-user tokens from the *token_store*.
-    """
-    from .mcp.client import StreamableHttpMCPClient
-
-    return StreamableHttpMCPClient(
-        server_config.url,
-        server_type=server_config.type,
-        transport=server_config.transport,
-        cache_ttl=server_config.cache_ttl,
-        server_name=server_config.name,
-        auth_mode=server_config.auth.mode,
-        token_store=token_store,
-        token_endpoint=server_config.auth.token_endpoint,
-        client_id=server_config.auth.client_id,
-    )
-
-
-def _default_llm_service() -> LLMProvider:
-    """Create the default LiteLLM-backed provider."""
-    from .llm_service import LiteLLMProvider
-
-    return LiteLLMProvider()
+    return build_chat_model(model, **kwargs)
 
 
 @dataclass
@@ -90,19 +66,26 @@ class OrchidRuntime:
         LiteLLM model identifier (e.g. ``"gemini/gemini-2.5-flash"``).
     reader : VectorReader | None
         Vector store backend.  ``None`` → ``NullVectorReader`` (no RAG).
-    llm_service : LLMProvider | None
-        LLM abstraction.  ``None`` → ``LiteLLMProvider()`` (default).
+    chat_model : BaseChatModel | None
+        LangChain chat model.  ``None`` → built via ``build_chat_model(default_model)``.
     mcp_client_factory : MCPClientFactory | None
         Factory for creating MCP clients from server config.
         ``None`` → ``StreamableHttpMCPClient`` (default).
+    checkpointer : BaseCheckpointSaver | None
+        LangGraph checkpointer for graph state persistence.
+        ``None`` → no checkpointing (current request replays full history).
+        When set, the compiled graph persists state keyed by ``thread_id``
+        (= ``chat_id``).  Use :func:`orchid_ai.checkpointing.build_checkpointer`
+        to create one from a type string or dotted class path.
     """
 
     default_model: str = "ollama/llama3.2"
     reader: VectorReader | None = None
-    llm_service: LLMProvider | None = None
+    chat_model: BaseChatModel | None = None
     mcp_client_factory: MCPClientFactory | None = None
     mcp_token_store: MCPTokenStore | None = None
     mcp_auth_registry: MCPAuthRegistry | None = field(default=None)
+    checkpointer: BaseCheckpointSaver | None = None
 
     # ── Resolved accessors (lazy defaults) ──────────────────────
 
@@ -114,14 +97,52 @@ class OrchidRuntime:
 
         return NullVectorReader()
 
-    def get_llm_service(self) -> LLMProvider:
-        """Return the configured LLM provider, falling back to LiteLLMProvider."""
-        if self.llm_service is not None:
-            return self.llm_service
-        return _default_llm_service()
+    def get_chat_model(self) -> BaseChatModel:
+        """Return the configured chat model, falling back to ChatLiteLLM."""
+        if self.chat_model is not None:
+            return self.chat_model
+        return _default_chat_model(self.default_model)
 
     def get_mcp_client_factory(self) -> MCPClientFactory:
-        """Return the configured MCP factory, falling back to StreamableHttpMCPClient."""
+        """Return the configured MCP factory, falling back to the default.
+
+        When no explicit ``mcp_client_factory`` was supplied, returns a
+        callable bound to this runtime's :attr:`mcp_token_store`, so
+        ``oauth`` servers can resolve per-user tokens.
+        """
         if self.mcp_client_factory is not None:
             return self.mcp_client_factory
-        return _default_mcp_client_factory
+        token_store = self.mcp_token_store
+        return lambda cfg: self.default_mcp_client_factory(cfg, token_store=token_store)
+
+    # ── Default MCP factory (override in subclasses) ────────────
+
+    @staticmethod
+    def default_mcp_client_factory(
+        server_config: MCPServerConfig,
+        *,
+        token_store: MCPTokenStore | None = None,
+    ) -> MCPClient:
+        """Create a ``StreamableHttpMCPClient`` from the server config.
+
+        Override in a subclass to change the default transport / client
+        without having to supply a full ``mcp_client_factory`` callable.
+
+        Auth modes:
+          - ``none`` (default): no auth headers sent.
+          - ``passthrough``: forwards the graph ``AuthContext`` bearer token.
+          - ``oauth``: resolves per-user tokens from the *token_store*.
+        """
+        from .mcp.client import StreamableHttpMCPClient
+
+        return StreamableHttpMCPClient(
+            server_config.url,
+            server_type=server_config.type,
+            transport=server_config.transport,
+            cache_ttl=server_config.cache_ttl,
+            server_name=server_config.name,
+            auth_mode=server_config.auth.mode,
+            token_store=token_store,
+            token_endpoint=server_config.auth.token_endpoint,
+            client_id=server_config.auth.client_id,
+        )

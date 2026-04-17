@@ -31,12 +31,9 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ..config.schema import MCPServerConfig, ToolConfig
-from ..core.llm_provider import LLMProvider
-from ..core.mcp import MCPClient
+from ..core.mcp import MCPToolCaller
 from ..core.state import AuthContext
 
-# Note: get_llm_kwargs is imported lazily inside LLMDecidesStrategy._llm_complete()
-# because litellm should not be imported at module level (see Architecture Rules).
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +44,7 @@ class ToolCallStrategy(ABC):
     @abstractmethod
     async def execute(
         self,
-        client: MCPClient,
+        client: MCPToolCaller,
         tools: list[ToolConfig],
         query: str,
         auth: AuthContext,
@@ -55,7 +52,7 @@ class ToolCallStrategy(ABC):
         agent_name: str = "",
         server_config: MCPServerConfig | None = None,
         llm_model: str | None = None,
-        llm_service: LLMProvider | None = None,
+        chat_model: Any | None = None,
     ) -> dict[str, Any]:
         """
         Invoke tools according to this strategy's rules.
@@ -76,7 +73,7 @@ class ToolCallStrategy(ABC):
             Full server configuration (for strategies that need it).
         llm_model : str | None
             LLM model identifier (for strategies that use LLM).
-        llm_service : LLMProvider | None
+        chat_model : Any | None
             LLM provider for strategies that need LLM (e.g. llm_decides).
         """
         ...
@@ -154,7 +151,7 @@ class LLMDecidesStrategy(ToolCallStrategy):
         agent_name="",
         server_config=None,
         llm_model=None,
-        llm_service=None,
+        chat_model=None,
         **kwargs,
     ) -> dict[str, Any]:
         results: dict[str, Any] = {}
@@ -196,7 +193,7 @@ class LLMDecidesStrategy(ToolCallStrategy):
 
         try:
             raw = await self._llm_complete(
-                llm_service,
+                chat_model,
                 _model,
                 [{"role": "user", "content": decision_prompt}],
                 temperature=0,
@@ -235,24 +232,21 @@ class LLMDecidesStrategy(ToolCallStrategy):
 
     @staticmethod
     async def _llm_complete(
-        llm_service: LLMProvider | None,
+        chat_model: Any | None,
         model: str,
         messages: list[dict[str, Any]],
         *,
         temperature: float = 0.0,
         response_format: dict[str, str] | None = None,
     ) -> str:
-        """Call LLM via the injected LLMProvider."""
-        if not llm_service:
-            raise RuntimeError(
-                "LLMDecidesStrategy requires an LLMProvider. Pass llm_service= when constructing the agent."
-            )
-        return await llm_service.complete(
-            model,
-            messages,
-            temperature=temperature,
-            response_format=response_format,
-        )
+        """Call LLM via the injected BaseChatModel."""
+        if not chat_model:
+            raise RuntimeError("LLMDecidesStrategy requires a BaseChatModel. Pass chat_model= when building the graph.")
+        kwargs: dict[str, Any] = {"temperature": temperature}
+        if response_format:
+            kwargs["response_format"] = response_format
+        result = await chat_model.ainvoke(messages, **kwargs)
+        return result.content or ""
 
 
 # ── Strategy Registry ──────────────────────────────────────────
@@ -262,6 +256,24 @@ STRATEGY_REGISTRY: dict[str, type[ToolCallStrategy]] = {
     "sequential": SequentialStrategy,
     "llm_decides": LLMDecidesStrategy,
 }
+
+
+def register_strategy(name: str, cls: type[ToolCallStrategy]) -> None:
+    """Register a custom tool call strategy by name."""
+    STRATEGY_REGISTRY[name] = cls
+    logger.info("[Strategies] Registered '%s' → %s", name, cls.__name__)
+
+
+def clear_strategies() -> None:
+    """Reset to built-in strategies (useful for test isolation)."""
+    STRATEGY_REGISTRY.clear()
+    STRATEGY_REGISTRY.update(
+        {
+            "all": CallAllStrategy,
+            "sequential": SequentialStrategy,
+            "llm_decides": LLMDecidesStrategy,
+        }
+    )
 
 
 def get_strategy(name: str) -> ToolCallStrategy:

@@ -49,7 +49,7 @@ class MCPDispatcher:
         *,
         agent_name: str = "",
         llm_model: str | None = None,
-        llm_service: Any = None,
+        chat_model: Any = None,
         skip_tools: set[str] | None = None,
     ) -> dict[str, Any]:
         """Call MCP tools concurrently across servers, per configured strategy.
@@ -111,7 +111,7 @@ class MCPDispatcher:
                     agent_name=agent_name,
                     server_config=server_config,
                     llm_model=llm_model,
-                    llm_service=llm_service,
+                    chat_model=chat_model,
                 )
                 server_results.update(tool_results)
             except Exception as exc:

@@ -33,8 +33,9 @@ from qdrant_client.models import (
     VectorParams,
 )
 
+from langchain_core.embeddings import Embeddings
+
 from ...core.repository import Document, SearchResult, VectorStoreRepository
-from ..embeddings import Embedder
 from ..scopes import RAGScope, build_qdrant_filter
 
 logger = logging.getLogger(__name__)
@@ -51,15 +52,19 @@ class QdrantRepository(VectorStoreRepository):
     point, and all reads filter on ``[tenant_id, "__shared__"]``.
     """
 
+    supports_scope_promotion = True
+
     def __init__(
         self,
         *,
         url: str,
-        embedder: Embedder,
+        embeddings: Embeddings,
+        embedding_dimension: int = 1536,
         default_tenant: str = "default",
     ):
         self._client = AsyncQdrantClient(url=url)
-        self._embedder = embedder
+        self._embeddings = embeddings
+        self._embedding_dimension = embedding_dimension
         self._default_tenant = default_tenant
 
     # ── VectorReader ──────────────────────────────────────────
@@ -80,7 +85,7 @@ class QdrantRepository(VectorStoreRepository):
         """
         await self._ensure_collection(namespace)
 
-        query_vector = await self._embedder.embed_query(query)
+        query_vector = await self._embeddings.aembed_query(query)
 
         # Build hierarchical filter from scope
         if scope:
@@ -105,7 +110,7 @@ class QdrantRepository(VectorStoreRepository):
             SearchResult(
                 document=Document(
                     id=str(hit.id),
-                    content=hit.payload.get("content", "") if hit.payload else "",
+                    page_content=hit.payload.get("content", "") if hit.payload else "",
                     metadata=hit.payload or {},
                 ),
                 score=hit.score,
@@ -176,12 +181,14 @@ class QdrantRepository(VectorStoreRepository):
             )
             for point in results:
                 payload = point.payload or {}
+                meta = dict(payload)
+                if isinstance(point.vector, list):
+                    meta["_embedding"] = point.vector
                 documents.append(
                     Document(
                         id=payload.get("doc_id", str(point.id)),
-                        content=payload.get("content", ""),
-                        metadata=payload,
-                        embedding=point.vector if isinstance(point.vector, list) else None,
+                        page_content=payload.get("content", ""),
+                        metadata=meta,
                     )
                 )
             if next_offset is None:
@@ -311,48 +318,53 @@ class QdrantRepository(VectorStoreRepository):
         await self._client.create_collection(
             collection_name=namespace,
             vectors_config=VectorParams(
-                size=self._embedder.dimension,
+                size=self._embedding_dimension,
                 distance=Distance.COSINE,
             ),
         )
         logger.info(
             "[Qdrant] created collection '%s' (dim=%d)",
             namespace,
-            self._embedder.dimension,
+            self._embedding_dimension,
         )
 
     # ── Internal helpers ──────────────────────────────────────
 
     async def _documents_to_points(self, documents: list[Document]) -> list[PointStruct]:
-        """Convert Documents to Qdrant PointStructs, embedding if needed."""
+        """Convert Documents to Qdrant PointStructs, embedding texts as needed."""
+        # Check which docs already have pre-computed embeddings (stored in metadata)
         texts_to_embed: list[str] = []
         embed_indices: list[int] = []
+        doc_embeddings: list[list[float] | None] = []
 
         for i, doc in enumerate(documents):
-            if doc.embedding is None:
-                texts_to_embed.append(doc.content)
+            pre_emb = doc.metadata.get("_embedding")
+            doc_embeddings.append(pre_emb)
+            if pre_emb is None:
+                texts_to_embed.append(doc.page_content)
                 embed_indices.append(i)
 
         if texts_to_embed:
-            embeddings = await self._embedder.embed(texts_to_embed)
-            for idx, emb in zip(embed_indices, embeddings):
-                documents[idx].embedding = emb
+            computed = await self._embeddings.aembed_documents(texts_to_embed)
+            for idx, emb in zip(embed_indices, computed):
+                doc_embeddings[idx] = emb
 
         points: list[PointStruct] = []
-        for doc in documents:
+        for i, doc in enumerate(documents):
+            # Build payload: exclude internal _embedding key
+            meta = {k: v for k, v in doc.metadata.items() if k != "_embedding"}
             payload = {
-                "content": doc.content,
+                "content": doc.page_content,
                 "doc_id": doc.id,
-                **doc.metadata,
+                **meta,
             }
-            # Ensure tenant_id is always present
             if "tenant_id" not in payload:
                 payload["tenant_id"] = self._default_tenant
 
             points.append(
                 PointStruct(
                     id=str(uuid.uuid4()),
-                    vector=doc.embedding or [],
+                    vector=doc_embeddings[i] or [],
                     payload=payload,
                 )
             )

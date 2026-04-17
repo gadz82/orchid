@@ -4,9 +4,11 @@ Base agent abstraction — Open/Closed Principle (ADR-008).
 Adding a new agent = subclass BaseAgent + register in Composition Root.
 Nothing else needs to change.
 
-This module uses ONLY stdlib types.  The `llm` parameter is typed as
-`Any` because the concrete LLM wrapper (LiteLLM) is a third-party
-dependency that must not leak into core/.
+This module uses ONLY stdlib types for its own definitions.  The
+``chat_model`` parameter is typed as ``Any`` because the concrete
+LangChain ``BaseChatModel`` is an external dependency that must not
+leak into ``core/``.  At runtime the field holds a ``BaseChatModel``
+that supports ``ainvoke(messages) -> AIMessage``.
 
 Shared helpers (``extract_user_query``, ``fetch_rag_context``,
 ``summarise``) are provided as concrete methods so that both
@@ -18,16 +20,15 @@ Platform-agnostic: no vendor-specific references.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .llm_provider import LLMProvider
+from . import helpers as _helpers
 from .mcp import MCPClient
 from .repository import VectorReader
+from .scopes import RAGScope
 from .state import AgentState
-from ..rag.scopes import RAGScope
 
 logger = logging.getLogger(__name__)
 
@@ -43,15 +44,17 @@ class BaseAgent(ABC):
     def __init__(
         self,
         *,
-        llm: Any,
+        model_id: Any = None,
         reader: VectorReader,
         mcp_clients: list[MCPClient] | None = None,
-        llm_service: LLMProvider | None = None,
+        chat_model: Any | None = None,
+        **_kwargs: Any,
     ):
-        self.llm = llm
+        # Accept both model_id= (preferred) and llm= (legacy) for backward compat
+        self.model_id: str = model_id or _kwargs.pop("llm", "") or ""
         self.reader = reader
         self.mcp_clients = mcp_clients or []
-        self._llm_service = llm_service
+        self._chat_model = chat_model  # BaseChatModel (duck-typed to avoid core/ deps)
 
     # ── Identity ────────────────────────────────────────────
 
@@ -104,6 +107,19 @@ class BaseAgent(ABC):
             if type(msg).__name__ == "HumanMessage":
                 return str(msg.content)
         return ""
+
+    async def reformulate_query(self, query: str, state: AgentState) -> str:
+        """Rewrite the user's query as a standalone search query.
+
+        Delegates to :func:`core.helpers.reformulate_query`.  See that
+        function for full documentation.
+        """
+        return await _helpers.reformulate_query(
+            query,
+            state,
+            chat_model=self._chat_model,
+            agent_name=self.name,
+        )
 
     @staticmethod
     def extract_conversation_history(
@@ -186,8 +202,7 @@ class BaseAgent(ABC):
     async def compress_conversation_history(
         history: list[dict[str, str]],
         *,
-        llm_service: LLMProvider,
-        model: str,
+        chat_model: Any,
         recent_turns: int = 3,
     ) -> list[dict[str, str]]:
         """Compress older conversation turns into a summary, keeping recent ones verbatim.
@@ -204,11 +219,8 @@ class BaseAgent(ABC):
         ----------
         history : list[dict[str, str]]
             Full conversation history from ``extract_conversation_history()``.
-        llm_service : LLMProvider
-            LLM provider for the summarization call.
-        model : str
-            Model identifier for the summarization call (can be a cheap/fast
-            model like ``gemini/gemini-2.5-flash-lite``).
+        chat_model : BaseChatModel
+            LangChain chat model for the summarization call (duck-typed).
         recent_turns : int
             Number of recent user/assistant exchange pairs to keep verbatim.
             Default ``10`` (= 20 messages).
@@ -241,14 +253,14 @@ class BaseAgent(ABC):
         )
 
         try:
-            summary_text = await llm_service.complete(
-                model,
+            result = await chat_model.ainvoke(
                 [
                     {"role": "system", "content": "You are a conversation summarizer. Output only the summary."},
                     {"role": "user", "content": summary_prompt},
                 ],
                 temperature=0.0,
             )
+            summary_text = result.content or ""
         except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
             logger.warning("History compression failed (%s), falling back to truncation", exc)
             # Fallback: just keep the recent turns (no summary)
@@ -268,43 +280,18 @@ class BaseAgent(ABC):
         namespace: str | None = None,
         k: int = 5,
     ) -> list[dict[str, Any]]:
-        """
-        Retrieve relevant documents from the vector store.
+        """Retrieve relevant documents from the vector store.
 
-        Parameters
-        ----------
-        query : str
-            User query to embed and search.
-        scope : RAGScope
-            Hierarchical scope for filtering (tenant → user → chat → agent).
-        namespace : str | None
-            Qdrant collection name.  Falls back to ``self.rag_namespace``.
-        k : int
-            Number of documents to retrieve.
+        Delegates to :func:`core.helpers.fetch_rag_context`.
         """
-        ns = namespace or self.rag_namespace
-        try:
-            results = await self.reader.retrieve(
-                query=query,
-                namespace=ns,
-                k=k,
-                scope=scope,
-            )
-            rag_docs = [
-                {
-                    "content": r.document.content,
-                    "score": round(r.score, 3),
-                    "metadata": {
-                        mk: mv for mk, mv in r.document.metadata.items() if mk not in ("content", "embedding")
-                    },
-                }
-                for r in results
-            ]
-            logger.info("[%s] RAG retrieved %d docs (scope=%s)", self.name, len(rag_docs), scope.tenant_id)
-            return rag_docs
-        except (ConnectionError, TimeoutError, OSError, ValueError) as exc:
-            logger.warning("[%s] RAG retrieval failed: %s", self.name, exc)
-            return []
+        return await _helpers.fetch_rag_context(
+            query,
+            scope,
+            reader=self.reader,
+            namespace=namespace or self.rag_namespace,
+            k=k,
+            agent_name=self.name,
+        )
 
     async def summarise(
         self,
@@ -313,102 +300,31 @@ class BaseAgent(ABC):
         rag_data: list[dict[str, Any]],
         *,
         system_prompt: str,
-        model: str | None = None,
         temperature: float = 0.2,
         conversation_history: list[dict[str, str]] | None = None,
         prior_tool_context: dict[str, Any] | None = None,
+        **_kwargs: Any,
     ) -> str:
+        """Use LLM to produce a human-readable summary of RAG + MCP data.
+
+        Delegates to :func:`core.helpers.summarise`.  See that function
+        for full documentation.
+
+        Raises ``RuntimeError`` if no ``chat_model`` was injected.
         """
-        Use LLM to produce a human-readable summary of RAG + MCP data.
-
-        When ``conversation_history`` is provided (from
-        ``extract_conversation_history``), it is injected between the
-        system prompt and the current user query so the LLM has
-        multi-turn context (e.g. knows which entity the user is
-        referring to with "tell me more about the second one").
-
-        When ``prior_tool_context`` is provided, it is appended to the
-        system prompt so the LLM knows what tools returned in previous
-        invocations (e.g. a ``create_notification`` response with IDs
-        and details from a prior turn).
-
-        Requires an injected ``LLMProvider`` (DIP-compliant).
-
-        Parameters
-        ----------
-        query : str
-            The current user query.
-        mcp_data : dict
-            Tool call results to summarise.
-        rag_data : list[dict]
-            RAG retrieval results for background context.
-        system_prompt : str
-            System prompt for the LLM.
-        model : str | None
-            LLM model override; falls back to ``self.llm``.
-        temperature : float
-            Sampling temperature.
-        conversation_history : list[dict] | None
-            Prior conversation turns from ``extract_conversation_history()``.
-            Each entry is ``{"role": "user"|"assistant", "content": ...}``.
-        prior_tool_context : dict | None
-            Tool results from previous agent invocations (from
-            ``state["mcp_context"]``).  Injected into the system prompt
-            so the LLM has grounding on what was previously fetched or
-            created.
-
-        Raises
-        ------
-        RuntimeError
-            If no ``LLMProvider`` was injected during construction.
-        """
-        if not self._llm_service:
+        if not self._chat_model:
             raise RuntimeError(
-                f"[{self.name}] Cannot summarise: no LLMProvider injected. "
-                "Pass llm_service= when constructing the agent."
+                f"[{self.name}] Cannot summarise: no chat model injected. Pass chat_model= when constructing the agent."
             )
-
-        _model = model or (self.llm if isinstance(self.llm, str) else str(self.llm))
-
-        # ── Build enriched system prompt ──
-        enriched_system = system_prompt
-
-        # Add multi-turn focus instruction when history is available
-        if conversation_history:
-            enriched_system += (
-                "\n\nIMPORTANT: The conversation history below shows prior exchanges. "
-                "Always focus on the user's LATEST message and its relationship to "
-                "the most recent topic. Do NOT change topic or introduce unrelated "
-                "content unless the user explicitly asks for something new."
-            )
-
-        # Append prior tool results so the LLM knows what was returned in earlier turns
-        if prior_tool_context:
-            prior_json = json.dumps(prior_tool_context, indent=2, default=str)[:4000]
-            enriched_system += f"\n\n--- Previous Tool Results (from prior turns) ---\n{prior_json}"
-
-        rag_section = ""
-        if rag_data:
-            rag_section = "Background knowledge (from RAG):\n" + json.dumps(rag_data, indent=2, default=str) + "\n\n"
-
-        user_content = (
-            f"User query: {query}\n\n{rag_section}Live data (from API):\n{json.dumps(mcp_data, indent=2, default=str)}"
-        )
-
-        messages: list[dict[str, str]] = [
-            {"role": "system", "content": enriched_system},
-        ]
-
-        # Inject conversation history so the LLM has multi-turn context
-        if conversation_history:
-            messages.extend(conversation_history)
-
-        messages.append({"role": "user", "content": user_content})
-
-        return await self._llm_service.complete(
-            _model,
-            messages,
+        return await _helpers.summarise(
+            query,
+            mcp_data,
+            rag_data,
+            system_prompt=system_prompt,
+            chat_model=self._chat_model,
             temperature=temperature,
+            conversation_history=conversation_history,
+            prior_tool_context=prior_tool_context,
         )
 
     async def fetch_all_rag_context(

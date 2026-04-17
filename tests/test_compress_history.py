@@ -3,32 +3,29 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from orchid_ai.core.agent import BaseAgent
-from orchid_ai.core.llm_provider import LLMProvider
 
 
-class _FakeLLM(LLMProvider):
-    """Fake LLM provider that records calls and returns a canned summary."""
+class _FakeLLM:
+    """Fake chat model that records calls and returns a canned summary."""
 
     def __init__(self, response: str = "Summary of older conversation.") -> None:
         self.response = response
         self.calls: list[dict[str, Any]] = []
 
-    async def complete(
+    async def ainvoke(
         self,
-        model: str,
         messages: list[dict[str, Any]],
-        *,
-        temperature: float = 0.2,
-        response_format: dict[str, str] | None = None,
         **kwargs: Any,
-    ) -> str:
-        self.calls.append({"model": model, "messages": messages, "temperature": temperature})
-        return self.response
+    ) -> MagicMock:
+        self.calls.append({"messages": messages, **kwargs})
+        result = MagicMock()
+        result.content = self.response
+        return result
 
 
 def _build_history(turn_count: int) -> list[dict[str, str]]:
@@ -51,8 +48,7 @@ class TestCompressConversationHistory:
 
         result = await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm,
-            model="test-model",
+            chat_model=llm,
             recent_turns=3,
         )
 
@@ -67,8 +63,7 @@ class TestCompressConversationHistory:
 
         result = await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm,
-            model="test-model",
+            chat_model=llm,
             recent_turns=3,
         )
 
@@ -83,8 +78,7 @@ class TestCompressConversationHistory:
 
         result = await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm,
-            model="cheap-model",
+            chat_model=llm,
             recent_turns=3,
         )
 
@@ -99,20 +93,18 @@ class TestCompressConversationHistory:
         assert result[-1] == {"role": "assistant", "content": "Assistant response 9"}
 
     @pytest.mark.asyncio
-    async def test_llm_called_with_correct_model(self) -> None:
-        """The compression LLM call uses the specified model."""
+    async def test_llm_called_with_correct_params(self) -> None:
+        """The compression LLM call uses temperature=0."""
         llm = _FakeLLM()
         history = _build_history(5)  # 10 messages
 
         await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm,
-            model="gemini/gemini-2.5-flash-lite",
+            chat_model=llm,
             recent_turns=2,
         )
 
         assert len(llm.calls) == 1
-        assert llm.calls[0]["model"] == "gemini/gemini-2.5-flash-lite"
         assert llm.calls[0]["temperature"] == 0.0
 
     @pytest.mark.asyncio
@@ -123,8 +115,7 @@ class TestCompressConversationHistory:
 
         await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm,
-            model="test-model",
+            chat_model=llm,
             recent_turns=2,
         )
 
@@ -139,13 +130,12 @@ class TestCompressConversationHistory:
     async def test_fallback_on_llm_failure(self) -> None:
         """If the LLM call fails, fall back to just the recent turns (no summary)."""
         llm = _FakeLLM()
-        llm.complete = AsyncMock(side_effect=RuntimeError("API down"))  # type: ignore[method-assign]
+        llm.ainvoke = AsyncMock(side_effect=RuntimeError("API down"))  # type: ignore[method-assign]
         history = _build_history(6)  # 12 messages
 
         result = await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm,
-            model="test-model",
+            chat_model=llm,
             recent_turns=2,
         )
 
@@ -162,8 +152,7 @@ class TestCompressConversationHistory:
 
         result = await BaseAgent.compress_conversation_history(
             history,
-            llm_service=llm,
-            model="test-model",
+            chat_model=llm,
             recent_turns=1,
         )
 
@@ -178,8 +167,7 @@ class TestCompressConversationHistory:
         llm = _FakeLLM()
         result = await BaseAgent.compress_conversation_history(
             [],
-            llm_service=llm,
-            model="test-model",
+            chat_model=llm,
         )
         assert result == []
         assert len(llm.calls) == 0
