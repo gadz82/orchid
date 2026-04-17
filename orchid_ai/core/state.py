@@ -16,6 +16,7 @@ Consumers subclass AuthContext to add platform-specific fields
 
 from __future__ import annotations
 
+import time
 from typing import Any, TypedDict
 
 
@@ -90,8 +91,6 @@ class AuthContext:
 
     @property
     def is_expired(self) -> bool:
-        import time
-
         return self.expires_at > 0 and time.time() >= self.expires_at
 
     @property

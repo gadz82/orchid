@@ -24,7 +24,6 @@ they call through HTTP, the CLI, or this in-process client.
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, TYPE_CHECKING
@@ -33,17 +32,12 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
 
-from .config.loader import load_config
+from .bootstrap import build_runtime
 from .config.schema import AgentsConfig
-from .core.repository import VectorStoreAdmin
 from .core.state import AuthContext
 from .graph.graph import build_graph
 from .persistence.base import ChatStorage
-from .persistence.factory import build_chat_storage
-from .persistence.mcp_token_factory import build_mcp_token_store
-from .rag.factory import build_reader
 from .runtime import OrchidRuntime
-from .utils import import_class
 
 if TYPE_CHECKING:
     from .core.mcp import MCPTokenStore
@@ -171,10 +165,6 @@ class OrchidClient:
         self._mcp_token_store = mcp_token_store
         self._owns_resources = _owns_resources
         self._closed = False
-
-        if mcp_token_store is not None and runtime.mcp_token_store is None:
-            runtime.mcp_token_store = mcp_token_store
-
         self._graph = build_graph(config=config, runtime=runtime)
 
     # ── Construction helpers ─────────────────────────────────
@@ -241,99 +231,26 @@ class OrchidClient:
             must call :meth:`close` (or use ``async with``) to release
             resources.
         """
-        # Apply YAML to env (same behaviour as bootstrap / settings)
-        from .config.yaml_env import apply_yaml_to_env
-
-        if config_path:
-            os.environ.setdefault("ORCHID_CONFIG", config_path)
-            apply_yaml_to_env(config_path)
-
-        agents_config_path = os.environ.get("AGENTS_CONFIG_PATH", "agents.yaml")
-        agents_config = load_config(agents_config_path)
-
-        # Resolve per-setting: explicit arg > env var > hardcoded default
-        resolved_model = model or os.environ.get("LITELLM_MODEL", "ollama/llama3.2")
-        resolved_backend = vector_backend or os.environ.get("VECTOR_BACKEND", "qdrant")
-        resolved_qdrant = qdrant_url or os.environ.get("QDRANT_URL", "http://qdrant:6333")
-        resolved_embedding = embedding_model or os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
-
-        resolved_storage_class = (
-            chat_storage_class
-            or os.environ.get("CHAT_STORAGE_CLASS", "")
-            or "orchid_ai.persistence.sqlite.SQLiteChatStorage"
+        result = await build_runtime(
+            config_path=config_path,
+            model=model,
+            vector_backend=vector_backend,
+            qdrant_url=qdrant_url,
+            embedding_model=embedding_model,
+            chat_storage_class=chat_storage_class,
+            chat_db_dsn=chat_db_dsn,
+            mcp_token_store_class=mcp_token_store_class,
+            mcp_token_store_dsn=mcp_token_store_dsn,
+            checkpointer_type=checkpointer_type,
+            checkpointer_dsn=checkpointer_dsn,
+            startup_hook=startup_hook,
+            runtime_overrides=runtime_overrides,
         )
-        resolved_storage_dsn = chat_db_dsn or os.environ.get("CHAT_DB_DSN", "") or "~/.orchid/chats.db"
-
-        resolved_token_class = (
-            mcp_token_store_class
-            or os.environ.get("MCP_TOKEN_STORE_CLASS", "")
-            or "orchid_ai.persistence.mcp_token_sqlite.SQLiteMCPTokenStore"
-        )
-        resolved_token_dsn = mcp_token_store_dsn or os.environ.get("MCP_TOKEN_STORE_DSN", "") or resolved_storage_dsn
-
-        resolved_checkpointer_type = checkpointer_type or os.environ.get("CHECKPOINTER_TYPE", "")
-        resolved_checkpointer_dsn = checkpointer_dsn or os.environ.get("CHECKPOINTER_DSN", "")
-        resolved_startup_hook = startup_hook or os.environ.get("STARTUP_HOOK", "")
-
-        overrides = dict(runtime_overrides or {})
-
-        # ── Build reader (unless caller injected one) ────────
-        reader = overrides.pop("reader", None) or build_reader(
-            vector_backend=resolved_backend,
-            qdrant_url=resolved_qdrant,
-            embedding_model=resolved_embedding,
-        )
-
-        # Pre-create vector collections referenced by agents
-        if isinstance(reader, VectorStoreAdmin):
-            namespaces = [a.rag.namespace for a in agents_config.agents.values() if a.rag.enabled and a.rag.namespace]
-            if namespaces:
-                await reader.ensure_collections([*namespaces, "uploads"])
-
-        # ── Chat persistence ────────────────────────────────
-        chat_repo = build_chat_storage(class_path=resolved_storage_class, dsn=resolved_storage_dsn)
-        await chat_repo.init_db()
-
-        # ── MCP OAuth token store ───────────────────────────
-        mcp_token_store = build_mcp_token_store(class_path=resolved_token_class, dsn=resolved_token_dsn)
-        await mcp_token_store.init_db()
-
-        # ── Startup hook (optional seeding / warm-up) ──────
-        if resolved_startup_hook:
-            hook_fn = import_class(resolved_startup_hook)
-            await hook_fn(reader=reader, settings=None)
-            logger.info("[OrchidClient] Startup hook executed: %s", resolved_startup_hook)
-
-        # ── Runtime ─────────────────────────────────────────
-        runtime = OrchidRuntime(
-            default_model=resolved_model,
-            reader=reader,
-            mcp_token_store=mcp_token_store,
-            **overrides,
-        )
-
-        # ── Optional checkpointer ──────────────────────────
-        if resolved_checkpointer_type:
-            from .checkpointing import build_checkpointer
-
-            runtime.checkpointer = await build_checkpointer(
-                checkpointer_type=resolved_checkpointer_type,
-                dsn=resolved_checkpointer_dsn,
-            )
-            logger.info("[OrchidClient] Checkpointer: %s", type(runtime.checkpointer).__name__)
-
-        logger.info(
-            "[OrchidClient] Ready — model=%s, backend=%s, agents=%s",
-            resolved_model,
-            resolved_backend,
-            list(agents_config.agents.keys()),
-        )
-
         return cls(
-            config=agents_config,
-            runtime=runtime,
-            chat_repo=chat_repo,
-            mcp_token_store=mcp_token_store,
+            config=result.config,
+            runtime=result.runtime,
+            chat_repo=result.chat_repo,
+            mcp_token_store=result.mcp_token_store,
             _owns_resources=True,
         )
 
@@ -417,62 +334,36 @@ class OrchidClient:
         """
         self._ensure_open()
 
-        auth_ctx = auth or AuthContext(
-            access_token=access_token,
-            tenant_key=tenant_id,
-            user_id=user_id,
-        )
-
-        # Resolve / create the chat id
-        if chat_id is None and persist and self._chat_repo is not None:
-            # Let the backend assign the id so it stays in sync with storage
-            new_chat = await self._chat_repo.create_chat(
-                tenant_id=auth_ctx.tenant_key,
-                user_id=auth_ctx.user_id,
-                title=message[:50],
-            )
-            effective_chat_id = new_chat.id
-        else:
-            effective_chat_id = chat_id or str(uuid.uuid4())
-
-        # Resolve history
-        resolved_history = await self._resolve_history(effective_chat_id, history)
-
-        initial_state = self._build_initial_state(
-            auth_ctx=auth_ctx,
-            chat_id=effective_chat_id,
+        prepared = await self._prepare_invocation(
             message=message,
-            history=resolved_history,
+            chat_id=chat_id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            access_token=access_token,
+            auth=auth,
+            history=history,
+            persist=persist,
         )
-
-        graph_config = {"configurable": {"thread_id": effective_chat_id}}
 
         try:
-            result = await self._graph.ainvoke(initial_state, config=graph_config)
+            result = await self._graph.ainvoke(prepared.state, config=prepared.graph_config)
         except GraphInterrupt as exc:
             # HITL pause — don't persist; caller resumes via :meth:`resume`.
-            return _interrupt_to_result(exc, effective_chat_id)
+            return self._interrupt_to_result(exc, prepared.chat_id)
 
         response_text = result.get("final_response", "")
         agents_used = list(result.get("active_agents") or [])
 
         if persist and self._chat_repo is not None and response_text:
-            await self._chat_repo.add_message(effective_chat_id, "user", message)
+            await self._chat_repo.add_message(prepared.chat_id, "user", message)
             await self._chat_repo.add_message(
-                effective_chat_id,
+                prepared.chat_id,
                 "assistant",
                 response_text,
                 agents_used=agents_used,
             )
 
-        return InvokeResult(
-            response=response_text,
-            chat_id=effective_chat_id,
-            agents_used=agents_used,
-            messages=list(result.get("messages") or []),
-            mcp_context=dict(result.get("mcp_context") or {}),
-            rag_context=dict(result.get("rag_context") or {}),
-        )
+        return self._result_from_graph_output(result, prepared.chat_id)
 
     async def resume(
         self,
@@ -517,7 +408,7 @@ class OrchidClient:
                 config=graph_config,
             )
         except GraphInterrupt as exc:
-            return _interrupt_to_result(exc, chat_id)
+            return self._interrupt_to_result(exc, chat_id)
 
         response_text = result.get("final_response", "")
         agents_used = list(result.get("active_agents") or [])
@@ -530,14 +421,7 @@ class OrchidClient:
                 agents_used=agents_used,
             )
 
-        return InvokeResult(
-            response=response_text,
-            chat_id=chat_id,
-            agents_used=agents_used,
-            messages=list(result.get("messages") or []),
-            mcp_context=dict(result.get("mcp_context") or {}),
-            rag_context=dict(result.get("rag_context") or {}),
-        )
+        return self._result_from_graph_output(result, chat_id)
 
     async def stream(
         self,
@@ -569,30 +453,34 @@ class OrchidClient:
         This method does not persist messages — the caller is responsible
         for saving both sides of the conversation once the stream drains
         (or uses its own persistence strategy).
+
+        Checkpointer interaction
+        ------------------------
+        When the runtime has a ``BaseCheckpointSaver`` attached (HITL
+        flows), the graph persists its own conversation state keyed by
+        ``thread_id=chat_id``.  In that mode the client does **not**
+        prepend history messages — passing the same ``chat_id`` across
+        stream calls is enough for the graph to see prior turns.  When
+        no checkpointer is configured and a ``chat_repo`` was wired,
+        history is auto-loaded from the chat repo (same behaviour as
+        :meth:`invoke`).
         """
         self._ensure_open()
 
-        auth_ctx = auth or AuthContext(
-            access_token=access_token,
-            tenant_key=tenant_id,
-            user_id=user_id,
-        )
-        effective_chat_id = chat_id or str(uuid.uuid4())
-
-        resolved_history = await self._resolve_history(effective_chat_id, history)
-
-        initial_state = self._build_initial_state(
-            auth_ctx=auth_ctx,
-            chat_id=effective_chat_id,
+        prepared = await self._prepare_invocation(
             message=message,
-            history=resolved_history,
+            chat_id=chat_id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            access_token=access_token,
+            auth=auth,
+            history=history,
+            persist=False,  # streaming never writes to the chat repo
         )
-
-        graph_config = {"configurable": {"thread_id": effective_chat_id}}
 
         async for mode, chunk in self._graph.astream(
-            initial_state,
-            config=graph_config,
+            prepared.state,
+            config=prepared.graph_config,
             stream_mode=stream_mode if isinstance(stream_mode, list) else [stream_mode],
         ):
             yield mode, chunk
@@ -613,19 +501,18 @@ class OrchidClient:
         if not self._owns_resources:
             return
 
-        if self._runtime.checkpointer is not None:
-            from .checkpointing import shutdown_checkpointer
+        from .bootstrap import BootstrapResult, teardown_runtime
 
-            await shutdown_checkpointer(self._runtime.checkpointer)
-            self._runtime.checkpointer = None
-
-        if self._mcp_token_store is not None:
-            await self._mcp_token_store.close()
-            self._mcp_token_store = None
-
-        if self._chat_repo is not None:
-            await self._chat_repo.close()
-            self._chat_repo = None
+        await teardown_runtime(
+            BootstrapResult(
+                runtime=self._runtime,
+                config=self._config,
+                chat_repo=self._chat_repo,  # type: ignore[arg-type]
+                mcp_token_store=self._mcp_token_store,  # type: ignore[arg-type]
+            )
+        )
+        self._mcp_token_store = None
+        self._chat_repo = None
 
     # ── Internal helpers ────────────────────────────────────
 
@@ -666,54 +553,128 @@ class OrchidClient:
                 out.append(AIMessage(content=row.content, id=row.id))
         return out
 
-    def _build_initial_state(
+    async def _prepare_invocation(
         self,
         *,
-        auth_ctx: AuthContext,
-        chat_id: str,
         message: str,
-        history: list[BaseMessage],
-    ) -> dict[str, Any]:
-        """Compose the state dict handed to ``graph.ainvoke`` / ``astream``."""
-        messages: list[BaseMessage] = [*history, HumanMessage(content=message)]
-        state: dict[str, Any] = {
-            "messages": messages,
-            "auth_context": auth_ctx,
-            "chat_id": chat_id,
-        }
-        return state
+        chat_id: str | None,
+        user_id: str,
+        tenant_id: str,
+        access_token: str,
+        auth: AuthContext | None,
+        history: list[BaseMessage] | None,
+        persist: bool,
+    ) -> _PreparedInvocation:
+        """Assemble everything ``graph.ainvoke`` / ``astream`` need.
 
+        Shared by :meth:`invoke` and :meth:`stream`.  Handles the four
+        prelude concerns in one place:
 
-# ── Module-level helpers ───────────────────────────────────────
+          1. Build (or accept) the :class:`AuthContext`.
+          2. Resolve the ``chat_id`` — when ``persist=True`` and no id
+             is supplied, a new row is created in ``chat_repo`` so its
+             backend-assigned id stays in sync with storage.  Otherwise
+             a fresh UUID is generated locally (no DB write).
+          3. Resolve conversation history (explicit arg, chat_repo, or
+             none — skipped when a checkpointer owns state).
+          4. Build the initial ``GraphState`` dict and ``thread_id`` config.
+        """
+        auth_ctx = auth or AuthContext(
+            access_token=access_token,
+            tenant_key=tenant_id,
+            user_id=user_id,
+        )
 
-
-def _interrupt_to_result(exc: GraphInterrupt, chat_id: str) -> InvokeResult:
-    """Convert a ``GraphInterrupt`` into an :class:`InvokeResult`."""
-    interrupts = exc.args[0] if exc.args else []
-    approvals: list[PendingApproval] = []
-    for i in interrupts:
-        val = getattr(i, "value", None)
-        if isinstance(val, dict):
-            approvals.append(
-                PendingApproval(
-                    tool=val.get("tool", ""),
-                    args=val.get("args", {}),
-                    agent=val.get("agent", ""),
-                    interrupt_id=str(getattr(i, "id", "")),
-                )
+        if chat_id is None and persist and self._chat_repo is not None:
+            # Let the backend assign the id so it stays in sync with storage.
+            new_chat = await self._chat_repo.create_chat(
+                tenant_id=auth_ctx.tenant_key,
+                user_id=auth_ctx.user_id,
+                title=message[:50],
             )
+            effective_chat_id = new_chat.id
         else:
-            approvals.append(
-                PendingApproval(
-                    tool=str(val) if val is not None else "",
-                    args={},
-                    agent="",
-                    interrupt_id=str(getattr(i, "id", "")),
+            effective_chat_id = chat_id or str(uuid.uuid4())
+
+        resolved_history = await self._resolve_history(effective_chat_id, history)
+
+        new_user_msg = HumanMessage(content=message)
+        state: dict[str, Any] = {
+            "messages": [*resolved_history, new_user_msg],
+            "auth_context": auth_ctx,
+            "chat_id": effective_chat_id,
+        }
+        graph_config = {"configurable": {"thread_id": effective_chat_id}}
+
+        return _PreparedInvocation(
+            auth_ctx=auth_ctx,
+            chat_id=effective_chat_id,
+            state=state,
+            graph_config=graph_config,
+        )
+
+    def _result_from_graph_output(self, result: dict[str, Any], chat_id: str) -> InvokeResult:
+        """Build an :class:`InvokeResult` from the graph's return payload.
+
+        Shared by :meth:`invoke` and :meth:`resume`.
+        """
+        return InvokeResult(
+            response=result.get("final_response", ""),
+            chat_id=chat_id,
+            agents_used=list(result.get("active_agents") or []),
+            messages=list(result.get("messages") or []),
+            mcp_context=dict(result.get("mcp_context") or {}),
+            rag_context=dict(result.get("rag_context") or {}),
+        )
+
+    @staticmethod
+    def _interrupt_to_result(exc: GraphInterrupt, chat_id: str) -> InvokeResult:
+        """Convert a ``GraphInterrupt`` into an :class:`InvokeResult`.
+
+        Kept as a :func:`staticmethod` so tests and subclasses can
+        override the interrupt → result mapping without touching module
+        state.
+        """
+        interrupts = exc.args[0] if exc.args else []
+        approvals: list[PendingApproval] = []
+        for i in interrupts:
+            val = getattr(i, "value", None)
+            if isinstance(val, dict):
+                approvals.append(
+                    PendingApproval(
+                        tool=val.get("tool", ""),
+                        args=val.get("args", {}),
+                        agent=val.get("agent", ""),
+                        interrupt_id=str(getattr(i, "id", "")),
+                    )
                 )
-            )
-    return InvokeResult(
-        response="",
-        chat_id=chat_id,
-        interrupted=True,
-        approvals_needed=approvals,
-    )
+            else:
+                approvals.append(
+                    PendingApproval(
+                        tool=str(val) if val is not None else "",
+                        args={},
+                        agent="",
+                        interrupt_id=str(getattr(i, "id", "")),
+                    )
+                )
+        return InvokeResult(
+            response="",
+            chat_id=chat_id,
+            interrupted=True,
+            approvals_needed=approvals,
+        )
+
+
+@dataclass(frozen=True)
+class _PreparedInvocation:
+    """Return type of :meth:`OrchidClient._prepare_invocation`.
+
+    Keeps the four prelude outputs in a typed bundle so call sites can
+    refer to them by name instead of unpacking a tuple.  Frozen because
+    the prelude is decided once per call and never needs to be mutated.
+    """
+
+    auth_ctx: AuthContext
+    chat_id: str
+    state: dict[str, Any]
+    graph_config: dict[str, Any]
