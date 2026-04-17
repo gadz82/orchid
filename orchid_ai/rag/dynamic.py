@@ -7,7 +7,7 @@ indexes the results into the vector store so that:
   2. The static knowledge base is progressively enriched with live data.
   3. The Supervisor's synthesis step can find richer RAG context.
 
-The ``inject_to_rag`` function is safe to call even when the reader
+The ``inject_to_rag`` function is safe to call even when the store
 is a ``NullVectorReader`` — it simply no-ops.
 """
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 async def inject_to_rag(
-    reader: VectorReader,
+    store: VectorReader | VectorWriter,
     *,
     mcp_data: dict[str, Any],
     namespace: str,
@@ -38,14 +38,13 @@ async def inject_to_rag(
 
     Parameters
     ----------
-    reader : VectorReader
-        The reader injected into the agent.  If it also implements
-        ``VectorWriter`` (e.g. ``QdrantRepository``), data is written.
-        Otherwise this is a no-op.
+    store : VectorReader | VectorWriter
+        The vector store backend.  Writing only happens when the store
+        implements ``VectorWriter``; otherwise this is a safe no-op.
     mcp_data : dict
         Raw tool results (e.g. ``{"courses": "...", "enrollments": "..."}``).
     namespace : str
-        Qdrant collection name (e.g. ``"learning"``, ``"notifications"``).
+        Collection name (e.g. ``"learning"``, ``"notifications"``).
     scope : RAGScope
         Hierarchical scope — determines where the data lands.
     source_tool : str
@@ -54,11 +53,11 @@ async def inject_to_rag(
     Returns
     -------
     int
-        Number of documents indexed (0 if reader doesn't support writing).
+        Number of documents indexed (0 if store doesn't support writing).
     """
-    if not isinstance(reader, VectorWriter):
+    if not isinstance(store, VectorWriter):
         logger.debug(
-            "[DynamicRAG] Reader does not support writing — skipping injection for '%s'",
+            "[DynamicRAG] Store does not support writing — skipping injection for '%s'",
             namespace,
         )
         return 0
@@ -71,7 +70,7 @@ async def inject_to_rag(
         return 0
 
     try:
-        await reader.upsert(documents, namespace)
+        await store.upsert(documents, namespace)
         logger.info(
             "[DynamicRAG] Injected %d docs into '%s' (tenant=%s, chat=%s, tool=%s)",
             len(documents),
@@ -125,7 +124,7 @@ def _tool_data_to_documents(
         docs.append(
             Document(
                 id=doc_id,
-                content=text,
+                page_content=text,
                 metadata={
                     "tenant_id": scope.tenant_id,
                     "user_id": scope.user_id,

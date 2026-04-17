@@ -97,7 +97,7 @@ class TestToolDataToDocuments:
         data = {"error": "bad", "good": "data"}
         docs = _tool_data_to_documents(data, scope, source_tool="test")
         assert len(docs) == 1
-        assert docs[0].content == "data"
+        assert docs[0].page_content == "data"
 
     def test_deterministic_ids(self, scope):
         data = {"key": "value"}
@@ -123,10 +123,10 @@ class TestToolDataToDocuments:
         long_text = "x" * 3000
         data = {"big": long_text}
         docs = _tool_data_to_documents(data, scope, source_tool="test")
-        assert len(docs[0].content) < 3000
-        assert docs[0].content.endswith("... [truncated]")
+        assert len(docs[0].page_content) < 3000
+        assert docs[0].page_content.endswith("... [truncated]")
         # Truncated at 2000 chars + the suffix
-        assert docs[0].content[:2000] == "x" * 2000
+        assert docs[0].page_content[:2000] == "x" * 2000
 
     def test_non_string_values_json_serialized(self, scope):
         data = {"nums": [1, 2, 3], "obj": {"nested": True}}
@@ -134,7 +134,7 @@ class TestToolDataToDocuments:
         assert len(docs) == 2
         # Find the document for "nums"
         nums_doc = next(d for d in docs if "nums" in d.id)
-        parsed = json.loads(nums_doc.content)
+        parsed = json.loads(nums_doc.page_content)
         assert parsed == [1, 2, 3]
 
     def test_document_type_is_correct(self, scope):

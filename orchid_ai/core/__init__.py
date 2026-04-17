@@ -19,15 +19,15 @@ from .repository import (
     VectorWriter,
     VectorStoreRepository,
 )
+from .scopes import RAGScope
 from .mcp import MCPClient, MCPDiscoverable, MCPToolCaller, MCPToolResult
-from .llm_provider import LLMProvider
 
 __all__ = [
     "AgentState",
     "AuthContext",
     "BaseAgent",
     "Document",
-    "LLMProvider",
+    "RAGScope",
     "SearchResult",
     "VectorReader",
     "VectorWriter",

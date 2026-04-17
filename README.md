@@ -249,9 +249,11 @@ Orchid uses two configuration files:
 |-------|------|---------|
 | `model` | str | `"gemini/gemini-2.5-flash"` |
 | `temperature` | float | `0.2` |
+| `fallback_model` | str\|null | `null` |
 
 - **`model`** -- The LLM model identifier using LiteLLM's `provider/model-name` format. This is the default model used by all agents unless overridden per-agent. Supported providers include `ollama/llama3.2` (local Ollama), `openai/gpt-4o`, `anthropic/claude-sonnet-4-20250514`, `gemini/gemini-2.5-flash`, `groq/llama-3.3-70b-versatile`, and any model supported by LiteLLM.
 - **`temperature`** -- Controls randomness in LLM responses. `0.0` = fully deterministic (always picks the most likely token), `1.0` = maximum randomness. Lower values (0.1--0.3) are best for factual/tool-calling agents. Higher values (0.7--0.9) suit creative tasks. Default `0.2` favors consistency.
+- **`fallback_model`** -- Optional fallback LLM model. When set, the framework automatically retries with this model if the primary model fails (503, rate limit, timeout). Disabled by default (`null`). When set at `defaults.llm` level, it applies to all agents and the supervisor unless overridden per-agent or per-supervisor. Example: `"ollama/llama3.2"` as fallback for a cloud model.
 
 #### `defaults.rag`
 
@@ -270,6 +272,7 @@ Orchid uses two configuration files:
 | Field | Type | Default |
 |-------|------|---------|
 | `assistant_name` | str | `"AI assistant"` |
+| `fallback_model` | str\|null | `null` |
 | `routing_system_prompt` | str | `null` |
 | `synthesis_system_prompt` | str | `null` |
 | `sequential_advance_prompt` | str | `null` |
@@ -280,6 +283,7 @@ Orchid uses two configuration files:
 | `history_summary_recent_turns` | int | `10` |
 
 - **`assistant_name`** -- The name used in the supervisor's prompts when referring to itself (e.g. "You are the routing brain of **Travel Assistant**"). Appears in synthesized responses. Set this to your product's name.
+- **`fallback_model`** -- Optional fallback LLM for the supervisor specifically. Overrides `defaults.llm.fallback_model` for routing, synthesis, and sequential advance calls. Use when the supervisor needs a different fallback than the agents (e.g. the supervisor uses a fast model with a reliable fallback, while agents use a powerful model with a cheaper fallback).
 - **`routing_system_prompt`** -- Fully custom system prompt for the supervisor's routing step. The routing step analyzes the user's message and decides which agent(s) should handle it by reading each agent's `description`. When `null`, the built-in template from `supervisor.py` is used. Override this to change how agents are selected (e.g. to add domain-specific routing rules or prioritization logic).
 - **`synthesis_system_prompt`** -- Custom system prompt for the synthesis step. After all selected agents return their results, the supervisor synthesizes them into a single coherent response. Override this to control the tone, format, or structure of final responses.
 - **`sequential_advance_prompt`** -- Custom prompt used during orchestrator skill execution. After each step in a multi-agent skill completes, this prompt decides whether to advance to the next step or respond directly. Override this to change how skill steps chain together.

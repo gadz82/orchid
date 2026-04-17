@@ -1,20 +1,12 @@
 """
 Hierarchical RAG scoping — 5-level partition scheme.
 
-Scope hierarchy (most specific → broadest):
-  chat_agent  → only this agent in this chat
-  chat_shared → all agents in this chat
-  user        → all chats for this user
-  tenant      → all users in this tenant
-  __shared__  → all tenants (root common data)
-
-At query time, an agent sees ALL levels it's entitled to
-(its own agent-private data + chat shared + user common + tenant + shared).
+``RAGScope`` lives in ``core/scopes.py`` (zero external deps) and is
+re-exported here for backward compatibility.  The Qdrant-specific
+``build_qdrant_filter()`` stays here because it depends on ``qdrant_client``.
 """
 
 from __future__ import annotations
-
-from dataclasses import dataclass
 
 from qdrant_client.models import (
     FieldCondition,
@@ -22,17 +14,10 @@ from qdrant_client.models import (
     MatchValue,
 )
 
-SHARED_TENANT = "__shared__"
+# Re-export from core for backward compatibility
+from ..core.scopes import SHARED_TENANT, RAGScope
 
-
-@dataclass(frozen=True)
-class RAGScope:
-    """Full position in the RAG hierarchy."""
-
-    tenant_id: str
-    user_id: str = ""
-    chat_id: str = ""
-    agent_id: str = ""
+__all__ = ["SHARED_TENANT", "RAGScope", "build_qdrant_filter"]
 
 
 def build_qdrant_filter(scope: RAGScope) -> Filter:

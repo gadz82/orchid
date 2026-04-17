@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 
 from ..core.repository import VectorReader
-from .embeddings import LiteLLMEmbedder
+from .embeddings import build_embeddings, get_embedding_dimension
 from .null import NullVectorReader
 
 logger = logging.getLogger(__name__)
@@ -39,16 +39,18 @@ def build_reader(
     if vector_backend == "qdrant":
         from .backends.qdrant import QdrantRepository
 
-        embedder = LiteLLMEmbedder(embedding_model)
+        embeddings = build_embeddings(embedding_model)
+        dimension = get_embedding_dimension(embedding_model)
         repo = QdrantRepository(
             url=qdrant_url,
-            embedder=embedder,
+            embeddings=embeddings,
+            embedding_dimension=dimension,
         )
         logger.info(
             "[RAG] Using QdrantRepository (url=%s, model=%s, dim=%d)",
             qdrant_url,
             embedding_model,
-            embedder.dimension,
+            dimension,
         )
         return repo
 

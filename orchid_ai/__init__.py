@@ -10,7 +10,11 @@ from __future__ import annotations
 
 __version__ = "0.0.0"
 
+from .bootstrap import BootstrapResult, build_runtime, teardown_runtime
+from .checkpointing.factory import build_checkpointer, shutdown_checkpointer
+from .client import InvokeResult, OrchidClient, PendingApproval
 from .config.loader import load_config
+from .observability.callbacks import OrchidMetricsHandler
 from .core.agent import BaseAgent
 from .core.guardrails import (
     Guardrail,
@@ -21,7 +25,7 @@ from .core.guardrails import (
     GuardrailResult,
 )
 from .core.identity import IdentityError, IdentityResolver
-from .core.llm_provider import LLMProvider
+from .llm_factory import build_chat_model
 from .core.mcp import (
     MCPAuthRequiredError,
     MCPClient,
@@ -41,17 +45,32 @@ from .core.repository import (
 )
 from .core.state import AgentState, AuthContext
 from .graph.graph import build_graph
+from .graph.supervisor import RoutingDecision
 from .guardrails import build_guardrail_chain, register_guardrail
 from .mcp.auth_registry import MCPAuthRegistry, MCPOAuthServerInfo
+from .mcp.oauth_state import (
+    InMemoryOAuthStateStore,
+    OAuthPendingState,
+    OAuthStateStore,
+    build_oauth_state_store,
+    register_oauth_state_store,
+)
 from .persistence.base import ChatStorage
 from .persistence.factory import build_chat_storage
 from .persistence.mcp_token_factory import build_mcp_token_store
 from .persistence.mcp_token_sqlite import SQLiteMCPTokenStore
 from .persistence.sqlite import SQLiteChatStorage
+from .plugins import iter_entry_point_plugins
 from .rag.factory import build_reader
 from .rag.scopes import RAGScope
 from .runtime import OrchidRuntime
-from .utils import import_class
+
+# ``utils.import_class`` is intentionally NOT re-exported on the top-level
+# ``orchid_ai`` namespace — it's an implementation detail used by the
+# framework's own factories (chat storage, MCP store, checkpointers,
+# identity resolver) and can change without notice.  Integrators who
+# genuinely need dynamic dotted-path resolution should import it
+# explicitly from :mod:`orchid_ai.utils`.
 
 __all__ = [
     # core ABCs
@@ -64,6 +83,12 @@ __all__ = [
     "MCPOAuthServerInfo",
     "MCPTokenRecord",
     "MCPTokenStore",
+    # MCP OAuth state store
+    "InMemoryOAuthStateStore",
+    "OAuthPendingState",
+    "OAuthStateStore",
+    "build_oauth_state_store",
+    "register_oauth_state_store",
     "SQLiteChatStorage",
     "SQLiteMCPTokenStore",
     "Document",
@@ -75,7 +100,14 @@ __all__ = [
     "GuardrailResult",
     "IdentityError",
     "IdentityResolver",
-    "LLMProvider",
+    "InvokeResult",
+    "OrchidClient",
+    "PendingApproval",
+    # bootstrap
+    "BootstrapResult",
+    "build_runtime",
+    "teardown_runtime",
+    "build_chat_model",
     "MCPClient",
     "MCPDiscoverable",
     "MCPToolCaller",
@@ -88,13 +120,19 @@ __all__ = [
     "VectorWriter",
     # runtime
     "OrchidRuntime",
+    # observability
+    "OrchidMetricsHandler",
+    # checkpointing
+    "build_checkpointer",
+    "shutdown_checkpointer",
     # factories
     "build_chat_storage",
     "build_mcp_token_store",
     "build_graph",
+    "RoutingDecision",
     "build_guardrail_chain",
     "build_reader",
-    "import_class",
+    "iter_entry_point_plugins",
     "load_config",
     "register_guardrail",
 ]

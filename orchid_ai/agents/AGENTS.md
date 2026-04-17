@@ -76,34 +76,24 @@ rag_data = await self._fetch_rag_context(...)  # use self.fetch_rag_context()
 - **`conversation_history`** — List of `{"role": ..., "content": ...}` dicts from `extract_conversation_history()`. Injected between system and user messages.
 - **`prior_tool_context`** — Dict from `state["mcp_context"][agent_name]`. Appended to the system prompt so the agent remembers tool results from previous invocations.
 
-### Use `LLMProvider` for summarization
+### Use `BaseChatModel` for LLM calls
 
-For simple LLM completions (summarization, classification), use the inherited `self.summarise()` which routes through the injected `LLMProvider`:
+All LLM access goes through LangChain's `BaseChatModel` (injected as `chat_model=`):
 
 ```python
-# GOOD — uses LLMProvider via BaseAgent
+# GOOD — uses BaseChatModel via BaseAgent.summarise()
 summary = await self.summarise(query, mcp_data, rag_data, system_prompt=MY_PROMPT)
 
-# BAD — direct litellm import for simple completion
-import litellm
-response = await litellm.acompletion(model=model, messages=[...])
+# GOOD — direct ainvoke for custom logic
+result = await self._chat_model.ainvoke(messages)
+
+# GOOD — agentic loop with tool-calling
+model_with_tools = self._chat_model.bind_tools(tool_defs)
+ai_msg = await model_with_tools.ainvoke(messages)
+# ai_msg.tool_calls = [{"name": ..., "args": ..., "id": ...}]
 ```
 
-### Agentic loops: litellm is acceptable
-
-When you need tool_calls from the LLM response (multi-turn agentic loops), use `litellm` directly with a **lazy import inside the method**:
-
-```python
-async def _agentic_loop(self, ...):
-    # Agentic loop requires full response objects (tool_calls),
-    # so we use litellm directly — LLMProvider.complete() only returns str.
-    import litellm
-    from orchid_ai.llm_service import get_llm_kwargs
-    
-    response = await litellm.acompletion(model=model, messages=msgs, tools=tools, **get_llm_kwargs(model))
-```
-
-Never import `litellm` at the module level in consumer agents.
+Do NOT import `litellm` directly in consumer agents. Use the injected `_chat_model` for all LLM calls.
 
 ### GenericAgent internal structure (SRP)
 
@@ -120,4 +110,4 @@ Don't merge these back into `GenericAgent`. If you need to modify skill detectio
 - **Not returning `messages`.** The supervisor expects an `AIMessage` from each agent.
 - **Forgetting `name=self.name` on `AIMessage`.** The supervisor uses this to track responses.
 - **Duplicating `_extract_user_query()` or `_fetch_rag_context()`.** Use the inherited `self.extract_user_query()` and `self.fetch_rag_context()`.
-- **Importing `litellm` at module level for summarization.** Use `self.summarise()` instead.
+- **Importing `litellm` directly.** Use `self._chat_model.ainvoke()` or `self.summarise()` instead.

@@ -22,7 +22,7 @@ import aiosqlite
 
 from .base import ChatStorage
 from .migrations.runner import MigrationRunner
-from .models import ChatMessage, ChatSession
+from .models import ChatMessage, ChatSession, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ class SQLiteChatStorage(ChatStorage):
         user_id: str,
         title: str = "",
     ) -> ChatSession:
-        now = datetime.utcnow()
+        now = utcnow()
         now_iso = now.isoformat()
         chat = ChatSession(
             id=str(uuid.uuid4()),
@@ -145,7 +145,7 @@ class SQLiteChatStorage(ChatStorage):
         await self._conn.commit()
 
     async def update_title(self, chat_id: str, title: str) -> None:
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = utcnow().isoformat()
         await self._conn.execute(
             "UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ?",
             (title, now_iso, chat_id),
@@ -153,7 +153,7 @@ class SQLiteChatStorage(ChatStorage):
         await self._conn.commit()
 
     async def mark_shared(self, chat_id: str) -> None:
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = utcnow().isoformat()
         await self._conn.execute(
             "UPDATE chat_sessions SET is_shared = 1, updated_at = ? WHERE id = ?",
             (now_iso, chat_id),
@@ -170,7 +170,7 @@ class SQLiteChatStorage(ChatStorage):
         agents_used: list[str] | None = None,
         metadata: dict | None = None,
     ) -> ChatMessage:
-        now = datetime.utcnow()
+        now = utcnow()
         now_iso = now.isoformat()
         msg = ChatMessage(
             id=str(uuid.uuid4()),
@@ -224,7 +224,7 @@ def _parse_dt(val: str | datetime) -> datetime:
     try:
         return datetime.fromisoformat(val)
     except (ValueError, TypeError):
-        return datetime.utcnow()
+        return utcnow()
 
 
 def _row_to_session(row: aiosqlite.Row) -> ChatSession:

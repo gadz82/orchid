@@ -5,6 +5,11 @@ VectorReader: agents that only retrieve.
 VectorWriter: indexers that only write.
 VectorStoreRepository: combines both (for components that need full access).
 
+Uses LangChain's ``Document`` as the standard document model:
+
+    from langchain_core.documents import Document
+    doc = Document(page_content="text", metadata={"scope": "tenant"}, id="doc-1")
+
 Architectural rule:
     No agent, tool, or pipeline may import QdrantClient, opensearchpy,
     or any other concrete vector DB client.  All access goes through
@@ -13,22 +18,16 @@ Architectural rule:
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import Any, ClassVar
 
-if TYPE_CHECKING:
-    from ..rag.scopes import RAGScope
+from langchain_core.documents import Document
 
+from .scopes import RAGScope  # noqa: F401 — used in type annotations
 
-@dataclass
-class Document:
-    """A piece of content indexed in the vector store."""
-
-    id: str
-    content: str
-    metadata: dict = field(default_factory=dict)
-    embedding: list[float] | None = None
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -119,6 +118,11 @@ class VectorStoreRepository(VectorReader, VectorWriter, VectorStoreAdmin, ABC):
     capabilities (e.g. the Qdrant backend).
     """
 
+    #: Set to ``True`` in subclasses that implement :meth:`promote_scope`.
+    #: Callers use this to distinguish "promoted 0 points" from
+    #: "backend doesn't support promotion" without introspecting the class.
+    supports_scope_promotion: ClassVar[bool] = False
+
     async def promote_scope(
         self,
         *,
@@ -143,8 +147,11 @@ class VectorStoreRepository(VectorReader, VectorWriter, VectorStoreAdmin, ABC):
         int
             Number of points promoted.
 
-        Subclasses must override.  Default raises ``NotImplementedError``.
+        The base implementation is a no-op returning ``0`` so callers can
+        safely invoke it on any :class:`VectorStoreRepository` (LSP
+        compliance).  Check :attr:`supports_scope_promotion` beforehand
+        when the caller must distinguish "no points matched" from
+        "backend does not support promotion".
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support promote_scope(). Override this method to enable chat sharing."
-        )
+        logger.debug("[%s] promote_scope() not implemented — returning 0", type(self).__name__)
+        return 0

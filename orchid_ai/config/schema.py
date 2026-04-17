@@ -31,10 +31,30 @@ class LLMConfig(BaseModel):
       - ``anthropic/claude-sonnet-4-20250514``  → Anthropic
       - ``ollama/llama3.2``                  → Local Ollama
       - ``openai/gpt-4o``                   → OpenAI
+
+    The optional ``fallback_model`` is tried automatically when the
+    primary model fails (503, rate limit, timeout).  When set at
+    ``defaults.llm`` level, it applies to all agents and the supervisor
+    unless overridden per-agent or per-supervisor.
+
+    Example YAML::
+
+        defaults:
+          llm:
+            model: gemini/gemini-2.5-flash
+            fallback_model: ollama/llama3.2
+
+        agents:
+          critical-agent:
+            llm:
+              model: openai/gpt-4o
+              fallback_model: anthropic/claude-sonnet-4-20250514
     """
 
     model: str = "gemini/gemini-2.5-flash"
     temperature: float = 0.2
+    fallback_model: str | None = None
+    retry_attempts: int = 0  # 0 = disabled; when > 0, transient errors retry with exponential backoff
 
 
 class RAGDefaultsConfig(BaseModel):
@@ -43,14 +63,28 @@ class RAGDefaultsConfig(BaseModel):
     k: int = 5
     enabled: bool = True
     rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
+    reformulate_queries: bool = True  # rewrite queries using conversation history
+    retriever_type: Literal["simple", "multi_query"] = "simple"
 
 
 class RAGConfig(BaseModel):
-    """Per-agent RAG settings."""
+    """Per-agent RAG settings.
+
+    ``retriever_type`` controls the retrieval strategy:
+    - ``simple`` (default) — single vector similarity search per query.
+    - ``multi_query`` — LLM generates query variations for broader
+      recall, then results are merged and deduplicated.
+
+    When ``retriever_type`` is ``None`` (the YAML default), the value
+    is inherited from ``defaults.rag.retriever_type``.  Set it
+    explicitly to override the default.
+    """
 
     namespace: str = ""
     k: int = 5
     enabled: bool = True
+    reformulate_queries: bool = True  # rewrite queries using conversation history
+    retriever_type: Literal["simple", "multi_query"] | None = None  # None = inherit from defaults
     rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
 
 
@@ -61,6 +95,7 @@ class ToolConfig(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
+    requires_approval: bool = False  # pause and ask user before executing (HITL)
 
 
 class MCPAuthConfig(BaseModel):
@@ -188,6 +223,7 @@ class BuiltinToolConfig(BaseModel):
     parameters: dict[str, BuiltinToolParameter] = Field(default_factory=dict)
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
+    requires_approval: bool = False  # pause and ask user before executing (HITL)
 
 
 class AgentSkillStepConfig(BaseModel):
@@ -325,6 +361,8 @@ class SupervisorConfig(BaseModel):
     """
 
     assistant_name: str = "AI assistant"
+    fallback_model: str | None = None  # fallback LLM for supervisor (overrides defaults.llm.fallback_model)
+    streaming_enabled: bool = True  # enable SSE streaming for responses (default: on)
     routing_system_prompt: str | None = None
     synthesis_system_prompt: str | None = None
     sequential_advance_prompt: str | None = None
@@ -383,6 +421,9 @@ class AgentConfig(BaseModel):
     # Only includes tools with inject_to_rag=True AND effective TTL > 0
     injectable_tool_ttls: dict[str, int] = Field(default_factory=dict, exclude=True)
 
+    # Computed at validation — tool names that require human approval (HITL)
+    approval_tools: set[str] = Field(default_factory=set, exclude=True)
+
     model_config = {"populate_by_name": True}
 
 
@@ -390,10 +431,24 @@ class AgentConfig(BaseModel):
 
 
 class DefaultsConfig(BaseModel):
-    """Top-level defaults inherited by every agent."""
+    """Top-level defaults inherited by every agent.
+
+    ``cache_enabled`` activates a global in-memory LLM response cache
+    via LangChain's ``set_llm_cache(InMemoryCache())``.  Identical
+    prompts return cached results, reducing latency and cost.  Cache
+    lives for the process lifetime (reset on restart).
+
+    Example YAML::
+
+        defaults:
+          cache_enabled: true
+          llm:
+            model: gemini/gemini-2.5-flash
+    """
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     rag: RAGDefaultsConfig = Field(default_factory=RAGDefaultsConfig)
+    cache_enabled: bool = False
 
 
 # ── Root config ──────────────────────────────────────────────
@@ -453,6 +508,10 @@ def _apply_defaults(
         agent.rag.enabled = defaults.rag.enabled
     if agent.rag.rag_ttl == 0 and defaults.rag.rag_ttl != 0:
         agent.rag.rag_ttl = defaults.rag.rag_ttl
+    if not defaults.rag.reformulate_queries:
+        agent.rag.reformulate_queries = False
+    if agent.rag.retriever_type is None:
+        agent.rag.retriever_type = defaults.rag.retriever_type
 
     # Collect injectable MCP tool names + TTLs
     agent_ttl = agent.rag.rag_ttl
@@ -474,6 +533,17 @@ def _apply_defaults(
                 effective_ttl = tool_cfg.rag_ttl if tool_cfg.rag_ttl is not None else agent_ttl
                 if effective_ttl > 0:
                     agent.injectable_tool_ttls[key] = effective_ttl
+
+    # Collect tools requiring human approval (HITL)
+    for server in agent.mcp_servers:
+        for tool in server.tools:
+            if isinstance(tool, ToolConfig) and tool.requires_approval:
+                agent.approval_tools.add(tool.name)
+    if global_tools:
+        for tool_name in agent.tools:
+            tool_cfg = global_tools.get(tool_name)
+            if tool_cfg and tool_cfg.requires_approval:
+                agent.approval_tools.add(tool_name)
 
     # Recurse into children
     if agent.children:
