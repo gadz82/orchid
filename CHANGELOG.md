@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.1 (2026-04-20)
+
+### Bug Fixes
+
+- **persistence**: Enable integrator-defined migrations support
+  ([`886498f`](https://github.com/gadz82/orchid/commit/886498f688fffe5cc6fb4fbef97803e264219299))
+
+
 ## v1.3.0 (2026-04-17)
 
 ### Bug Fixes
