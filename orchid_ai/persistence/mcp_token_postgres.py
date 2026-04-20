@@ -2,8 +2,9 @@
 PostgreSQL MCP token storage — MCPTokenStore implementation using asyncpg.
 
 Shares the same database and migration system as ``PostgresChatStorage``.
-The ``mcp_oauth_tokens`` table is created by ``v002_mcp_tokens_schema``
-in the shared ``orchid_ai.persistence.migrations`` package.
+The ``mcp_oauth_tokens`` table is created by the unified
+``v001_initial_schema`` in the shared ``orchid_ai.persistence.migrations``
+package.
 
 Optional dependency — install via ``pip install orchid-ai[postgres]``.
 
@@ -28,13 +29,18 @@ class PostgresMCPTokenStore(MCPTokenStore):
     """Async PostgreSQL storage for per-server OAuth tokens.
 
     Uses connection pooling via asyncpg (min_size=2, max_size=10).
-    Constructor accepts a single ``dsn`` keyword argument.
+    Constructor accepts the connection string via ``dsn`` and an optional
+    ``extra_migrations_package`` (dotted import path) so integrators can
+    append their own migrations after the framework's — see
+    :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
     """
 
-    def __init__(self, *, dsn: str):
+    def __init__(self, *, dsn: str, extra_migrations_package: str | None = None):
         self._dsn = dsn
         self._pool: Any = None
-        self._migrator = PostgresMigrationRunner()
+        self._migrator = PostgresMigrationRunner(
+            extra_migrations_package=extra_migrations_package,
+        )
 
     # ── Lifecycle ────────────────────────────────────────────
 

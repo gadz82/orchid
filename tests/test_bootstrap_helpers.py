@@ -30,6 +30,7 @@ def clean_env(monkeypatch):
         "EMBEDDING_MODEL",
         "CHAT_STORAGE_CLASS",
         "CHAT_DB_DSN",
+        "CHAT_EXTRA_MIGRATIONS_PACKAGE",
         "MCP_TOKEN_STORE_CLASS",
         "MCP_TOKEN_STORE_DSN",
         "CHECKPOINTER_TYPE",
@@ -50,6 +51,7 @@ class TestResolveOverrides:
             embedding_model="",
             chat_storage_class="",
             chat_db_dsn="",
+            chat_extra_migrations_package=None,
             mcp_token_store_class="",
             mcp_token_store_dsn="",
             checkpointer_type="",
@@ -69,6 +71,7 @@ class TestResolveOverrides:
             embedding_model="",
             chat_storage_class="",
             chat_db_dsn="",
+            chat_extra_migrations_package=None,
             mcp_token_store_class="",
             mcp_token_store_dsn="",
             checkpointer_type="",
@@ -87,6 +90,7 @@ class TestResolveOverrides:
             embedding_model="",
             chat_storage_class="",
             chat_db_dsn="",
+            chat_extra_migrations_package=None,
             mcp_token_store_class="",
             mcp_token_store_dsn="",
             checkpointer_type="",
@@ -98,6 +102,65 @@ class TestResolveOverrides:
         assert ov.storage_dsn == "~/.orchid/chats.db"
         assert ov.token_store_dsn == ov.storage_dsn  # same-file default
 
+    def test_extra_migrations_arg_wins_over_env(self, clean_env, monkeypatch):
+        monkeypatch.setenv("CHAT_EXTRA_MIGRATIONS_PACKAGE", "from.env.pkg")
+        ov = _resolve_overrides(
+            agents_config_path="",
+            model="",
+            vector_backend="",
+            qdrant_url="",
+            embedding_model="",
+            chat_storage_class="",
+            chat_db_dsn="",
+            chat_extra_migrations_package="from.arg.pkg",
+            mcp_token_store_class="",
+            mcp_token_store_dsn="",
+            checkpointer_type="",
+            checkpointer_dsn="",
+            startup_hook="",
+            runtime_overrides=None,
+        )
+        assert ov.extra_migrations_package == "from.arg.pkg"
+
+    def test_extra_migrations_env_fallback(self, clean_env, monkeypatch):
+        monkeypatch.setenv("CHAT_EXTRA_MIGRATIONS_PACKAGE", "from.env.pkg")
+        ov = _resolve_overrides(
+            agents_config_path="",
+            model="",
+            vector_backend="",
+            qdrant_url="",
+            embedding_model="",
+            chat_storage_class="",
+            chat_db_dsn="",
+            chat_extra_migrations_package=None,
+            mcp_token_store_class="",
+            mcp_token_store_dsn="",
+            checkpointer_type="",
+            checkpointer_dsn="",
+            startup_hook="",
+            runtime_overrides=None,
+        )
+        assert ov.extra_migrations_package == "from.env.pkg"
+
+    def test_extra_migrations_defaults_to_none(self, clean_env):
+        ov = _resolve_overrides(
+            agents_config_path="",
+            model="",
+            vector_backend="",
+            qdrant_url="",
+            embedding_model="",
+            chat_storage_class="",
+            chat_db_dsn="",
+            chat_extra_migrations_package=None,
+            mcp_token_store_class="",
+            mcp_token_store_dsn="",
+            checkpointer_type="",
+            checkpointer_dsn="",
+            startup_hook="",
+            runtime_overrides=None,
+        )
+        assert ov.extra_migrations_package is None
+
     def test_runtime_overrides_is_copied(self, clean_env):
         original = {"reader": "foo"}
         ov = _resolve_overrides(
@@ -108,6 +171,7 @@ class TestResolveOverrides:
             embedding_model="",
             chat_storage_class="",
             chat_db_dsn="",
+            chat_extra_migrations_package=None,
             mcp_token_store_class="",
             mcp_token_store_dsn="",
             checkpointer_type="",
@@ -131,6 +195,7 @@ class TestPrepareReader:
             embedding_model="",
             chat_storage_class="",
             chat_db_dsn="",
+            chat_extra_migrations_package=None,
             mcp_token_store_class="",
             mcp_token_store_dsn="",
             checkpointer_type="",
@@ -155,6 +220,7 @@ class TestPrepareReader:
             embedding_model="",
             chat_storage_class="",
             chat_db_dsn="",
+            chat_extra_migrations_package=None,
             mcp_token_store_class="",
             mcp_token_store_dsn="",
             checkpointer_type="",

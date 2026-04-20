@@ -25,6 +25,11 @@ from typing import Any, Callable, Coroutine
 
 logger = logging.getLogger(__name__)
 
+# Version prefix for integrator-supplied migrations. Records land in the
+# same ``_migrations`` table as framework migrations; the prefix keeps the
+# primary key unique when a consumer starts their own numbering at "001".
+EXTRA_NAMESPACE_PREFIX = "ext:"
+
 
 @dataclass
 class Migration:
@@ -83,10 +88,20 @@ class MigrationRunner:
     ``dialect`` and ``migrations_package`` so that migration SQL is
     generated for the correct database engine and discovered from
     the correct location.
+
+    Integrators may also supply ``extra_migrations_package`` (dotted
+    import path) via the constructor.  Migrations in that package run
+    AFTER framework migrations and are recorded in the same tracking
+    table with an ``"ext:"`` prefix (see :data:`EXTRA_NAMESPACE_PREFIX`)
+    so their version numbers can overlap the framework's without
+    colliding on the primary key.
     """
 
     dialect: str = "postgres"
     migrations_package: str | None = None  # dotted path — set by subclass
+
+    def __init__(self, *, extra_migrations_package: str | None = None) -> None:
+        self.extra_migrations_package = extra_migrations_package
 
     async def ensure_migrations_table(self, conn: Any) -> None:
         """Create the _migrations tracking table if it doesn't exist."""
@@ -104,20 +119,51 @@ class MigrationRunner:
         """Remove a migration record (on rollback)."""
         raise NotImplementedError
 
-    async def run_up(self, conn: Any) -> list[str]:
-        """Apply all pending migrations. Returns list of applied versions."""
-        await self.ensure_migrations_table(conn)
-        applied = await self.get_applied_versions(conn)
-        all_migrations = discover_migrations(self.migrations_package)
+    async def _apply_pass(
+        self,
+        conn: Any,
+        applied: set[str],
+        package: str | None,
+        *,
+        namespace: str = "",
+    ) -> list[str]:
+        """Apply all pending migrations from ``package``, prefixing their
+        recorded version with ``namespace``.  Returns the list of
+        recorded keys (namespace-prefixed)."""
+        if package is None:
+            return []
 
         newly_applied: list[str] = []
-        for m in all_migrations:
-            if m.version in applied:
+        for m in discover_migrations(package):
+            key = f"{namespace}{m.version}"
+            if key in applied:
                 continue
-            logger.info("[Migration] Applying v%s — %s", m.version, m.description)
+            logger.info("[Migration] Applying %s — %s", key, m.description)
             await m.up(conn, dialect=self.dialect)
-            await self.record_version(conn, m.version, m.description)
-            newly_applied.append(m.version)
+            await self.record_version(conn, key, m.description)
+            newly_applied.append(key)
+        return newly_applied
+
+    async def run_up(self, conn: Any) -> list[str]:
+        """Apply all pending migrations. Returns list of applied versions.
+
+        Framework migrations run first (bare version keys); integrator
+        migrations run second (``ext:`` prefixed keys) when an
+        ``extra_migrations_package`` is configured.
+        """
+        await self.ensure_migrations_table(conn)
+        applied = await self.get_applied_versions(conn)
+
+        newly_applied: list[str] = []
+        newly_applied.extend(await self._apply_pass(conn, applied, self.migrations_package))
+        newly_applied.extend(
+            await self._apply_pass(
+                conn,
+                applied,
+                self.extra_migrations_package,
+                namespace=EXTRA_NAMESPACE_PREFIX,
+            )
+        )
 
         if newly_applied:
             logger.info("[Migration] Applied %d migration(s): %s", len(newly_applied), newly_applied)
@@ -125,23 +171,56 @@ class MigrationRunner:
             logger.info("[Migration] Database is up to date")
         return newly_applied
 
+    async def _rollback_pass(
+        self,
+        conn: Any,
+        applied: set[str],
+        package: str | None,
+        target_version: str,
+        *,
+        namespace: str = "",
+    ) -> list[str]:
+        """Roll back migrations from ``package`` down to (but not
+        including) ``target_version``.  Versions are compared in the
+        namespaced form so ``ext:`` keys sort independently of framework
+        keys."""
+        if package is None:
+            return []
+
+        rolled_back: list[str] = []
+        migrations = discover_migrations(package)
+        for m in reversed(migrations):
+            key = f"{namespace}{m.version}"
+            if key not in applied or key <= target_version:
+                continue
+            logger.info("[Migration] Rolling back %s — %s", key, m.description)
+            await m.down(conn, dialect=self.dialect)
+            await self.remove_version(conn, key)
+            rolled_back.append(key)
+        return rolled_back
+
     async def run_down(self, conn: Any, target_version: str = "") -> list[str]:
-        """
-        Roll back migrations down to (but not including) target_version.
-        If target_version is empty, rolls back ALL migrations.
+        """Roll back migrations down to (but not including)
+        ``target_version``.  If ``target_version`` is empty, rolls back
+        ALL migrations.
+
+        Integrator migrations are rolled back first (reverse dependency
+        order), then framework migrations.
         """
         await self.ensure_migrations_table(conn)
         applied = await self.get_applied_versions(conn)
-        all_migrations = discover_migrations(self.migrations_package)
-
-        to_rollback = [m for m in reversed(all_migrations) if m.version in applied and m.version > target_version]
 
         rolled_back: list[str] = []
-        for m in to_rollback:
-            logger.info("[Migration] Rolling back v%s — %s", m.version, m.description)
-            await m.down(conn, dialect=self.dialect)
-            await self.remove_version(conn, m.version)
-            rolled_back.append(m.version)
+        rolled_back.extend(
+            await self._rollback_pass(
+                conn,
+                applied,
+                self.extra_migrations_package,
+                target_version,
+                namespace=EXTRA_NAMESPACE_PREFIX,
+            )
+        )
+        rolled_back.extend(await self._rollback_pass(conn, applied, self.migrations_package, target_version))
 
         if rolled_back:
             logger.info("[Migration] Rolled back %d migration(s): %s", len(rolled_back), rolled_back)

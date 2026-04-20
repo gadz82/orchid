@@ -48,6 +48,7 @@ YAML_TO_ENV: dict[tuple[str, str], str] = {
     # ── storage ───────────────────────────────────────────────
     ("storage", "class"): "CHAT_STORAGE_CLASS",
     ("storage", "dsn"): "CHAT_DB_DSN",
+    ("storage", "extra_migrations_package"): "CHAT_EXTRA_MIGRATIONS_PACKAGE",
     # ── mcp ───────────────────────────────────────────────────
     ("mcp", "catalog_url"): "MCP_CATALOG_URL",
     ("mcp", "notifications_url"): "MCP_NOTIFICATIONS_URL",

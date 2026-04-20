@@ -2,8 +2,9 @@
 SQLite MCP token storage — built-in lightweight MCPTokenStore implementation.
 
 Shares the same database and migration system as ``SQLiteChatStorage``.
-The ``mcp_oauth_tokens`` table is created by ``v002_mcp_tokens_schema``
-in the shared ``orchid_ai.persistence.migrations`` package.
+The ``mcp_oauth_tokens`` table is created by the unified
+``v001_initial_schema`` in the shared ``orchid_ai.persistence.migrations``
+package.
 
 Configuration:
     MCP_TOKEN_STORE_CLASS=orchid_ai.persistence.mcp_token_sqlite.SQLiteMCPTokenStore
@@ -27,14 +28,20 @@ logger = logging.getLogger(__name__)
 class SQLiteMCPTokenStore(MCPTokenStore):
     """Async SQLite storage for per-server OAuth tokens.
 
-    Constructor accepts a single ``dsn`` keyword argument (the file path).
+    Constructor accepts the file path via ``dsn`` and an optional
+    ``extra_migrations_package`` (dotted import path) so integrators
+    can append their own migrations after the framework's — see
+    :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
+
     Use ``:memory:`` for in-memory databases (tests).
     """
 
-    def __init__(self, *, dsn: str):
+    def __init__(self, *, dsn: str, extra_migrations_package: str | None = None):
         self._db_path = os.path.expanduser(dsn)
         self._conn: aiosqlite.Connection | None = None
-        self._migrator = SQLiteMigrationRunner()
+        self._migrator = SQLiteMigrationRunner(
+            extra_migrations_package=extra_migrations_package,
+        )
 
     # ── Lifecycle ────────────────────────────────────────────
 

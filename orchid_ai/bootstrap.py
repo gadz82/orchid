@@ -94,6 +94,7 @@ class _ResolvedOverrides:
     embedding_model: str
     storage_class: str
     storage_dsn: str
+    extra_migrations_package: str | None
     token_store_class: str
     token_store_dsn: str
     checkpointer_type: str
@@ -113,6 +114,7 @@ async def build_runtime(
     embedding_model: str = "",
     chat_storage_class: str = "",
     chat_db_dsn: str = "",
+    chat_extra_migrations_package: str | None = None,
     mcp_token_store_class: str = "",
     mcp_token_store_dsn: str = "",
     checkpointer_type: str = "",
@@ -144,6 +146,11 @@ async def build_runtime(
     chat_storage_class, chat_db_dsn : str
         Chat persistence backend.  Defaults to SQLite at
         ``~/.orchid/chats.db``.
+    chat_extra_migrations_package : str | None
+        Optional dotted import path of an integrator-supplied migrations
+        package.  Applied after the framework's migrations by both the
+        chat storage and the MCP token store (they share the DB).  See
+        :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
     mcp_token_store_class, mcp_token_store_dsn : str
         MCP per-server OAuth token store.  DSN defaults to the chat DB
         path (same file).
@@ -179,6 +186,7 @@ async def build_runtime(
         embedding_model=embedding_model,
         chat_storage_class=chat_storage_class,
         chat_db_dsn=chat_db_dsn,
+        chat_extra_migrations_package=chat_extra_migrations_package,
         mcp_token_store_class=mcp_token_store_class,
         mcp_token_store_dsn=mcp_token_store_dsn,
         checkpointer_type=checkpointer_type,
@@ -236,6 +244,7 @@ def _resolve_overrides(
     embedding_model: str,
     chat_storage_class: str,
     chat_db_dsn: str,
+    chat_extra_migrations_package: str | None,
     mcp_token_store_class: str,
     mcp_token_store_dsn: str,
     checkpointer_type: str,
@@ -245,6 +254,7 @@ def _resolve_overrides(
 ) -> _ResolvedOverrides:
     """Apply ``arg → env → default`` precedence and return a typed bundle."""
     storage_dsn = chat_db_dsn or os.environ.get("CHAT_DB_DSN", "") or _DEFAULT_STORAGE_DSN
+    extra_pkg = chat_extra_migrations_package or os.environ.get("CHAT_EXTRA_MIGRATIONS_PACKAGE", "") or None
     return _ResolvedOverrides(
         agents_config_path=agents_config_path or os.environ.get("AGENTS_CONFIG_PATH", "agents.yaml"),
         model=model or os.environ.get("LITELLM_MODEL", _DEFAULT_MODEL),
@@ -253,6 +263,7 @@ def _resolve_overrides(
         embedding_model=embedding_model or os.environ.get("EMBEDDING_MODEL", _DEFAULT_EMBEDDING_MODEL),
         storage_class=(chat_storage_class or os.environ.get("CHAT_STORAGE_CLASS", "") or _DEFAULT_STORAGE_CLASS),
         storage_dsn=storage_dsn,
+        extra_migrations_package=extra_pkg,
         token_store_class=(
             mcp_token_store_class or os.environ.get("MCP_TOKEN_STORE_CLASS", "") or _DEFAULT_TOKEN_STORE_CLASS
         ),
@@ -300,13 +311,22 @@ async def _prepare_reader(
 async def _build_persistence(
     overrides: _ResolvedOverrides,
 ) -> tuple[ChatStorage, MCPTokenStore]:
-    """Initialise chat storage and MCP token store (idempotent ``init_db``)."""
-    chat_repo = build_chat_storage(class_path=overrides.storage_class, dsn=overrides.storage_dsn)
+    """Initialise chat storage and MCP token store (idempotent ``init_db``).
+
+    Both stores share the integrator ``extra_migrations_package`` (they
+    share the underlying DB), so a single YAML entry covers both.
+    """
+    chat_repo = build_chat_storage(
+        class_path=overrides.storage_class,
+        dsn=overrides.storage_dsn,
+        extra_migrations_package=overrides.extra_migrations_package,
+    )
     await chat_repo.init_db()
 
     mcp_token_store = build_mcp_token_store(
         class_path=overrides.token_store_class,
         dsn=overrides.token_store_dsn,
+        extra_migrations_package=overrides.extra_migrations_package,
     )
     await mcp_token_store.init_db()
     return chat_repo, mcp_token_store
