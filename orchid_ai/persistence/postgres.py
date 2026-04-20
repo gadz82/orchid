@@ -62,13 +62,19 @@ class PostgresChatStorage(ChatStorage):
     """
     Async PostgreSQL storage for chat sessions and messages.
 
-    Constructor accepts a single ``dsn`` keyword argument.
+    Constructor accepts the connection string via ``dsn`` and an
+    optional ``extra_migrations_package`` (dotted import path) so
+    integrators can append their own migrations after the framework's
+    — see
+    :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
     """
 
-    def __init__(self, *, dsn: str):
+    def __init__(self, *, dsn: str, extra_migrations_package: str | None = None):
         self._dsn = dsn
         self._pool: asyncpg.Pool | None = None
-        self._migrator = PostgresMigrationRunner()
+        self._migrator = PostgresMigrationRunner(
+            extra_migrations_package=extra_migrations_package,
+        )
 
     # ── Lifecycle ────────────────────────────────────────────
 

@@ -1,16 +1,18 @@
 """
-Migration v001 — Initial chat persistence schema.
+Migration v001 — Initial persistence schema (chat + MCP OAuth tokens).
 
 Creates:
   - chat_sessions table
   - chat_messages table (with FK cascade to sessions)
-  - Indices for user listing and message ordering
+  - mcp_oauth_tokens table (per-server OAuth tokens, same DB)
+  - Supporting indices for user listing, message ordering, and token lookup
 
-Dialect-aware: uses TIMESTAMPTZ/JSONB on PostgreSQL, TEXT on SQLite.
+Dialect-aware: uses TIMESTAMPTZ/JSONB/DOUBLE PRECISION on PostgreSQL,
+TEXT/REAL on SQLite.
 """
 
 VERSION = "001"
-DESCRIPTION = "Initial chat sessions and messages schema"
+DESCRIPTION = "Initial schema: chat sessions, messages, and MCP OAuth tokens"
 
 # ── PostgreSQL DDL ──────────────────────────────────────────
 
@@ -44,6 +46,24 @@ _PG_UP = [
     """
     CREATE INDEX IF NOT EXISTS idx_messages_chat
         ON chat_messages (chat_id, created_at ASC)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS mcp_oauth_tokens (
+        server_name  TEXT NOT NULL,
+        tenant_id    TEXT NOT NULL,
+        user_id      TEXT NOT NULL,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL DEFAULT '',
+        expires_at   DOUBLE PRECISION NOT NULL DEFAULT 0,
+        scopes       TEXT NOT NULL DEFAULT '',
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (server_name, tenant_id, user_id)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user
+        ON mcp_oauth_tokens (tenant_id, user_id)
     """,
 ]
 
@@ -80,9 +100,28 @@ _SQLITE_UP = [
     CREATE INDEX IF NOT EXISTS idx_messages_chat
         ON chat_messages (chat_id, created_at ASC)
     """,
+    """
+    CREATE TABLE IF NOT EXISTS mcp_oauth_tokens (
+        server_name  TEXT NOT NULL,
+        tenant_id    TEXT NOT NULL,
+        user_id      TEXT NOT NULL,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL DEFAULT '',
+        expires_at   REAL NOT NULL DEFAULT 0,
+        scopes       TEXT NOT NULL DEFAULT '',
+        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (server_name, tenant_id, user_id)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user
+        ON mcp_oauth_tokens (tenant_id, user_id)
+    """,
 ]
 
 _DOWN = [
+    "DROP TABLE IF EXISTS mcp_oauth_tokens",
     "DROP TABLE IF EXISTS chat_messages",
     "DROP TABLE IF EXISTS chat_sessions",
 ]

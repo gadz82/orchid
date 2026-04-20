@@ -15,7 +15,8 @@ orchid/persistence/                   ← LIBRARY (framework + built-in backends
   models.py                             ChatSession, ChatMessage — pure dataclasses
   migrations/
     runner.py                           MigrationRunner base + discover_migrations(package)
-    v001_initial_schema.py              Dialect-aware schema (PG + SQLite)
+    v001_initial_schema.py              Dialect-aware schema for chat_sessions,
+                                        chat_messages, and mcp_oauth_tokens (PG + SQLite)
 
 ```
 
@@ -66,8 +67,27 @@ class ChatStorage(ABC):
 2. Subclass `ChatStorage` from `orchid.persistence.base`
 3. Subclass `MigrationRunner` from `orchid.persistence.migrations.runner` — set `dialect` and `migrations_package`
 4. Create migration modules in your migrations package
-5. The constructor must accept `*, dsn: str`
+5. The constructor must accept `*, dsn: str, extra_migrations_package: str | None = None` and forward the extras kwarg to the migrator
 6. Set `CHAT_STORAGE_CLASS=my_project.storage.mysql.MySQLChatStorage`
+
+**Integrator migrations (recommended path for most consumers).** If you
+only need extra tables/indices on top of the built-in PostgreSQL or
+SQLite backend, don't subclass anything — point `storage.class` at the
+framework backend and set `storage.extra_migrations_package` to the
+dotted path of your migrations package:
+
+```yaml
+storage:
+  class: orchid_ai.persistence.postgres.PostgresChatStorage
+  dsn: postgresql://...
+  extra_migrations_package: myapp.migrations
+```
+
+Framework migrations run first (recorded as `"001"`, `"002"`, …).
+Integrator migrations run second, recorded with an `"ext:"` prefix
+(`"ext:001"`, `"ext:002"`, …) — your file can start at `VERSION = "001"`
+without colliding. The MCP OAuth token store reuses the same extras
+package automatically (it shares the DB).
 
 ## Migration System
 
@@ -76,15 +96,27 @@ class ChatStorage(ABC):
 ```python
 class MigrationRunner:
     dialect: str = "postgres"          # subclass sets this
-    migrations_package: str | None     # dotted path to migrations package
+    migrations_package: str | None     # framework package (subclass default)
+    extra_migrations_package: str | None  # integrator (passed at construction)
 
     async def ensure_migrations_table(conn)
     async def get_applied_versions(conn) → set
     async def record_version(conn, version, description)
     async def remove_version(conn, version)
-    async def run_up(conn)
-    async def run_down(conn, target_version)
+    async def run_up(conn)              # framework pass, then integrator pass
+    async def run_down(conn, target_version)  # integrator first, then framework
 ```
+
+The runner applies migrations in **two passes**:
+
+1. Framework migrations from `self.migrations_package`, recorded with
+   bare version keys (`"001"`, `"002"`, …).
+2. Integrator migrations from `self.extra_migrations_package` (if set),
+   recorded with the `"ext:"` prefix from
+   `orchid_ai.persistence.migrations.runner.EXTRA_NAMESPACE_PREFIX`.
+
+Rollback runs in reverse order (integrator first) to preserve
+dependency direction.
 
 ### discover_migrations(package)
 

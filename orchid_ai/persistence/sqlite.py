@@ -66,16 +66,21 @@ class SQLiteChatStorage(ChatStorage):
     """
     Async SQLite storage for chat sessions and messages.
 
-    Constructor accepts a single ``dsn`` keyword argument (the file path).
-    Use ``:memory:`` for in-memory databases (tests).
+    Constructor accepts the file path via ``dsn`` and an optional
+    ``extra_migrations_package`` (dotted import path) so integrators
+    can append their own migrations after the framework's — see
+    :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
 
-    The default path ``~/.orchid/chats.db`` is resolved at init time.
+    Use ``:memory:`` for in-memory databases (tests).  The default path
+    ``~/.orchid/chats.db`` is resolved at init time.
     """
 
-    def __init__(self, *, dsn: str):
+    def __init__(self, *, dsn: str, extra_migrations_package: str | None = None):
         self._db_path = os.path.expanduser(dsn)
         self._conn: aiosqlite.Connection | None = None
-        self._migrator = SQLiteMigrationRunner()
+        self._migrator = SQLiteMigrationRunner(
+            extra_migrations_package=extra_migrations_package,
+        )
 
     # ── Lifecycle ────────────────────────────────────────────
 

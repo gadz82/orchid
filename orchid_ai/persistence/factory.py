@@ -24,7 +24,12 @@ from .base import ChatStorage
 logger = logging.getLogger(__name__)
 
 
-def build_chat_storage(class_path: str, dsn: str) -> ChatStorage:
+def build_chat_storage(
+    class_path: str,
+    dsn: str,
+    *,
+    extra_migrations_package: str | None = None,
+) -> ChatStorage:
     """
     Dynamically import and instantiate a ChatStorage backend.
 
@@ -36,6 +41,11 @@ def build_chat_storage(class_path: str, dsn: str) -> ChatStorage:
     dsn : str
         Connection string (PostgreSQL DSN) or file path (SQLite).
         Passed as ``dsn=`` keyword to the constructor.
+    extra_migrations_package : str | None
+        Optional dotted import path of an integrator-supplied migrations
+        package.  When provided, those migrations run after the
+        framework's (see
+        :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`).
 
     Returns
     -------
@@ -55,4 +65,4 @@ def build_chat_storage(class_path: str, dsn: str) -> ChatStorage:
         raise TypeError(f"'{class_path}' resolves to {cls!r}, which is not a ChatStorage subclass.")
 
     logger.info("[ChatStorage] Using %s", class_path)
-    return cls(dsn=dsn)
+    return cls(dsn=dsn, extra_migrations_package=extra_migrations_package)

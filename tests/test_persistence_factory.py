@@ -29,3 +29,21 @@ class TestBuildChatStorage:
         """A class that exists but is NOT a ChatStorage subclass should raise TypeError."""
         with pytest.raises(TypeError, match="not a ChatStorage subclass"):
             build_chat_storage("orchid_ai.persistence.models.ChatSession", dsn="sqlite:///test.db")
+
+    def test_forwards_extra_migrations_package(self):
+        """The factory threads ``extra_migrations_package`` into the concrete backend."""
+        storage = build_chat_storage(
+            "orchid_ai.persistence.sqlite.SQLiteChatStorage",
+            dsn=":memory:",
+            extra_migrations_package="my.integrator.migrations",
+        )
+        # The kwarg lands on the migrator that the storage owns.
+        assert storage._migrator.extra_migrations_package == "my.integrator.migrations"
+
+    def test_defaults_extra_migrations_package_to_none(self):
+        """Callers that omit the kwarg get ``None`` (no extras discovered)."""
+        storage = build_chat_storage(
+            "orchid_ai.persistence.sqlite.SQLiteChatStorage",
+            dsn=":memory:",
+        )
+        assert storage._migrator.extra_migrations_package is None
