@@ -315,6 +315,21 @@ class Orchid:
         """Chat storage backend, or ``None`` when running without persistence."""
         return self._chat_repo
 
+    @property
+    def mcp_token_store(self) -> "OrchidMCPTokenStore | None":
+        """MCP per-server OAuth token store, or ``None``.
+
+        Downstream packages dereference ``orchid.mcp_token_store`` — in
+        particular ``orchid-cli.commands.chat._send_message`` for the
+        pre-flight MCP auth check, and
+        ``orchid-api.context.AppContext.mcp_token_store`` as a
+        read-through property for the ``get_mcp_token_store_optional``
+        FastAPI dependency.  ``_mcp_token_store`` is already stored in
+        :meth:`__init__`; this accessor exposes it through the public
+        facade surface.
+        """
+        return self._mcp_token_store
+
     # ── Core operations ─────────────────────────────────────
 
     async def invoke(

@@ -456,3 +456,20 @@ class TestAccessors:
         assert client.runtime is noop_runtime
         assert client.graph is not None
         assert client.chat_repo is None
+        # ``mcp_token_store`` must also be exposed on the public facade —
+        # both ``orchid-cli`` (pre-flight MCP auth check) and ``orchid-api``
+        # (``get_mcp_token_store_optional`` FastAPI dep) dereference it.
+        assert client.mcp_token_store is None
+
+    @pytest.mark.asyncio
+    async def test_mcp_token_store_accessor_returns_injected_store(self, minimal_config, noop_runtime):
+        """Regression for the 1.3.2 release that shipped without this accessor."""
+        sentinel = object()
+        with patch("orchid_ai.orchid.build_graph") as build:
+            build.return_value = _fake_graph()
+            client = Orchid(
+                config=minimal_config,
+                runtime=noop_runtime,
+                mcp_token_store=sentinel,  # type: ignore[arg-type]
+            )
+        assert client.mcp_token_store is sentinel
