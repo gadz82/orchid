@@ -59,7 +59,7 @@ text = await extract_text(file_bytes=..., filename=..., vision_model=...)
 
 # Step 2: Chunk + embed + store (with pre-extracted text to avoid re-parsing)
 count = await ingest_document(
-    file_bytes=..., filename=..., scope=RAGScope(...),
+    file_bytes=..., filename=..., scope=OrchidRAGScope(...),
     writer=..., pre_extracted_text=text,  # ← reuse!
 )
 ```

@@ -14,10 +14,10 @@ from __future__ import annotations
 import re
 
 from ..core.guardrails import (
-    Guardrail,
-    GuardrailAction,
-    GuardrailContext,
-    GuardrailResult,
+    OrchidGuardrail,
+    OrchidGuardrailAction,
+    OrchidGuardrailContext,
+    OrchidGuardrailResult,
 )
 
 # ── Default blocklist patterns (case-insensitive) ─────────────
@@ -40,7 +40,7 @@ _DEFAULT_PATTERNS: dict[str, list[str]] = {
 }
 
 
-class ContentSafetyGuardrail(Guardrail):
+class ContentSafetyGuardrail(OrchidGuardrail):
     """
     Block content matching harmful keyword patterns or custom blocklists.
 
@@ -65,7 +65,7 @@ class ContentSafetyGuardrail(Guardrail):
         patterns: list[str] | None = None,
         categories: list[str] | None = None,
     ) -> None:
-        self._fail_action = GuardrailAction(fail_action)
+        self._fail_action = OrchidGuardrailAction(fail_action)
         self._blocklist = [w.lower() for w in (blocklist or [])]
         self._custom_patterns = [re.compile(p, re.IGNORECASE) for p in (patterns or [])]
 
@@ -80,13 +80,13 @@ class ContentSafetyGuardrail(Guardrail):
     def name(self) -> str:
         return "content_safety"
 
-    async def check(self, content: str, context: GuardrailContext) -> GuardrailResult:
+    async def check(self, content: str, context: OrchidGuardrailContext) -> OrchidGuardrailResult:
         content_lower = content.lower()
 
         # Check custom blocklist
         for word in self._blocklist:
             if word in content_lower:
-                return GuardrailResult(
+                return OrchidGuardrailResult(
                     triggered=True,
                     action=self._fail_action,
                     guardrail_name=self.name,
@@ -98,7 +98,7 @@ class ContentSafetyGuardrail(Guardrail):
         for pattern in self._custom_patterns:
             match = pattern.search(content)
             if match:
-                return GuardrailResult(
+                return OrchidGuardrailResult(
                     triggered=True,
                     action=self._fail_action,
                     guardrail_name=self.name,
@@ -111,7 +111,7 @@ class ContentSafetyGuardrail(Guardrail):
             for pattern in patterns:
                 match = pattern.search(content)
                 if match:
-                    return GuardrailResult(
+                    return OrchidGuardrailResult(
                         triggered=True,
                         action=self._fail_action,
                         guardrail_name=self.name,
@@ -119,4 +119,4 @@ class ContentSafetyGuardrail(Guardrail):
                         details={"matched_type": "category", "category": category, "matched_text": match.group()},
                     )
 
-        return GuardrailResult.passed(self.name)
+        return OrchidGuardrailResult.passed(self.name)

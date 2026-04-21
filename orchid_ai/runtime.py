@@ -29,20 +29,20 @@ from typing import TYPE_CHECKING, Callable
 
 from langchain_core.language_models import BaseChatModel
 
-from .core.mcp import MCPClient, MCPTokenStore
-from .core.repository import VectorReader
+from .core.mcp import OrchidMCPClient, OrchidMCPTokenStore
+from .core.repository import OrchidVectorReader
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
 
-    from .config.schema import MCPServerConfig
-    from .mcp.auth_registry import MCPAuthRegistry
+    from .config.schema import OrchidMCPServerConfig
+    from .mcp.auth_registry import OrchidMCPAuthRegistry
 
 logger = logging.getLogger(__name__)
 
 # Type alias for the MCP client factory callable.
-# Takes a server config, returns a ready-to-use MCPClient.
-MCPClientFactory = Callable[["MCPServerConfig"], MCPClient]
+# Takes a server config, returns a ready-to-use OrchidMCPClient.
+MCPClientFactory = Callable[["OrchidMCPServerConfig"], OrchidMCPClient]
 
 
 def _default_chat_model(model: str = "ollama/llama3.2", **kwargs) -> BaseChatModel:
@@ -64,7 +64,7 @@ class OrchidRuntime:
     ----------
     default_model : str
         LiteLLM model identifier (e.g. ``"gemini/gemini-2.5-flash"``).
-    reader : VectorReader | None
+    reader : OrchidVectorReader | None
         Vector store backend.  ``None`` → ``NullVectorReader`` (no RAG).
     chat_model : BaseChatModel | None
         LangChain chat model.  ``None`` → built via ``build_chat_model(default_model)``.
@@ -80,16 +80,16 @@ class OrchidRuntime:
     """
 
     default_model: str = "ollama/llama3.2"
-    reader: VectorReader | None = None
+    reader: OrchidVectorReader | None = None
     chat_model: BaseChatModel | None = None
     mcp_client_factory: MCPClientFactory | None = None
-    mcp_token_store: MCPTokenStore | None = None
-    mcp_auth_registry: MCPAuthRegistry | None = field(default=None)
+    mcp_token_store: OrchidMCPTokenStore | None = None
+    mcp_auth_registry: OrchidMCPAuthRegistry | None = field(default=None)
     checkpointer: BaseCheckpointSaver | None = None
 
     # ── Resolved accessors (lazy defaults) ──────────────────────
 
-    def get_reader(self) -> VectorReader:
+    def get_reader(self) -> OrchidVectorReader:
         """Return the configured reader, falling back to NullVectorReader."""
         if self.reader is not None:
             return self.reader
@@ -119,10 +119,10 @@ class OrchidRuntime:
 
     @staticmethod
     def default_mcp_client_factory(
-        server_config: MCPServerConfig,
+        server_config: OrchidMCPServerConfig,
         *,
-        token_store: MCPTokenStore | None = None,
-    ) -> MCPClient:
+        token_store: OrchidMCPTokenStore | None = None,
+    ) -> OrchidMCPClient:
         """Create a ``StreamableHttpMCPClient`` from the server config.
 
         Override in a subclass to change the default transport / client
@@ -130,7 +130,7 @@ class OrchidRuntime:
 
         Auth modes:
           - ``none`` (default): no auth headers sent.
-          - ``passthrough``: forwards the graph ``AuthContext`` bearer token.
+          - ``passthrough``: forwards the graph ``OrchidAuthContext`` bearer token.
           - ``oauth``: resolves per-user tokens from the *token_store*.
         """
         from .mcp.client import StreamableHttpMCPClient

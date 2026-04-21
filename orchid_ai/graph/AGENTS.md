@@ -8,7 +8,7 @@ Assembles the LangGraph state machine: supervisor routing, graph state with anno
 
 | File | Purpose |
 |------|---------|
-| `state.py` | `GraphState` — extends `AgentState` with LangGraph annotations |
+| `state.py` | `GraphState` — extends `OrchidAgentState` with LangGraph annotations |
 | `supervisor.py` | Supervisor node — routing logic, synthesis, sequential/parallel |
 | `graph.py` | `build_graph()` — dynamically constructs graph from YAML config |
 
@@ -17,7 +17,7 @@ Assembles the LangGraph state machine: supervisor routing, graph state with anno
 ```python
 class GraphState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]  # auto-merge + dedup
-    auth_context: AuthContext
+    auth_context: OrchidAuthContext
     chat_id: str
     active_agents: list[str]
     execution_mode: Literal["parallel", "sequential"]
@@ -50,7 +50,7 @@ The supervisor decides routing via LLM:
 ## Graph Construction
 
 ```python
-def build_graph(config: AgentsConfig, runtime: OrchidRuntime) -> CompiledGraph:
+def build_graph(config: OrchidAgentsConfig, runtime: OrchidRuntime) -> CompiledGraph:
 ```
 
 `OrchidRuntime` holds the resolved dependencies (reader, LLM provider, MCP client factory). Integrators override only what they need:
@@ -82,11 +82,11 @@ New agents are added by YAML config — `build_graph()` handles the wiring autom
 
 ## Conversation History in the Supervisor
 
-The supervisor uses `BaseAgent.extract_conversation_history()` to build clean multi-turn context for routing, synthesis, and sequential advance steps. This filters out internal `[Supervisor` messages and truncates per-message content.
+The supervisor uses `OrchidAgent.extract_conversation_history()` to build clean multi-turn context for routing, synthesis, and sequential advance steps. This filters out internal `[Supervisor` messages and truncates per-message content.
 
 ### Configurable History Limits
 
-Configured via `SupervisorConfig` in `agents.yaml`:
+Configured via `OrchidSupervisorConfig` in `agents.yaml`:
 
 ```yaml
 supervisor:
@@ -105,7 +105,7 @@ supervisor:
   history_summary_recent_turns: 10  # keep last 10 exchanges verbatim
 ```
 
-The supervisor calls `BaseAgent.compress_conversation_history()` in both `_synthesise()` and `_advance_sequential()`. `GenericAgent` also compresses in `_step_summarise()` when the config is present. On LLM failure, the system falls back to using only the recent turns (no crash).
+The supervisor calls `OrchidAgent.compress_conversation_history()` in both `_synthesise()` and `_advance_sequential()`. `GenericAgent` also compresses in `_step_summarise()` when the config is present. On LLM failure, the system falls back to using only the recent turns (no crash).
 
 ### `_filter_internal_messages()`
 
@@ -120,4 +120,4 @@ The supervisor's `_advance_sequential()` injects `mcp_context` from previous age
 - **Using `list` annotation instead of `replace_list` for `pending_agents`.** Default list annotation appends, but sequential routing needs full replacement.
 - **Not returning to supervisor.** Every agent node must have an edge back to `supervisor`. The supervisor decides when to end.
 - **Mutating state in-place.** Always return a new dict from nodes. LangGraph handles merging via annotations.
-- **Hardcoding history limits.** Use `SupervisorConfig.history_max_turns` and `history_max_chars` instead of magic numbers.
+- **Hardcoding history limits.** Use `OrchidSupervisorConfig.history_max_turns` and `history_max_chars` instead of magic numbers.

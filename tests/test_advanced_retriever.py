@@ -9,26 +9,26 @@ import pytest
 from langchain_core.documents import Document
 
 from orchid_ai.config.schema import (
-    AgentConfig,
-    AgentsConfig,
-    DefaultsConfig,
-    RAGConfig,
-    RAGDefaultsConfig,
+    OrchidAgentConfig,
+    OrchidAgentsConfig,
+    OrchidDefaultsConfig,
+    OrchidRAGConfig,
+    OrchidRAGDefaultsConfig,
 )
-from orchid_ai.core.repository import SearchResult
-from orchid_ai.rag.scopes import RAGScope
+from orchid_ai.core.repository import OrchidSearchResult
+from orchid_ai.rag.scopes import OrchidRAGScope
 
 
 # ── Fixtures ────────────────────────────────────────────────
 
 
-def _make_scope() -> RAGScope:
-    return RAGScope(tenant_id="t1", user_id="u1", chat_id="c1", agent_id="test")
+def _make_scope() -> OrchidRAGScope:
+    return OrchidRAGScope(tenant_id="t1", user_id="u1", chat_id="c1", agent_id="test")
 
 
-def _make_search_results(n: int = 3) -> list[SearchResult]:
+def _make_search_results(n: int = 3) -> list[OrchidSearchResult]:
     return [
-        SearchResult(
+        OrchidSearchResult(
             document=Document(
                 id=f"doc-{i}",
                 page_content=f"Content of document {i}",
@@ -44,35 +44,35 @@ def _make_search_results(n: int = 3) -> list[SearchResult]:
 
 
 class TestRetrieverTypeConfig:
-    """RAGConfig.retriever_type field."""
+    """OrchidRAGConfig.retriever_type field."""
 
     def test_default_is_none(self):
-        cfg = RAGConfig()
+        cfg = OrchidRAGConfig()
         assert cfg.retriever_type is None  # None = inherit from defaults
 
     def test_multi_query(self):
-        cfg = RAGConfig(retriever_type="multi_query")
+        cfg = OrchidRAGConfig(retriever_type="multi_query")
         assert cfg.retriever_type == "multi_query"
 
     def test_defaults_propagate(self):
-        cfg = RAGDefaultsConfig(retriever_type="multi_query")
+        cfg = OrchidRAGDefaultsConfig(retriever_type="multi_query")
         assert cfg.retriever_type == "multi_query"
 
     def test_agent_inherits_retriever_type(self):
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
-                rag=RAGDefaultsConfig(retriever_type="multi_query"),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                rag=OrchidRAGDefaultsConfig(retriever_type="multi_query"),
             ),
             agents={
-                "test": AgentConfig(description="test", prompt="test"),
+                "test": OrchidAgentConfig(description="test", prompt="test"),
             },
         )
         assert config.agents["test"].rag.retriever_type == "multi_query"
 
     def test_agent_keeps_simple_when_default_simple(self):
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(description="test", prompt="test"),
+                "test": OrchidAgentConfig(description="test", prompt="test"),
             },
         )
         assert config.agents["test"].rag.retriever_type == "simple"
@@ -91,7 +91,7 @@ class TestRetrieverTypeConfig:
                 },
             },
         }
-        config = AgentsConfig(**raw)
+        config = OrchidAgentsConfig(**raw)
         assert config.agents["a"].rag.retriever_type == "multi_query"
         assert config.agents["b"].rag.retriever_type == "simple"
 
@@ -100,7 +100,7 @@ class TestRetrieverTypeConfig:
 
 
 class TestOrchidRetriever:
-    """OrchidRetriever wraps VectorReader as BaseRetriever."""
+    """OrchidRetriever wraps OrchidVectorReader as BaseRetriever."""
 
     @pytest.mark.asyncio
     async def test_ainvoke_returns_documents(self):
@@ -167,7 +167,7 @@ class TestMultiQueryRetrieve:
             if call_count == 1:
                 return _make_search_results(3)
             return [
-                SearchResult(
+                OrchidSearchResult(
                     document=Document(id=f"doc-{i}", page_content=f"Content {i}", metadata={}),
                     score=0.8 - (i - 2) * 0.1,
                 )
@@ -224,8 +224,8 @@ class TestMultiQueryRetrieve:
         mock_reader = MagicMock()
 
         # Both queries return same doc but with different scores
-        results_a = [SearchResult(document=Document(id="d1", page_content="x", metadata={}), score=0.5)]
-        results_b = [SearchResult(document=Document(id="d1", page_content="x", metadata={}), score=0.9)]
+        results_a = [OrchidSearchResult(document=Document(id="d1", page_content="x", metadata={}), score=0.5)]
+        results_b = [OrchidSearchResult(document=Document(id="d1", page_content="x", metadata={}), score=0.9)]
 
         mock_reader.retrieve = AsyncMock(side_effect=[results_a, results_b])
 
@@ -296,12 +296,12 @@ class TestParentDocumentRetrieval:
     @pytest.mark.asyncio
     async def test_parent_content_preferred(self):
         """When parent_content is in metadata, it's used as content."""
-        from orchid_ai.core.agent import BaseAgent
+        from orchid_ai.core.agent import OrchidAgent
 
         mock_reader = MagicMock()
         mock_reader.retrieve = AsyncMock(
             return_value=[
-                SearchResult(
+                OrchidSearchResult(
                     document=Document(
                         id="d1",
                         page_content="child chunk text",
@@ -316,7 +316,7 @@ class TestParentDocumentRetrieval:
             ]
         )
 
-        class _TestAgent(BaseAgent):
+        class _TestAgent(OrchidAgent):
             @property
             def name(self) -> str:
                 return "test"
@@ -339,12 +339,12 @@ class TestParentDocumentRetrieval:
     @pytest.mark.asyncio
     async def test_no_parent_uses_page_content(self):
         """Without parent_content, regular page_content is used."""
-        from orchid_ai.core.agent import BaseAgent
+        from orchid_ai.core.agent import OrchidAgent
 
         mock_reader = MagicMock()
         mock_reader.retrieve = AsyncMock(
             return_value=[
-                SearchResult(
+                OrchidSearchResult(
                     document=Document(
                         id="d1",
                         page_content="regular chunk text",
@@ -355,7 +355,7 @@ class TestParentDocumentRetrieval:
             ]
         )
 
-        class _TestAgent(BaseAgent):
+        class _TestAgent(OrchidAgent):
             @property
             def name(self) -> str:
                 return "test"

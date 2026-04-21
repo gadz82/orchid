@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from ..core.repository import Document, VectorWriter
+from ..core.repository import Document, OrchidVectorWriter
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class StaticIndexer:
     then call ``index_all()`` or ``index_shared_only()`` to seed the store.
     """
 
-    def __init__(self, writer: VectorWriter):
+    def __init__(self, writer: OrchidVectorWriter):
         self._writer = writer
         self._namespaces: dict[str, _NamespaceData] = {}
 

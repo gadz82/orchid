@@ -9,8 +9,8 @@ from __future__ import annotations
 import hashlib
 import logging
 
-from ..core.repository import Document, VectorWriter
-from ..rag.scopes import RAGScope
+from ..core.repository import Document, OrchidVectorWriter
+from ..rag.scopes import OrchidRAGScope
 from .chunker import ChunkConfig, chunk_text, parent_child_chunk_text
 from .parsers import get_parser
 
@@ -35,9 +35,9 @@ async def ingest_document(
     *,
     file_bytes: bytes,
     filename: str,
-    scope: RAGScope,
+    scope: OrchidRAGScope,
     namespace: str = "uploads",
-    writer: VectorWriter,
+    writer: OrchidVectorWriter,
     chunk_config: ChunkConfig | None = None,
     vision_model: str = "",
     pre_extracted_text: str | None = None,

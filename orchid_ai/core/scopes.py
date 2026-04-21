@@ -2,9 +2,9 @@
 RAG scope — pure dataclass for hierarchical partition keys.
 
 Lives in ``core/`` because it has zero external dependencies and is
-used by ``VectorReader.retrieve()`` and ``BaseAgent.fetch_rag_context()``.
+used by ``OrchidVectorReader.retrieve()`` and ``OrchidAgent.fetch_rag_context()``.
 The Qdrant-specific ``build_qdrant_filter()`` stays in ``rag/scopes.py``
-and imports ``RAGScope`` from here.
+and imports ``OrchidRAGScope`` from here.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ SHARED_TENANT = "__shared__"
 
 
 @dataclass(frozen=True)
-class RAGScope:
+class OrchidRAGScope:
     """Full position in the RAG hierarchy.
 
     Scope hierarchy (most specific to broadest):

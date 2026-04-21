@@ -10,11 +10,11 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 
 from orchid_ai.config.schema import (
-    AgentConfig,
-    AgentsConfig,
-    DefaultsConfig,
-    LLMConfig,
-    RAGConfig,
+    OrchidAgentConfig,
+    OrchidAgentsConfig,
+    OrchidDefaultsConfig,
+    OrchidLLMConfig,
+    OrchidRAGConfig,
 )
 from orchid_ai.runtime import OrchidRuntime
 
@@ -156,13 +156,13 @@ class TestGraphCompileWithCheckpointer:
         from orchid_ai.graph.graph import build_graph
 
         saver = MemorySaver()
-        config = AgentsConfig(
-            defaults=DefaultsConfig(llm=LLMConfig(model="ollama/llama3.2")),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(llm=OrchidLLMConfig(model="ollama/llama3.2")),
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -175,13 +175,13 @@ class TestGraphCompileWithCheckpointer:
     def test_without_checkpointer(self):
         from orchid_ai.graph.graph import build_graph
 
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
-                    llm=LLMConfig(model="ollama/llama3.2"),
+                    rag=OrchidRAGConfig(enabled=False),
+                    llm=OrchidLLMConfig(model="ollama/llama3.2"),
                 ),
             },
         )

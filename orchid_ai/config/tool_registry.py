@@ -8,7 +8,7 @@ Resolution:
 Sync functions are automatically wrapped with ``asyncio.to_thread`` at call time.
 
 Parameters:
-  When a ``BuiltinToolConfig`` declares ``parameters``, they are stored
+  When a ``OrchidBuiltinToolConfig`` declares ``parameters``, they are stored
   alongside the handler.  When omitted, parameters are auto-extracted
   from the Python function signature via ``inspect``.  This metadata is
   used by the CLI skill generator to produce accurate Claude Code
@@ -221,7 +221,7 @@ def load_tools_from_config(tools_config: dict[str, Any]) -> None:
     Parameters
     ----------
     tools_config : dict
-        Mapping of tool name → ``BuiltinToolConfig``-like object with ``handler``, ``description``,
+        Mapping of tool name → ``OrchidBuiltinToolConfig``-like object with ``handler``, ``description``,
         and optional ``parameters``.
     """
     for tool_name, tool_cfg in tools_config.items():

@@ -1,12 +1,12 @@
 """
-PostgreSQL chat storage — built-in ChatStorage implementation.
+PostgreSQL chat storage — built-in OrchidChatStorage implementation.
 
 This is the **default** storage backend shipped with the library.
 Uses asyncpg for async connection pooling. Migrations are discovered
 from ``src.persistence.migrations``.
 
 Configuration:
-    CHAT_STORAGE_CLASS=src.persistence.postgres.PostgresChatStorage
+    CHAT_STORAGE_CLASS=src.persistence.postgres.OrchidPostgresChatStorage
     CHAT_DB_DSN=postgresql://user:pass@host:5432/dbname
 """
 
@@ -19,16 +19,16 @@ from typing import Any
 
 import asyncpg
 
-from .base import ChatStorage
-from .migrations.runner import MigrationRunner
-from .models import ChatMessage, ChatSession, utcnow
+from .base import OrchidChatStorage
+from .migrations.runner import OrchidMigrationRunner
+from .models import OrchidChatMessage, OrchidChatSession, utcnow
 
 logger = logging.getLogger(__name__)
 
 MIGRATIONS_PACKAGE = "orchid_ai.persistence.migrations"
 
 
-class PostgresMigrationRunner(MigrationRunner):
+class OrchidPostgresMigrationRunner(OrchidMigrationRunner):
     """PostgreSQL-specific migration tracking."""
 
     dialect = "postgres"
@@ -58,7 +58,7 @@ class PostgresMigrationRunner(MigrationRunner):
         await conn.execute("DELETE FROM _migrations WHERE version = $1", version)
 
 
-class PostgresChatStorage(ChatStorage):
+class OrchidPostgresChatStorage(OrchidChatStorage):
     """
     Async PostgreSQL storage for chat sessions and messages.
 
@@ -66,13 +66,13 @@ class PostgresChatStorage(ChatStorage):
     optional ``extra_migrations_package`` (dotted import path) so
     integrators can append their own migrations after the framework's
     — see
-    :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
+    :class:`orchid_ai.persistence.migrations.runner.OrchidMigrationRunner`.
     """
 
     def __init__(self, *, dsn: str, extra_migrations_package: str | None = None):
         self._dsn = dsn
         self._pool: asyncpg.Pool | None = None
-        self._migrator = PostgresMigrationRunner(
+        self._migrator = OrchidPostgresMigrationRunner(
             extra_migrations_package=extra_migrations_package,
         )
 
@@ -83,7 +83,7 @@ class PostgresChatStorage(ChatStorage):
         async with self._pool.acquire() as conn:
             await self._migrator.run_up(conn)
         safe_dsn = self._dsn.split("@")[-1] if "@" in self._dsn else self._dsn
-        logger.info("[ChatStorage:pg] Initialised — %s", safe_dsn)
+        logger.info("[OrchidChatStorage:pg] Initialised — %s", safe_dsn)
 
     async def close(self) -> None:
         if self._pool:
@@ -96,9 +96,9 @@ class PostgresChatStorage(ChatStorage):
         tenant_id: str,
         user_id: str,
         title: str = "",
-    ) -> ChatSession:
+    ) -> OrchidChatSession:
         now = utcnow()
-        chat = ChatSession(
+        chat = OrchidChatSession(
             id=str(uuid.uuid4()),
             tenant_id=tenant_id,
             user_id=user_id,
@@ -123,7 +123,7 @@ class PostgresChatStorage(ChatStorage):
         self,
         tenant_id: str,
         user_id: str,
-    ) -> list[ChatSession]:
+    ) -> list[OrchidChatSession]:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT * FROM chat_sessions WHERE tenant_id = $1 AND user_id = $2 ORDER BY updated_at DESC",
@@ -132,7 +132,7 @@ class PostgresChatStorage(ChatStorage):
             )
             return [_row_to_session(r) for r in rows]
 
-    async def get_chat(self, chat_id: str) -> ChatSession | None:
+    async def get_chat(self, chat_id: str) -> OrchidChatSession | None:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT * FROM chat_sessions WHERE id = $1",
@@ -172,9 +172,9 @@ class PostgresChatStorage(ChatStorage):
         content: str,
         agents_used: list[str] | None = None,
         metadata: dict | None = None,
-    ) -> ChatMessage:
+    ) -> OrchidChatMessage:
         now = utcnow()
-        msg = ChatMessage(
+        msg = OrchidChatMessage(
             id=str(uuid.uuid4()),
             chat_id=chat_id,
             role=role,
@@ -208,7 +208,7 @@ class PostgresChatStorage(ChatStorage):
         chat_id: str,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[ChatMessage]:
+    ) -> list[OrchidChatMessage]:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT * FROM chat_messages WHERE chat_id = $1 ORDER BY created_at ASC LIMIT $2 OFFSET $3",
@@ -222,8 +222,8 @@ class PostgresChatStorage(ChatStorage):
 # ── Row mappers ──────────────────────────────────────────────
 
 
-def _row_to_session(row: asyncpg.Record) -> ChatSession:
-    return ChatSession(
+def _row_to_session(row: asyncpg.Record) -> OrchidChatSession:
+    return OrchidChatSession(
         id=row["id"],
         tenant_id=row["tenant_id"],
         user_id=row["user_id"],
@@ -234,14 +234,14 @@ def _row_to_session(row: asyncpg.Record) -> ChatSession:
     )
 
 
-def _row_to_message(row: asyncpg.Record) -> ChatMessage:
+def _row_to_message(row: asyncpg.Record) -> OrchidChatMessage:
     agents_used = row["agents_used"]
     if isinstance(agents_used, str):
         agents_used = json.loads(agents_used)
     meta = row["metadata"]
     if isinstance(meta, str):
         meta = json.loads(meta)
-    return ChatMessage(
+    return OrchidChatMessage(
         id=row["id"],
         chat_id=row["chat_id"],
         role=row["role"],

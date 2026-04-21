@@ -1,25 +1,25 @@
-"""Tests for MCPAuthConfig and MCPServerConfig auth field."""
+"""Tests for OrchidMCPAuthConfig and OrchidMCPServerConfig auth field."""
 
 from __future__ import annotations
 
 import pytest
 
-from orchid_ai.config.schema import MCPAuthConfig, MCPServerConfig
+from orchid_ai.config.schema import OrchidMCPAuthConfig, OrchidMCPServerConfig
 
 
 class TestMCPAuthConfig:
-    """MCPAuthConfig Pydantic model tests."""
+    """OrchidMCPAuthConfig Pydantic model tests."""
 
     def test_default_mode_is_none(self):
-        cfg = MCPAuthConfig()
+        cfg = OrchidMCPAuthConfig()
         assert cfg.mode == "none"
 
     def test_passthrough_mode(self):
-        cfg = MCPAuthConfig(mode="passthrough")
+        cfg = OrchidMCPAuthConfig(mode="passthrough")
         assert cfg.mode == "passthrough"
 
     def test_oauth_mode_with_issuer(self):
-        cfg = MCPAuthConfig(
+        cfg = OrchidMCPAuthConfig(
             mode="oauth",
             client_id="my-app",
             issuer="https://auth.example.com",
@@ -31,7 +31,7 @@ class TestMCPAuthConfig:
         assert cfg.scopes == "openid api.read"
 
     def test_oauth_mode_with_explicit_endpoints(self):
-        cfg = MCPAuthConfig(
+        cfg = OrchidMCPAuthConfig(
             mode="oauth",
             client_id="my-app",
             authorization_endpoint="https://auth.example.com/authorize",
@@ -42,14 +42,14 @@ class TestMCPAuthConfig:
 
     def test_invalid_mode_raises(self):
         with pytest.raises(Exception):
-            MCPAuthConfig(mode="invalid")
+            OrchidMCPAuthConfig(mode="invalid")
 
     def test_default_scopes(self):
-        cfg = MCPAuthConfig()
+        cfg = OrchidMCPAuthConfig()
         assert cfg.scopes == "openid"
 
     def test_default_empty_strings(self):
-        cfg = MCPAuthConfig()
+        cfg = OrchidMCPAuthConfig()
         assert cfg.client_id == ""
         assert cfg.authorization_endpoint == ""
         assert cfg.token_endpoint == ""
@@ -57,27 +57,27 @@ class TestMCPAuthConfig:
 
 
 class TestMCPServerConfigAuth:
-    """MCPServerConfig backward compatibility and auth integration."""
+    """OrchidMCPServerConfig backward compatibility and auth integration."""
 
     def test_no_auth_field_defaults_to_none_mode(self):
         """Existing YAML without auth: still parses (backward compat)."""
-        cfg = MCPServerConfig(name="my-server", url="http://localhost:3000/mcp")
+        cfg = OrchidMCPServerConfig(name="my-server", url="http://localhost:3000/mcp")
         assert cfg.auth.mode == "none"
         assert cfg.auth.client_id == ""
 
     def test_auth_passthrough(self):
-        cfg = MCPServerConfig(
+        cfg = OrchidMCPServerConfig(
             name="internal",
             url="http://localhost:3000/mcp",
-            auth=MCPAuthConfig(mode="passthrough"),
+            auth=OrchidMCPAuthConfig(mode="passthrough"),
         )
         assert cfg.auth.mode == "passthrough"
 
     def test_auth_oauth(self):
-        cfg = MCPServerConfig(
+        cfg = OrchidMCPServerConfig(
             name="external-crm",
             url="https://crm.example.com/mcp",
-            auth=MCPAuthConfig(
+            auth=OrchidMCPAuthConfig(
                 mode="oauth",
                 client_id="orchid-crm",
                 issuer="https://auth.crm.example.com",
@@ -90,7 +90,7 @@ class TestMCPServerConfigAuth:
     def test_from_dict_no_auth(self):
         """Parse from dict (as YAML loader produces)."""
         data = {"name": "server1", "url": "http://localhost/mcp"}
-        cfg = MCPServerConfig(**data)
+        cfg = OrchidMCPServerConfig(**data)
         assert cfg.auth.mode == "none"
 
     def test_from_dict_with_auth(self):
@@ -103,7 +103,7 @@ class TestMCPServerConfigAuth:
                 "issuer": "https://auth.example.com",
             },
         }
-        cfg = MCPServerConfig(**data)
+        cfg = OrchidMCPServerConfig(**data)
         assert cfg.auth.mode == "oauth"
         assert cfg.auth.client_id == "my-app"
 
@@ -115,6 +115,6 @@ class TestMCPServerConfigAuth:
             "tools": "*",
             "auth": {"mode": "passthrough"},
         }
-        cfg = MCPServerConfig(**data)
+        cfg = OrchidMCPServerConfig(**data)
         assert cfg.discover_all_tools is True
         assert cfg.auth.mode == "passthrough"

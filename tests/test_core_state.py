@@ -1,18 +1,18 @@
-"""Tests for AuthContext and AgentState from src/core/state.py."""
+"""Tests for OrchidAuthContext and OrchidAgentState from src/core/state.py."""
 
 from __future__ import annotations
 
 import time
 
 
-from orchid_ai.core.state import AgentState, AuthContext
+from orchid_ai.core.state import OrchidAgentState, OrchidAuthContext
 
 
-# ── AuthContext defaults ──
+# ── OrchidAuthContext defaults ──
 
 
 def test_auth_defaults():
-    ctx = AuthContext(access_token="tok")
+    ctx = OrchidAuthContext(access_token="tok")
     assert ctx.access_token == "tok"
     assert ctx.tenant_key == "default"
     assert ctx.user_id == ""
@@ -21,7 +21,7 @@ def test_auth_defaults():
 
 
 def test_auth_custom_values():
-    ctx = AuthContext(
+    ctx = OrchidAuthContext(
         access_token="tok",
         tenant_key="acme",
         user_id="u-1",
@@ -35,12 +35,12 @@ def test_auth_custom_values():
 
 
 def test_tenant_key_falls_back_to_default_on_empty_string():
-    ctx = AuthContext(access_token="tok", tenant_key="")
+    ctx = OrchidAuthContext(access_token="tok", tenant_key="")
     assert ctx.tenant_key == "default"
 
 
 def test_user_id_returns_set_value():
-    ctx = AuthContext(access_token="tok", user_id="u-42")
+    ctx = OrchidAuthContext(access_token="tok", user_id="u-42")
     assert ctx.user_id == "u-42"
 
 
@@ -48,17 +48,17 @@ def test_user_id_returns_set_value():
 
 
 def test_is_expired_false_when_zero():
-    ctx = AuthContext(access_token="tok")
+    ctx = OrchidAuthContext(access_token="tok")
     assert ctx.is_expired is False
 
 
 def test_is_expired_true_when_in_past():
-    ctx = AuthContext(access_token="tok", expires_at=1.0)
+    ctx = OrchidAuthContext(access_token="tok", expires_at=1.0)
     assert ctx.is_expired is True
 
 
 def test_is_expired_false_when_far_future():
-    ctx = AuthContext(access_token="tok", expires_at=time.time() + 99999)
+    ctx = OrchidAuthContext(access_token="tok", expires_at=time.time() + 99999)
     assert ctx.is_expired is False
 
 
@@ -66,7 +66,7 @@ def test_is_expired_false_when_far_future():
 
 
 def test_bearer_header():
-    ctx = AuthContext(access_token="my-token")
+    ctx = OrchidAuthContext(access_token="my-token")
     assert ctx.bearer_header == {"Authorization": "Bearer my-token"}
 
 
@@ -74,9 +74,9 @@ def test_bearer_header():
 
 
 def test_repr_contains_key_info():
-    ctx = AuthContext(access_token="tok", tenant_key="acme", user_id="u-1")
+    ctx = OrchidAuthContext(access_token="tok", tenant_key="acme", user_id="u-1")
     r = repr(ctx)
-    assert "AuthContext" in r
+    assert "OrchidAuthContext" in r
     assert "acme" in r
     assert "u-1" in r
     assert "expired=" in r
@@ -86,25 +86,25 @@ def test_repr_contains_key_info():
 
 
 def test_eq_same_values():
-    a = AuthContext(access_token="tok", tenant_key="t", user_id="u")
-    b = AuthContext(access_token="tok", tenant_key="t", user_id="u")
+    a = OrchidAuthContext(access_token="tok", tenant_key="t", user_id="u")
+    b = OrchidAuthContext(access_token="tok", tenant_key="t", user_id="u")
     assert a == b
 
 
 def test_eq_different_values():
-    a = AuthContext(access_token="tok1", tenant_key="t", user_id="u")
-    b = AuthContext(access_token="tok2", tenant_key="t", user_id="u")
+    a = OrchidAuthContext(access_token="tok1", tenant_key="t", user_id="u")
+    b = OrchidAuthContext(access_token="tok2", tenant_key="t", user_id="u")
     assert a != b
 
 
 def test_eq_not_implemented_for_non_auth():
-    ctx = AuthContext(access_token="tok")
+    ctx = OrchidAuthContext(access_token="tok")
     assert ctx.__eq__("not an auth") is NotImplemented
 
 
 def test_hash_matches_for_equal_instances():
-    a = AuthContext(access_token="tok", tenant_key="t", user_id="u")
-    b = AuthContext(access_token="tok", tenant_key="t", user_id="u")
+    a = OrchidAuthContext(access_token="tok", tenant_key="t", user_id="u")
+    b = OrchidAuthContext(access_token="tok", tenant_key="t", user_id="u")
     assert hash(a) == hash(b)
 
 
@@ -112,7 +112,7 @@ def test_hash_matches_for_equal_instances():
 
 
 def test_extra_is_mutable():
-    ctx = AuthContext(access_token="tok")
+    ctx = OrchidAuthContext(access_token="tok")
     ctx.extra["new_key"] = "value"
     assert ctx.extra["new_key"] == "value"
 
@@ -121,7 +121,7 @@ def test_extra_is_mutable():
 
 
 def test_subclass_overrides_properties():
-    class CustomAuth(AuthContext):
+    class CustomAuth(OrchidAuthContext):
         def __init__(self, *, access_token, custom_tenant, custom_user, **kwargs):
             super().__init__(access_token=access_token, **kwargs)
             self._custom_tenant = custom_tenant
@@ -141,18 +141,18 @@ def test_subclass_overrides_properties():
     assert ctx.access_token == "tok"
 
 
-# ── AgentState ──
+# ── OrchidAgentState ──
 
 
 def test_agent_state_empty_dict():
-    state: AgentState = {}
+    state: OrchidAgentState = {}
     assert isinstance(state, dict)
 
 
 def test_agent_state_with_fields():
-    state: AgentState = {
+    state: OrchidAgentState = {
         "messages": [],
-        "auth_context": AuthContext(access_token="tok"),
+        "auth_context": OrchidAuthContext(access_token="tok"),
         "chat_id": "c-1",
         "active_agents": ["a"],
         "mcp_context": {},
@@ -166,4 +166,4 @@ def test_agent_state_with_fields():
 
 def test_agent_state_is_total_false():
     # total=False means __required_keys__ is empty
-    assert AgentState.__required_keys__ == frozenset()
+    assert OrchidAgentState.__required_keys__ == frozenset()

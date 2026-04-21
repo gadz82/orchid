@@ -9,19 +9,19 @@ import pytest
 
 from orchid_ai.agents.generic_agent import GenericAgent
 from orchid_ai.config.schema import (
-    AgentConfig,
-    LLMConfig,
-    MCPServerConfig,
-    RAGConfig,
-    ToolConfig,
+    OrchidAgentConfig,
+    OrchidLLMConfig,
+    OrchidMCPServerConfig,
+    OrchidRAGConfig,
+    OrchidToolConfig,
 )
-from orchid_ai.core.state import AuthContext
+from orchid_ai.core.state import OrchidAuthContext
 
 
 def _make_state(query: str = "test query") -> dict[str, Any]:
     return {
         "messages": [MagicMock(content=query)],
-        "auth_context": AuthContext(
+        "auth_context": OrchidAuthContext(
             access_token="tok",
             tenant_key="t1",
             user_id="u1",
@@ -30,7 +30,7 @@ def _make_state(query: str = "test query") -> dict[str, Any]:
     }
 
 
-def _make_agent(config: AgentConfig) -> GenericAgent:
+def _make_agent(config: OrchidAgentConfig) -> GenericAgent:
     reader = MagicMock()
     reader.retrieve = AsyncMock(return_value=[])
     chat_model = MagicMock()
@@ -47,11 +47,11 @@ def _make_agent(config: AgentConfig) -> GenericAgent:
 @pytest.mark.asyncio
 async def test_no_injection_when_no_injectable_tools():
     """When no tools have inject_to_rag=True, inject_to_rag() is never called."""
-    config = AgentConfig(
+    config = OrchidAgentConfig(
         description="d",
         prompt="p",
-        rag=RAGConfig(enabled=True, namespace="ns"),
-        llm=LLMConfig(),
+        rag=OrchidRAGConfig(enabled=True, namespace="ns"),
+        llm=OrchidLLMConfig(),
     )
     assert config.injectable_tools == set()
 
@@ -73,18 +73,18 @@ async def test_no_injection_when_no_injectable_tools():
 @pytest.mark.asyncio
 async def test_injection_only_for_opted_in_mcp_tools():
     """Only MCP tool results with inject_to_rag=True are passed to inject_to_rag()."""
-    config = AgentConfig(
+    config = OrchidAgentConfig(
         description="d",
         prompt="p",
-        rag=RAGConfig(enabled=True, namespace="ns"),
-        llm=LLMConfig(),
+        rag=OrchidRAGConfig(enabled=True, namespace="ns"),
+        llm=OrchidLLMConfig(),
         mcp_servers=[
-            MCPServerConfig(
+            OrchidMCPServerConfig(
                 name="srv",
                 url="http://x",
                 tools=[
-                    ToolConfig(name="tool_keep", inject_to_rag=True),
-                    ToolConfig(name="tool_skip"),
+                    OrchidToolConfig(name="tool_keep", inject_to_rag=True),
+                    OrchidToolConfig(name="tool_skip"),
                 ],
             ),
         ],
@@ -114,11 +114,11 @@ async def test_injection_only_for_opted_in_mcp_tools():
 @pytest.mark.asyncio
 async def test_injection_only_for_opted_in_builtin_tools():
     """Only built-in tool results with inject_to_rag=True are passed to inject_to_rag()."""
-    config = AgentConfig(
+    config = OrchidAgentConfig(
         description="d",
         prompt="p",
-        rag=RAGConfig(enabled=True, namespace="ns"),
-        llm=LLMConfig(),
+        rag=OrchidRAGConfig(enabled=True, namespace="ns"),
+        llm=OrchidLLMConfig(),
         tools=["format_date", "calc_rate"],
     )
     config.injectable_tools = {"builtin_format_date"}
@@ -146,16 +146,16 @@ async def test_injection_only_for_opted_in_builtin_tools():
 @pytest.mark.asyncio
 async def test_no_injection_when_rag_disabled():
     """Even with injectable_tools set, injection is skipped when rag.enabled=False."""
-    config = AgentConfig(
+    config = OrchidAgentConfig(
         description="d",
         prompt="p",
-        rag=RAGConfig(enabled=False, namespace="ns"),
-        llm=LLMConfig(),
+        rag=OrchidRAGConfig(enabled=False, namespace="ns"),
+        llm=OrchidLLMConfig(),
         mcp_servers=[
-            MCPServerConfig(
+            OrchidMCPServerConfig(
                 name="srv",
                 url="http://x",
-                tools=[ToolConfig(name="tool_a", inject_to_rag=True)],
+                tools=[OrchidToolConfig(name="tool_a", inject_to_rag=True)],
             ),
         ],
     )
@@ -182,18 +182,18 @@ async def test_no_injection_when_rag_disabled():
 @pytest.mark.asyncio
 async def test_cache_hit_skips_tool_in_agentic_loop():
     """When cache has valid data for a tool, that tool is skipped in the agentic loop."""
-    config = AgentConfig(
+    config = OrchidAgentConfig(
         description="d",
         prompt="p",
-        rag=RAGConfig(enabled=True, namespace="ns", rag_ttl=3600),
-        llm=LLMConfig(),
+        rag=OrchidRAGConfig(enabled=True, namespace="ns", rag_ttl=3600),
+        llm=OrchidLLMConfig(),
         mcp_servers=[
-            MCPServerConfig(
+            OrchidMCPServerConfig(
                 name="srv",
                 url="http://x",
                 tools=[
-                    ToolConfig(name="cached_tool", inject_to_rag=True),
-                    ToolConfig(name="fresh_tool"),
+                    OrchidToolConfig(name="cached_tool", inject_to_rag=True),
+                    OrchidToolConfig(name="fresh_tool"),
                 ],
             ),
         ],
@@ -222,16 +222,16 @@ async def test_cache_hit_skips_tool_in_agentic_loop():
 @pytest.mark.asyncio
 async def test_cache_miss_calls_tool_normally():
     """When cache returns None, the tool is called normally."""
-    config = AgentConfig(
+    config = OrchidAgentConfig(
         description="d",
         prompt="p",
-        rag=RAGConfig(enabled=True, namespace="ns", rag_ttl=3600),
-        llm=LLMConfig(),
+        rag=OrchidRAGConfig(enabled=True, namespace="ns", rag_ttl=3600),
+        llm=OrchidLLMConfig(),
         mcp_servers=[
-            MCPServerConfig(
+            OrchidMCPServerConfig(
                 name="srv",
                 url="http://x",
-                tools=[ToolConfig(name="tool_a", inject_to_rag=True)],
+                tools=[OrchidToolConfig(name="tool_a", inject_to_rag=True)],
             ),
         ],
     )
@@ -258,11 +258,11 @@ async def test_cache_miss_calls_tool_normally():
 @pytest.mark.asyncio
 async def test_no_cache_check_when_no_ttls():
     """When injectable_tool_ttls is empty, no cache lookup happens."""
-    config = AgentConfig(
+    config = OrchidAgentConfig(
         description="d",
         prompt="p",
-        rag=RAGConfig(enabled=True, namespace="ns"),
-        llm=LLMConfig(),
+        rag=OrchidRAGConfig(enabled=True, namespace="ns"),
+        llm=OrchidLLMConfig(),
     )
     assert config.injectable_tool_ttls == {}
 

@@ -19,18 +19,18 @@ import logging
 import time
 from typing import Any
 
-from ..core.repository import Document, VectorReader, VectorWriter
-from .scopes import RAGScope
+from ..core.repository import Document, OrchidVectorReader, OrchidVectorWriter
+from .scopes import OrchidRAGScope
 
 logger = logging.getLogger(__name__)
 
 
 async def inject_to_rag(
-    store: VectorReader | VectorWriter,
+    store: OrchidVectorReader | OrchidVectorWriter,
     *,
     mcp_data: dict[str, Any],
     namespace: str,
-    scope: RAGScope,
+    scope: OrchidRAGScope,
     source_tool: str = "unknown",
 ) -> int:
     """
@@ -38,14 +38,14 @@ async def inject_to_rag(
 
     Parameters
     ----------
-    store : VectorReader | VectorWriter
+    store : OrchidVectorReader | OrchidVectorWriter
         The vector store backend.  Writing only happens when the store
-        implements ``VectorWriter``; otherwise this is a safe no-op.
+        implements ``OrchidVectorWriter``; otherwise this is a safe no-op.
     mcp_data : dict
         Raw tool results (e.g. ``{"courses": "...", "enrollments": "..."}``).
     namespace : str
         Collection name (e.g. ``"learning"``, ``"notifications"``).
-    scope : RAGScope
+    scope : OrchidRAGScope
         Hierarchical scope — determines where the data lands.
     source_tool : str
         Tool name that produced this data (for metadata tracking).
@@ -55,7 +55,7 @@ async def inject_to_rag(
     int
         Number of documents indexed (0 if store doesn't support writing).
     """
-    if not isinstance(store, VectorWriter):
+    if not isinstance(store, OrchidVectorWriter):
         logger.debug(
             "[DynamicRAG] Store does not support writing — skipping injection for '%s'",
             namespace,
@@ -91,7 +91,7 @@ async def inject_to_rag(
 
 def _tool_data_to_documents(
     data: dict[str, Any],
-    scope: RAGScope,
+    scope: OrchidRAGScope,
     source_tool: str,
 ) -> list[Document]:
     """

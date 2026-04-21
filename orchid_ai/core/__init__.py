@@ -10,30 +10,30 @@ Architectural rule (ADR-008):
     third-party library inside this package is a bug.
 """
 
-from .state import AgentState, AuthContext
-from .agent import BaseAgent
+from .state import OrchidAgentState, OrchidAuthContext
+from .agent import OrchidAgent
 from .repository import (
     Document,
-    SearchResult,
-    VectorReader,
-    VectorWriter,
-    VectorStoreRepository,
+    OrchidSearchResult,
+    OrchidVectorReader,
+    OrchidVectorWriter,
+    OrchidVectorStoreRepository,
 )
-from .scopes import RAGScope
-from .mcp import MCPClient, MCPDiscoverable, MCPToolCaller, MCPToolResult
+from .scopes import OrchidRAGScope
+from .mcp import OrchidMCPClient, OrchidMCPDiscoverable, OrchidMCPToolCaller, OrchidMCPToolResult
 
 __all__ = [
-    "AgentState",
-    "AuthContext",
-    "BaseAgent",
+    "OrchidAgentState",
+    "OrchidAuthContext",
+    "OrchidAgent",
     "Document",
-    "RAGScope",
-    "SearchResult",
-    "VectorReader",
-    "VectorWriter",
-    "VectorStoreRepository",
-    "MCPClient",
-    "MCPDiscoverable",
-    "MCPToolCaller",
-    "MCPToolResult",
+    "OrchidRAGScope",
+    "OrchidSearchResult",
+    "OrchidVectorReader",
+    "OrchidVectorWriter",
+    "OrchidVectorStoreRepository",
+    "OrchidMCPClient",
+    "OrchidMCPDiscoverable",
+    "OrchidMCPToolCaller",
+    "OrchidMCPToolResult",
 ]

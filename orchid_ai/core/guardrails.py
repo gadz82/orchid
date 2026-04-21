@@ -1,5 +1,5 @@
 """
-Guardrail abstractions — input/output firewalls for agents and orchestrator.
+OrchidGuardrail abstractions — input/output firewalls for agents and orchestrator.
 
 This module defines the **core contracts** for the guardrail system.
 All classes here use ONLY Python stdlib types (zero external dependencies),
@@ -30,7 +30,7 @@ Architecture (3-tier):
 
 Guardrails are configured via YAML (``guardrails:`` key in orchid.yml
 and per-agent in agents.yaml) and instantiated via a registry, following
-the same Open/Closed pattern as ``ToolCallStrategy``.
+the same Open/Closed pattern as ``OrchidToolCallStrategy``.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ from typing import Any
 # ── Enums ────────────────────────────────────────────────────
 
 
-class GuardrailAction(Enum):
+class OrchidGuardrailAction(Enum):
     """Action to take when a guardrail check fails."""
 
     ALLOW = "allow"
@@ -54,7 +54,7 @@ class GuardrailAction(Enum):
     LOG = "log"
 
 
-class GuardrailDirection(Enum):
+class OrchidGuardrailDirection(Enum):
     """Whether this guardrail runs on input or output."""
 
     INPUT = "input"
@@ -65,7 +65,7 @@ class GuardrailDirection(Enum):
 
 
 @dataclass(frozen=True)
-class GuardrailContext:
+class OrchidGuardrailContext:
     """
     Contextual information passed to every guardrail check.
 
@@ -73,7 +73,7 @@ class GuardrailContext:
     (e.g. different rules per tenant, per agent, per direction).
     """
 
-    direction: GuardrailDirection
+    direction: OrchidGuardrailDirection
     agent_name: str = ""  # empty for global rails
     tenant_key: str = "default"
     user_id: str = ""
@@ -82,7 +82,7 @@ class GuardrailContext:
 
 
 @dataclass
-class GuardrailResult:
+class OrchidGuardrailResult:
     """
     Outcome of a single guardrail check.
 
@@ -93,7 +93,7 @@ class GuardrailResult:
     """
 
     triggered: bool
-    action: GuardrailAction = GuardrailAction.ALLOW
+    action: OrchidGuardrailAction = OrchidGuardrailAction.ALLOW
     guardrail_name: str = ""
     message: str = ""
     redacted_content: str | None = None
@@ -102,23 +102,23 @@ class GuardrailResult:
     @property
     def blocked(self) -> bool:
         """Convenience: True when the guardrail blocked the content."""
-        return self.triggered and self.action == GuardrailAction.BLOCK
+        return self.triggered and self.action == OrchidGuardrailAction.BLOCK
 
     @staticmethod
-    def passed(guardrail_name: str = "") -> GuardrailResult:
+    def passed(guardrail_name: str = "") -> OrchidGuardrailResult:
         """Factory for a clean pass result."""
-        return GuardrailResult(triggered=False, guardrail_name=guardrail_name)
+        return OrchidGuardrailResult(triggered=False, guardrail_name=guardrail_name)
 
 
 # ── ABCs ─────────────────────────────────────────────────────
 
 
-class Guardrail(ABC):
+class OrchidGuardrail(ABC):
     """
     Abstract base for all guardrails.
 
     A guardrail inspects content (input or output) and returns a
-    ``GuardrailResult`` indicating whether to allow, block, redact, or warn.
+    ``OrchidGuardrailResult`` indicating whether to allow, block, redact, or warn.
 
     Implementations must be stateless — all context comes via parameters.
     """
@@ -133,8 +133,8 @@ class Guardrail(ABC):
     async def check(
         self,
         content: str,
-        context: GuardrailContext,
-    ) -> GuardrailResult:
+        context: OrchidGuardrailContext,
+    ) -> OrchidGuardrailResult:
         """
         Evaluate content against this guardrail's rules.
 
@@ -142,18 +142,18 @@ class Guardrail(ABC):
         ----------
         content : str
             The text to evaluate (user message or agent response).
-        context : GuardrailContext
+        context : OrchidGuardrailContext
             Scope information (direction, agent, tenant, etc.).
 
         Returns
         -------
-        GuardrailResult
+        OrchidGuardrailResult
             The outcome — ``triggered=False`` means the content is clean.
         """
         ...
 
 
-class GuardrailChain:
+class OrchidGuardrailChain:
     """
     Ordered sequence of guardrails with short-circuit-on-block semantics.
 
@@ -163,15 +163,15 @@ class GuardrailChain:
     ``WARN`` and ``LOG`` are collected but don't stop evaluation.
     """
 
-    def __init__(self, guardrails: list[Guardrail] | None = None) -> None:
-        self._guardrails: list[Guardrail] = guardrails or []
+    def __init__(self, guardrails: list[OrchidGuardrail] | None = None) -> None:
+        self._guardrails: list[OrchidGuardrail] = guardrails or []
 
-    def add(self, guardrail: Guardrail) -> None:
+    def add(self, guardrail: OrchidGuardrail) -> None:
         """Append a guardrail to the chain."""
         self._guardrails.append(guardrail)
 
     @property
-    def guardrails(self) -> list[Guardrail]:
+    def guardrails(self) -> list[OrchidGuardrail]:
         """Read-only access to the guardrail list."""
         return list(self._guardrails)
 
@@ -183,8 +183,8 @@ class GuardrailChain:
     async def evaluate(
         self,
         content: str,
-        context: GuardrailContext,
-    ) -> GuardrailResult:
+        context: OrchidGuardrailContext,
+    ) -> OrchidGuardrailResult:
         """
         Run all guardrails in sequence.
 
@@ -192,8 +192,8 @@ class GuardrailChain:
         or a ``passed`` result if nothing was triggered.
         """
         current_content = content
-        last_redact: GuardrailResult | None = None
-        warnings: list[GuardrailResult] = []
+        last_redact: OrchidGuardrailResult | None = None
+        warnings: list[OrchidGuardrailResult] = []
 
         for guardrail in self._guardrails:
             result = await guardrail.check(current_content, context)
@@ -201,14 +201,14 @@ class GuardrailChain:
             if not result.triggered:
                 continue
 
-            if result.action == GuardrailAction.BLOCK:
+            if result.action == OrchidGuardrailAction.BLOCK:
                 return result
 
-            if result.action == GuardrailAction.REDACT and result.redacted_content is not None:
+            if result.action == OrchidGuardrailAction.REDACT and result.redacted_content is not None:
                 current_content = result.redacted_content
                 last_redact = result
 
-            if result.action in (GuardrailAction.WARN, GuardrailAction.LOG):
+            if result.action in (OrchidGuardrailAction.WARN, OrchidGuardrailAction.LOG):
                 warnings.append(result)
 
         # Return the last redaction if any, otherwise clean pass
@@ -219,11 +219,11 @@ class GuardrailChain:
             # Return the first warning (caller can decide what to do)
             return warnings[0]
 
-        return GuardrailResult.passed()
+        return OrchidGuardrailResult.passed()
 
     def __len__(self) -> int:
         return len(self._guardrails)
 
     def __repr__(self) -> str:
         names = [g.name for g in self._guardrails]
-        return f"GuardrailChain({names})"
+        return f"OrchidGuardrailChain({names})"

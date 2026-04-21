@@ -1,14 +1,14 @@
-"""Tests for src.persistence.models — ChatSession + ChatMessage."""
+"""Tests for src.persistence.models — OrchidChatSession + OrchidChatMessage."""
 
 from __future__ import annotations
 
-from orchid_ai.persistence.models import ChatMessage, ChatSession, utcnow
+from orchid_ai.persistence.models import OrchidChatMessage, OrchidChatSession, utcnow
 
 
 class TestChatSession:
     def test_creation(self):
         now = utcnow()
-        session = ChatSession(
+        session = OrchidChatSession(
             id="sess-1",
             tenant_id="t1",
             user_id="u1",
@@ -27,7 +27,7 @@ class TestChatSession:
 
     def test_default_is_shared(self):
         now = utcnow()
-        session = ChatSession(
+        session = OrchidChatSession(
             id="s",
             tenant_id="t",
             user_id="u",
@@ -41,7 +41,7 @@ class TestChatSession:
 class TestChatMessage:
     def test_creation(self):
         now = utcnow()
-        msg = ChatMessage(
+        msg = OrchidChatMessage(
             id="msg-1",
             chat_id="chat-1",
             role="user",
@@ -58,6 +58,6 @@ class TestChatMessage:
         assert msg.metadata == {"key": "val"}
 
     def test_default_agents_used_and_metadata(self):
-        msg = ChatMessage(id="m", chat_id="c", role="assistant", content="Hi")
+        msg = OrchidChatMessage(id="m", chat_id="c", role="assistant", content="Hi")
         assert msg.agents_used == []
         assert msg.metadata == {}

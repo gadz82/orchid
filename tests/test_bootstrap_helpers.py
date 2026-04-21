@@ -17,7 +17,7 @@ from orchid_ai.bootstrap import (
     _resolve_overrides,
     _run_startup_hook,
 )
-from orchid_ai.config.schema import AgentConfig, AgentsConfig, RAGConfig
+from orchid_ai.config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidRAGConfig
 
 
 @pytest.fixture
@@ -204,13 +204,13 @@ class TestPrepareReader:
             runtime_overrides={"reader": custom},
         )
         # Empty agents → no namespaces → no ensure/warn
-        empty_config = AgentsConfig(agents={})
+        empty_config = OrchidAgentsConfig(agents={})
         reader = await _prepare_reader(ov, empty_config)
         assert reader is custom
 
     @pytest.mark.asyncio
     async def test_warns_when_agents_need_admin_reader(self, clean_env, caplog):
-        # A plain mock is not a VectorStoreAdmin.
+        # A plain mock is not a OrchidVectorStoreAdmin.
         plain = MagicMock(spec=object)
         ov = _resolve_overrides(
             agents_config_path="",
@@ -228,12 +228,12 @@ class TestPrepareReader:
             startup_hook="",
             runtime_overrides={"reader": plain},
         )
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "a": AgentConfig(
+                "a": OrchidAgentConfig(
                     description="a",
                     prompt="p",
-                    rag=RAGConfig(enabled=True, namespace="foo"),
+                    rag=OrchidRAGConfig(enabled=True, namespace="foo"),
                 )
             }
         )

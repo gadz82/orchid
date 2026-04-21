@@ -1,9 +1,9 @@
 """
 Standalone helper functions for agent operations.
 
-These functions contain the reusable logic that ``BaseAgent`` methods
+These functions contain the reusable logic that ``OrchidAgent`` methods
 delegate to.  They can also be imported directly by custom agents or
-tests without requiring a ``BaseAgent`` instance.
+tests without requiring a ``OrchidAgent`` instance.
 
 Conversation history extraction, query reformulation, RAG retrieval,
 and LLM summarization each live here as a pure async function.
@@ -15,8 +15,8 @@ import json
 import logging
 from typing import Any
 
-from .scopes import RAGScope
-from .state import AgentState
+from .scopes import OrchidRAGScope
+from .state import OrchidAgentState
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # ── User query extraction ──────────────────────────────────────
 
 
-def extract_user_query(state: AgentState) -> str:
+def extract_user_query(state: OrchidAgentState) -> str:
     """Walk messages in reverse to find the last human message."""
     for msg in reversed(state.get("messages", [])):
         if hasattr(msg, "type") and msg.type == "human":
@@ -38,7 +38,7 @@ def extract_user_query(state: AgentState) -> str:
 
 
 def extract_conversation_history(
-    state: AgentState,
+    state: OrchidAgentState,
     *,
     max_turns: int = 10,
     max_chars: int | None = None,
@@ -157,7 +157,7 @@ _REFORMULATE_PROMPT = (
 
 async def reformulate_query(
     query: str,
-    state: AgentState,
+    state: OrchidAgentState,
     *,
     chat_model: Any,
     agent_name: str = "",
@@ -197,7 +197,7 @@ async def reformulate_query(
 
 async def fetch_rag_context(
     query: str,
-    scope: RAGScope,
+    scope: OrchidRAGScope,
     *,
     reader: Any,
     namespace: str,
@@ -249,7 +249,7 @@ async def summarise(
 ) -> str:
     """Use LLM to produce a human-readable summary of RAG + MCP data.
 
-    Standalone version of ``BaseAgent.summarise()``.
+    Standalone version of ``OrchidAgent.summarise()``.
     """
     enriched_system = system_prompt
 

@@ -1,33 +1,28 @@
 """
-Shared runtime bootstrap — single source of truth for building the
-``OrchidRuntime`` + persistence + checkpointer stack from configuration.
+Shared runtime bootstrap — private single source of truth for building
+the ``OrchidRuntime`` + persistence + checkpointer stack.
 
-Called by:
-  * :class:`orchid_ai.client.OrchidClient.from_config_path` — in-process clients
-  * ``orchid_api.lifecycle.setup_orchid`` — FastAPI server
-  * ``orchid_cli.bootstrap.bootstrap``   — CLI
+This module is an **implementation detail** of :class:`orchid_ai.Orchid`.
+``_build_runtime`` / ``_teardown_runtime`` / ``_BootstrapResult`` are
+leading-underscore private symbols and are not part of the public SDK
+surface — integrators go through :class:`orchid_ai.Orchid` instead.
 
-Keeping this logic in one place prevents the three entry points from
-drifting.  Each caller adds only its own adapter-specific concerns
-(tracing + HTTP client + identity resolver for the API, Typer context
-for the CLI, etc.).
+The only callers are:
+  * :meth:`orchid_ai.Orchid.from_config_path` — the mandatory entry
+    point for ``orchid-api``, ``orchid-cli``, and in-process integrators
+  * this module's own :func:`_teardown_runtime`, invoked indirectly by
+    :meth:`Orchid.close`
 
-The orchestrator :func:`build_runtime` delegates to focused, unit-
+Keeping this wiring in one private module prevents the three downstream
+entry points from drifting; every adapter-specific concern (tracing, an
+HTTP client, an identity resolver, a Typer context) stays inside its
+own adapter package.
+
+The orchestrator :func:`_build_runtime` delegates to focused, unit-
 testable helpers (:func:`_resolve_overrides`, :func:`_prepare_reader`,
 :func:`_build_persistence`, :func:`_run_startup_hook`,
 :func:`_attach_checkpointer`) — splitting a 200-line linear sequence
 into a handful of 10-30 line functions with obvious contracts.
-
-Example::
-
-    from orchid_ai.bootstrap import build_runtime, teardown_runtime
-
-    result = await build_runtime(config_path="orchid.yml")
-    try:
-        graph = build_graph(config=result.config, runtime=result.runtime)
-        # ... use the graph ...
-    finally:
-        await teardown_runtime(result)
 """
 
 from __future__ import annotations
@@ -39,11 +34,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from .config.loader import load_config
-from .config.schema import AgentsConfig
+from .config.schema import OrchidAgentsConfig
 from .config.yaml_env import apply_yaml_to_env
-from .core.mcp import MCPTokenStore
-from .core.repository import VectorReader, VectorStoreAdmin
-from .persistence.base import ChatStorage
+from .core.mcp import OrchidMCPTokenStore
+from .core.repository import OrchidVectorReader, OrchidVectorStoreAdmin
+from .persistence.base import OrchidChatStorage
 from .persistence.factory import build_chat_storage
 from .persistence.mcp_token_factory import build_mcp_token_store
 from .rag.factory import build_reader
@@ -58,23 +53,23 @@ _DEFAULT_MODEL = "ollama/llama3.2"
 _DEFAULT_VECTOR_BACKEND = "qdrant"
 _DEFAULT_QDRANT_URL = "http://qdrant:6333"
 _DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
-_DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.SQLiteChatStorage"
+_DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
 _DEFAULT_STORAGE_DSN = "~/.orchid/chats.db"
-_DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.SQLiteMCPTokenStore"
+_DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore"
 
 
 @dataclass
-class BootstrapResult:
-    """Resources produced by :func:`build_runtime`.
+class _BootstrapResult:
+    """Resources produced by :func:`_build_runtime`.
 
     The caller owns every field and must release them — either by calling
-    :func:`teardown_runtime`, or by shutting each resource down manually.
+    :func:`_teardown_runtime`, or by shutting each resource down manually.
     """
 
     runtime: OrchidRuntime
-    config: AgentsConfig
-    chat_repo: ChatStorage
-    mcp_token_store: MCPTokenStore
+    config: OrchidAgentsConfig
+    chat_repo: OrchidChatStorage
+    mcp_token_store: OrchidMCPTokenStore
 
 
 @dataclass(frozen=True)
@@ -103,7 +98,7 @@ class _ResolvedOverrides:
     runtime_overrides: dict[str, Any]
 
 
-async def build_runtime(
+async def _build_runtime(
     *,
     config_path: str = "",
     apply_yaml: bool = True,
@@ -123,7 +118,7 @@ async def build_runtime(
     startup_hook_kwargs: dict[str, Any] | None = None,
     runtime_overrides: dict[str, Any] | None = None,
     skip_yaml_sections: set[str] | None = None,
-) -> BootstrapResult:
+) -> _BootstrapResult:
     """Build an :class:`OrchidRuntime` plus its persistence stack.
 
     Resolution order for every optional ``*`` parameter:
@@ -150,7 +145,7 @@ async def build_runtime(
         Optional dotted import path of an integrator-supplied migrations
         package.  Applied after the framework's migrations by both the
         chat storage and the MCP token store (they share the DB).  See
-        :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
+        :class:`orchid_ai.persistence.migrations.runner.OrchidMigrationRunner`.
     mcp_token_store_class, mcp_token_store_dsn : str
         MCP per-server OAuth token store.  DSN defaults to the chat DB
         path (same file).
@@ -162,7 +157,7 @@ async def build_runtime(
         invoked after the reader is built (e.g. for seeding RAG).
     startup_hook_kwargs : dict | None
         Keyword arguments forwarded to the startup hook.  The hook always
-        receives at least ``reader=<VectorReader>``.
+        receives at least ``reader=<OrchidVectorReader>``.
     runtime_overrides : dict | None
         Extra keyword arguments forwarded to :class:`OrchidRuntime`.  Use
         this to inject a pre-built ``chat_model`` or a custom
@@ -224,7 +219,7 @@ async def build_runtime(
         list(agents_config.agents.keys()),
     )
 
-    return BootstrapResult(
+    return _BootstrapResult(
         runtime=runtime,
         config=agents_config,
         chat_repo=chat_repo,
@@ -277,13 +272,13 @@ def _resolve_overrides(
 
 async def _prepare_reader(
     overrides: _ResolvedOverrides,
-    agents_config: AgentsConfig,
-) -> VectorReader:
+    agents_config: OrchidAgentsConfig,
+) -> OrchidVectorReader:
     """Build (or accept) the vector reader and pre-create namespaces.
 
     A caller-provided ``reader`` in ``runtime_overrides`` wins over the
     built-in factory.  When any agent declares ``rag.enabled`` but the
-    reader isn't :class:`VectorStoreAdmin`, log a single warning so the
+    reader isn't :class:`OrchidVectorStoreAdmin`, log a single warning so the
     operator knows retrievals will silently return empty.
     """
     reader = overrides.runtime_overrides.pop("reader", None) or build_reader(
@@ -296,12 +291,12 @@ async def _prepare_reader(
     if not namespaces:
         return reader
 
-    if isinstance(reader, VectorStoreAdmin):
+    if isinstance(reader, OrchidVectorStoreAdmin):
         await reader.ensure_collections([*namespaces, "uploads"])
     else:
         logger.warning(
             "[Bootstrap] %d agent(s) declare rag.enabled but reader %s does not implement "
-            "VectorStoreAdmin — collections will not be auto-created; retrievals may return empty.",
+            "OrchidVectorStoreAdmin — collections will not be auto-created; retrievals may return empty.",
             len(namespaces),
             type(reader).__name__,
         )
@@ -310,7 +305,7 @@ async def _prepare_reader(
 
 async def _build_persistence(
     overrides: _ResolvedOverrides,
-) -> tuple[ChatStorage, MCPTokenStore]:
+) -> tuple[OrchidChatStorage, OrchidMCPTokenStore]:
     """Initialise chat storage and MCP token store (idempotent ``init_db``).
 
     Both stores share the integrator ``extra_migrations_package`` (they
@@ -334,7 +329,7 @@ async def _build_persistence(
 
 async def _run_startup_hook(
     hook_path: str,
-    reader: VectorReader,
+    reader: OrchidVectorReader,
     extra_kwargs: dict[str, Any] | None,
 ) -> None:
     """Resolve and invoke the startup hook, validating its signature first.
@@ -406,8 +401,8 @@ def _validate_startup_hook(path: str, hook_fn: Any, kwargs: dict[str, Any]) -> N
         ) from exc
 
 
-async def teardown_runtime(result: BootstrapResult) -> None:
-    """Idempotent cleanup for resources produced by :func:`build_runtime`.
+async def _teardown_runtime(result: _BootstrapResult) -> None:
+    """Idempotent cleanup for resources produced by :func:`_build_runtime`.
 
     Safe to call multiple times; each shutdown step short-circuits when
     its resource is already ``None`` or closed.

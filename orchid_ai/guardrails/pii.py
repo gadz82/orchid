@@ -22,10 +22,10 @@ from __future__ import annotations
 import re
 
 from ..core.guardrails import (
-    Guardrail,
-    GuardrailAction,
-    GuardrailContext,
-    GuardrailResult,
+    OrchidGuardrail,
+    OrchidGuardrailAction,
+    OrchidGuardrailContext,
+    OrchidGuardrailResult,
 )
 
 # ── PII patterns ─────────────────────────────────────────────
@@ -70,7 +70,7 @@ _PII_PATTERNS: dict[str, tuple[re.Pattern[str], str]] = {
 }
 
 
-class PIIDetectionGuardrail(Guardrail):
+class PIIDetectionGuardrail(OrchidGuardrail):
     """
     Detect and optionally redact PII in content.
 
@@ -90,7 +90,7 @@ class PIIDetectionGuardrail(Guardrail):
         fail_action: str = "redact",
         entities: list[str] | None = None,
     ) -> None:
-        self._fail_action = GuardrailAction(fail_action)
+        self._fail_action = OrchidGuardrailAction(fail_action)
 
         enabled = entities or list(_PII_PATTERNS.keys())
         self._patterns: dict[str, tuple[re.Pattern[str], str]] = {
@@ -101,7 +101,7 @@ class PIIDetectionGuardrail(Guardrail):
     def name(self) -> str:
         return "pii_detection"
 
-    async def check(self, content: str, context: GuardrailContext) -> GuardrailResult:
+    async def check(self, content: str, context: OrchidGuardrailContext) -> OrchidGuardrailResult:
         found_entities: list[dict[str, str]] = []
         redacted = content
 
@@ -113,11 +113,11 @@ class PIIDetectionGuardrail(Guardrail):
                 redacted = pattern.sub(replacement, redacted)
 
         if not found_entities:
-            return GuardrailResult.passed(self.name)
+            return OrchidGuardrailResult.passed(self.name)
 
         entity_types = list({e["type"] for e in found_entities})
 
-        return GuardrailResult(
+        return OrchidGuardrailResult(
             triggered=True,
             action=self._fail_action,
             guardrail_name=self.name,
@@ -125,7 +125,7 @@ class PIIDetectionGuardrail(Guardrail):
                 f"Personal information detected ({', '.join(entity_types)}). "
                 "Content has been filtered for privacy protection."
             ),
-            redacted_content=redacted if self._fail_action == GuardrailAction.REDACT else None,
+            redacted_content=redacted if self._fail_action == OrchidGuardrailAction.REDACT else None,
             details={
                 "entities_found": len(found_entities),
                 "entity_types": entity_types,

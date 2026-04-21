@@ -7,8 +7,8 @@ import json
 import logging
 from typing import Any, Callable, Awaitable
 
-from ..config.schema import AgentSkillStepConfig
-from ..core.state import AuthContext
+from ..config.schema import OrchidAgentSkillStepConfig
+from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,9 @@ class SkillExecutor:
     async def run_skill(
         self,
         skill_name: str,
-        steps: list[AgentSkillStepConfig],
+        steps: list[OrchidAgentSkillStepConfig],
         query: str,
-        auth: AuthContext,
+        auth: OrchidAuthContext,
     ) -> dict[str, Any]:
         """Execute a named skill step-by-step."""
         results: dict[str, Any] = {}
@@ -51,9 +51,9 @@ class SkillExecutor:
 
     async def _run_step(
         self,
-        step: AgentSkillStepConfig,
+        step: OrchidAgentSkillStepConfig,
         query: str,
-        auth: AuthContext,
+        auth: OrchidAuthContext,
         previous_results: dict[str, Any],
     ) -> Any:
         """Execute a single skill step."""
@@ -92,7 +92,7 @@ class SkillExecutor:
         self,
         tool_name: str,
         query: str,
-        auth: AuthContext,
+        auth: OrchidAuthContext,
         step_arguments: dict[str, Any],
         previous_results: dict[str, Any],
     ) -> Any:
@@ -165,7 +165,7 @@ class SkillExecutor:
         agent_name: str,
         instruction: str,
         query: str,
-        auth: AuthContext,
+        auth: OrchidAuthContext,
         previous_results: dict[str, Any],
     ) -> dict[str, Any]:
         """Invoke another agent within a skill step."""
@@ -188,9 +188,9 @@ class SkillExecutor:
             context_str = json.dumps(previous_results, indent=2, default=str)
             effective_query += f"\n\nContext from previous steps:\n```json\n{context_str}\n```"
 
-        from ..core.state import AgentState
+        from ..core.state import OrchidAgentState
 
-        mini_state: AgentState = {
+        mini_state: OrchidAgentState = {
             "messages": [HumanMessage(content=effective_query)],
             "auth_context": auth,
             "chat_id": "",

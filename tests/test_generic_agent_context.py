@@ -9,16 +9,16 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from orchid_ai.agents.generic_agent import GenericAgent
-from orchid_ai.config.schema import AgentConfig, LLMConfig, RAGConfig
-from orchid_ai.core.state import AuthContext
+from orchid_ai.config.schema import OrchidAgentConfig, OrchidLLMConfig, OrchidRAGConfig
+from orchid_ai.core.state import OrchidAuthContext
 
 
 def _make_agent() -> GenericAgent:
-    config = AgentConfig(
+    config = OrchidAgentConfig(
         description="Test agent",
         prompt="You are a test agent.",
-        rag=RAGConfig(enabled=False, namespace="test"),
-        llm=LLMConfig(model="test-model"),
+        rag=OrchidRAGConfig(enabled=False, namespace="test"),
+        llm=OrchidLLMConfig(model="test-model"),
     )
     reader = MagicMock()
     reader.retrieve = AsyncMock(return_value=[])
@@ -43,7 +43,7 @@ def _make_state(
     messages.append(HumanMessage(content=query))
     state: dict[str, Any] = {
         "messages": messages,
-        "auth_context": AuthContext(
+        "auth_context": OrchidAuthContext(
             access_token="tok",
             tenant_key="t1",
             user_id="u1",

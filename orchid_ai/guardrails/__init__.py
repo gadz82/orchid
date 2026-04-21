@@ -8,7 +8,7 @@ following the same Open/Closed pattern as tool call strategies.
 Usage::
 
     from orchid_ai.guardrails import get_guardrail, build_guardrail_chain
-    from orchid_ai.core.guardrails import GuardrailContext, GuardrailDirection
+    from orchid_ai.core.guardrails import OrchidGuardrailContext, OrchidGuardrailDirection
 
     chain = build_guardrail_chain([
         {"type": "max_length", "fail_action": "block", "config": {"max_characters": 5000}},

@@ -1,4 +1,4 @@
-"""Tests for src.agents.strategies — ToolCallStrategy implementations."""
+"""Tests for src.agents.strategies — OrchidToolCallStrategy implementations."""
 
 from __future__ import annotations
 
@@ -11,15 +11,15 @@ from orchid_ai.agents.strategies import (
     SequentialStrategy,
     get_strategy,
 )
-from orchid_ai.config.schema import ToolConfig
-from orchid_ai.core.mcp import MCPClient, MCPToolResult
-from orchid_ai.core.state import AuthContext
+from orchid_ai.config.schema import OrchidToolConfig
+from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
+from orchid_ai.core.state import OrchidAuthContext
 
 
 # ── Inline mock MCP client ──────────────────────────────────────
 
 
-class _MockMCPClient(MCPClient):
+class _MockMCPClient(OrchidMCPClient):
     """Lightweight mock for strategy tests."""
 
     def __init__(self, results=None, raise_for=None):
@@ -33,7 +33,7 @@ class _MockMCPClient(MCPClient):
             raise RuntimeError(f"Tool {tool_name} failed")
         if tool_name in self._results:
             return self._results[tool_name]
-        return MCPToolResult(content=[{"type": "text", "text": f"result_{tool_name}"}])
+        return OrchidMCPToolResult(content=[{"type": "text", "text": f"result_{tool_name}"}])
 
     async def list_tools(self, auth):
         return [{"name": k, "description": f"Tool {k}"} for k in self._results]
@@ -59,11 +59,11 @@ class _MockMCPClient(MCPClient):
 
 
 def _auth():
-    return AuthContext(access_token="test-token")
+    return OrchidAuthContext(access_token="test-token")
 
 
 def _tools(*names):
-    return [ToolConfig(name=n) for n in names]
+    return [OrchidToolConfig(name=n) for n in names]
 
 
 # ── CallAllStrategy ─────────────────────────────────────────────
@@ -84,7 +84,7 @@ class TestCallAllStrategy:
     async def test_returns_results_keyed_by_name(self):
         client = _MockMCPClient(
             results={
-                "tool_a": MCPToolResult(content=[{"type": "text", "text": "hello"}]),
+                "tool_a": OrchidMCPToolResult(content=[{"type": "text", "text": "hello"}]),
             }
         )
         strategy = CallAllStrategy()
@@ -174,7 +174,7 @@ class TestStrategyRegistry:
         assert "llm_decides" in STRATEGY_REGISTRY
 
     def test_values_are_strategy_subclasses(self):
-        from orchid_ai.agents.strategies import ToolCallStrategy
+        from orchid_ai.agents.strategies import OrchidToolCallStrategy
 
         for cls in STRATEGY_REGISTRY.values():
-            assert issubclass(cls, ToolCallStrategy)
+            assert issubclass(cls, OrchidToolCallStrategy)

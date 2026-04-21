@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 from langchain_core.language_models import BaseChatModel
 
 from orchid_ai.config.schema import (
-    AgentConfig,
-    AgentsConfig,
-    DefaultsConfig,
-    LLMConfig,
-    RAGConfig,
-    SupervisorConfig,
+    OrchidAgentConfig,
+    OrchidAgentsConfig,
+    OrchidDefaultsConfig,
+    OrchidLLMConfig,
+    OrchidRAGConfig,
+    OrchidSupervisorConfig,
 )
 
 
@@ -20,29 +20,29 @@ from orchid_ai.config.schema import (
 
 
 class TestLLMConfigFallback:
-    """LLMConfig.fallback_model field."""
+    """OrchidLLMConfig.fallback_model field."""
 
     def test_default_no_fallback(self):
-        cfg = LLMConfig()
+        cfg = OrchidLLMConfig()
         assert cfg.fallback_model is None
 
     def test_fallback_model_set(self):
-        cfg = LLMConfig(model="gemini/gemini-2.5-flash", fallback_model="ollama/llama3.2")
+        cfg = OrchidLLMConfig(model="gemini/gemini-2.5-flash", fallback_model="ollama/llama3.2")
         assert cfg.model == "gemini/gemini-2.5-flash"
         assert cfg.fallback_model == "ollama/llama3.2"
 
     def test_fallback_model_from_dict(self):
         """Parse from dict (as YAML loader produces)."""
         data = {"model": "openai/gpt-4o", "fallback_model": "anthropic/claude-sonnet-4-20250514"}
-        cfg = LLMConfig(**data)
+        cfg = OrchidLLMConfig(**data)
         assert cfg.fallback_model == "anthropic/claude-sonnet-4-20250514"
 
     def test_supervisor_fallback(self):
-        cfg = SupervisorConfig(fallback_model="ollama/llama3.2")
+        cfg = OrchidSupervisorConfig(fallback_model="ollama/llama3.2")
         assert cfg.fallback_model == "ollama/llama3.2"
 
     def test_supervisor_default_no_fallback(self):
-        cfg = SupervisorConfig()
+        cfg = OrchidSupervisorConfig()
         assert cfg.fallback_model is None
 
 
@@ -50,12 +50,12 @@ class TestFallbackInheritance:
     """Default fallback propagates to agents unless overridden."""
 
     def test_default_fallback_in_config(self):
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
-                llm=LLMConfig(model="gemini/gemini-2.5-flash", fallback_model="ollama/llama3.2"),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                llm=OrchidLLMConfig(model="gemini/gemini-2.5-flash", fallback_model="ollama/llama3.2"),
             ),
             agents={
-                "test": AgentConfig(description="test", prompt="test", rag=RAGConfig(enabled=False)),
+                "test": OrchidAgentConfig(description="test", prompt="test", rag=OrchidRAGConfig(enabled=False)),
             },
         )
         # Default fallback is set
@@ -65,16 +65,16 @@ class TestFallbackInheritance:
         assert config.agents["test"].llm.model == "gemini/gemini-2.5-flash"
 
     def test_agent_overrides_fallback(self):
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
-                llm=LLMConfig(model="gemini/gemini-2.5-flash", fallback_model="ollama/llama3.2"),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                llm=OrchidLLMConfig(model="gemini/gemini-2.5-flash", fallback_model="ollama/llama3.2"),
             ),
             agents={
-                "custom": AgentConfig(
+                "custom": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    llm=LLMConfig(model="openai/gpt-4o", fallback_model="anthropic/claude-sonnet-4-20250514"),
-                    rag=RAGConfig(enabled=False),
+                    llm=OrchidLLMConfig(model="openai/gpt-4o", fallback_model="anthropic/claude-sonnet-4-20250514"),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -83,21 +83,21 @@ class TestFallbackInheritance:
 
     def test_agent_with_custom_model_keeps_own_fallback(self):
         """Agent with custom model and explicit fallback_model keeps its own."""
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
-                llm=LLMConfig(model="gemini/gemini-2.5-flash", fallback_model="ollama/llama3.2"),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                llm=OrchidLLMConfig(model="gemini/gemini-2.5-flash", fallback_model="ollama/llama3.2"),
             ),
             agents={
-                "custom_fb": AgentConfig(
+                "custom_fb": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    llm=LLMConfig(model="openai/gpt-4o", fallback_model="anthropic/claude-sonnet-4-20250514"),
-                    rag=RAGConfig(enabled=False),
+                    llm=OrchidLLMConfig(model="openai/gpt-4o", fallback_model="anthropic/claude-sonnet-4-20250514"),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
-                "no_custom_llm": AgentConfig(
+                "no_custom_llm": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -148,15 +148,15 @@ class TestGraphFallbackWiring:
         from orchid_ai.graph.graph import build_graph
         from orchid_ai.runtime import OrchidRuntime
 
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
-                llm=LLMConfig(model="ollama/llama3.2", fallback_model="ollama/mistral"),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                llm=OrchidLLMConfig(model="ollama/llama3.2", fallback_model="ollama/mistral"),
             ),
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test agent",
                     prompt="You are a test agent",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -168,11 +168,11 @@ class TestGraphFallbackWiring:
         """Agent with its own fallback gets a dedicated chat model."""
         from orchid_ai.graph.graph import _instantiate_agent
 
-        agent_config = AgentConfig(
+        agent_config = OrchidAgentConfig(
             description="critical agent",
             prompt="You are critical",
-            llm=LLMConfig(model="openai/gpt-4o", fallback_model="anthropic/claude-sonnet-4-20250514"),
-            rag=RAGConfig(enabled=False),
+            llm=OrchidLLMConfig(model="openai/gpt-4o", fallback_model="anthropic/claude-sonnet-4-20250514"),
+            rag=OrchidRAGConfig(enabled=False),
         )
         agent_config.name = "critical"
 
@@ -199,11 +199,11 @@ class TestGraphFallbackWiring:
         """Agent without custom LLM uses the shared default chat model."""
         from orchid_ai.graph.graph import _instantiate_agent
 
-        agent_config = AgentConfig(
+        agent_config = OrchidAgentConfig(
             description="basic agent",
             prompt="You are basic",
-            rag=RAGConfig(enabled=False),
-            llm=LLMConfig(model="ollama/llama3.2"),
+            rag=OrchidRAGConfig(enabled=False),
+            llm=OrchidLLMConfig(model="ollama/llama3.2"),
         )
         agent_config.name = "basic"
 
@@ -229,14 +229,14 @@ class TestGraphFallbackWiring:
         from orchid_ai.graph.graph import build_graph
         from orchid_ai.runtime import OrchidRuntime
 
-        config = AgentsConfig(
-            defaults=DefaultsConfig(llm=LLMConfig(model="ollama/llama3.2")),
-            supervisor=SupervisorConfig(fallback_model="ollama/mistral"),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(llm=OrchidLLMConfig(model="ollama/llama3.2")),
+            supervisor=OrchidSupervisorConfig(fallback_model="ollama/mistral"),
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -249,13 +249,13 @@ class TestGraphFallbackWiring:
         from orchid_ai.graph.graph import build_graph
         from orchid_ai.runtime import OrchidRuntime
 
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
-                    llm=LLMConfig(model="ollama/llama3.2"),
+                    rag=OrchidRAGConfig(enabled=False),
+                    llm=OrchidLLMConfig(model="ollama/llama3.2"),
                 ),
             },
         )
@@ -271,7 +271,7 @@ class TestFallbackYAML:
     """Verify fallback_model survives YAML config loading."""
 
     def test_agents_yaml_with_fallback(self):
-        """AgentsConfig parses fallback_model from dict (simulates YAML)."""
+        """OrchidAgentsConfig parses fallback_model from dict (simulates YAML)."""
         raw = {
             "defaults": {
                 "llm": {
@@ -298,7 +298,7 @@ class TestFallbackYAML:
                 },
             },
         }
-        config = AgentsConfig(**raw)
+        config = OrchidAgentsConfig(**raw)
 
         assert config.defaults.llm.fallback_model == "ollama/llama3.2"
         assert config.supervisor.fallback_model == "ollama/mistral"

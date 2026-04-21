@@ -16,10 +16,10 @@ from __future__ import annotations
 import re
 
 from ..core.guardrails import (
-    Guardrail,
-    GuardrailAction,
-    GuardrailContext,
-    GuardrailResult,
+    OrchidGuardrail,
+    OrchidGuardrailAction,
+    OrchidGuardrailContext,
+    OrchidGuardrailResult,
 )
 
 # ── Default injection patterns (case-insensitive) ─────────────
@@ -62,7 +62,7 @@ _INJECTION_PATTERNS: list[tuple[str, str]] = [
 ]
 
 
-class PromptInjectionGuardrail(Guardrail):
+class PromptInjectionGuardrail(OrchidGuardrail):
     """
     Detect and block prompt injection attempts.
 
@@ -80,7 +80,7 @@ class PromptInjectionGuardrail(Guardrail):
         fail_action: str = "block",
         extra_patterns: list[str] | None = None,
     ) -> None:
-        self._fail_action = GuardrailAction(fail_action)
+        self._fail_action = OrchidGuardrailAction(fail_action)
 
         # Compile all patterns
         self._patterns: list[tuple[re.Pattern[str], str]] = [
@@ -95,11 +95,11 @@ class PromptInjectionGuardrail(Guardrail):
     def name(self) -> str:
         return "prompt_injection"
 
-    async def check(self, content: str, context: GuardrailContext) -> GuardrailResult:
+    async def check(self, content: str, context: OrchidGuardrailContext) -> OrchidGuardrailResult:
         for pattern, category in self._patterns:
             match = pattern.search(content)
             if match:
-                return GuardrailResult(
+                return OrchidGuardrailResult(
                     triggered=True,
                     action=self._fail_action,
                     guardrail_name=self.name,
@@ -110,4 +110,4 @@ class PromptInjectionGuardrail(Guardrail):
                     },
                 )
 
-        return GuardrailResult.passed(self.name)
+        return OrchidGuardrailResult.passed(self.name)

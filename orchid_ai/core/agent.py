@@ -1,7 +1,7 @@
 """
 Base agent abstraction — Open/Closed Principle (ADR-008).
 
-Adding a new agent = subclass BaseAgent + register in Composition Root.
+Adding a new agent = subclass OrchidAgent + register in Composition Root.
 Nothing else needs to change.
 
 This module uses ONLY stdlib types for its own definitions.  The
@@ -25,15 +25,15 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from . import helpers as _helpers
-from .mcp import MCPClient
-from .repository import VectorReader
-from .scopes import RAGScope
-from .state import AgentState
+from .mcp import OrchidMCPClient
+from .repository import OrchidVectorReader
+from .scopes import OrchidRAGScope
+from .state import OrchidAgentState
 
 logger = logging.getLogger(__name__)
 
 
-class BaseAgent(ABC):
+class OrchidAgent(ABC):
     """
     Abstract base for all domain agents.
 
@@ -45,8 +45,8 @@ class BaseAgent(ABC):
         self,
         *,
         model_id: Any = None,
-        reader: VectorReader,
-        mcp_clients: list[MCPClient] | None = None,
+        reader: OrchidVectorReader,
+        mcp_clients: list[OrchidMCPClient] | None = None,
         chat_model: Any | None = None,
         **_kwargs: Any,
     ):
@@ -85,7 +85,7 @@ class BaseAgent(ABC):
     # ── Execution ───────────────────────────────────────────
 
     @abstractmethod
-    async def run(self, state: AgentState) -> AgentState:
+    async def run(self, state: OrchidAgentState) -> OrchidAgentState:
         """
         Agent-specific logic.
         Receives the full graph state, returns the updated state.
@@ -98,7 +98,7 @@ class BaseAgent(ABC):
     # ── Shared helpers ──────────────────────────────────────
 
     @staticmethod
-    def extract_user_query(state: AgentState) -> str:
+    def extract_user_query(state: OrchidAgentState) -> str:
         """Walk messages in reverse to find the last human message."""
         for msg in reversed(state.get("messages", [])):
             # Duck-type check: LangChain message objects expose .type
@@ -108,7 +108,7 @@ class BaseAgent(ABC):
                 return str(msg.content)
         return ""
 
-    async def reformulate_query(self, query: str, state: AgentState) -> str:
+    async def reformulate_query(self, query: str, state: OrchidAgentState) -> str:
         """Rewrite the user's query as a standalone search query.
 
         Delegates to :func:`core.helpers.reformulate_query`.  See that
@@ -123,7 +123,7 @@ class BaseAgent(ABC):
 
     @staticmethod
     def extract_conversation_history(
-        state: AgentState,
+        state: OrchidAgentState,
         *,
         max_turns: int = 10,
         max_chars: int | None = None,
@@ -140,7 +140,7 @@ class BaseAgent(ABC):
 
         Parameters
         ----------
-        state : AgentState
+        state : OrchidAgentState
             Full graph state containing ``messages``.
         max_turns : int
             Maximum number of user/assistant exchanges to keep.
@@ -275,7 +275,7 @@ class BaseAgent(ABC):
     async def fetch_rag_context(
         self,
         query: str,
-        scope: RAGScope,
+        scope: OrchidRAGScope,
         *,
         namespace: str | None = None,
         k: int = 5,
@@ -330,7 +330,7 @@ class BaseAgent(ABC):
     async def fetch_all_rag_context(
         self,
         query: str,
-        scope: RAGScope,
+        scope: OrchidRAGScope,
         *,
         k: int = 5,
     ) -> list[dict[str, Any]]:

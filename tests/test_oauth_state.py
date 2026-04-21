@@ -7,16 +7,16 @@ import time
 import pytest
 
 from orchid_ai.mcp.oauth_state import (
-    InMemoryOAuthStateStore,
-    OAuthPendingState,
-    OAuthStateStore,
+    OrchidInMemoryOAuthStateStore,
+    OrchidOAuthPendingState,
+    OrchidOAuthStateStore,
     build_oauth_state_store,
     register_oauth_state_store,
 )
 
 
-def _payload(state_id: str = "srv", *, created_at: float | None = None) -> OAuthPendingState:
-    return OAuthPendingState(
+def _payload(state_id: str = "srv", *, created_at: float | None = None) -> OrchidOAuthPendingState:
+    return OrchidOAuthPendingState(
         server_name=state_id,
         tenant_id="t",
         user_id="u",
@@ -29,7 +29,7 @@ def _payload(state_id: str = "srv", *, created_at: float | None = None) -> OAuth
 class TestInMemoryStore:
     @pytest.mark.asyncio
     async def test_put_pop_roundtrip(self):
-        store = InMemoryOAuthStateStore()
+        store = OrchidInMemoryOAuthStateStore()
         payload = _payload()
 
         await store.put("abc", payload)
@@ -39,7 +39,7 @@ class TestInMemoryStore:
 
     @pytest.mark.asyncio
     async def test_pop_consumes(self):
-        store = InMemoryOAuthStateStore()
+        store = OrchidInMemoryOAuthStateStore()
         await store.put("abc", _payload())
 
         first = await store.pop("abc")
@@ -50,12 +50,12 @@ class TestInMemoryStore:
 
     @pytest.mark.asyncio
     async def test_pop_missing_returns_none(self):
-        store = InMemoryOAuthStateStore()
+        store = OrchidInMemoryOAuthStateStore()
         assert await store.pop("never-put") is None
 
     @pytest.mark.asyncio
     async def test_expired_entries_are_evicted(self):
-        store = InMemoryOAuthStateStore(ttl_seconds=0.01)
+        store = OrchidInMemoryOAuthStateStore(ttl_seconds=0.01)
         await store.put("old", _payload(created_at=time.time() - 10))
         await store.put("new", _payload())
 
@@ -65,7 +65,7 @@ class TestInMemoryStore:
 
     @pytest.mark.asyncio
     async def test_close_is_noop(self):
-        store = InMemoryOAuthStateStore()
+        store = OrchidInMemoryOAuthStateStore()
         await store.close()
         await store.close()  # idempotent
 
@@ -74,23 +74,23 @@ class TestFactory:
     @pytest.mark.asyncio
     async def test_memory_returns_in_memory_store(self):
         store = await build_oauth_state_store("memory")
-        assert isinstance(store, InMemoryOAuthStateStore)
+        assert isinstance(store, OrchidInMemoryOAuthStateStore)
 
     @pytest.mark.asyncio
     async def test_default_type_is_memory(self):
         store = await build_oauth_state_store()
-        assert isinstance(store, InMemoryOAuthStateStore)
+        assert isinstance(store, OrchidInMemoryOAuthStateStore)
 
     @pytest.mark.asyncio
     async def test_registered_type_wins(self):
-        class DummyStore(OAuthStateStore):
-            async def put(self, state: str, payload: OAuthPendingState) -> None:
+        class DummyStore(OrchidOAuthStateStore):
+            async def put(self, state: str, payload: OrchidOAuthPendingState) -> None:
                 return None
 
-            async def pop(self, state: str) -> OAuthPendingState | None:
+            async def pop(self, state: str) -> OrchidOAuthPendingState | None:
                 return None
 
-        async def dummy_factory(*, dsn: str, ttl_seconds: float) -> OAuthStateStore:
+        async def dummy_factory(*, dsn: str, ttl_seconds: float) -> OrchidOAuthStateStore:
             return DummyStore()
 
         register_oauth_state_store("dummy", dummy_factory)
@@ -100,10 +100,10 @@ class TestFactory:
     @pytest.mark.asyncio
     async def test_custom_class_path(self):
         store = await build_oauth_state_store(
-            "orchid_ai.mcp.oauth_state.InMemoryOAuthStateStore",
+            "orchid_ai.mcp.oauth_state.OrchidInMemoryOAuthStateStore",
             ttl_seconds=42.0,
         )
-        assert isinstance(store, InMemoryOAuthStateStore)
+        assert isinstance(store, OrchidInMemoryOAuthStateStore)
 
     @pytest.mark.asyncio
     async def test_non_subclass_raises(self):

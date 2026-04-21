@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from orchid_ai.rag.null import NullVectorReader
-from orchid_ai.rag.scopes import RAGScope
+from orchid_ai.rag.scopes import OrchidRAGScope
 
 
 class TestNullVectorReader:
@@ -18,7 +18,7 @@ class TestNullVectorReader:
     @pytest.mark.asyncio
     async def test_retrieve_with_scope(self):
         reader = NullVectorReader()
-        scope = RAGScope(tenant_id="t-1", user_id="u-1", chat_id="c-1")
+        scope = OrchidRAGScope(tenant_id="t-1", user_id="u-1", chat_id="c-1")
         result = await reader.retrieve("query", "ns", k=10, scope=scope)
         assert result == []
 

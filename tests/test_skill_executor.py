@@ -6,7 +6,7 @@ import pytest
 
 from orchid_ai.agents.skill_executor import SkillExecutor
 from orchid_ai.config import tool_registry as treg
-from orchid_ai.core.state import AuthContext
+from orchid_ai.core.state import OrchidAuthContext
 
 
 @pytest.fixture(autouse=True)
@@ -16,17 +16,17 @@ def _clean_registry():
     treg.clear()
 
 
-def _make_auth() -> AuthContext:
-    return AuthContext(access_token="tok", tenant_key="t", user_id="u")
+def _make_auth() -> OrchidAuthContext:
+    return OrchidAuthContext(access_token="tok", tenant_key="t", user_id="u")
 
 
 def _make_executor() -> SkillExecutor:
-    from orchid_ai.core.agent import BaseAgent
+    from orchid_ai.core.agent import OrchidAgent
 
     return SkillExecutor(
         agent_name="test",
         mcp_dispatcher=None,
-        builtin_tool_caller=BaseAgent.call_builtin_tool.__get__(type("Stub", (), {})),  # won't be used directly
+        builtin_tool_caller=OrchidAgent.call_builtin_tool.__get__(type("Stub", (), {})),  # won't be used directly
     )
 
 

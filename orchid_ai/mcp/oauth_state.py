@@ -1,15 +1,15 @@
 """
-OAuthStateStore — pluggable PKCE + CSRF state for MCP OAuth flows.
+OrchidOAuthStateStore — pluggable PKCE + CSRF state for MCP OAuth flows.
 
 Between the ``GET /authorize`` redirect and the ``GET /callback``
 redirect, the server must remember per-request data (PKCE verifier,
 server name, token endpoint, tenant / user identity).  The default
-:class:`InMemoryOAuthStateStore` keeps this in a process-local dict —
+:class:`OrchidInMemoryOAuthStateStore` keeps this in a process-local dict —
 fine for single-instance deployments.
 
 Multi-instance deployments (multiple uvicorn workers behind a load
 balancer) need shared storage so the callback can land on a different
-worker than the authorize.  Integrators implement :class:`OAuthStateStore`
+worker than the authorize.  Integrators implement :class:`OrchidOAuthStateStore`
 on top of Redis / the database of their choice and register it via the
 :func:`build_oauth_state_store` factory::
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class OAuthPendingState:
+class OrchidOAuthPendingState:
     """Per-request state stored between ``/authorize`` and ``/callback``.
 
     Frozen because the payload is captured at the ``/authorize`` call
@@ -49,11 +49,11 @@ class OAuthPendingState:
     created_at: float
 
 
-class OAuthStateStore(ABC):
+class OrchidOAuthStateStore(ABC):
     """Abstract PKCE / CSRF state store for MCP OAuth flows.
 
     Implementations must be safe to call from concurrent requests
-    (``InMemoryOAuthStateStore`` relies on a single event loop / GIL).
+    (``OrchidInMemoryOAuthStateStore`` relies on a single event loop / GIL).
 
     Constructor contract
     --------------------
@@ -71,11 +71,11 @@ class OAuthStateStore(ABC):
     """
 
     @abstractmethod
-    async def put(self, state: str, payload: OAuthPendingState) -> None:
+    async def put(self, state: str, payload: OrchidOAuthPendingState) -> None:
         """Store ``payload`` under the CSRF ``state`` token."""
 
     @abstractmethod
-    async def pop(self, state: str) -> OAuthPendingState | None:
+    async def pop(self, state: str) -> OrchidOAuthPendingState | None:
         """Fetch *and remove* the payload for ``state``; ``None`` if unknown."""
 
     async def cleanup_expired(self, ttl_seconds: float) -> None:
@@ -92,7 +92,7 @@ class OAuthStateStore(ABC):
         return None
 
 
-class InMemoryOAuthStateStore(OAuthStateStore):
+class OrchidInMemoryOAuthStateStore(OrchidOAuthStateStore):
     """Single-process OAuth state store — the default.
 
     Evicts expired entries lazily on every access.  Suitable for
@@ -101,13 +101,13 @@ class InMemoryOAuthStateStore(OAuthStateStore):
 
     def __init__(self, *, ttl_seconds: float = 600.0) -> None:
         self._ttl = ttl_seconds
-        self._pending: dict[str, OAuthPendingState] = {}
+        self._pending: dict[str, OrchidOAuthPendingState] = {}
 
-    async def put(self, state: str, payload: OAuthPendingState) -> None:
+    async def put(self, state: str, payload: OrchidOAuthPendingState) -> None:
         await self._sweep()
         self._pending[state] = payload
 
-    async def pop(self, state: str) -> OAuthPendingState | None:
+    async def pop(self, state: str) -> OrchidOAuthPendingState | None:
         await self._sweep()
         return self._pending.pop(state, None)
 
@@ -125,20 +125,20 @@ class InMemoryOAuthStateStore(OAuthStateStore):
 # ── Factory + registry ────────────────────────────────────────
 
 
-_OAUTH_STATE_REGISTRY: dict[str, Callable[..., Coroutine[Any, Any, OAuthStateStore]]] = {}
+_OAUTH_STATE_REGISTRY: dict[str, Callable[..., Coroutine[Any, Any, OrchidOAuthStateStore]]] = {}
 
 
 def register_oauth_state_store(
     type_name: str,
-    factory: Callable[..., Coroutine[Any, Any, OAuthStateStore]],
+    factory: Callable[..., Coroutine[Any, Any, OrchidOAuthStateStore]],
 ) -> None:
     """Register a custom OAuth state store type for :func:`build_oauth_state_store`.
 
     The factory is an async callable ``(dsn: str, ttl_seconds: float) ->
-    OAuthStateStore``.
+    OrchidOAuthStateStore``.
     """
     _OAUTH_STATE_REGISTRY[type_name] = factory
-    logger.info("[OAuthStateStore] Registered custom type: %s", type_name)
+    logger.info("[OrchidOAuthStateStore] Registered custom type: %s", type_name)
 
 
 async def build_oauth_state_store(
@@ -146,44 +146,44 @@ async def build_oauth_state_store(
     *,
     dsn: str = "",
     ttl_seconds: float = 600.0,
-) -> OAuthStateStore:
-    """Resolve ``store_type`` to a concrete :class:`OAuthStateStore`.
+) -> OrchidOAuthStateStore:
+    """Resolve ``store_type`` to a concrete :class:`OrchidOAuthStateStore`.
 
     Resolution order:
         1. Registered types from :func:`register_oauth_state_store`.
-        2. The built-in ``"memory"`` type → :class:`InMemoryOAuthStateStore`.
+        2. The built-in ``"memory"`` type → :class:`OrchidInMemoryOAuthStateStore`.
         3. A dotted class path → ``cls(ttl_seconds=..., dsn=...)``.
 
-    See :class:`OAuthStateStore` for the constructor contract that
+    See :class:`OrchidOAuthStateStore` for the constructor contract that
     dotted-path subclasses must satisfy.  If your class needs a
     different signature, register an async factory via
     :func:`register_oauth_state_store` instead.
 
     Raises ``TypeError`` when a dotted path resolves to a class that is
-    not a :class:`OAuthStateStore` subclass, or whose constructor
+    not a :class:`OrchidOAuthStateStore` subclass, or whose constructor
     rejects the ``ttl_seconds`` / ``dsn`` kwargs.
     """
     if store_type in _OAUTH_STATE_REGISTRY:
         factory_fn = _OAUTH_STATE_REGISTRY[store_type]
-        logger.info("[OAuthStateStore] Using registered type: %s", store_type)
+        logger.info("[OrchidOAuthStateStore] Using registered type: %s", store_type)
         return await factory_fn(dsn=dsn, ttl_seconds=ttl_seconds)
 
     if store_type == "memory":
-        return InMemoryOAuthStateStore(ttl_seconds=ttl_seconds)
+        return OrchidInMemoryOAuthStateStore(ttl_seconds=ttl_seconds)
 
     cls = import_class(store_type)
-    if not (isinstance(cls, type) and issubclass(cls, OAuthStateStore)):
-        raise TypeError(f"'{store_type}' resolves to {cls!r}, which is not an OAuthStateStore subclass.")
+    if not (isinstance(cls, type) and issubclass(cls, OrchidOAuthStateStore)):
+        raise TypeError(f"'{store_type}' resolves to {cls!r}, which is not an OrchidOAuthStateStore subclass.")
     kwargs: dict[str, Any] = {"ttl_seconds": ttl_seconds}
     if dsn:
         kwargs["dsn"] = dsn
-    logger.info("[OAuthStateStore] Using custom class: %s", store_type)
+    logger.info("[OrchidOAuthStateStore] Using custom class: %s", store_type)
     try:
         return cls(**kwargs)
     except TypeError as exc:
         raise TypeError(
             f"Could not instantiate '{store_type}' with kwargs={list(kwargs)}. "
-            "Dotted-path OAuthStateStore subclasses must accept `ttl_seconds=` "
+            "Dotted-path OrchidOAuthStateStore subclasses must accept `ttl_seconds=` "
             "(and optionally `dsn=`).  Register an async factory via "
             "`register_oauth_state_store` if you need a different constructor."
         ) from exc

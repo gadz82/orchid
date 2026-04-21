@@ -1,16 +1,16 @@
 """
 Shared state definitions for the LangGraph agent graph.
 
-AuthContext is the identity envelope propagated to every agent and MCP client
+OrchidAuthContext is the identity envelope propagated to every agent and MCP client
 (ADR-010 — Token Propagation).
 
-The base AuthContext defines the **minimal contract** the framework needs:
+The base OrchidAuthContext defines the **minimal contract** the framework needs:
   - ``access_token`` — for bearer passthrough to MCP servers
   - ``tenant_key``   — for RAG data isolation (multi-tenancy)
   - ``user_id``      — for chat ownership and user-scoped RAG
   - ``is_expired``   — for proactive token validation
 
-Consumers subclass AuthContext to add platform-specific fields
+Consumers subclass OrchidAuthContext to add platform-specific fields
 (e.g. with ``installation_id``, ``domain``, ``paas_token``).
 """
 
@@ -20,7 +20,7 @@ import time
 from typing import Any, TypedDict
 
 
-class AuthContext:
+class OrchidAuthContext:
     """
     Base identity context — subclass to add platform-specific fields.
 
@@ -36,7 +36,7 @@ class AuthContext:
 
     Example consumer subclass::
 
-        class MyPlatformAuthContext(AuthContext):
+        class MyPlatformAuthContext(OrchidAuthContext):
             def __init__(self, *, access_token, domain, tenant_id,
                          user_uuid, **kwargs):
                 super().__init__(access_token=access_token, **kwargs)
@@ -107,7 +107,7 @@ class AuthContext:
         )
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, AuthContext):
+        if not isinstance(other, OrchidAuthContext):
             return NotImplemented
         return (
             self.access_token == other.access_token
@@ -125,7 +125,7 @@ class AuthContext:
 # Here we define the *shape* only.
 
 
-class AgentState(TypedDict, total=False):
+class OrchidAgentState(TypedDict, total=False):
     """
     Canonical state schema for the LangGraph graph.
 
@@ -134,7 +134,7 @@ class AgentState(TypedDict, total=False):
     """
 
     messages: list[Any]  # populated as Annotated[list, add_messages] in graph/
-    auth_context: AuthContext  # ADR-010: one token for the whole session
+    auth_context: OrchidAuthContext  # ADR-010: one token for the whole session
     # ADR-014: tenant key = auth_context.tenant_key
     chat_id: str  # chat session identifier for RAG scoping
     active_agents: list[str]

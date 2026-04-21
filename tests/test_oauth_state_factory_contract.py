@@ -1,13 +1,13 @@
-"""Tests for the OAuthStateStore factory's subclass-contract error path."""
+"""Tests for the OrchidOAuthStateStore factory's subclass-contract error path."""
 
 from __future__ import annotations
 
 import pytest
 
-from orchid_ai.mcp.oauth_state import OAuthStateStore, build_oauth_state_store
+from orchid_ai.mcp.oauth_state import OrchidOAuthStateStore, build_oauth_state_store
 
 
-class _BadSignatureStore(OAuthStateStore):
+class _BadSignatureStore(OrchidOAuthStateStore):
     """Declares a constructor that rejects the factory's kwargs."""
 
     def __init__(self, *, wrong_name: str = "") -> None:  # noqa: D401

@@ -12,12 +12,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from .state import AuthContext
+from .state import OrchidAuthContext
 
 
-class IdentityResolver(ABC):
+class OrchidIdentityResolver(ABC):
     """
-    Resolves a bearer token into an ``AuthContext``.
+    Resolves a bearer token into an ``OrchidAuthContext``.
 
     Implementations typically call a platform-specific endpoint
     (e.g. a platform-specific token endpoint, or a standard
@@ -26,9 +26,9 @@ class IdentityResolver(ABC):
     """
 
     @abstractmethod
-    async def resolve(self, domain: str, bearer_token: str) -> AuthContext:
+    async def resolve(self, domain: str, bearer_token: str) -> OrchidAuthContext:
         """
-        Validate the bearer token and return a populated AuthContext.
+        Validate the bearer token and return a populated OrchidAuthContext.
 
         Parameters
         ----------
@@ -39,13 +39,13 @@ class IdentityResolver(ABC):
 
         Raises
         ------
-        IdentityError
+        OrchidIdentityError
             If the token is invalid, expired, or the platform is unreachable.
         """
         ...
 
 
-class IdentityError(Exception):
+class OrchidIdentityError(Exception):
     """Raised when identity resolution fails."""
 
     def __init__(self, message: str, status_code: int = 0) -> None:

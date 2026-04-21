@@ -14,7 +14,7 @@ def import_class(class_path: str) -> type:
     Parameters
     ----------
     class_path : str
-        Fully-qualified dotted path, e.g. ``"orchid_ai.persistence.postgres.PostgresChatStorage"``.
+        Fully-qualified dotted path, e.g. ``"orchid_ai.persistence.postgres.OrchidPostgresChatStorage"``.
 
     Raises
     ------

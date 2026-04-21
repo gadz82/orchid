@@ -28,7 +28,7 @@ def utcnow() -> datetime:
 
 
 @dataclass
-class ChatSession:
+class OrchidChatSession:
     """A conversation session belonging to a specific user/tenant."""
 
     id: str
@@ -41,7 +41,7 @@ class ChatSession:
 
 
 @dataclass
-class ChatMessage:
+class OrchidChatMessage:
     """A single message within a chat session."""
 
     id: str

@@ -8,9 +8,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..config.schema import MCPServerConfig, ToolConfig
-from ..core.mcp import MCPAuthRequiredError, MCPClient
-from ..core.state import AuthContext
+from ..config.schema import OrchidMCPServerConfig, OrchidToolConfig
+from ..core.mcp import OrchidMCPAuthRequiredError, OrchidMCPClient
+from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +25,8 @@ class MCPCapabilities:
 
     #: Tool definitions in the raw MCP format (name, description, schema).
     raw_tools: list[dict[str, Any]] = field(default_factory=list)
-    #: Mapping from tool name → (MCPClient, MCPServerConfig) for routing calls.
-    tool_client_map: dict[str, tuple[MCPClient, MCPServerConfig]] = field(default_factory=dict)
+    #: Mapping from tool name → (OrchidMCPClient, OrchidMCPServerConfig) for routing calls.
+    tool_client_map: dict[str, tuple[OrchidMCPClient, OrchidMCPServerConfig]] = field(default_factory=dict)
     #: Zero-arg prompts rendered to text: [{"name": ..., "text": ...}].
     rendered_prompts: list[dict[str, str]] = field(default_factory=list)
     #: Resource contents: {name: content_str}.
@@ -38,14 +38,14 @@ class MCPCapabilities:
 class MCPDispatcher:
     """Dispatches tool calls to MCP servers using configured strategies."""
 
-    def __init__(self, mcp_clients: list[MCPClient], server_configs: list[MCPServerConfig]):
+    def __init__(self, mcp_clients: list[OrchidMCPClient], server_configs: list[OrchidMCPServerConfig]):
         self._clients = mcp_clients
         self._configs = server_configs
 
     async def fetch(
         self,
         query: str,
-        auth: AuthContext,
+        auth: OrchidAuthContext,
         *,
         agent_name: str = "",
         llm_model: str | None = None,
@@ -69,7 +69,7 @@ class MCPDispatcher:
         if not self._clients or not self._configs:
             return {}
 
-        async def _fetch_server(i: int, server_config: MCPServerConfig) -> dict[str, Any]:
+        async def _fetch_server(i: int, server_config: OrchidMCPServerConfig) -> dict[str, Any]:
             if i >= len(self._clients):
                 logger.warning("[%s] No MCP client for server '%s' (index %d)", agent_name, server_config.name, i)
                 return {}
@@ -118,7 +118,7 @@ class MCPDispatcher:
                 # Broad catch: MCP servers can fail with HTTP errors (401, 500),
                 # transport errors, protocol errors, etc.  This is a fault-isolation
                 # boundary — one failing server must not crash the entire agent.
-                if isinstance(exc, MCPAuthRequiredError):
+                if isinstance(exc, OrchidMCPAuthRequiredError):
                     logger.info(
                         "[%s] MCP server '%s' skipped — OAuth authorization required", agent_name, server_config.name
                     )
@@ -141,7 +141,7 @@ class MCPDispatcher:
         source_name: str,
         tool_name: str,
         query: str,
-        auth: AuthContext,
+        auth: OrchidAuthContext,
         extra_args: dict[str, Any],
         previous_results: dict[str, Any],
     ) -> str:
@@ -158,15 +158,15 @@ class MCPDispatcher:
 
     async def _discover_capabilities(
         self,
-        client: MCPClient,
-        server_config: MCPServerConfig,
-        auth: AuthContext,
+        client: OrchidMCPClient,
+        server_config: OrchidMCPServerConfig,
+        auth: OrchidAuthContext,
         agent_name: str,
-    ) -> tuple[list[ToolConfig], dict[str, Any]]:
+    ) -> tuple[list[OrchidToolConfig], dict[str, Any]]:
         """Discover tools, prompts, and resources from an MCP server."""
         server_name = server_config.name
         meta: dict[str, Any] = {}
-        discovered_tools: list[ToolConfig] = []
+        discovered_tools: list[OrchidToolConfig] = []
 
         # Discover tools, prompts, and resources concurrently
         async def _discover_tools():
@@ -174,7 +174,7 @@ class MCPDispatcher:
                 return []
             try:
                 raw_tools = await client.list_tools(auth)
-                tools = [ToolConfig(name=t["name"]) for t in raw_tools]
+                tools = [OrchidToolConfig(name=t["name"]) for t in raw_tools]
                 logger.info(
                     "[%s] Discovered %d tools from '%s': %s",
                     agent_name,
@@ -237,7 +237,7 @@ class MCPDispatcher:
 
     async def render_capabilities(
         self,
-        auth: AuthContext,
+        auth: OrchidAuthContext,
         *,
         agent_name: str = "",
     ) -> MCPCapabilities:
@@ -262,7 +262,7 @@ class MCPDispatcher:
         if not self._clients or not self._configs:
             return caps
 
-        async def _render_server(i: int, server_config: MCPServerConfig) -> None:
+        async def _render_server(i: int, server_config: OrchidMCPServerConfig) -> None:
             if i >= len(self._clients):
                 return
 

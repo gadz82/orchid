@@ -1,25 +1,25 @@
-"""Tests for BaseAgent.extract_conversation_history."""
+"""Tests for OrchidAgent.extract_conversation_history."""
 
 from __future__ import annotations
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from orchid_ai.core.agent import BaseAgent
+from orchid_ai.core.agent import OrchidAgent
 
 
 class TestExtractConversationHistory:
     """Verify the framework-level conversation history extraction."""
 
     def test_empty_messages(self) -> None:
-        assert BaseAgent.extract_conversation_history({"messages": []}) == []
+        assert OrchidAgent.extract_conversation_history({"messages": []}) == []
 
     def test_no_messages_key(self) -> None:
-        assert BaseAgent.extract_conversation_history({}) == []
+        assert OrchidAgent.extract_conversation_history({}) == []
 
     def test_single_user_message_excluded(self) -> None:
         """Last user message should be excluded — it's the current query."""
         state = {"messages": [HumanMessage(content="Hello")]}
-        assert BaseAgent.extract_conversation_history(state) == []
+        assert OrchidAgent.extract_conversation_history(state) == []
 
     def test_user_assistant_pair(self) -> None:
         state = {
@@ -29,7 +29,7 @@ class TestExtractConversationHistory:
                 HumanMessage(content="Follow-up"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state)
+        result = OrchidAgent.extract_conversation_history(state)
         assert result == [
             {"role": "user", "content": "First question"},
             {"role": "assistant", "content": "First answer"},
@@ -44,7 +44,7 @@ class TestExtractConversationHistory:
                 HumanMessage(content="Follow-up"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state)
+        result = OrchidAgent.extract_conversation_history(state)
         assert len(result) == 2
         assert result[0] == {"role": "user", "content": "Hello"}
         assert result[1] == {"role": "assistant", "content": "Agent response"}
@@ -57,7 +57,7 @@ class TestExtractConversationHistory:
                 HumanMessage(content="Current query"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state)
+        result = OrchidAgent.extract_conversation_history(state)
         assert result == []
 
     def test_custom_skip_prefixes(self) -> None:
@@ -67,7 +67,7 @@ class TestExtractConversationHistory:
                 HumanMessage(content="Query"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(
+        result = OrchidAgent.extract_conversation_history(
             state,
             skip_prefixes=("[Supervisor", "[Internal]"),
         )
@@ -80,7 +80,7 @@ class TestExtractConversationHistory:
                 HumanMessage(content="Follow-up"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(
+        result = OrchidAgent.extract_conversation_history(
             state,
             strip_prefixes=("[MyAgent]\n",),
         )
@@ -94,7 +94,7 @@ class TestExtractConversationHistory:
                 HumanMessage(content="Query"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(
+        result = OrchidAgent.extract_conversation_history(
             state,
             strip_prefixes=("[AgentA]\n", "[AgentB]\n"),
         )
@@ -111,7 +111,7 @@ class TestExtractConversationHistory:
                 HumanMessage(content="Current"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state)
+        result = OrchidAgent.extract_conversation_history(state)
         assert len(result) == 1
         assert result[0] == {"role": "user", "content": "Hello"}
 
@@ -123,7 +123,7 @@ class TestExtractConversationHistory:
         messages.append(HumanMessage(content="Current query"))
 
         state = {"messages": messages}
-        result = BaseAgent.extract_conversation_history(state, max_turns=3)
+        result = OrchidAgent.extract_conversation_history(state, max_turns=3)
 
         # max_turns=3 → keep last 6 messages (3 user-assistant pairs)
         assert len(result) == 6
@@ -143,7 +143,7 @@ class TestExtractConversationHistory:
                 HumanMessage(content="Current"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state)
+        result = OrchidAgent.extract_conversation_history(state)
         assert len(result) == 6
         roles = [m["role"] for m in result]
         assert roles == ["user", "assistant", "user", "assistant", "user", "assistant"]
@@ -156,7 +156,7 @@ class TestExtractConversationHistory:
                 AIMessage(content="Answer"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state)
+        result = OrchidAgent.extract_conversation_history(state)
         assert len(result) == 2
         assert result[0] == {"role": "user", "content": "Question"}
         assert result[1] == {"role": "assistant", "content": "Answer"}
@@ -173,7 +173,7 @@ class TestMaxChars:
                 HumanMessage(content="current"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state)
+        result = OrchidAgent.extract_conversation_history(state)
         assert len(result) == 1
         assert result[0]["content"] == long_content  # not truncated
 
@@ -185,7 +185,7 @@ class TestMaxChars:
                 HumanMessage(content="current"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state, max_chars=100)
+        result = OrchidAgent.extract_conversation_history(state, max_chars=100)
         assert len(result) == 2
         # Short message untouched
         assert result[0]["content"] == "short"
@@ -201,7 +201,7 @@ class TestMaxChars:
                 HumanMessage(content="current"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state, max_chars=50)
+        result = OrchidAgent.extract_conversation_history(state, max_chars=50)
         assert len(result[0]["content"]) == 51  # 50 + "…"
         assert result[0]["content"].endswith("…")
 
@@ -214,7 +214,7 @@ class TestMaxChars:
                 HumanMessage(content="current"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(state, max_chars=100)
+        result = OrchidAgent.extract_conversation_history(state, max_chars=100)
         assert result[0]["content"] == content  # no ellipsis
 
     def test_truncation_after_strip_prefix(self) -> None:
@@ -225,7 +225,7 @@ class TestMaxChars:
                 HumanMessage(content="current"),
             ]
         }
-        result = BaseAgent.extract_conversation_history(
+        result = OrchidAgent.extract_conversation_history(
             state,
             max_chars=50,
             strip_prefixes=("[Agent]\n",),

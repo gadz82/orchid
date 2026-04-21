@@ -1,4 +1,4 @@
-"""Tests for Document, SearchResult, and vector store ABCs from src/core/repository.py."""
+"""Tests for Document, OrchidSearchResult, and vector store ABCs from src/core/repository.py."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ import pytest
 
 from orchid_ai.core.repository import (
     Document,
-    SearchResult,
-    VectorReader,
-    VectorStoreAdmin,
-    VectorStoreRepository,
-    VectorWriter,
+    OrchidSearchResult,
+    OrchidVectorReader,
+    OrchidVectorStoreAdmin,
+    OrchidVectorStoreRepository,
+    OrchidVectorWriter,
 )
 
 
@@ -30,12 +30,12 @@ def test_document_all_fields():
     assert doc.id == "d-2"
 
 
-# ── SearchResult ──
+# ── OrchidSearchResult ──
 
 
 def test_search_result():
     doc = Document(id="d-1", page_content="hello")
-    sr = SearchResult(document=doc, score=0.95)
+    sr = OrchidSearchResult(document=doc, score=0.95)
     assert sr.document is doc
     assert sr.score == 0.95
 
@@ -45,22 +45,22 @@ def test_search_result():
 
 def test_vector_reader_is_abstract():
     with pytest.raises(TypeError):
-        VectorReader()
+        OrchidVectorReader()
 
 
 def test_vector_writer_is_abstract():
     with pytest.raises(TypeError):
-        VectorWriter()
+        OrchidVectorWriter()
 
 
 def test_vector_store_admin_is_abstract():
     with pytest.raises(TypeError):
-        VectorStoreAdmin()
+        OrchidVectorStoreAdmin()
 
 
 def test_vector_store_repository_is_abstract():
     with pytest.raises(TypeError):
-        VectorStoreRepository()
+        OrchidVectorStoreRepository()
 
 
 # ── Concrete implementations work (via conftest mocks) ──

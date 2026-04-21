@@ -1,5 +1,5 @@
 """
-RAG factory — builds the concrete VectorStoreRepository at runtime.
+RAG factory — builds the concrete OrchidVectorStoreRepository at runtime.
 
 Chosen via ``Settings.vector_backend``:
   - ``qdrant`` → QdrantRepository (PoC)
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from ..core.repository import VectorReader
+from ..core.repository import OrchidVectorReader
 from .embeddings import build_embeddings, get_embedding_dimension
 from .null import NullVectorReader
 
@@ -25,11 +25,11 @@ def build_reader(
     vector_backend: str = "qdrant",
     qdrant_url: str = "http://qdrant:6333",
     embedding_model: str = "text-embedding-3-small",
-) -> VectorReader:
+) -> OrchidVectorReader:
     """
-    Factory that returns the right VectorReader based on config.
+    Factory that returns the right OrchidVectorReader based on config.
 
-    Returns a full VectorStoreRepository (which implements VectorReader)
+    Returns a full OrchidVectorStoreRepository (which implements OrchidVectorReader)
     for backends that support writes, or NullVectorReader as a fallback.
     """
     if vector_backend == "null":

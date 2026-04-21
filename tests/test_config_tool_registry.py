@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from orchid_ai.config import tool_registry as treg
-from orchid_ai.config.schema import BuiltinToolConfig
+from orchid_ai.config.schema import OrchidBuiltinToolConfig
 
 
 @pytest.fixture(autouse=True)
@@ -74,7 +74,7 @@ class TestListAndClear:
 class TestLoadToolsFromConfig:
     def test_loads_from_config(self):
         config = {
-            "join_path": BuiltinToolConfig(handler="os.path.join", description="Join paths"),
+            "join_path": OrchidBuiltinToolConfig(handler="os.path.join", description="Join paths"),
         }
         treg.load_tools_from_config(config)
         entry = treg.get_tool("join_path")

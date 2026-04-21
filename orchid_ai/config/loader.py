@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from .schema import AgentsConfig
+from .schema import OrchidAgentsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def _find_comment_start(line: str) -> int | None:
     return None
 
 
-def load_config(path: str | Path) -> AgentsConfig:
+def load_config(path: str | Path) -> OrchidAgentsConfig:
     """
     Load and validate the agents YAML configuration.
 
@@ -80,7 +80,7 @@ def load_config(path: str | Path) -> AgentsConfig:
 
     Returns
     -------
-    AgentsConfig
+    OrchidAgentsConfig
         Fully validated configuration with defaults merged in.
 
     Raises
@@ -113,7 +113,7 @@ def load_config(path: str | Path) -> AgentsConfig:
     if not isinstance(data, dict):
         raise ValueError(f"Expected YAML dict at top level, got {type(data).__name__}")
 
-    config = AgentsConfig.model_validate(data)
+    config = OrchidAgentsConfig.model_validate(data)
 
     agent_names = list(config.agents.keys())
     logger.info("[Config] Loaded %d agents from %s: %s", len(agent_names), path.name, agent_names)

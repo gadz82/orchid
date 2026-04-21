@@ -1,13 +1,13 @@
 """
-SQLite MCP token storage — built-in lightweight MCPTokenStore implementation.
+SQLite MCP token storage — built-in lightweight OrchidMCPTokenStore implementation.
 
-Shares the same database and migration system as ``SQLiteChatStorage``.
+Shares the same database and migration system as ``OrchidSQLiteChatStorage``.
 The ``mcp_oauth_tokens`` table is created by the unified
 ``v001_initial_schema`` in the shared ``orchid_ai.persistence.migrations``
 package.
 
 Configuration:
-    MCP_TOKEN_STORE_CLASS=orchid_ai.persistence.mcp_token_sqlite.SQLiteMCPTokenStore
+    MCP_TOKEN_STORE_CLASS=orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore
     MCP_TOKEN_STORE_DSN=~/.orchid/chats.db
 """
 
@@ -19,19 +19,19 @@ import time
 
 import aiosqlite
 
-from ..core.mcp import MCPTokenRecord, MCPTokenStore
-from .sqlite import SQLiteMigrationRunner
+from ..core.mcp import OrchidMCPTokenRecord, OrchidMCPTokenStore
+from .sqlite import OrchidSQLiteMigrationRunner
 
 logger = logging.getLogger(__name__)
 
 
-class SQLiteMCPTokenStore(MCPTokenStore):
+class OrchidSQLiteMCPTokenStore(OrchidMCPTokenStore):
     """Async SQLite storage for per-server OAuth tokens.
 
     Constructor accepts the file path via ``dsn`` and an optional
     ``extra_migrations_package`` (dotted import path) so integrators
     can append their own migrations after the framework's — see
-    :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
+    :class:`orchid_ai.persistence.migrations.runner.OrchidMigrationRunner`.
 
     Use ``:memory:`` for in-memory databases (tests).
     """
@@ -39,7 +39,7 @@ class SQLiteMCPTokenStore(MCPTokenStore):
     def __init__(self, *, dsn: str, extra_migrations_package: str | None = None):
         self._db_path = os.path.expanduser(dsn)
         self._conn: aiosqlite.Connection | None = None
-        self._migrator = SQLiteMigrationRunner(
+        self._migrator = OrchidSQLiteMigrationRunner(
             extra_migrations_package=extra_migrations_package,
         )
 
@@ -53,7 +53,7 @@ class SQLiteMCPTokenStore(MCPTokenStore):
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._migrator.run_up(self._conn)
-        logger.info("[MCPTokenStore:sqlite] Initialised — %s", self._db_path)
+        logger.info("[OrchidMCPTokenStore:sqlite] Initialised — %s", self._db_path)
 
     async def close(self) -> None:
         if self._conn:
@@ -66,7 +66,7 @@ class SQLiteMCPTokenStore(MCPTokenStore):
         tenant_id: str,
         user_id: str,
         server_name: str,
-    ) -> MCPTokenRecord | None:
+    ) -> OrchidMCPTokenRecord | None:
         cursor = await self._conn.execute(
             "SELECT * FROM mcp_oauth_tokens WHERE server_name = ? AND tenant_id = ? AND user_id = ?",
             (server_name, tenant_id, user_id),
@@ -74,7 +74,7 @@ class SQLiteMCPTokenStore(MCPTokenStore):
         row = await cursor.fetchone()
         return _row_to_record(row) if row else None
 
-    async def save_token(self, record: MCPTokenRecord) -> None:
+    async def save_token(self, record: OrchidMCPTokenRecord) -> None:
         now = time.time()
         await self._conn.execute(
             "INSERT OR REPLACE INTO mcp_oauth_tokens "
@@ -112,7 +112,7 @@ class SQLiteMCPTokenStore(MCPTokenStore):
         self,
         tenant_id: str,
         user_id: str,
-    ) -> list[MCPTokenRecord]:
+    ) -> list[OrchidMCPTokenRecord]:
         cursor = await self._conn.execute(
             "SELECT * FROM mcp_oauth_tokens WHERE tenant_id = ? AND user_id = ?",
             (tenant_id, user_id),
@@ -124,8 +124,8 @@ class SQLiteMCPTokenStore(MCPTokenStore):
 # ── Row mapper ──────────────────────────────────────────────
 
 
-def _row_to_record(row: aiosqlite.Row) -> MCPTokenRecord:
-    return MCPTokenRecord(
+def _row_to_record(row: aiosqlite.Row) -> OrchidMCPTokenRecord:
+    return OrchidMCPTokenRecord(
         server_name=row["server_name"],
         tenant_id=row["tenant_id"],
         user_id=row["user_id"],

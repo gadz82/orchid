@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 
 from orchid_ai.config import tool_registry as treg
-from orchid_ai.config.schema import AgentsConfig, BuiltinToolConfig, BuiltinToolParameter
+from orchid_ai.config.schema import OrchidAgentsConfig, OrchidBuiltinToolConfig, BuiltinToolParameter
 from orchid_ai.config.tool_registry import ToolParameter, _extract_parameters_from_handler, find_param_doc
 
 
@@ -53,7 +53,7 @@ class TestBuiltinToolParameterSchema:
         assert p.default is True
 
     def test_builtin_tool_config_with_parameters(self):
-        cfg = BuiltinToolConfig(
+        cfg = OrchidBuiltinToolConfig(
             handler="os.path.join",
             description="Join paths",
             parameters={
@@ -66,7 +66,7 @@ class TestBuiltinToolParameterSchema:
         assert cfg.parameters["suffix"].default == ""
 
     def test_builtin_tool_config_no_parameters(self):
-        cfg = BuiltinToolConfig(handler="os.path.join", description="Join paths")
+        cfg = OrchidBuiltinToolConfig(handler="os.path.join", description="Join paths")
         assert cfg.parameters == {}
 
 
@@ -208,7 +208,7 @@ class TestLoadToolsWithParameters:
 
     def test_load_with_parameters(self):
         config = {
-            "join_path": BuiltinToolConfig(
+            "join_path": OrchidBuiltinToolConfig(
                 handler="os.path.join",
                 description="Join paths",
                 parameters={
@@ -224,7 +224,7 @@ class TestLoadToolsWithParameters:
     def test_load_without_parameters_triggers_extraction(self):
         """When no parameters declared in YAML, auto-extract from handler."""
         config = {
-            "isabs": BuiltinToolConfig(
+            "isabs": OrchidBuiltinToolConfig(
                 handler="os.path.isabs",
                 description="Check if path is absolute",
             ),
@@ -272,7 +272,7 @@ tools:
         default: true
 agents: {}
 """)
-        config = AgentsConfig(**raw)
+        config = OrchidAgentsConfig(**raw)
         tool = config.tools["test_tool"]
         assert tool.parameters["name"].type == "string"
         assert tool.parameters["name"].required is True
@@ -294,5 +294,5 @@ tools:
     description: "Test tool"
 agents: {}
 """)
-        config = AgentsConfig(**raw)
+        config = OrchidAgentsConfig(**raw)
         assert config.tools["test_tool"].parameters == {}

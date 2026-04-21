@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..config.schema import AgentSkillConfig
+from ..config.schema import OrchidAgentSkillConfig
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class SkillDetector:
     def __init__(self, chat_model: Any):
         self._chat_model = chat_model
 
-    async def detect(self, query: str, skills: dict[str, AgentSkillConfig]) -> str | None:
+    async def detect(self, query: str, skills: dict[str, OrchidAgentSkillConfig]) -> str | None:
         """Return the matching skill name, or None."""
         if not skills:
             return None

@@ -7,14 +7,14 @@ This is the simplest guardrail: pure deterministic check, zero latency.
 from __future__ import annotations
 
 from ..core.guardrails import (
-    Guardrail,
-    GuardrailAction,
-    GuardrailContext,
-    GuardrailResult,
+    OrchidGuardrail,
+    OrchidGuardrailAction,
+    OrchidGuardrailContext,
+    OrchidGuardrailResult,
 )
 
 
-class MaxLengthGuardrail(Guardrail):
+class MaxLengthGuardrail(OrchidGuardrail):
     """Block or warn when content exceeds a maximum character count."""
 
     def __init__(
@@ -23,19 +23,19 @@ class MaxLengthGuardrail(Guardrail):
         fail_action: str = "block",
         max_characters: int = 10000,
     ) -> None:
-        self._fail_action = GuardrailAction(fail_action)
+        self._fail_action = OrchidGuardrailAction(fail_action)
         self._max_characters = max_characters
 
     @property
     def name(self) -> str:
         return "max_length"
 
-    async def check(self, content: str, context: GuardrailContext) -> GuardrailResult:
+    async def check(self, content: str, context: OrchidGuardrailContext) -> OrchidGuardrailResult:
         length = len(content)
         if length <= self._max_characters:
-            return GuardrailResult.passed(self.name)
+            return OrchidGuardrailResult.passed(self.name)
 
-        return GuardrailResult(
+        return OrchidGuardrailResult(
             triggered=True,
             action=self._fail_action,
             guardrail_name=self.name,

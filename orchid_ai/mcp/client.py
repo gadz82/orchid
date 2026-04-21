@@ -24,8 +24,8 @@ from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
 
-from ..core.mcp import MCPClient, MCPToolResult
-from ..core.state import AuthContext
+from ..core.mcp import OrchidMCPClient, OrchidMCPToolResult
+from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +45,14 @@ class _CapabilitiesCache:
     timestamp: float = 0.0
 
 
-class StreamableHttpMCPClient(MCPClient):
+class StreamableHttpMCPClient(OrchidMCPClient):
     """MCP client that connects via Streamable HTTP or SSE transport.
 
     Capabilities are discovered once and cached for ``cache_ttl`` seconds.
 
     When ``auth_mode`` is ``"oauth"``, the client resolves per-user
     tokens from the ``token_store`` instead of using the graph's
-    ``AuthContext`` bearer token (passthrough).
+    ``OrchidAuthContext`` bearer token (passthrough).
     """
 
     def __init__(
@@ -64,7 +64,7 @@ class StreamableHttpMCPClient(MCPClient):
         *,
         server_name: str = "",
         auth_mode: str = "passthrough",
-        token_store: Any | None = None,  # MCPTokenStore (lazy import to avoid circular)
+        token_store: Any | None = None,  # OrchidMCPTokenStore (lazy import to avoid circular)
         token_endpoint: str = "",
         client_id: str = "",
     ) -> None:
@@ -94,7 +94,7 @@ class StreamableHttpMCPClient(MCPClient):
         """Force re-discovery on next call."""
         self._cache = _CapabilitiesCache()
 
-    async def warm_cache(self, auth: AuthContext) -> None:
+    async def warm_cache(self, auth: OrchidAuthContext) -> None:
         """
         Pre-populate the capabilities cache.
 
@@ -104,7 +104,7 @@ class StreamableHttpMCPClient(MCPClient):
             return
         await self._discover_and_cache(auth)
 
-    async def _discover_and_cache(self, auth: AuthContext) -> None:
+    async def _discover_and_cache(self, auth: OrchidAuthContext) -> None:
         """Discover all capabilities in a single connection and populate the cache."""
         logger.info("[MCP] Discovering capabilities from %s …", self._url)
 
@@ -203,15 +203,15 @@ class StreamableHttpMCPClient(MCPClient):
 
     # ── Auth ─────────────────────────────────────────────────
 
-    async def _resolve_auth_headers(self, auth: AuthContext) -> dict[str, str]:
+    async def _resolve_auth_headers(self, auth: OrchidAuthContext) -> dict[str, str]:
         """Resolve the Authorization header based on auth mode.
 
         - **none** (default): no auth headers — suitable for local or
           unauthenticated MCP servers.
-        - **passthrough**: forwards the graph's ``AuthContext`` bearer
+        - **passthrough**: forwards the graph's ``OrchidAuthContext`` bearer
           token unchanged — zero overhead.
         - **oauth**: looks up the per-user token from the token store,
-          auto-refreshes if expired, or raises ``MCPAuthRequiredError``
+          auto-refreshes if expired, or raises ``OrchidMCPAuthRequiredError``
           when the user has not authorized this server.
         """
         if self._auth_mode == "none":
@@ -220,26 +220,26 @@ class StreamableHttpMCPClient(MCPClient):
         if self._auth_mode == "passthrough":
             return auth.bearer_header
 
-        from ..core.mcp import MCPAuthRequiredError, MCPTokenRecord
+        from ..core.mcp import OrchidMCPAuthRequiredError, OrchidMCPTokenRecord
 
         if not self._token_store:
-            raise MCPAuthRequiredError(self._server_name)
+            raise OrchidMCPAuthRequiredError(self._server_name)
 
-        record: MCPTokenRecord | None = await self._token_store.get_token(
+        record: OrchidMCPTokenRecord | None = await self._token_store.get_token(
             auth.tenant_key,
             auth.user_id,
             self._server_name,
         )
 
         if record is None:
-            raise MCPAuthRequiredError(self._server_name)
+            raise OrchidMCPAuthRequiredError(self._server_name)
 
         # Auto-refresh expired tokens when a refresh_token is available
         if record.is_expired and record.is_refresh_available:
             record = await self._refresh_oauth_token(record)
 
         if record.is_expired:
-            raise MCPAuthRequiredError(self._server_name)
+            raise OrchidMCPAuthRequiredError(self._server_name)
 
         return record.bearer_header
 
@@ -247,7 +247,7 @@ class StreamableHttpMCPClient(MCPClient):
         """Exchange a refresh token for a new access token.
 
         On failure, returns the stale record unchanged — the caller
-        checks ``is_expired`` and raises ``MCPAuthRequiredError``.
+        checks ``is_expired`` and raises ``OrchidMCPAuthRequiredError``.
         """
         import time as _time
 
@@ -270,9 +270,9 @@ class StreamableHttpMCPClient(MCPClient):
                 resp.raise_for_status()
                 data = resp.json()
 
-            from ..core.mcp import MCPTokenRecord
+            from ..core.mcp import OrchidMCPTokenRecord
 
-            new_record = MCPTokenRecord(
+            new_record = OrchidMCPTokenRecord(
                 server_name=record.server_name,
                 tenant_id=record.tenant_id,
                 user_id=record.user_id,
@@ -294,7 +294,7 @@ class StreamableHttpMCPClient(MCPClient):
     # ── Transport ────────────────────────────────────────────
 
     @asynccontextmanager
-    async def _connect(self, auth: AuthContext, *, timeout: float = 30.0) -> AsyncGenerator[ClientSession, None]:
+    async def _connect(self, auth: OrchidAuthContext, *, timeout: float = 30.0) -> AsyncGenerator[ClientSession, None]:
         """Open a transport connection and yield an initialized ClientSession."""
         import asyncio
 
@@ -318,10 +318,10 @@ class StreamableHttpMCPClient(MCPClient):
         self,
         tool_name: str,
         arguments: dict[str, Any],
-        auth: AuthContext,
+        auth: OrchidAuthContext,
         *,
         timeout: float = 60.0,
-    ) -> MCPToolResult:
+    ) -> OrchidMCPToolResult:
         """Invoke a named tool on the MCP server."""
         logger.info(
             "[MCP] call_tool → %s | params: %s | url: %s [%s]",
@@ -335,7 +335,7 @@ class StreamableHttpMCPClient(MCPClient):
             result = await session.call_tool(tool_name, arguments)
             content = [{"type": c.type, "text": getattr(c, "text", "")} for c in result.content]
 
-            result_obj = MCPToolResult(
+            result_obj = OrchidMCPToolResult(
                 content=content,
                 is_error=result.isError or False,
             )
@@ -351,19 +351,19 @@ class StreamableHttpMCPClient(MCPClient):
 
     # ── Cached discovery methods ─────────────────────────────
 
-    async def list_tools(self, auth: AuthContext) -> list[dict[str, Any]]:
+    async def list_tools(self, auth: OrchidAuthContext) -> list[dict[str, Any]]:
         """List all tools (cached)."""
         if not self._cache_valid():
             await self._discover_and_cache(auth)
         return self._cache.tools
 
-    async def list_prompts(self, auth: AuthContext) -> list[dict[str, Any]]:
+    async def list_prompts(self, auth: OrchidAuthContext) -> list[dict[str, Any]]:
         """List all prompts (cached)."""
         if not self._cache_valid():
             await self._discover_and_cache(auth)
         return self._cache.prompts
 
-    async def list_resources(self, auth: AuthContext) -> list[dict[str, Any]]:
+    async def list_resources(self, auth: OrchidAuthContext) -> list[dict[str, Any]]:
         """List all resources (cached)."""
         if not self._cache_valid():
             await self._discover_and_cache(auth)
@@ -375,7 +375,7 @@ class StreamableHttpMCPClient(MCPClient):
         self,
         name: str,
         arguments: dict[str, str],
-        auth: AuthContext,
+        auth: OrchidAuthContext,
     ) -> list[dict[str, Any]]:
         """Render a prompt template (cached for zero-arg prompts)."""
         # Return from cache if pre-rendered and no arguments provided
@@ -392,7 +392,7 @@ class StreamableHttpMCPClient(MCPClient):
                 for m in result.messages
             ]
 
-    async def read_resource(self, uri: str, auth: AuthContext) -> str:
+    async def read_resource(self, uri: str, auth: OrchidAuthContext) -> str:
         """Read resource content (cached if previously discovered)."""
         # Check cache by URI or name
         for res_name, content in self._cache.resource_contents.items():
