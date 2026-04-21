@@ -5,11 +5,11 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from orchid_ai.config.schema import (
-    AgentConfig,
-    AgentsConfig,
-    DefaultsConfig,
-    LLMConfig,
-    RAGConfig,
+    OrchidAgentConfig,
+    OrchidAgentsConfig,
+    OrchidDefaultsConfig,
+    OrchidLLMConfig,
+    OrchidRAGConfig,
 )
 
 
@@ -17,14 +17,14 @@ from orchid_ai.config.schema import (
 
 
 class TestCacheConfig:
-    """DefaultsConfig.cache_enabled field."""
+    """OrchidDefaultsConfig.cache_enabled field."""
 
     def test_default_cache_disabled(self):
-        cfg = DefaultsConfig()
+        cfg = OrchidDefaultsConfig()
         assert cfg.cache_enabled is False
 
     def test_cache_enabled(self):
-        cfg = DefaultsConfig(cache_enabled=True)
+        cfg = OrchidDefaultsConfig(cache_enabled=True)
         assert cfg.cache_enabled is True
 
     def test_cache_from_yaml_dict(self):
@@ -32,12 +32,12 @@ class TestCacheConfig:
             "cache_enabled": True,
             "llm": {"model": "ollama/llama3.2"},
         }
-        cfg = DefaultsConfig(**raw)
+        cfg = OrchidDefaultsConfig(**raw)
         assert cfg.cache_enabled is True
 
 
 class TestCacheInAgentsConfig:
-    """cache_enabled in full AgentsConfig."""
+    """cache_enabled in full OrchidAgentsConfig."""
 
     def test_cache_enabled_in_full_config(self):
         raw = {
@@ -52,16 +52,16 @@ class TestCacheInAgentsConfig:
                 },
             },
         }
-        config = AgentsConfig(**raw)
+        config = OrchidAgentsConfig(**raw)
         assert config.defaults.cache_enabled is True
 
     def test_cache_disabled_by_default_in_full_config(self):
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -78,16 +78,16 @@ class TestCacheGraphWiring:
         from orchid_ai.graph.graph import build_graph
         from orchid_ai.runtime import OrchidRuntime
 
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
                 cache_enabled=True,
-                llm=LLMConfig(model="ollama/llama3.2"),
+                llm=OrchidLLMConfig(model="ollama/llama3.2"),
             ),
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -101,16 +101,16 @@ class TestCacheGraphWiring:
         from orchid_ai.graph.graph import build_graph
         from orchid_ai.runtime import OrchidRuntime
 
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
                 cache_enabled=False,
-                llm=LLMConfig(model="ollama/llama3.2"),
+                llm=OrchidLLMConfig(model="ollama/llama3.2"),
             ),
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -124,16 +124,16 @@ class TestCacheGraphWiring:
         from orchid_ai.graph.graph import build_graph
         from orchid_ai.runtime import OrchidRuntime
 
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
                 cache_enabled=True,
-                llm=LLMConfig(model="ollama/llama3.2"),
+                llm=OrchidLLMConfig(model="ollama/llama3.2"),
             ),
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )

@@ -1,7 +1,7 @@
 """
 Advanced retriever wrappers for Orchid's RAG pipeline.
 
-``OrchidRetriever`` wraps the framework's ``VectorReader`` ABC as a
+``OrchidRetriever`` wraps the framework's ``OrchidVectorReader`` ABC as a
 LangChain ``BaseRetriever``, enabling composition with any LangChain
 retriever chain.
 
@@ -41,8 +41,8 @@ from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.retrievers import BaseRetriever
 
-from ..core.repository import SearchResult, VectorReader
-from ..core.scopes import RAGScope
+from ..core.repository import OrchidSearchResult, OrchidVectorReader
+from ..core.scopes import OrchidRAGScope
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ _MULTI_QUERY_PROMPT = (
 
 
 class OrchidRetriever(BaseRetriever):
-    """Wraps Orchid's ``VectorReader`` as a LangChain ``BaseRetriever``.
+    """Wraps Orchid's ``OrchidVectorReader`` as a LangChain ``BaseRetriever``.
 
     This enables composition with LangChain retriever chains and
     provides a standard ``ainvoke()`` / ``invoke()`` interface.
@@ -65,9 +65,9 @@ class OrchidRetriever(BaseRetriever):
     without importing concrete types that would violate dependency rules.
     """
 
-    reader: Any  # VectorReader — Any to avoid Pydantic ABC validation issues
+    reader: Any  # OrchidVectorReader — Any to avoid Pydantic ABC validation issues
     namespace: str
-    scope: Any  # RAGScope
+    scope: Any  # OrchidRAGScope
     k: int = 5
 
     class Config:
@@ -87,7 +87,7 @@ class OrchidRetriever(BaseRetriever):
         *,
         run_manager: Any = None,
     ) -> list[Document]:
-        results: list[SearchResult] = await self.reader.retrieve(
+        results: list[OrchidSearchResult] = await self.reader.retrieve(
             query=query,
             namespace=self.namespace,
             k=self.k,
@@ -119,13 +119,13 @@ async def _generate_query_variations(
 
 async def multi_query_retrieve(
     query: str,
-    reader: VectorReader,
+    reader: OrchidVectorReader,
     namespace: str,
-    scope: RAGScope,
+    scope: OrchidRAGScope,
     chat_model: Any,
     k: int = 5,
     num_queries: int = 3,
-) -> list[SearchResult]:
+) -> list[OrchidSearchResult]:
     """Multi-query retrieval: generate query variations, retrieve for each, deduplicate.
 
     The original query is always included.  Results are merged, deduplicated
@@ -136,11 +136,11 @@ async def multi_query_retrieve(
     ----------
     query : str
         Original user query.
-    reader : VectorReader
+    reader : OrchidVectorReader
         Vector store backend.
     namespace : str
         Collection name.
-    scope : RAGScope
+    scope : OrchidRAGScope
         Hierarchical scope filter.
     chat_model
         LangChain ``BaseChatModel`` for generating query variations.
@@ -151,7 +151,7 @@ async def multi_query_retrieve(
 
     Returns
     -------
-    list[SearchResult]
+    list[OrchidSearchResult]
         Deduplicated, score-sorted results (at most *k*).
     """
     # Generate alternative queries
@@ -178,7 +178,7 @@ async def multi_query_retrieve(
             return []
 
     # Merge and deduplicate by document ID, keeping highest score
-    seen: dict[str, SearchResult] = {}
+    seen: dict[str, OrchidSearchResult] = {}
     for result_set in all_results:
         if isinstance(result_set, Exception):
             logger.warning("[MultiQuery] One query variation failed: %s", result_set)

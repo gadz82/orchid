@@ -1,11 +1,11 @@
 """
-SQLite chat storage — built-in lightweight ChatStorage implementation.
+SQLite chat storage — built-in lightweight OrchidChatStorage implementation.
 
 Default storage backend for orchid. Data is stored in a single file
 (default: ``~/.orchid/chats.db``) or ``:memory:`` for tests.
 
 Configuration:
-    CHAT_STORAGE_CLASS=orchid.persistence.sqlite.SQLiteChatStorage
+    CHAT_STORAGE_CLASS=orchid.persistence.sqlite.OrchidSQLiteChatStorage
     CHAT_DB_DSN=~/.orchid/chats.db
 """
 
@@ -20,16 +20,16 @@ from typing import Any
 
 import aiosqlite
 
-from .base import ChatStorage
-from .migrations.runner import MigrationRunner
-from .models import ChatMessage, ChatSession, utcnow
+from .base import OrchidChatStorage
+from .migrations.runner import OrchidMigrationRunner
+from .models import OrchidChatMessage, OrchidChatSession, utcnow
 
 logger = logging.getLogger(__name__)
 
 MIGRATIONS_PACKAGE = "orchid_ai.persistence.migrations"
 
 
-class SQLiteMigrationRunner(MigrationRunner):
+class OrchidSQLiteMigrationRunner(OrchidMigrationRunner):
     """SQLite-specific migration tracking."""
 
     dialect = "sqlite"
@@ -62,14 +62,14 @@ class SQLiteMigrationRunner(MigrationRunner):
         await conn.commit()
 
 
-class SQLiteChatStorage(ChatStorage):
+class OrchidSQLiteChatStorage(OrchidChatStorage):
     """
     Async SQLite storage for chat sessions and messages.
 
     Constructor accepts the file path via ``dsn`` and an optional
     ``extra_migrations_package`` (dotted import path) so integrators
     can append their own migrations after the framework's — see
-    :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
+    :class:`orchid_ai.persistence.migrations.runner.OrchidMigrationRunner`.
 
     Use ``:memory:`` for in-memory databases (tests).  The default path
     ``~/.orchid/chats.db`` is resolved at init time.
@@ -78,7 +78,7 @@ class SQLiteChatStorage(ChatStorage):
     def __init__(self, *, dsn: str, extra_migrations_package: str | None = None):
         self._db_path = os.path.expanduser(dsn)
         self._conn: aiosqlite.Connection | None = None
-        self._migrator = SQLiteMigrationRunner(
+        self._migrator = OrchidSQLiteMigrationRunner(
             extra_migrations_package=extra_migrations_package,
         )
 
@@ -93,7 +93,7 @@ class SQLiteChatStorage(ChatStorage):
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._migrator.run_up(self._conn)
-        logger.info("[ChatStorage:sqlite] Initialised — %s", self._db_path)
+        logger.info("[OrchidChatStorage:sqlite] Initialised — %s", self._db_path)
 
     async def close(self) -> None:
         if self._conn:
@@ -106,10 +106,10 @@ class SQLiteChatStorage(ChatStorage):
         tenant_id: str,
         user_id: str,
         title: str = "",
-    ) -> ChatSession:
+    ) -> OrchidChatSession:
         now = utcnow()
         now_iso = now.isoformat()
-        chat = ChatSession(
+        chat = OrchidChatSession(
             id=str(uuid.uuid4()),
             tenant_id=tenant_id,
             user_id=user_id,
@@ -129,7 +129,7 @@ class SQLiteChatStorage(ChatStorage):
         self,
         tenant_id: str,
         user_id: str,
-    ) -> list[ChatSession]:
+    ) -> list[OrchidChatSession]:
         cursor = await self._conn.execute(
             "SELECT * FROM chat_sessions WHERE tenant_id = ? AND user_id = ? ORDER BY updated_at DESC",
             (tenant_id, user_id),
@@ -137,7 +137,7 @@ class SQLiteChatStorage(ChatStorage):
         rows = await cursor.fetchall()
         return [_row_to_session(r) for r in rows]
 
-    async def get_chat(self, chat_id: str) -> ChatSession | None:
+    async def get_chat(self, chat_id: str) -> OrchidChatSession | None:
         cursor = await self._conn.execute(
             "SELECT * FROM chat_sessions WHERE id = ?",
             (chat_id,),
@@ -174,10 +174,10 @@ class SQLiteChatStorage(ChatStorage):
         content: str,
         agents_used: list[str] | None = None,
         metadata: dict | None = None,
-    ) -> ChatMessage:
+    ) -> OrchidChatMessage:
         now = utcnow()
         now_iso = now.isoformat()
-        msg = ChatMessage(
+        msg = OrchidChatMessage(
             id=str(uuid.uuid4()),
             chat_id=chat_id,
             role=role,
@@ -211,7 +211,7 @@ class SQLiteChatStorage(ChatStorage):
         chat_id: str,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[ChatMessage]:
+    ) -> list[OrchidChatMessage]:
         cursor = await self._conn.execute(
             "SELECT * FROM chat_messages WHERE chat_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?",
             (chat_id, limit, offset),
@@ -232,8 +232,8 @@ def _parse_dt(val: str | datetime) -> datetime:
         return utcnow()
 
 
-def _row_to_session(row: aiosqlite.Row) -> ChatSession:
-    return ChatSession(
+def _row_to_session(row: aiosqlite.Row) -> OrchidChatSession:
+    return OrchidChatSession(
         id=row["id"],
         tenant_id=row["tenant_id"],
         user_id=row["user_id"],
@@ -244,14 +244,14 @@ def _row_to_session(row: aiosqlite.Row) -> ChatSession:
     )
 
 
-def _row_to_message(row: aiosqlite.Row) -> ChatMessage:
+def _row_to_message(row: aiosqlite.Row) -> OrchidChatMessage:
     agents_used = row["agents_used"]
     if isinstance(agents_used, str):
         agents_used = json.loads(agents_used)
     meta = row["metadata"]
     if isinstance(meta, str):
         meta = json.loads(meta)
-    return ChatMessage(
+    return OrchidChatMessage(
         id=row["id"],
         chat_id=row["chat_id"],
         role=row["role"],

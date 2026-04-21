@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock, MagicMock
 from langchain_core.language_models import BaseChatModel
 
 from orchid_ai.config.schema import (
-    AgentConfig,
-    AgentsConfig,
-    DefaultsConfig,
-    LLMConfig,
-    RAGConfig,
+    OrchidAgentConfig,
+    OrchidAgentsConfig,
+    OrchidDefaultsConfig,
+    OrchidLLMConfig,
+    OrchidRAGConfig,
 )
 
 
@@ -19,19 +19,19 @@ from orchid_ai.config.schema import (
 
 
 class TestLLMConfigRetry:
-    """LLMConfig.retry_attempts field."""
+    """OrchidLLMConfig.retry_attempts field."""
 
     def test_default_no_retry(self):
-        cfg = LLMConfig()
+        cfg = OrchidLLMConfig()
         assert cfg.retry_attempts == 0
 
     def test_retry_attempts_set(self):
-        cfg = LLMConfig(model="gemini/gemini-2.5-flash", retry_attempts=3)
+        cfg = OrchidLLMConfig(model="gemini/gemini-2.5-flash", retry_attempts=3)
         assert cfg.retry_attempts == 3
 
     def test_retry_from_dict(self):
         data = {"model": "openai/gpt-4o", "retry_attempts": 5}
-        cfg = LLMConfig(**data)
+        cfg = OrchidLLMConfig(**data)
         assert cfg.retry_attempts == 5
 
 
@@ -39,15 +39,15 @@ class TestRetryInheritance:
     """Default retry propagates to agents unless overridden."""
 
     def test_agent_inherits_default_retry(self):
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
-                llm=LLMConfig(model="ollama/llama3.2", retry_attempts=3),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                llm=OrchidLLMConfig(model="ollama/llama3.2", retry_attempts=3),
             ),
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -56,16 +56,16 @@ class TestRetryInheritance:
         assert config.agents["test"].llm.retry_attempts == 3
 
     def test_agent_overrides_retry(self):
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
-                llm=LLMConfig(model="ollama/llama3.2", retry_attempts=3),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                llm=OrchidLLMConfig(model="ollama/llama3.2", retry_attempts=3),
             ),
             agents={
-                "custom": AgentConfig(
+                "custom": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    llm=LLMConfig(model="ollama/llama3.2", retry_attempts=5),
-                    rag=RAGConfig(enabled=False),
+                    llm=OrchidLLMConfig(model="ollama/llama3.2", retry_attempts=5),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -128,15 +128,15 @@ class TestGraphRetryWiring:
         from orchid_ai.graph.graph import build_graph
         from orchid_ai.runtime import OrchidRuntime
 
-        config = AgentsConfig(
-            defaults=DefaultsConfig(
-                llm=LLMConfig(model="ollama/llama3.2", retry_attempts=3),
+        config = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                llm=OrchidLLMConfig(model="ollama/llama3.2", retry_attempts=3),
             ),
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test agent",
                     prompt="You are a test agent",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -148,11 +148,11 @@ class TestGraphRetryWiring:
         """Agent with its own retry gets a dedicated chat model."""
         from orchid_ai.graph.graph import _instantiate_agent
 
-        agent_config = AgentConfig(
+        agent_config = OrchidAgentConfig(
             description="critical agent",
             prompt="You are critical",
-            llm=LLMConfig(model="ollama/llama3.2", retry_attempts=5),
-            rag=RAGConfig(enabled=False),
+            llm=OrchidLLMConfig(model="ollama/llama3.2", retry_attempts=5),
+            rag=OrchidRAGConfig(enabled=False),
         )
         agent_config.name = "critical"
 
@@ -178,11 +178,11 @@ class TestGraphRetryWiring:
         """Agent with same retry as default reuses the shared model."""
         from orchid_ai.graph.graph import _instantiate_agent
 
-        agent_config = AgentConfig(
+        agent_config = OrchidAgentConfig(
             description="basic agent",
             prompt="You are basic",
-            rag=RAGConfig(enabled=False),
-            llm=LLMConfig(model="ollama/llama3.2", retry_attempts=3),
+            rag=OrchidRAGConfig(enabled=False),
+            llm=OrchidLLMConfig(model="ollama/llama3.2", retry_attempts=3),
         )
         agent_config.name = "basic"
 
@@ -208,13 +208,13 @@ class TestGraphRetryWiring:
         from orchid_ai.graph.graph import build_graph
         from orchid_ai.runtime import OrchidRuntime
 
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
-                    llm=LLMConfig(model="ollama/llama3.2"),
+                    rag=OrchidRAGConfig(enabled=False),
+                    llm=OrchidLLMConfig(model="ollama/llama3.2"),
                 ),
             },
         )
@@ -252,7 +252,7 @@ class TestRetryYAML:
                 },
             },
         }
-        config = AgentsConfig(**raw)
+        config = OrchidAgentsConfig(**raw)
 
         assert config.defaults.llm.retry_attempts == 3
         assert config.agents["agent_a"].llm.retry_attempts == 3  # inherited
@@ -275,6 +275,6 @@ class TestRetryYAML:
                 },
             },
         }
-        config = AgentsConfig(**raw)
+        config = OrchidAgentsConfig(**raw)
         assert config.defaults.llm.fallback_model == "ollama/llama3.2"
         assert config.defaults.llm.retry_attempts == 3

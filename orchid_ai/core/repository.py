@@ -1,9 +1,9 @@
 """
 Vector store abstractions — Interface Segregation (ADR-008).
 
-VectorReader: agents that only retrieve.
-VectorWriter: indexers that only write.
-VectorStoreRepository: combines both (for components that need full access).
+OrchidVectorReader: agents that only retrieve.
+OrchidVectorWriter: indexers that only write.
+OrchidVectorStoreRepository: combines both (for components that need full access).
 
 Uses LangChain's ``Document`` as the standard document model:
 
@@ -25,20 +25,20 @@ from typing import Any, ClassVar
 
 from langchain_core.documents import Document
 
-from .scopes import RAGScope  # noqa: F401 — used in type annotations
+from .scopes import OrchidRAGScope  # noqa: F401 — used in type annotations
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class SearchResult:
+class OrchidSearchResult:
     """A document with its relevance score."""
 
     document: Document
     score: float  # 0.0 → 1.0
 
 
-class VectorReader(ABC):
+class OrchidVectorReader(ABC):
     """Read-only access to the vector store (for agents)."""
 
     @abstractmethod
@@ -47,15 +47,15 @@ class VectorReader(ABC):
         query: str,
         namespace: str,
         k: int = 5,
-        scope: RAGScope | None = None,
-    ) -> list[SearchResult]:
+        scope: OrchidRAGScope | None = None,
+    ) -> list[OrchidSearchResult]:
         """Return the k most relevant documents for the query."""
         ...
 
     async def lookup_cached_tool_results(
         self,
         namespace: str,
-        scope: RAGScope,
+        scope: OrchidRAGScope,
         tool_name: str,
         min_injected_at: float,
     ) -> str | None:
@@ -67,7 +67,7 @@ class VectorReader(ABC):
         return None
 
 
-class VectorWriter(ABC):
+class OrchidVectorWriter(ABC):
     """Write-only access to the vector store (for indexers)."""
 
     @abstractmethod
@@ -98,7 +98,7 @@ class VectorWriter(ABC):
         ...
 
 
-class VectorStoreAdmin(ABC):
+class OrchidVectorStoreAdmin(ABC):
     """Administrative operations on the vector store (collection management).
 
     Implementations should handle idempotent collection creation.
@@ -112,7 +112,7 @@ class VectorStoreAdmin(ABC):
         ...
 
 
-class VectorStoreRepository(VectorReader, VectorWriter, VectorStoreAdmin, ABC):
+class OrchidVectorStoreRepository(OrchidVectorReader, OrchidVectorWriter, OrchidVectorStoreAdmin, ABC):
     """
     Full read+write+admin access — used by components that need all
     capabilities (e.g. the Qdrant backend).
@@ -148,7 +148,7 @@ class VectorStoreRepository(VectorReader, VectorWriter, VectorStoreAdmin, ABC):
             Number of points promoted.
 
         The base implementation is a no-op returning ``0`` so callers can
-        safely invoke it on any :class:`VectorStoreRepository` (LSP
+        safely invoke it on any :class:`OrchidVectorStoreRepository` (LSP
         compliance).  Check :attr:`supports_scope_promotion` beforehand
         when the caller must distinguish "no points matched" from
         "backend does not support promotion".

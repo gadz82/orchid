@@ -1,6 +1,6 @@
 """End-to-end SQLite test for integrator migrations.
 
-Exercises ``SQLiteChatStorage(extra_migrations_package=...)`` against a
+Exercises ``OrchidSQLiteChatStorage(extra_migrations_package=...)`` against a
 real in-memory aiosqlite database: the framework's v001 runs first, then
 the integrator migration creates an extra table.  Verifies the table
 exists and the recorded version keys use the ``ext:`` prefix.
@@ -13,7 +13,7 @@ import types
 
 import pytest
 
-from orchid_ai.persistence.sqlite import SQLiteChatStorage
+from orchid_ai.persistence.sqlite import OrchidSQLiteChatStorage
 
 _EXT_PACKAGE = "tests._fake_integrator_migrations_extras"
 
@@ -74,7 +74,7 @@ def _patch_pkgutil_iter_modules(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_integrator_migration_runs_after_framework() -> None:
     _install_fake_integrator_package()
 
-    storage = SQLiteChatStorage(
+    storage = OrchidSQLiteChatStorage(
         dsn=":memory:",
         extra_migrations_package=_EXT_PACKAGE,
     )
@@ -99,7 +99,7 @@ async def test_integrator_migration_runs_after_framework() -> None:
 
 @pytest.mark.asyncio
 async def test_without_extras_only_framework_tables() -> None:
-    storage = SQLiteChatStorage(dsn=":memory:")
+    storage = OrchidSQLiteChatStorage(dsn=":memory:")
     await storage.init_db()
     try:
         cursor = await storage._conn.execute(

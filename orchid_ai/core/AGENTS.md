@@ -9,10 +9,10 @@ Forbidden: `qdrant_client`, `litellm`, `asyncpg`, `pydantic` (except via langcha
 
 ## Files
 
-### `state.py` — AuthContext + AgentState
+### `state.py` — OrchidAuthContext + OrchidAgentState
 
 ```python
-AuthContext                 # Base class — subclass to add platform-specific fields.
+OrchidAuthContext                 # Base class — subclass to add platform-specific fields.
   .access_token            # raw bearer token
   .expires_at              # epoch seconds (0 = no expiry)
   .extra                   # dict — extension point for arbitrary data
@@ -23,14 +23,14 @@ AuthContext                 # Base class — subclass to add platform-specific f
   .bearer_header → dict    # {"Authorization": "Bearer {token}"}
 
 # Consumer subclass example:
-MyPlatformAuthContext(AuthContext)
+MyPlatformAuthContext(OrchidAuthContext)
   .domain                  # e.g. "acme.example.com"
   ._tenant_id              # Platform tenant ID
   .user_uuid               # Platform user UUID
 
-AgentState(TypedDict)      # Flows through LangGraph. Extended by GraphState.
+OrchidAgentState(TypedDict)      # Flows through LangGraph. Extended by GraphState.
   .messages                # list of LangChain messages
-  .auth_context            # AuthContext
+  .auth_context            # OrchidAuthContext
   .chat_id                 # current chat session UUID
   .active_agents           # agents activated this round
   .mcp_context             # dict of tool results (agent_name → data)
@@ -42,26 +42,26 @@ AgentState(TypedDict)      # Flows through LangGraph. Extended by GraphState.
 ### `repository.py` — Vector Store Interfaces
 
 ```python
-VectorReader(ABC)          # Read-only. Agents depend on this.
-  .retrieve(query, namespace, k, scope) → list[SearchResult]
+OrchidVectorReader(ABC)          # Read-only. Agents depend on this.
+  .retrieve(query, namespace, k, scope) → list[OrchidSearchResult]
 
-VectorWriter(ABC)          # Write-only. Indexers depend on this.
+OrchidVectorWriter(ABC)          # Write-only. Indexers depend on this.
   .upsert(documents, namespace)
   .delete(document_ids, namespace)
 
-VectorStoreRepository(VectorReader, VectorWriter)  # Combined. Qdrant implements this.
+OrchidVectorStoreRepository(OrchidVectorReader, OrchidVectorWriter)  # Combined. Qdrant implements this.
 ```
 
-The `scope` parameter in `retrieve()` is a `RAGScope` — NOT a raw dict. If you see `filters: dict` anywhere, it's legacy and should be migrated.
+The `scope` parameter in `retrieve()` is a `OrchidRAGScope` — NOT a raw dict. If you see `filters: dict` anywhere, it's legacy and should be migrated.
 
-### `agent.py` — BaseAgent ABC
+### `agent.py` — OrchidAgent ABC
 
 ```python
-BaseAgent(ABC)
+OrchidAgent(ABC)
   .name → str              # unique identifier (e.g., "learning")
   .description → str       # Supervisor reads this to decide routing
   .rag_namespace → str     # Qdrant collection name
-  .run(state) → AgentState # the main agent logic
+  .run(state) → OrchidAgentState # the main agent logic
   .extract_user_query(state) → str
   .fetch_rag_context(query, scope, namespace, k) → list[dict]
   .summarise(query, mcp_data, rag_data, *, system_prompt, model, temperature,
@@ -87,7 +87,7 @@ Static method that extracts clean `[{"role": "user"|"assistant", "content": "...
 Async static method that implements the **sliding-window with summarization** pattern. When conversation history exceeds `recent_turns * 2` messages, older turns are compressed into a single LLM-generated summary paragraph, while the most recent `recent_turns` exchanges are preserved verbatim.
 
 ```python
-compressed = await BaseAgent.compress_conversation_history(
+compressed = await OrchidAgent.compress_conversation_history(
     history,
     llm_service=llm_provider,
     model="gemini/gemini-2.5-flash-lite",  # use a cheap/fast model
@@ -107,10 +107,10 @@ When `conversation_history` (list of dicts) is provided, `summarise()` injects t
 
 When `prior_tool_context` (dict) is provided, it appends `--- Previous Tool Results ---` JSON to the system prompt (truncated to 4000 chars). This carries tool results from previous invocations so agents don't re-ask for information already gathered.
 
-### `mcp.py` — MCPClient ABC
+### `mcp.py` — OrchidMCPClient ABC
 
 ```python
-MCPClient(ABC)
+OrchidMCPClient(ABC)
   .call_tool(tool_name, arguments, auth) → dict
   .list_tools(auth) → list
 ```

@@ -6,7 +6,7 @@ Handles all vector storage: hierarchical scoping, static indexing, dynamic injec
 
 ## Hierarchical Scope Model (ADR-018)
 
-Every RAG operation uses `RAGScope` — never raw filters.
+Every RAG operation uses `OrchidRAGScope` — never raw filters.
 
 ```
 "__shared__"                        ← visible to ALL tenants
@@ -21,7 +21,7 @@ Every RAG operation uses `RAGScope` — never raw filters.
 
 ### Query: which data does a scope see?
 
-`build_qdrant_filter(scope)` creates an OR filter. A query with `RAGScope(tenant_id="99999", user_id="dev-user", chat_id="abc")` sees:
+`build_qdrant_filter(scope)` creates an OR filter. A query with `OrchidRAGScope(tenant_id="99999", user_id="dev-user", chat_id="abc")` sees:
 1. All `__shared__` documents
 2. All `tenant_id=99999, scope="tenant"` documents
 3. All `tenant_id=99999, user_id="dev-user", scope="user"` documents
@@ -39,19 +39,19 @@ When indexing documents, set scope metadata explicitly:
 
 | File | Purpose |
 |------|---------|
-| `scopes.py` | `RAGScope` dataclass + `build_qdrant_filter()` |
+| `scopes.py` | `OrchidRAGScope` dataclass + `build_qdrant_filter()` |
 | `dynamic.py` | `inject_to_rag()` — indexes MCP/built-in tool results |
 | `indexer.py` | `StaticIndexer` — batch indexes test/seed data at startup |
 | `embeddings.py` | `LiteLLMEmbedder` — generates embeddings via LiteLLM |
-| `factory.py` | `build_reader()` — creates VectorReader from settings |
+| `factory.py` | `build_reader()` — creates OrchidVectorReader from settings |
 | `null.py` | `NullVectorReader` — no-op backend for tests / RAG-disabled mode |
 | `backends/qdrant.py` | `QdrantRepository` — full Qdrant implementation |
 
 ## Key Rules
 
-- **Never import `qdrant_client` outside `backends/qdrant.py`.** Other files use `VectorReader`/`VectorWriter` from `core/repository.py`.
+- **Never import `qdrant_client` outside `backends/qdrant.py`.** Other files use `OrchidVectorReader`/`OrchidVectorWriter` from `core/repository.py`.
 - **Embedding model dimensions are critical.** `nomic-embed-text` = 768-d, `text-embedding-3-small` = 1536-d. Changing models requires re-creating Qdrant collections.
-- **`inject_to_rag()` is safe to call on `NullVectorReader`** — it checks `isinstance(reader, VectorWriter)` first.
+- **`inject_to_rag()` is safe to call on `NullVectorReader`** — it checks `isinstance(reader, OrchidVectorWriter)` first.
 - **Namespaces = Qdrant collection names.** One collection per domain (e.g., `learning`, `notifications`, `uploads`). Tenant isolation is via payload filtering, NOT separate collections.
 
 ## QdrantRepository Notes

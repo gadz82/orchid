@@ -1,4 +1,4 @@
-"""Tests for the two-pass MigrationRunner (framework + integrator extras).
+"""Tests for the two-pass OrchidMigrationRunner (framework + integrator extras).
 
 The runner is exercised against a minimal in-memory fake of the
 backend-specific connection contract (``execute`` / ``get_applied_versions``)
@@ -17,7 +17,7 @@ import pytest
 
 from orchid_ai.persistence.migrations.runner import (
     EXTRA_NAMESPACE_PREFIX,
-    MigrationRunner,
+    OrchidMigrationRunner,
     discover_migrations,
 )
 
@@ -35,7 +35,7 @@ class _FakeConn:
         self.executed.append(sql)
 
 
-class _FakeRunner(MigrationRunner):
+class _FakeRunner(OrchidMigrationRunner):
     """Concrete runner that tracks applied versions in a Python set."""
 
     dialect = "sqlite"

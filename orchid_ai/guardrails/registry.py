@@ -1,11 +1,11 @@
 """
-Guardrail registry — maps type names to concrete guardrail classes.
+OrchidGuardrail registry — maps type names to concrete guardrail classes.
 
 Follows the same Open/Closed pattern as ``STRATEGY_REGISTRY`` in
 ``agents/strategies.py``.  New guardrails are added via
 ``register_guardrail()`` — no code changes required.
 
-The ``build_guardrail_chain()`` factory constructs a ``GuardrailChain``
+The ``build_guardrail_chain()`` factory constructs a ``OrchidGuardrailChain``
 from YAML configuration dicts.
 """
 
@@ -14,22 +14,22 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..core.guardrails import Guardrail, GuardrailChain
+from ..core.guardrails import OrchidGuardrail, OrchidGuardrailChain
 
 logger = logging.getLogger(__name__)
 
 # ── Registry ─────────────────────────────────────────────────
 
-GUARDRAIL_REGISTRY: dict[str, type[Guardrail]] = {}
+GUARDRAIL_REGISTRY: dict[str, type[OrchidGuardrail]] = {}
 
 
-def register_guardrail(name: str, cls: type[Guardrail]) -> None:
+def register_guardrail(name: str, cls: type[OrchidGuardrail]) -> None:
     """Register a guardrail class under the given type name."""
     GUARDRAIL_REGISTRY[name] = cls
     logger.debug("[Guardrails] Registered '%s' → %s", name, cls.__name__)
 
 
-def get_guardrail(name: str) -> type[Guardrail] | None:
+def get_guardrail(name: str) -> type[OrchidGuardrail] | None:
     """Look up a guardrail class by type name."""
     return GUARDRAIL_REGISTRY.get(name)
 
@@ -39,9 +39,9 @@ def get_guardrail(name: str) -> type[Guardrail] | None:
 
 def build_guardrail_chain(
     configs: list[dict[str, Any]],
-) -> GuardrailChain:
+) -> OrchidGuardrailChain:
     """
-    Build a ``GuardrailChain`` from a list of YAML config dicts.
+    Build a ``OrchidGuardrailChain`` from a list of YAML config dicts.
 
     Each dict must have a ``type`` key matching a registered guardrail.
     Optional keys: ``fail_action`` (default: "block"), ``config`` (dict
@@ -58,7 +58,7 @@ def build_guardrail_chain(
             - type: content_safety
               fail_action: block
     """
-    chain = GuardrailChain()
+    chain = OrchidGuardrailChain()
 
     for cfg in configs:
         type_name = cfg.get("type", "")

@@ -1,8 +1,8 @@
 """
 Immutable registry of MCP servers that require per-server OAuth.
 
-Built once from ``AgentsConfig`` at graph startup via
-``MCPAuthRegistry.from_config(config)``.  Scans all agents' MCP
+Built once from ``OrchidAgentsConfig`` at graph startup via
+``OrchidMCPAuthRegistry.from_config(config)``.  Scans all agents' MCP
 servers and collects those with ``auth.mode == "oauth"``.  When the
 same server name appears in multiple agents their ``agent_names``
 lists are merged.
@@ -19,13 +19,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..config.schema import AgentsConfig
+    from ..config.schema import OrchidAgentsConfig
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class MCPOAuthServerInfo:
+class OrchidMCPOAuthServerInfo:
     """Static OAuth metadata for a single MCP server."""
 
     server_name: str
@@ -38,19 +38,19 @@ class MCPOAuthServerInfo:
 
 
 @dataclass
-class MCPAuthRegistry:
+class OrchidMCPAuthRegistry:
     """Immutable registry of OAuth-requiring MCP servers.
 
     Constructed via the :meth:`from_config` class method — never
     instantiated directly by consumers.
     """
 
-    _servers: dict[str, MCPOAuthServerInfo] = field(default_factory=dict)
+    _servers: dict[str, OrchidMCPOAuthServerInfo] = field(default_factory=dict)
 
     # ── Public API ────────────────────────────────────────────
 
     @property
-    def oauth_servers(self) -> dict[str, MCPOAuthServerInfo]:
+    def oauth_servers(self) -> dict[str, OrchidMCPOAuthServerInfo]:
         """All OAuth servers keyed by name (read-only view)."""
         return dict(self._servers)
 
@@ -59,7 +59,7 @@ class MCPAuthRegistry:
         """True when no OAuth servers are registered."""
         return len(self._servers) == 0
 
-    def get_server(self, name: str) -> MCPOAuthServerInfo | None:
+    def get_server(self, name: str) -> OrchidMCPOAuthServerInfo | None:
         """Retrieve info for a specific server, or ``None``."""
         return self._servers.get(name)
 
@@ -70,7 +70,7 @@ class MCPAuthRegistry:
     # ── Factory ───────────────────────────────────────────────
 
     @classmethod
-    def from_config(cls, config: AgentsConfig) -> MCPAuthRegistry:
+    def from_config(cls, config: OrchidAgentsConfig) -> OrchidMCPAuthRegistry:
         """Scan all agents and collect OAuth-requiring MCP servers.
 
         When the same ``server_name`` appears in multiple agents their
@@ -126,7 +126,7 @@ class MCPAuthRegistry:
 
         # Build frozen dataclass instances
         servers = {
-            name: MCPOAuthServerInfo(
+            name: OrchidMCPOAuthServerInfo(
                 server_name=data["server_name"],
                 client_id=data["client_id"],
                 authorization_endpoint=data["authorization_endpoint"],
@@ -140,11 +140,11 @@ class MCPAuthRegistry:
 
         if servers:
             logger.info(
-                "[MCPAuthRegistry] %d OAuth server(s): %s",
+                "[OrchidMCPAuthRegistry] %d OAuth server(s): %s",
                 len(servers),
                 ", ".join(f"{n} (agents: {', '.join(s.agent_names)})" for n, s in servers.items()),
             )
         else:
-            logger.debug("[MCPAuthRegistry] No OAuth servers configured")
+            logger.debug("[OrchidMCPAuthRegistry] No OAuth servers configured")
 
         return cls(_servers=servers)

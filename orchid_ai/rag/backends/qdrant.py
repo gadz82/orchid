@@ -1,5 +1,5 @@
 """
-Qdrant implementation of VectorStoreRepository — multi-tenant (ADR-014).
+Qdrant implementation of OrchidVectorStoreRepository — multi-tenant (ADR-014).
 
 Multi-tenancy strategy:
   - **One Qdrant collection per domain** (e.g. ``learning``, ``notifications``).
@@ -35,15 +35,15 @@ from qdrant_client.models import (
 
 from langchain_core.embeddings import Embeddings
 
-from ...core.repository import Document, SearchResult, VectorStoreRepository
-from ..scopes import RAGScope, build_qdrant_filter
+from ...core.repository import Document, OrchidSearchResult, OrchidVectorStoreRepository
+from ..scopes import OrchidRAGScope, build_qdrant_filter
 
 logger = logging.getLogger(__name__)
 
 QDRANT_TIMEOUT = 30.0  # seconds — timeout for Qdrant operations
 
 
-class QdrantRepository(VectorStoreRepository):
+class QdrantRepository(OrchidVectorStoreRepository):
     """
     Qdrant-backed vector store with per-tenant isolation (ADR-014).
 
@@ -67,19 +67,19 @@ class QdrantRepository(VectorStoreRepository):
         self._embedding_dimension = embedding_dimension
         self._default_tenant = default_tenant
 
-    # ── VectorReader ──────────────────────────────────────────
+    # ── OrchidVectorReader ──────────────────────────────────────────
 
     async def retrieve(
         self,
         query: str,
         namespace: str,
         k: int = 5,
-        scope: RAGScope | None = None,
-    ) -> list[SearchResult]:
+        scope: OrchidRAGScope | None = None,
+    ) -> list[OrchidSearchResult]:
         """
         Retrieve the *k* most relevant documents for *query* in *namespace*.
 
-        Uses the hierarchical ``RAGScope`` to build a Qdrant filter that
+        Uses the hierarchical ``OrchidRAGScope`` to build a Qdrant filter that
         includes all scope levels visible to the caller (shared → tenant →
         user → chat_shared → chat_agent).
         """
@@ -107,7 +107,7 @@ class QdrantRepository(VectorStoreRepository):
             )
 
         return [
-            SearchResult(
+            OrchidSearchResult(
                 document=Document(
                     id=str(hit.id),
                     page_content=hit.payload.get("content", "") if hit.payload else "",
@@ -121,7 +121,7 @@ class QdrantRepository(VectorStoreRepository):
     async def lookup_cached_tool_results(
         self,
         namespace: str,
-        scope: RAGScope,
+        scope: OrchidRAGScope,
         tool_name: str,
         min_injected_at: float,
     ) -> str | None:
@@ -234,7 +234,7 @@ class QdrantRepository(VectorStoreRepository):
         )
         return len(docs)
 
-    # ── VectorStoreRepository — scope promotion ────────────────
+    # ── OrchidVectorStoreRepository — scope promotion ────────────────
 
     async def promote_scope(
         self,
@@ -250,7 +250,7 @@ class QdrantRepository(VectorStoreRepository):
             new_scope_fields=new_scope_fields,
         )
 
-    # ── VectorWriter ──────────────────────────────────────────
+    # ── OrchidVectorWriter ──────────────────────────────────────────
 
     async def index(
         self,

@@ -1,7 +1,7 @@
 """
-PostgreSQL MCP token storage — MCPTokenStore implementation using asyncpg.
+PostgreSQL MCP token storage — OrchidMCPTokenStore implementation using asyncpg.
 
-Shares the same database and migration system as ``PostgresChatStorage``.
+Shares the same database and migration system as ``OrchidPostgresChatStorage``.
 The ``mcp_oauth_tokens`` table is created by the unified
 ``v001_initial_schema`` in the shared ``orchid_ai.persistence.migrations``
 package.
@@ -9,7 +9,7 @@ package.
 Optional dependency — install via ``pip install orchid-ai[postgres]``.
 
 Configuration:
-    MCP_TOKEN_STORE_CLASS=orchid_ai.persistence.mcp_token_postgres.PostgresMCPTokenStore
+    MCP_TOKEN_STORE_CLASS=orchid_ai.persistence.mcp_token_postgres.OrchidPostgresMCPTokenStore
     MCP_TOKEN_STORE_DSN=postgresql://user:pass@host:5432/db
 """
 
@@ -19,26 +19,26 @@ import logging
 import time
 from typing import Any
 
-from ..core.mcp import MCPTokenRecord, MCPTokenStore
-from .postgres import PostgresMigrationRunner
+from ..core.mcp import OrchidMCPTokenRecord, OrchidMCPTokenStore
+from .postgres import OrchidPostgresMigrationRunner
 
 logger = logging.getLogger(__name__)
 
 
-class PostgresMCPTokenStore(MCPTokenStore):
+class OrchidPostgresMCPTokenStore(OrchidMCPTokenStore):
     """Async PostgreSQL storage for per-server OAuth tokens.
 
     Uses connection pooling via asyncpg (min_size=2, max_size=10).
     Constructor accepts the connection string via ``dsn`` and an optional
     ``extra_migrations_package`` (dotted import path) so integrators can
     append their own migrations after the framework's — see
-    :class:`orchid_ai.persistence.migrations.runner.MigrationRunner`.
+    :class:`orchid_ai.persistence.migrations.runner.OrchidMigrationRunner`.
     """
 
     def __init__(self, *, dsn: str, extra_migrations_package: str | None = None):
         self._dsn = dsn
         self._pool: Any = None
-        self._migrator = PostgresMigrationRunner(
+        self._migrator = OrchidPostgresMigrationRunner(
             extra_migrations_package=extra_migrations_package,
         )
 
@@ -51,7 +51,7 @@ class PostgresMCPTokenStore(MCPTokenStore):
         async with self._pool.acquire() as conn:
             await self._migrator.run_up(conn)
         logger.info(
-            "[MCPTokenStore:postgres] Initialised — %s", self._dsn.split("@")[-1] if "@" in self._dsn else "***"
+            "[OrchidMCPTokenStore:postgres] Initialised — %s", self._dsn.split("@")[-1] if "@" in self._dsn else "***"
         )
 
     async def close(self) -> None:
@@ -65,7 +65,7 @@ class PostgresMCPTokenStore(MCPTokenStore):
         tenant_id: str,
         user_id: str,
         server_name: str,
-    ) -> MCPTokenRecord | None:
+    ) -> OrchidMCPTokenRecord | None:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT * FROM mcp_oauth_tokens WHERE server_name = $1 AND tenant_id = $2 AND user_id = $3",
@@ -75,7 +75,7 @@ class PostgresMCPTokenStore(MCPTokenStore):
             )
         return _row_to_record(row) if row else None
 
-    async def save_token(self, record: MCPTokenRecord) -> None:
+    async def save_token(self, record: OrchidMCPTokenRecord) -> None:
         now = time.time()
         async with self._pool.acquire() as conn:
             await conn.execute(
@@ -121,7 +121,7 @@ class PostgresMCPTokenStore(MCPTokenStore):
         self,
         tenant_id: str,
         user_id: str,
-    ) -> list[MCPTokenRecord]:
+    ) -> list[OrchidMCPTokenRecord]:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT * FROM mcp_oauth_tokens WHERE tenant_id = $1 AND user_id = $2",
@@ -134,8 +134,8 @@ class PostgresMCPTokenStore(MCPTokenStore):
 # ── Row mapper ──────────────────────────────────────────────
 
 
-def _row_to_record(row: Any) -> MCPTokenRecord:
-    return MCPTokenRecord(
+def _row_to_record(row: Any) -> OrchidMCPTokenRecord:
+    return OrchidMCPTokenRecord(
         server_name=row["server_name"],
         tenant_id=row["tenant_id"],
         user_id=row["user_id"],

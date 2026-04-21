@@ -6,12 +6,12 @@ from unittest.mock import MagicMock
 
 
 from orchid_ai.config.schema import (
-    AgentConfig,
-    AgentsConfig,
-    BuiltinToolConfig,
-    MCPServerConfig,
-    RAGConfig,
-    ToolConfig,
+    OrchidAgentConfig,
+    OrchidAgentsConfig,
+    OrchidBuiltinToolConfig,
+    OrchidMCPServerConfig,
+    OrchidRAGConfig,
+    OrchidToolConfig,
 )
 
 
@@ -19,52 +19,52 @@ from orchid_ai.config.schema import (
 
 
 class TestToolConfigApproval:
-    """ToolConfig.requires_approval field (MCP tools)."""
+    """OrchidToolConfig.requires_approval field (MCP tools)."""
 
     def test_default_no_approval(self):
-        cfg = ToolConfig(name="list_items")
+        cfg = OrchidToolConfig(name="list_items")
         assert cfg.requires_approval is False
 
     def test_approval_set(self):
-        cfg = ToolConfig(name="create_item", requires_approval=True)
+        cfg = OrchidToolConfig(name="create_item", requires_approval=True)
         assert cfg.requires_approval is True
 
     def test_from_dict(self):
         data = {"name": "delete_item", "requires_approval": True}
-        cfg = ToolConfig(**data)
+        cfg = OrchidToolConfig(**data)
         assert cfg.requires_approval is True
 
 
 class TestBuiltinToolConfigApproval:
-    """BuiltinToolConfig.requires_approval field (built-in tools)."""
+    """OrchidBuiltinToolConfig.requires_approval field (built-in tools)."""
 
     def test_default_no_approval(self):
-        cfg = BuiltinToolConfig(handler="mymod.fn")
+        cfg = OrchidBuiltinToolConfig(handler="mymod.fn")
         assert cfg.requires_approval is False
 
     def test_approval_set(self):
-        cfg = BuiltinToolConfig(handler="mymod.fn", requires_approval=True)
+        cfg = OrchidBuiltinToolConfig(handler="mymod.fn", requires_approval=True)
         assert cfg.requires_approval is True
 
 
 class TestApprovalToolsComputed:
-    """AgentConfig.approval_tools computed from MCP + built-in configs."""
+    """OrchidAgentConfig.approval_tools computed from MCP + built-in configs."""
 
     def test_mcp_tools_collected(self):
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                     mcp_servers=[
-                        MCPServerConfig(
+                        OrchidMCPServerConfig(
                             name="api",
                             url="http://localhost:8080",
                             tools=[
-                                ToolConfig(name="list_items"),
-                                ToolConfig(name="create_item", requires_approval=True),
-                                ToolConfig(name="delete_item", requires_approval=True),
+                                OrchidToolConfig(name="list_items"),
+                                OrchidToolConfig(name="create_item", requires_approval=True),
+                                OrchidToolConfig(name="delete_item", requires_approval=True),
                             ],
                         ),
                     ],
@@ -75,16 +75,16 @@ class TestApprovalToolsComputed:
         assert agent.approval_tools == {"create_item", "delete_item"}
 
     def test_builtin_tools_collected(self):
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             tools={
-                "search": BuiltinToolConfig(handler="mymod.search"),
-                "send_email": BuiltinToolConfig(handler="mymod.email", requires_approval=True),
+                "search": OrchidBuiltinToolConfig(handler="mymod.search"),
+                "send_email": OrchidBuiltinToolConfig(handler="mymod.email", requires_approval=True),
             },
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                     tools=["search", "send_email"],
                 ),
             },
@@ -94,22 +94,22 @@ class TestApprovalToolsComputed:
         assert "search" not in agent.approval_tools
 
     def test_mixed_mcp_and_builtin(self):
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             tools={
-                "dangerous_fn": BuiltinToolConfig(handler="mymod.danger", requires_approval=True),
+                "dangerous_fn": OrchidBuiltinToolConfig(handler="mymod.danger", requires_approval=True),
             },
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                     tools=["dangerous_fn"],
                     mcp_servers=[
-                        MCPServerConfig(
+                        OrchidMCPServerConfig(
                             name="api",
                             url="http://localhost:8080",
                             tools=[
-                                ToolConfig(name="write_data", requires_approval=True),
+                                OrchidToolConfig(name="write_data", requires_approval=True),
                             ],
                         ),
                     ],
@@ -120,12 +120,12 @@ class TestApprovalToolsComputed:
         assert agent.approval_tools == {"dangerous_fn", "write_data"}
 
     def test_no_approval_tools(self):
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    rag=RAGConfig(enabled=False),
+                    rag=OrchidRAGConfig(enabled=False),
                 ),
             },
         )
@@ -157,7 +157,7 @@ class TestApprovalToolsComputed:
                 },
             },
         }
-        config = AgentsConfig(**raw)
+        config = OrchidAgentsConfig(**raw)
         assert config.agents["ops"].approval_tools == {"send_alert", "restart_service"}
 
 
@@ -207,10 +207,10 @@ class TestBuildLangchainToolsApproval:
 
     def test_approval_tools_set_on_wrappers(self):
         from orchid_ai.agents.tools import build_langchain_tools
-        from orchid_ai.core.state import AuthContext
+        from orchid_ai.core.state import OrchidAuthContext
 
         mock_client = MagicMock()
-        auth = AuthContext(access_token="test")
+        auth = OrchidAuthContext(access_token="test")
 
         tools = build_langchain_tools(
             builtin_names={"safe_fn", "dangerous_fn"},

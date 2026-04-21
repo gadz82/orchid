@@ -15,7 +15,7 @@ Execution modes (ADR-013):
   - sequential → agents run one at a time; each round's output is
                  visible to the next agent via mcp_context
 
-Prompts are configurable via ``SupervisorConfig`` in agents.yaml.
+Prompts are configurable via ``OrchidSupervisorConfig`` in agents.yaml.
 """
 
 from __future__ import annotations
@@ -32,15 +32,15 @@ from typing import Literal as TypingLiteral
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, Field
 
-from ..core.agent import BaseAgent
-from ..config.schema import OrchestratorSkillConfig, SupervisorConfig
+from ..core.agent import OrchidAgent
+from ..config.schema import OrchidOrchestratorSkillConfig, OrchidSupervisorConfig
 from .state import GraphState
 
 
 # ── Structured output model for routing ──────────────────────
 
 
-class RoutingDecision(BaseModel):
+class OrchidRoutingDecision(BaseModel):
     """LLM-generated routing decision — guaranteed valid via structured output."""
 
     reasoning: str = Field(description="Brief analysis of the user's intent")
@@ -139,8 +139,8 @@ def create_supervisor_node(
     model: str,
     agent_descriptions: dict[str, str],
     chat_model: BaseChatModel | None = None,
-    orchestrator_skills: dict[str, OrchestratorSkillConfig] | None = None,
-    supervisor_config: SupervisorConfig | None = None,
+    orchestrator_skills: dict[str, OrchidOrchestratorSkillConfig] | None = None,
+    supervisor_config: OrchidSupervisorConfig | None = None,
 ):
     """
     Return a LangGraph node function with *model*, *agent_descriptions*,
@@ -148,7 +148,7 @@ def create_supervisor_node(
     module-level globals (ADR-008 Composition Root).
     """
     skills = orchestrator_skills or {}
-    sup_config = supervisor_config or SupervisorConfig()
+    sup_config = supervisor_config or OrchidSupervisorConfig()
 
     async def supervisor_node(state: GraphState) -> GraphState:
         pending = state.get("pending_agents", [])
@@ -268,8 +268,8 @@ async def _route(
     state: GraphState,
     model: str,
     agent_descriptions: dict[str, str],
-    orchestrator_skills: dict[str, OrchestratorSkillConfig] | None = None,
-    supervisor_config: SupervisorConfig | None = None,
+    orchestrator_skills: dict[str, OrchidOrchestratorSkillConfig] | None = None,
+    supervisor_config: OrchidSupervisorConfig | None = None,
     chat_model: BaseChatModel | None = None,
 ) -> GraphState:
     """Analyse user intent, choose execution mode, and activate agents."""
@@ -281,7 +281,7 @@ async def _route(
     else:
         skill_text = "(none defined)"
 
-    sup = supervisor_config or SupervisorConfig()
+    sup = supervisor_config or OrchidSupervisorConfig()
     routing_template = sup.routing_system_prompt or ROUTING_SYSTEM_PROMPT
 
     # Inject MCP auth status hint so the supervisor can make informed routing decisions
@@ -303,7 +303,7 @@ async def _route(
 
     # Use extract_conversation_history for clean, bounded context.
     # This respects max_turns/max_chars limits and filters supervisor noise.
-    history = BaseAgent.extract_conversation_history(
+    history = OrchidAgent.extract_conversation_history(
         state,
         max_turns=sup.history_max_turns,
         max_chars=sup.history_max_chars,
@@ -311,7 +311,7 @@ async def _route(
 
     # Compress older turns when sliding-window summarization is enabled
     if history and sup.history_summary_enabled and chat_model:
-        history = await BaseAgent.compress_conversation_history(
+        history = await OrchidAgent.compress_conversation_history(
             history,
             chat_model=chat_model,
             recent_turns=sup.history_summary_recent_turns,
@@ -327,7 +327,7 @@ async def _route(
         llm_messages.extend(clean_history)
 
     # Add the current user query
-    user_query = BaseAgent.extract_user_query(state)
+    user_query = OrchidAgent.extract_user_query(state)
     if user_query:
         llm_messages.append({"role": "user", "content": user_query})
 
@@ -335,8 +335,8 @@ async def _route(
         if not chat_model:
             raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
 
-        structured_model = chat_model.with_structured_output(RoutingDecision)
-        decision: RoutingDecision = await structured_model.ainvoke(llm_messages, temperature=0)
+        structured_model = chat_model.with_structured_output(OrchidRoutingDecision)
+        decision: OrchidRoutingDecision = await structured_model.ainvoke(llm_messages, temperature=0)
         logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
         # Handle LLM API failures gracefully
@@ -465,7 +465,7 @@ async def _advance_sequential(
     model: str,
     agent_descriptions: dict[str, str],
     pending: list[str],
-    supervisor_config: SupervisorConfig | None = None,
+    supervisor_config: OrchidSupervisorConfig | None = None,
     chat_model: BaseChatModel | None = None,
 ) -> GraphState:
     """
@@ -484,7 +484,7 @@ async def _advance_sequential(
     skill_instruction_section = f"\nSKILL INSTRUCTION for {next_agent}: {instruction}\n" if instruction else ""
 
     # Generate a handoff message so the next agent has context
-    sup = supervisor_config or SupervisorConfig()
+    sup = supervisor_config or OrchidSupervisorConfig()
     advance_template = sup.sequential_advance_prompt or SEQUENTIAL_ADVANCE_SYSTEM_PROMPT
     system = advance_template.format(
         assistant_name=sup.assistant_name,
@@ -495,7 +495,7 @@ async def _advance_sequential(
     )
 
     # Build clean history using the shared framework helper
-    history = BaseAgent.extract_conversation_history(
+    history = OrchidAgent.extract_conversation_history(
         state,
         max_turns=sup.history_max_turns,
         max_chars=sup.history_max_chars,
@@ -503,7 +503,7 @@ async def _advance_sequential(
 
     # Compress older turns when sliding-window summarization is enabled
     if history and sup.history_summary_enabled and chat_model:
-        history = await BaseAgent.compress_conversation_history(
+        history = await OrchidAgent.compress_conversation_history(
             history,
             chat_model=chat_model,
             recent_turns=sup.history_summary_recent_turns,
@@ -552,11 +552,11 @@ async def _advance_sequential(
 async def _synthesise(
     state: GraphState,
     model: str,
-    supervisor_config: SupervisorConfig | None = None,
+    supervisor_config: OrchidSupervisorConfig | None = None,
     chat_model: BaseChatModel | None = None,
 ) -> GraphState:
     """Combine sub-agent results into a final user-facing response."""
-    sup = supervisor_config or SupervisorConfig()
+    sup = supervisor_config or OrchidSupervisorConfig()
     all_messages = state.get("messages", [])
 
     # ── Split messages: prior history vs current turn ──
@@ -581,7 +581,7 @@ async def _synthesise(
     # Use the shared framework helper for clean, configurable history.
     # extract_conversation_history already filters [Supervisor messages,
     # excludes the last user message, and respects turn/char limits.
-    history = BaseAgent.extract_conversation_history(
+    history = OrchidAgent.extract_conversation_history(
         state,
         max_turns=sup.history_max_turns,
         max_chars=sup.history_max_chars,
@@ -589,7 +589,7 @@ async def _synthesise(
 
     # Compress older turns when sliding-window summarization is enabled
     if history and sup.history_summary_enabled and chat_model:
-        history = await BaseAgent.compress_conversation_history(
+        history = await OrchidAgent.compress_conversation_history(
             history,
             chat_model=chat_model,
             recent_turns=sup.history_summary_recent_turns,

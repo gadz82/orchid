@@ -1,4 +1,4 @@
-"""Tests for query reformulation (BaseAgent.reformulate_query)."""
+"""Tests for query reformulation (OrchidAgent.reformulate_query)."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from orchid_ai.core.agent import BaseAgent
+from orchid_ai.core.agent import OrchidAgent
 
 
-class _TestAgent(BaseAgent):
+class _TestAgent(OrchidAgent):
     @property
     def name(self):
         return "test"

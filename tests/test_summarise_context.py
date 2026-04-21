@@ -1,4 +1,4 @@
-"""Tests for BaseAgent.summarise() — conversation history + prior tool context."""
+"""Tests for OrchidAgent.summarise() — conversation history + prior tool context."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from orchid_ai.core.agent import BaseAgent
+from orchid_ai.core.agent import OrchidAgent
 
 
-# ── Concrete stub (BaseAgent is abstract) ──────────────────
+# ── Concrete stub (OrchidAgent is abstract) ──────────────────
 
 
-class _StubAgent(BaseAgent):
+class _StubAgent(OrchidAgent):
     @property
     def name(self) -> str:
         return "stub"

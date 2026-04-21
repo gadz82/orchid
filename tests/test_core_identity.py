@@ -1,19 +1,19 @@
-"""Tests for IdentityResolver ABC and IdentityError from src/core/identity.py."""
+"""Tests for OrchidIdentityResolver ABC and OrchidIdentityError from src/core/identity.py."""
 
 from __future__ import annotations
 
 import pytest
 
-from orchid_ai.core.identity import IdentityError, IdentityResolver
-from orchid_ai.core.state import AuthContext
+from orchid_ai.core.identity import OrchidIdentityError, OrchidIdentityResolver
+from orchid_ai.core.state import OrchidAuthContext
 
 
-# ── IdentityResolver is abstract ──
+# ── OrchidIdentityResolver is abstract ──
 
 
 def test_identity_resolver_is_abstract():
     with pytest.raises(TypeError):
-        IdentityResolver()
+        OrchidIdentityResolver()
 
 
 # ── Concrete subclass works ──
@@ -21,9 +21,9 @@ def test_identity_resolver_is_abstract():
 
 @pytest.mark.asyncio
 async def test_concrete_resolver():
-    class StubResolver(IdentityResolver):
-        async def resolve(self, domain: str, bearer_token: str) -> AuthContext:
-            return AuthContext(
+    class StubResolver(OrchidIdentityResolver):
+        async def resolve(self, domain: str, bearer_token: str) -> OrchidAuthContext:
+            return OrchidAuthContext(
                 access_token=bearer_token,
                 tenant_key=domain,
                 user_id="resolved-user",
@@ -36,20 +36,20 @@ async def test_concrete_resolver():
     assert ctx.user_id == "resolved-user"
 
 
-# ── IdentityError ──
+# ── OrchidIdentityError ──
 
 
 def test_identity_error_stores_message_and_status():
-    err = IdentityError("bad token", status_code=401)
+    err = OrchidIdentityError("bad token", status_code=401)
     assert str(err) == "bad token"
     assert err.status_code == 401
 
 
 def test_identity_error_default_status_code():
-    err = IdentityError("oops")
+    err = OrchidIdentityError("oops")
     assert err.status_code == 0
 
 
 def test_identity_error_is_exception():
-    with pytest.raises(IdentityError):
-        raise IdentityError("fail", status_code=500)
+    with pytest.raises(OrchidIdentityError):
+        raise OrchidIdentityError("fail", status_code=500)

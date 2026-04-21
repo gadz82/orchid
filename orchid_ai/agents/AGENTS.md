@@ -26,8 +26,8 @@ Most agents should use `GenericAgent` via YAML — no Python needed.
 When YAML isn't enough, create a custom agent:
 
 1. Create a file in `examples/<project>/agents/` (or your own project)
-2. Subclass `BaseAgent` from `orchid_ai.core.agent`
-3. Use **absolute imports** (not relative): `from orchid_ai.core.agent import BaseAgent`
+2. Subclass `OrchidAgent` from `orchid_ai.core.agent`
+3. Use **absolute imports** (not relative): `from orchid_ai.core.agent import OrchidAgent`
 4. Reference in `agents.yaml` with `class: examples.helpdesk.agents.support.SupportAgent`
 
 Example custom agents:
@@ -36,8 +36,8 @@ Example custom agents:
 
 ## Agent Contract
 
-- **Input:** `AgentState` (TypedDict)
-- **Output:** Partial `AgentState` — must include `messages` with an `AIMessage`
+- **Input:** `OrchidAgentState` (TypedDict)
+- **Output:** Partial `OrchidAgentState` — must include `messages` with an `AIMessage`
 - **Constructor:** `__init__(self, *, name, llm, reader, mcp_clients, config)` (injected by the framework)
 - **Resolution:** Dotted import path in YAML `class:` field → `importlib` at startup
 
@@ -45,7 +45,7 @@ Example custom agents:
 
 ### Use inherited helpers — don't duplicate
 
-`BaseAgent` provides reusable methods. Custom agents must use them instead of reimplementing:
+`OrchidAgent` provides reusable methods. Custom agents must use them instead of reimplementing:
 
 ```python
 # GOOD — use inherited methods
@@ -61,13 +61,13 @@ summary = await self.summarise(
 )
 
 # BAD — duplicated private methods
-user_query = self._extract_user_query(state)  # don't copy-paste from BaseAgent
+user_query = self._extract_user_query(state)  # don't copy-paste from OrchidAgent
 rag_data = await self._fetch_rag_context(...)  # use self.fetch_rag_context()
 ```
 
 ### Use `extract_conversation_history()` for multi-turn context
 
-`BaseAgent.extract_conversation_history(state)` is a static method that extracts clean user/assistant pairs from the graph state. It filters out `[Supervisor` routing messages, strips agent name prefixes, excludes the current query, and caps output to `max_turns` pairs. Use it in custom agents to maintain conversation continuity across turns.
+`OrchidAgent.extract_conversation_history(state)` is a static method that extracts clean user/assistant pairs from the graph state. It filters out `[Supervisor` routing messages, strips agent name prefixes, excludes the current query, and caps output to `max_turns` pairs. Use it in custom agents to maintain conversation continuity across turns.
 
 ### Pass `conversation_history` and `prior_tool_context` to `summarise()`
 
@@ -81,7 +81,7 @@ rag_data = await self._fetch_rag_context(...)  # use self.fetch_rag_context()
 All LLM access goes through LangChain's `BaseChatModel` (injected as `chat_model=`):
 
 ```python
-# GOOD — uses BaseChatModel via BaseAgent.summarise()
+# GOOD — uses BaseChatModel via OrchidAgent.summarise()
 summary = await self.summarise(query, mcp_data, rag_data, system_prompt=MY_PROMPT)
 
 # GOOD — direct ainvoke for custom logic
@@ -106,7 +106,7 @@ Don't merge these back into `GenericAgent`. If you need to modify skill detectio
 
 ## Common Mistakes
 
-- **Using relative imports in custom agents.** Files outside `src/` must use absolute imports (`from orchid_ai.core.agent import BaseAgent`).
+- **Using relative imports in custom agents.** Files outside `src/` must use absolute imports (`from orchid_ai.core.agent import OrchidAgent`).
 - **Not returning `messages`.** The supervisor expects an `AIMessage` from each agent.
 - **Forgetting `name=self.name` on `AIMessage`.** The supervisor uses this to track responses.
 - **Duplicating `_extract_user_query()` or `_fetch_rag_context()`.** Use the inherited `self.extract_user_query()` and `self.fetch_rag_context()`.

@@ -6,16 +6,16 @@ import json
 
 import pytest
 
-from orchid_ai.core.repository import Document, VectorReader, VectorWriter
+from orchid_ai.core.repository import Document, OrchidVectorReader, OrchidVectorWriter
 from orchid_ai.rag.dynamic import _tool_data_to_documents, inject_to_rag
 from orchid_ai.rag.null import NullVectorReader
-from orchid_ai.rag.scopes import RAGScope
+from orchid_ai.rag.scopes import OrchidRAGScope
 
 
-# ── Mock that implements both VectorReader and VectorWriter ─────
+# ── Mock that implements both OrchidVectorReader and OrchidVectorWriter ─────
 
 
-class MockReaderWriter(VectorReader, VectorWriter):
+class MockReaderWriter(OrchidVectorReader, OrchidVectorWriter):
     def __init__(self):
         self.upserted: list[tuple] = []
 
@@ -38,7 +38,7 @@ class MockReaderWriter(VectorReader, VectorWriter):
 class TestInjectToRag:
     @pytest.fixture
     def scope(self):
-        return RAGScope(tenant_id="t-1", user_id="u-1", chat_id="c-1")
+        return OrchidRAGScope(tenant_id="t-1", user_id="u-1", chat_id="c-1")
 
     @pytest.mark.asyncio
     async def test_null_reader_returns_zero(self, scope):
@@ -86,7 +86,7 @@ class TestInjectToRag:
 class TestToolDataToDocuments:
     @pytest.fixture
     def scope(self):
-        return RAGScope(tenant_id="t-1", user_id="u-1", chat_id="c-1")
+        return OrchidRAGScope(tenant_id="t-1", user_id="u-1", chat_id="c-1")
 
     def test_creates_one_document_per_key(self, scope):
         data = {"a": "text_a", "b": "text_b", "c": "text_c"}

@@ -8,23 +8,23 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from orchid_ai.agents.strategies import CallAllStrategy, LLMDecidesStrategy
-from orchid_ai.config.schema import ToolConfig
-from orchid_ai.core.mcp import MCPClient, MCPToolResult
-from orchid_ai.core.state import AuthContext
+from orchid_ai.config.schema import OrchidToolConfig
+from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
+from orchid_ai.core.state import OrchidAuthContext
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
 def _auth():
-    return AuthContext(access_token="test-token")
+    return OrchidAuthContext(access_token="test-token")
 
 
 def _tools(*names):
-    return [ToolConfig(name=n) for n in names]
+    return [OrchidToolConfig(name=n) for n in names]
 
 
-class _TimingMCPClient(MCPClient):
+class _TimingMCPClient(OrchidMCPClient):
     """MCP client that records call timestamps to verify concurrency."""
 
     def __init__(self, delay: float = 0.05):
@@ -35,7 +35,7 @@ class _TimingMCPClient(MCPClient):
         start = asyncio.get_event_loop().time()
         await asyncio.sleep(self._delay)
         self.call_times.append((tool_name, start))
-        return MCPToolResult(content=[{"type": "text", "text": f"result_{tool_name}"}])
+        return OrchidMCPToolResult(content=[{"type": "text", "text": f"result_{tool_name}"}])
 
     async def list_tools(self, auth):
         return []
@@ -87,11 +87,11 @@ class TestFetchAllRagConcurrency:
     @pytest.mark.asyncio
     async def test_domain_and_uploads_run_concurrently(self):
         """fetch_all_rag_context should use asyncio.gather for domain + uploads."""
-        from orchid_ai.core.agent import BaseAgent
-        from orchid_ai.rag.scopes import RAGScope
+        from orchid_ai.core.agent import OrchidAgent
+        from orchid_ai.rag.scopes import OrchidRAGScope
 
         # Create a concrete subclass for testing
-        class _TestAgent(BaseAgent):
+        class _TestAgent(OrchidAgent):
             @property
             def name(self):
                 return "test"
@@ -118,7 +118,7 @@ class TestFetchAllRagConcurrency:
         reader.retrieve = mock_retrieve
 
         agent = _TestAgent(llm="model", reader=reader)
-        scope = RAGScope(tenant_id="t", user_id="u")
+        scope = OrchidRAGScope(tenant_id="t", user_id="u")
 
         result = await agent.fetch_all_rag_context("query", scope, k=3)
 
@@ -134,10 +134,10 @@ class TestFetchAllRagConcurrency:
 class TestNoLitellmFallback:
     @pytest.mark.asyncio
     async def test_summarise_raises_without_chat_model(self):
-        """BaseAgent.summarise() should raise RuntimeError when no BaseChatModel injected."""
-        from orchid_ai.core.agent import BaseAgent
+        """OrchidAgent.summarise() should raise RuntimeError when no BaseChatModel injected."""
+        from orchid_ai.core.agent import OrchidAgent
 
-        class _TestAgent(BaseAgent):
+        class _TestAgent(OrchidAgent):
             @property
             def name(self):
                 return "test"
@@ -187,7 +187,7 @@ class TestSpecificExceptions:
     async def test_call_all_catches_connection_error(self):
         """CallAllStrategy should catch ConnectionError."""
 
-        class _FailClient(MCPClient):
+        class _FailClient(OrchidMCPClient):
             async def call_tool(self, name, args, auth):
                 raise ConnectionError("refused")
 
@@ -223,7 +223,7 @@ class TestSpecificExceptions:
         boundary — it must degrade gracefully, not crash the agent.
         """
 
-        class _AttrClient(MCPClient):
+        class _AttrClient(OrchidMCPClient):
             async def call_tool(self, name, args, auth):
                 raise AttributeError("unexpected")
 
@@ -260,7 +260,7 @@ class TestSpecificExceptions:
         """
         import httpx
 
-        class _HttpErrorClient(MCPClient):
+        class _HttpErrorClient(OrchidMCPClient):
             async def call_tool(self, name, args, auth):
                 response = httpx.Response(401, request=httpx.Request("POST", "http://mcp/tool"))
                 raise httpx.HTTPStatusError("401 Unauthorized", request=response.request, response=response)
@@ -336,16 +336,16 @@ class TestGenericAgentDecomposition:
 
     @pytest.mark.asyncio
     async def test_build_scope_returns_rag_scope(self):
-        """_build_scope should return a RAGScope from auth + state."""
+        """_build_scope should return a OrchidRAGScope from auth + state."""
         from orchid_ai.agents.generic_agent import GenericAgent
-        from orchid_ai.config.schema import AgentConfig, LLMConfig, RAGConfig
-        from orchid_ai.rag.scopes import RAGScope
+        from orchid_ai.config.schema import OrchidAgentConfig, OrchidLLMConfig, OrchidRAGConfig
+        from orchid_ai.rag.scopes import OrchidRAGScope
 
-        config = AgentConfig(
+        config = OrchidAgentConfig(
             description="d",
             prompt="p",
-            rag=RAGConfig(enabled=False, namespace="ns"),
-            llm=LLMConfig(),
+            rag=OrchidRAGConfig(enabled=False, namespace="ns"),
+            llm=OrchidLLMConfig(),
         )
         reader = MagicMock()
         reader.retrieve = AsyncMock(return_value=[])
@@ -359,11 +359,11 @@ class TestGenericAgentDecomposition:
             mcp_clients=[],
             chat_model=chat_model,
         )
-        auth = AuthContext(access_token="tok", tenant_key="t1", user_id="u1")
+        auth = OrchidAuthContext(access_token="tok", tenant_key="t1", user_id="u1")
         state = {"chat_id": "c1"}
 
         scope = agent._build_scope(auth, state)
-        assert isinstance(scope, RAGScope)
+        assert isinstance(scope, OrchidRAGScope)
         assert scope.tenant_id == "t1"
         assert scope.user_id == "u1"
         assert scope.chat_id == "c1"
@@ -382,11 +382,11 @@ class TestRenderCapabilitiesResilience:
         import httpx
 
         from orchid_ai.agents.mcp_dispatcher import MCPDispatcher
-        from orchid_ai.config.schema import MCPServerConfig
+        from orchid_ai.config.schema import OrchidMCPServerConfig
 
-        class _Http401Client(MCPClient):
+        class _Http401Client(OrchidMCPClient):
             async def call_tool(self, name, args, auth):
-                return MCPToolResult(text="")
+                return OrchidMCPToolResult(text="")
 
             async def list_tools(self, auth):
                 response = httpx.Response(401, request=httpx.Request("GET", "http://mcp/tools"))
@@ -408,7 +408,7 @@ class TestRenderCapabilitiesResilience:
             def server_url(self):
                 return "http://mcp"
 
-        server_cfg = MCPServerConfig(name="failing-server", url="http://mcp", discover_all_tools=True)
+        server_cfg = OrchidMCPServerConfig(name="failing-server", url="http://mcp", discover_all_tools=True)
         dispatcher = MCPDispatcher(mcp_clients=[_Http401Client()], server_configs=[server_cfg])
 
         # Should NOT raise — the 401 is caught and the server is skipped
@@ -422,9 +422,9 @@ class TestRenderCapabilitiesResilience:
         import httpx
 
         from orchid_ai.agents.mcp_dispatcher import MCPDispatcher
-        from orchid_ai.config.schema import MCPServerConfig, ToolConfig as TC
+        from orchid_ai.config.schema import OrchidMCPServerConfig, OrchidToolConfig as TC
 
-        class _Http500Client(MCPClient):
+        class _Http500Client(OrchidMCPClient):
             async def call_tool(self, name, args, auth):
                 response = httpx.Response(500, request=httpx.Request("POST", "http://mcp/tool"))
                 raise httpx.HTTPStatusError("500 Server Error", request=response.request, response=response)
@@ -448,7 +448,7 @@ class TestRenderCapabilitiesResilience:
             def server_url(self):
                 return "http://mcp"
 
-        server_cfg = MCPServerConfig(
+        server_cfg = OrchidMCPServerConfig(
             name="failing-server",
             url="http://mcp",
             tools=[TC(name="my_tool")],

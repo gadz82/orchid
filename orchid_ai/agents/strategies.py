@@ -7,7 +7,7 @@ Each strategy defines *how* tools on a single MCP server are invoked:
   - ``llm_decides``  — ask the LLM which tools to call and with what args
 
 Adding a new strategy:
-  1. Subclass ``ToolCallStrategy``
+  1. Subclass ``OrchidToolCallStrategy``
   2. Register it in ``STRATEGY_REGISTRY``
   3. Reference by name in ``agents.yaml`` → ``tool_call_strategy: my_strategy``
 
@@ -30,27 +30,27 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ..config.schema import MCPServerConfig, ToolConfig
-from ..core.mcp import MCPToolCaller
-from ..core.state import AuthContext
+from ..config.schema import OrchidMCPServerConfig, OrchidToolConfig
+from ..core.mcp import OrchidMCPToolCaller
+from ..core.state import OrchidAuthContext
 
 
 logger = logging.getLogger(__name__)
 
 
-class ToolCallStrategy(ABC):
+class OrchidToolCallStrategy(ABC):
     """Strategy for calling MCP tools on a single server."""
 
     @abstractmethod
     async def execute(
         self,
-        client: MCPToolCaller,
-        tools: list[ToolConfig],
+        client: OrchidMCPToolCaller,
+        tools: list[OrchidToolConfig],
         query: str,
-        auth: AuthContext,
+        auth: OrchidAuthContext,
         *,
         agent_name: str = "",
-        server_config: MCPServerConfig | None = None,
+        server_config: OrchidMCPServerConfig | None = None,
         llm_model: str | None = None,
         chat_model: Any | None = None,
     ) -> dict[str, Any]:
@@ -59,17 +59,17 @@ class ToolCallStrategy(ABC):
 
         Parameters
         ----------
-        client : MCPClient
+        client : OrchidMCPClient
             The MCP client to call tools on.
-        tools : list[ToolConfig]
+        tools : list[OrchidToolConfig]
             Tools available for this invocation.
         query : str
             The user's query.
-        auth : AuthContext
+        auth : OrchidAuthContext
             Authentication context for tool calls.
         agent_name : str
             Name of the calling agent (for logging).
-        server_config : MCPServerConfig | None
+        server_config : OrchidMCPServerConfig | None
             Full server configuration (for strategies that need it).
         llm_model : str | None
             LLM model identifier (for strategies that use LLM).
@@ -79,7 +79,7 @@ class ToolCallStrategy(ABC):
         ...
 
 
-class CallAllStrategy(ToolCallStrategy):
+class CallAllStrategy(OrchidToolCallStrategy):
     """Call every tool in the list concurrently and collect results."""
 
     async def execute(
@@ -107,7 +107,7 @@ class CallAllStrategy(ToolCallStrategy):
         return dict(pairs)
 
 
-class SequentialStrategy(ToolCallStrategy):
+class SequentialStrategy(OrchidToolCallStrategy):
     """Call tools in order, passing previous results as context."""
 
     async def execute(
@@ -138,7 +138,7 @@ class SequentialStrategy(ToolCallStrategy):
         return results
 
 
-class LLMDecidesStrategy(ToolCallStrategy):
+class LLMDecidesStrategy(OrchidToolCallStrategy):
     """Ask the LLM which tools to call and with what arguments."""
 
     async def execute(
@@ -251,14 +251,14 @@ class LLMDecidesStrategy(ToolCallStrategy):
 
 # ── Strategy Registry ──────────────────────────────────────────
 
-STRATEGY_REGISTRY: dict[str, type[ToolCallStrategy]] = {
+STRATEGY_REGISTRY: dict[str, type[OrchidToolCallStrategy]] = {
     "all": CallAllStrategy,
     "sequential": SequentialStrategy,
     "llm_decides": LLMDecidesStrategy,
 }
 
 
-def register_strategy(name: str, cls: type[ToolCallStrategy]) -> None:
+def register_strategy(name: str, cls: type[OrchidToolCallStrategy]) -> None:
     """Register a custom tool call strategy by name."""
     STRATEGY_REGISTRY[name] = cls
     logger.info("[Strategies] Registered '%s' → %s", name, cls.__name__)
@@ -276,7 +276,7 @@ def clear_strategies() -> None:
     )
 
 
-def get_strategy(name: str) -> ToolCallStrategy:
+def get_strategy(name: str) -> OrchidToolCallStrategy:
     """Look up and instantiate a tool call strategy by name."""
     cls = STRATEGY_REGISTRY.get(name)
     if not cls:

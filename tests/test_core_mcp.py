@@ -1,17 +1,17 @@
-"""Tests for MCPToolResult and MCPClient ABC from src/core/mcp.py."""
+"""Tests for OrchidMCPToolResult and OrchidMCPClient ABC from src/core/mcp.py."""
 
 from __future__ import annotations
 
 import pytest
 
-from orchid_ai.core.mcp import MCPClient, MCPToolResult
+from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
 
 
-# ── MCPToolResult defaults ──
+# ── OrchidMCPToolResult defaults ──
 
 
 def test_tool_result_defaults():
-    r = MCPToolResult()
+    r = OrchidMCPToolResult()
     assert r.content == []
     assert r.is_error is False
 
@@ -20,7 +20,7 @@ def test_tool_result_defaults():
 
 
 def test_text_concatenates_text_blocks():
-    r = MCPToolResult(
+    r = OrchidMCPToolResult(
         content=[
             {"type": "text", "text": "hello"},
             {"type": "text", "text": "world"},
@@ -30,7 +30,7 @@ def test_text_concatenates_text_blocks():
 
 
 def test_text_ignores_non_text_blocks():
-    r = MCPToolResult(
+    r = OrchidMCPToolResult(
         content=[
             {"type": "text", "text": "keep"},
             {"type": "image", "url": "http://img.png"},
@@ -41,21 +41,21 @@ def test_text_ignores_non_text_blocks():
 
 
 def test_text_empty_for_empty_content():
-    r = MCPToolResult(content=[])
+    r = OrchidMCPToolResult(content=[])
     assert r.text == ""
 
 
 def test_text_empty_for_only_non_text_blocks():
-    r = MCPToolResult(content=[{"type": "image", "url": "x"}])
+    r = OrchidMCPToolResult(content=[{"type": "image", "url": "x"}])
     assert r.text == ""
 
 
-# ── MCPClient is abstract ──
+# ── OrchidMCPClient is abstract ──
 
 
 def test_mcp_client_is_abstract():
     with pytest.raises(TypeError):
-        MCPClient()
+        OrchidMCPClient()
 
 
 # ── Mock MCP client works ──

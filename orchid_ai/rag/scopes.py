@@ -1,7 +1,7 @@
 """
 Hierarchical RAG scoping — 5-level partition scheme.
 
-``RAGScope`` lives in ``core/scopes.py`` (zero external deps) and is
+``OrchidRAGScope`` lives in ``core/scopes.py`` (zero external deps) and is
 re-exported here for backward compatibility.  The Qdrant-specific
 ``build_qdrant_filter()`` stays here because it depends on ``qdrant_client``.
 """
@@ -15,12 +15,12 @@ from qdrant_client.models import (
 )
 
 # Re-export from core for backward compatibility
-from ..core.scopes import SHARED_TENANT, RAGScope
+from ..core.scopes import SHARED_TENANT, OrchidRAGScope
 
-__all__ = ["SHARED_TENANT", "RAGScope", "build_qdrant_filter"]
+__all__ = ["SHARED_TENANT", "OrchidRAGScope", "build_qdrant_filter"]
 
 
-def build_qdrant_filter(scope: RAGScope) -> Filter:
+def build_qdrant_filter(scope: OrchidRAGScope) -> Filter:
     """
     Build a Qdrant ``Filter`` with ``should`` (OR) clauses covering
     every scope level visible to the caller.

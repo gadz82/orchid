@@ -5,8 +5,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 
-from orchid_ai.core.mcp import MCPClient
-from orchid_ai.core.repository import VectorReader
+from orchid_ai.core.mcp import OrchidMCPClient
+from orchid_ai.core.repository import OrchidVectorReader
 from orchid_ai.runtime import OrchidRuntime
 
 
@@ -30,7 +30,7 @@ class TestDefaults:
         assert isinstance(reader, NullVectorReader)
 
     def test_get_reader_returns_provided_reader(self):
-        mock_reader = MagicMock(spec=VectorReader)
+        mock_reader = MagicMock(spec=OrchidVectorReader)
         rt = OrchidRuntime(reader=mock_reader)
         assert rt.get_reader() is mock_reader
 
@@ -64,25 +64,25 @@ class TestDefaults:
 
 class TestCustomMCPFactory:
     def test_default_factory_creates_streamable_client(self):
-        from orchid_ai.config.schema import MCPServerConfig
+        from orchid_ai.config.schema import OrchidMCPServerConfig
         from orchid_ai.mcp.client import StreamableHttpMCPClient
 
         rt = OrchidRuntime()
         factory = rt.get_mcp_client_factory()
-        server_cfg = MCPServerConfig(name="test", url="http://localhost:8080")
+        server_cfg = OrchidMCPServerConfig(name="test", url="http://localhost:8080")
         client = factory(server_cfg)
         assert isinstance(client, StreamableHttpMCPClient)
         assert client.server_url == "http://localhost:8080"
 
     def test_custom_factory_is_used(self):
-        from orchid_ai.config.schema import MCPServerConfig
+        from orchid_ai.config.schema import OrchidMCPServerConfig
 
-        mock_client = MagicMock(spec=MCPClient)
+        mock_client = MagicMock(spec=OrchidMCPClient)
         custom_factory = MagicMock(return_value=mock_client)
 
         rt = OrchidRuntime(mcp_client_factory=custom_factory)
         factory = rt.get_mcp_client_factory()
-        server_cfg = MCPServerConfig(name="test", url="http://x")
+        server_cfg = OrchidMCPServerConfig(name="test", url="http://x")
         result = factory(server_cfg)
 
         custom_factory.assert_called_once_with(server_cfg)
@@ -95,16 +95,16 @@ class TestCustomMCPFactory:
 class TestBuildGraphIntegration:
     def test_build_graph_accepts_runtime(self):
         """build_graph() should work with OrchidRuntime parameter."""
-        from orchid_ai.config.schema import AgentConfig, AgentsConfig, LLMConfig, RAGConfig
+        from orchid_ai.config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidLLMConfig, OrchidRAGConfig
         from orchid_ai.graph.graph import build_graph
 
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test agent",
                     prompt="You are a test agent",
-                    rag=RAGConfig(enabled=False),
-                    llm=LLMConfig(model="test-model"),
+                    rag=OrchidRAGConfig(enabled=False),
+                    llm=OrchidLLMConfig(model="test-model"),
                 ),
             },
         )
@@ -114,21 +114,21 @@ class TestBuildGraphIntegration:
 
     def test_build_graph_with_custom_reader(self):
         """build_graph() should use the reader from OrchidRuntime."""
-        from orchid_ai.config.schema import AgentConfig, AgentsConfig, LLMConfig, RAGConfig
+        from orchid_ai.config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidLLMConfig, OrchidRAGConfig
         from orchid_ai.graph.graph import build_graph
 
-        mock_reader = MagicMock(spec=VectorReader)
+        mock_reader = MagicMock(spec=OrchidVectorReader)
         runtime = OrchidRuntime(
             default_model="runtime-model",
             reader=mock_reader,
         )
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test agent",
                     prompt="You are a test agent",
-                    rag=RAGConfig(enabled=False),
-                    llm=LLMConfig(model="test-model"),
+                    rag=OrchidRAGConfig(enabled=False),
+                    llm=OrchidLLMConfig(model="test-model"),
                 ),
             },
         )
@@ -138,29 +138,29 @@ class TestBuildGraphIntegration:
     def test_build_graph_uses_custom_mcp_factory(self):
         """build_graph() should use the runtime's MCP factory for agent creation."""
         from orchid_ai.config.schema import (
-            AgentConfig,
-            AgentsConfig,
-            LLMConfig,
-            MCPServerConfig,
-            RAGConfig,
+            OrchidAgentConfig,
+            OrchidAgentsConfig,
+            OrchidLLMConfig,
+            OrchidMCPServerConfig,
+            OrchidRAGConfig,
         )
         from orchid_ai.graph.graph import build_graph
 
-        mock_client = MagicMock(spec=MCPClient)
+        mock_client = MagicMock(spec=OrchidMCPClient)
         custom_factory = MagicMock(return_value=mock_client)
 
         runtime = OrchidRuntime(
             default_model="test-model",
             mcp_client_factory=custom_factory,
         )
-        config = AgentsConfig(
+        config = OrchidAgentsConfig(
             agents={
-                "test": AgentConfig(
+                "test": OrchidAgentConfig(
                     description="test agent",
                     prompt="You are a test agent",
-                    rag=RAGConfig(enabled=False),
-                    llm=LLMConfig(model="test-model"),
-                    mcp_servers=[MCPServerConfig(name="srv", url="http://x")],
+                    rag=OrchidRAGConfig(enabled=False),
+                    llm=OrchidLLMConfig(model="test-model"),
+                    mcp_servers=[OrchidMCPServerConfig(name="srv", url="http://x")],
                 ),
             },
         )

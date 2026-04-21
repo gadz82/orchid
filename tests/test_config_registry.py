@@ -31,10 +31,10 @@ class TestRegistry:
         assert reg.get_class(None) is GenericAgent
 
     def test_get_class_dotted_path(self):
-        cls = reg.get_class("orchid_ai.config.schema.LLMConfig")
-        from orchid_ai.config.schema import LLMConfig
+        cls = reg.get_class("orchid_ai.config.schema.OrchidLLMConfig")
+        from orchid_ai.config.schema import OrchidLLMConfig
 
-        assert cls is LLMConfig
+        assert cls is OrchidLLMConfig
 
     def test_get_class_invalid_path_raises(self):
         with pytest.raises(ImportError, match="Cannot resolve agent class"):

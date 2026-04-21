@@ -5,9 +5,9 @@ Concrete implementations live in ``mcp/``:
   - StreamableHttpMCPClient (production)
 
 Domain types for per-server OAuth token management:
-  - MCPTokenRecord — stored token for a (server, tenant, user) triple
-  - MCPTokenStore — persistence ABC for OAuth tokens
-  - MCPAuthRequiredError — raised when OAuth authorization is needed
+  - OrchidMCPTokenRecord — stored token for a (server, tenant, user) triple
+  - OrchidMCPTokenStore — persistence ABC for OAuth tokens
+  - OrchidMCPAuthRequiredError — raised when OAuth authorization is needed
 
 The agent never knows which transport or auth mode is being used.
 """
@@ -19,13 +19,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from .state import AuthContext
+from .state import OrchidAuthContext
 
 
 # ── Segregated Interfaces (ISP) ────────────────────────────
 
 
-class MCPToolCaller(ABC):
+class OrchidMCPToolCaller(ABC):
     """Minimal interface for invoking MCP tools — most consumers only need this."""
 
     @abstractmethod
@@ -33,8 +33,8 @@ class MCPToolCaller(ABC):
         self,
         tool_name: str,
         arguments: dict[str, Any],
-        auth: AuthContext,
-    ) -> MCPToolResult:
+        auth: OrchidAuthContext,
+    ) -> OrchidMCPToolResult:
         """Invoke a tool on the remote/local MCP server."""
         ...
 
@@ -45,21 +45,21 @@ class MCPToolCaller(ABC):
         ...
 
 
-class MCPDiscoverable(ABC):
+class OrchidMCPDiscoverable(ABC):
     """Interface for discovering MCP server capabilities."""
 
     @abstractmethod
-    async def list_tools(self, auth: AuthContext) -> list[dict[str, Any]]:
+    async def list_tools(self, auth: OrchidAuthContext) -> list[dict[str, Any]]:
         """List available tools on the MCP server."""
         ...
 
     @abstractmethod
-    async def list_prompts(self, auth: AuthContext) -> list[dict[str, Any]]:
+    async def list_prompts(self, auth: OrchidAuthContext) -> list[dict[str, Any]]:
         """List available prompts on the MCP server."""
         ...
 
     @abstractmethod
-    async def list_resources(self, auth: AuthContext) -> list[dict[str, Any]]:
+    async def list_resources(self, auth: OrchidAuthContext) -> list[dict[str, Any]]:
         """List available resources on the MCP server."""
         ...
 
@@ -68,19 +68,19 @@ class MCPDiscoverable(ABC):
         self,
         name: str,
         arguments: dict[str, str],
-        auth: AuthContext,
+        auth: OrchidAuthContext,
     ) -> list[dict[str, Any]]:
         """Render a prompt template and return its messages."""
         ...
 
     @abstractmethod
-    async def read_resource(self, uri: str, auth: AuthContext) -> str:
+    async def read_resource(self, uri: str, auth: OrchidAuthContext) -> str:
         """Read the content of a resource by URI."""
         ...
 
 
 @dataclass
-class MCPToolResult:
+class OrchidMCPToolResult:
     """Normalised result from an MCP tool call."""
 
     content: list[dict[str, Any]] = field(default_factory=list)
@@ -92,13 +92,13 @@ class MCPToolResult:
         return "\n".join(item.get("text", "") for item in self.content if item.get("type") == "text")
 
 
-class MCPClient(MCPToolCaller, MCPDiscoverable, ABC):
+class OrchidMCPClient(OrchidMCPToolCaller, OrchidMCPDiscoverable, ABC):
     """
     Combined MCP client interface.
 
-    Extends both ``MCPToolCaller`` (tool invocation) and ``MCPDiscoverable``
+    Extends both ``OrchidMCPToolCaller`` (tool invocation) and ``OrchidMCPDiscoverable``
     (capability discovery).  Code that only needs tool calling should
-    depend on ``MCPToolCaller`` instead for better interface segregation.
+    depend on ``OrchidMCPToolCaller`` instead for better interface segregation.
     """
 
     pass
@@ -107,7 +107,7 @@ class MCPClient(MCPToolCaller, MCPDiscoverable, ABC):
 # ── Per-server OAuth token management ────────────────────────
 
 
-class MCPAuthRequiredError(Exception):
+class OrchidMCPAuthRequiredError(Exception):
     """Raised when an MCP server requires OAuth but the user has not authorized.
 
     Caught at the fault-isolation boundaries in ``mcp_dispatcher.py``
@@ -121,7 +121,7 @@ class MCPAuthRequiredError(Exception):
 
 
 @dataclass
-class MCPTokenRecord:
+class OrchidMCPTokenRecord:
     """Stored OAuth token for a ``(server_name, tenant_id, user_id)`` triple.
 
     Mirrors the CLI's ``StoredToken`` pattern but adds multi-tenancy keys
@@ -154,10 +154,10 @@ class MCPTokenRecord:
         return {"Authorization": f"Bearer {self.access_token}"}
 
 
-class MCPTokenStore(ABC):
+class OrchidMCPTokenStore(ABC):
     """Persistence contract for per-server OAuth tokens.
 
-    Follows the same lifecycle and factory patterns as ``ChatStorage``:
+    Follows the same lifecycle and factory patterns as ``OrchidChatStorage``:
     construct with ``__init__(*, dsn: str)``, call ``init_db()`` on
     startup, ``close()`` on shutdown.
 
@@ -180,12 +180,12 @@ class MCPTokenStore(ABC):
         tenant_id: str,
         user_id: str,
         server_name: str,
-    ) -> MCPTokenRecord | None:
+    ) -> OrchidMCPTokenRecord | None:
         """Retrieve a stored token, or ``None`` if not found."""
         ...
 
     @abstractmethod
-    async def save_token(self, record: MCPTokenRecord) -> None:
+    async def save_token(self, record: OrchidMCPTokenRecord) -> None:
         """Insert or update (upsert) a token record."""
         ...
 
@@ -204,6 +204,6 @@ class MCPTokenStore(ABC):
         self,
         tenant_id: str,
         user_id: str,
-    ) -> list[MCPTokenRecord]:
+    ) -> list[OrchidMCPTokenRecord]:
         """List all tokens for a given tenant + user."""
         ...

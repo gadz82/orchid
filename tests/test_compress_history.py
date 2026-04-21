@@ -1,4 +1,4 @@
-"""Tests for BaseAgent.compress_conversation_history (sliding-window summarization)."""
+"""Tests for OrchidAgent.compress_conversation_history (sliding-window summarization)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from orchid_ai.core.agent import BaseAgent
+from orchid_ai.core.agent import OrchidAgent
 
 
 class _FakeLLM:
@@ -46,7 +46,7 @@ class TestCompressConversationHistory:
         llm = _FakeLLM()
         history = _build_history(3)  # 6 messages
 
-        result = await BaseAgent.compress_conversation_history(
+        result = await OrchidAgent.compress_conversation_history(
             history,
             chat_model=llm,
             recent_turns=3,
@@ -61,7 +61,7 @@ class TestCompressConversationHistory:
         llm = _FakeLLM()
         history = _build_history(3)  # 6 messages, recent_turns=3 → threshold=6
 
-        result = await BaseAgent.compress_conversation_history(
+        result = await OrchidAgent.compress_conversation_history(
             history,
             chat_model=llm,
             recent_turns=3,
@@ -76,7 +76,7 @@ class TestCompressConversationHistory:
         llm = _FakeLLM(response="The user discussed topics 0 through 6.")
         history = _build_history(10)  # 20 messages, recent_turns=3 → keep last 6
 
-        result = await BaseAgent.compress_conversation_history(
+        result = await OrchidAgent.compress_conversation_history(
             history,
             chat_model=llm,
             recent_turns=3,
@@ -98,7 +98,7 @@ class TestCompressConversationHistory:
         llm = _FakeLLM()
         history = _build_history(5)  # 10 messages
 
-        await BaseAgent.compress_conversation_history(
+        await OrchidAgent.compress_conversation_history(
             history,
             chat_model=llm,
             recent_turns=2,
@@ -113,7 +113,7 @@ class TestCompressConversationHistory:
         llm = _FakeLLM()
         history = _build_history(5)  # 10 messages, recent_turns=2 → older = first 6
 
-        await BaseAgent.compress_conversation_history(
+        await OrchidAgent.compress_conversation_history(
             history,
             chat_model=llm,
             recent_turns=2,
@@ -133,7 +133,7 @@ class TestCompressConversationHistory:
         llm.ainvoke = AsyncMock(side_effect=RuntimeError("API down"))  # type: ignore[method-assign]
         history = _build_history(6)  # 12 messages
 
-        result = await BaseAgent.compress_conversation_history(
+        result = await OrchidAgent.compress_conversation_history(
             history,
             chat_model=llm,
             recent_turns=2,
@@ -150,7 +150,7 @@ class TestCompressConversationHistory:
         llm = _FakeLLM(response="Summary.")
         history = _build_history(4)  # 8 messages
 
-        result = await BaseAgent.compress_conversation_history(
+        result = await OrchidAgent.compress_conversation_history(
             history,
             chat_model=llm,
             recent_turns=1,
@@ -165,7 +165,7 @@ class TestCompressConversationHistory:
     async def test_empty_history(self) -> None:
         """Empty history returns empty (no LLM call)."""
         llm = _FakeLLM()
-        result = await BaseAgent.compress_conversation_history(
+        result = await OrchidAgent.compress_conversation_history(
             [],
             chat_model=llm,
         )
@@ -174,20 +174,20 @@ class TestCompressConversationHistory:
 
 
 class TestCompressConfigSchema:
-    """Verify that SupervisorConfig exposes the new compression fields."""
+    """Verify that OrchidSupervisorConfig exposes the new compression fields."""
 
     def test_defaults(self) -> None:
-        from orchid_ai.config.schema import SupervisorConfig
+        from orchid_ai.config.schema import OrchidSupervisorConfig
 
-        cfg = SupervisorConfig()
+        cfg = OrchidSupervisorConfig()
         assert cfg.history_summary_enabled is True
         assert cfg.history_summary_model is None
         assert cfg.history_summary_recent_turns == 10
 
     def test_custom_values(self) -> None:
-        from orchid_ai.config.schema import SupervisorConfig
+        from orchid_ai.config.schema import OrchidSupervisorConfig
 
-        cfg = SupervisorConfig(
+        cfg = OrchidSupervisorConfig(
             history_summary_enabled=True,
             history_summary_model="gemini/gemini-2.5-flash-lite",
             history_summary_recent_turns=5,

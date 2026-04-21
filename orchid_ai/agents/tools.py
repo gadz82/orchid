@@ -30,8 +30,8 @@ from typing import Any
 
 from langchain_core.tools import BaseTool
 
-from ..core.mcp import MCPToolCaller
-from ..core.state import AuthContext
+from ..core.mcp import OrchidMCPToolCaller
+from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,8 @@ class MCPToolWrapper(BaseTool):
     without custom config wiring.
     """
 
-    mcp_client: Any  # MCPToolCaller — Any to avoid Pydantic ABC issues
-    auth: Any  # AuthContext
+    mcp_client: Any  # OrchidMCPToolCaller — Any to avoid Pydantic ABC issues
+    auth: Any  # OrchidAuthContext
     agent_name: str = ""
     requires_approval: bool = False  # HITL: pause and ask user before executing
 
@@ -80,7 +80,7 @@ class BuiltinToolWrapper(BaseTool):
     via the tool registry's ``call_tool()`` function.
     """
 
-    auth: Any  # AuthContext
+    auth: Any  # OrchidAuthContext
     agent_name: str = ""
     requires_approval: bool = False  # HITL: pause and ask user before executing
 
@@ -112,8 +112,8 @@ def build_langchain_tools(
     builtin_names: set[str],
     builtin_tool_defs: list[dict[str, Any]],
     mcp_tool_defs: list[dict[str, Any]],
-    mcp_tool_client_map: dict[str, tuple[MCPToolCaller, Any]],
-    auth: AuthContext,
+    mcp_tool_client_map: dict[str, tuple[OrchidMCPToolCaller, Any]],
+    auth: OrchidAuthContext,
     agent_name: str = "",
     approval_tools: set[str] | None = None,
 ) -> list[BaseTool]:
@@ -128,8 +128,8 @@ def build_langchain_tools(
     mcp_tool_defs : list[dict]
         OpenAI-format tool definitions for MCP tools.
     mcp_tool_client_map : dict
-        Maps tool name -> (MCPToolCaller, MCPServerConfig).
-    auth : AuthContext
+        Maps tool name -> (OrchidMCPToolCaller, OrchidMCPServerConfig).
+    auth : OrchidAuthContext
         Auth context baked into each wrapper.
     agent_name : str
         Agent name for logging.

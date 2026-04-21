@@ -25,13 +25,13 @@ from typing import Any
 
 from langchain_core.messages import AIMessage
 
-from ..config.schema import AgentConfig
-from ..core.agent import BaseAgent
-from ..core.mcp import MCPClient
-from ..core.repository import VectorReader
-from ..core.state import AgentState, AuthContext
+from ..config.schema import OrchidAgentConfig
+from ..core.agent import OrchidAgent
+from ..core.mcp import OrchidMCPClient
+from ..core.repository import OrchidVectorReader
+from ..core.state import OrchidAgentState, OrchidAuthContext
 from ..rag.dynamic import inject_to_rag
-from ..rag.scopes import RAGScope
+from ..rag.scopes import OrchidRAGScope
 
 from .mcp_dispatcher import MCPCapabilities, MCPDispatcher
 from .skill_detector import SkillDetector
@@ -42,9 +42,9 @@ logger = logging.getLogger(__name__)
 _wall_clock = time.time  # cache TTL must use wall clock — dynamic.py stores time.time()
 
 
-class GenericAgent(BaseAgent):
+class GenericAgent(OrchidAgent):
     """
-    A concrete agent whose behavior is fully defined by an ``AgentConfig``.
+    A concrete agent whose behavior is fully defined by an ``OrchidAgentConfig``.
 
     No subclassing needed — add agents by editing ``agents.yaml``.
     """
@@ -52,9 +52,9 @@ class GenericAgent(BaseAgent):
     def __init__(
         self,
         *,
-        config: AgentConfig,
-        reader: VectorReader,
-        mcp_clients: list[MCPClient] | None = None,
+        config: OrchidAgentConfig,
+        reader: OrchidVectorReader,
+        mcp_clients: list[OrchidMCPClient] | None = None,
         agent_peers: dict[str, Any] | None = None,
         chat_model: Any | None = None,
         summary_config: dict[str, Any] | None = None,
@@ -104,9 +104,9 @@ class GenericAgent(BaseAgent):
 
     # ── Execution ────────────────────────────────────────────
 
-    async def run(self, state: AgentState) -> AgentState:
+    async def run(self, state: OrchidAgentState) -> OrchidAgentState:
         """Execute the pipeline: RAG → skill check → agentic loop → inject → summarise."""
-        auth: AuthContext | None = state.get("auth_context")
+        auth: OrchidAuthContext | None = state.get("auth_context")
         if not auth:
             return {
                 "messages": [AIMessage(content=f"[{self.name}] Error: no auth context")],
@@ -162,9 +162,9 @@ class GenericAgent(BaseAgent):
 
     # ── Pipeline steps ──────────────────────────────────────────
 
-    def _build_scope(self, auth: AuthContext, state: AgentState) -> RAGScope:
+    def _build_scope(self, auth: OrchidAuthContext, state: OrchidAgentState) -> OrchidRAGScope:
         """Build hierarchical RAG scope from auth + state."""
-        return RAGScope(
+        return OrchidRAGScope(
             tenant_id=auth.tenant_key,
             user_id=auth.user_id,
             chat_id=state.get("chat_id", ""),
@@ -174,7 +174,7 @@ class GenericAgent(BaseAgent):
     async def _step_rag_retrieval(
         self,
         query: str,
-        scope: RAGScope,
+        scope: OrchidRAGScope,
     ) -> list[dict[str, Any]]:
         """Step 1: RAG retrieval (domain namespace + uploads).
 
@@ -192,7 +192,7 @@ class GenericAgent(BaseAgent):
     async def _multi_query_rag(
         self,
         query: str,
-        scope: RAGScope,
+        scope: OrchidRAGScope,
         *,
         k: int = 5,
     ) -> list[dict[str, Any]]:
@@ -221,7 +221,7 @@ class GenericAgent(BaseAgent):
         combined.sort(key=lambda d: d.get("score", 0), reverse=True)
         return combined[:k]
 
-    async def _step_cache_check(self, scope: RAGScope) -> dict[str, Any]:
+    async def _step_cache_check(self, scope: OrchidRAGScope) -> dict[str, Any]:
         """Step 1.5: Check RAG for cached tool results within TTL."""
         if not (self._config.rag.enabled and self._config.injectable_tool_ttls):
             return {}
@@ -230,7 +230,7 @@ class GenericAgent(BaseAgent):
     async def _step_dynamic_injection(
         self,
         mcp_data: dict[str, Any],
-        scope: RAGScope,
+        scope: OrchidRAGScope,
     ) -> None:
         """Dynamic RAG injection for tools with inject_to_rag=True."""
         if not (self._config.rag.enabled and self._config.injectable_tools):
@@ -250,7 +250,7 @@ class GenericAgent(BaseAgent):
         query: str,
         mcp_data: dict[str, Any],
         rag_data: list[dict[str, Any]],
-        state: AgentState | None = None,
+        state: OrchidAgentState | None = None,
     ) -> str:
         """LLM summarisation with conversation history and prior tool context."""
         llm_config = self._config.llm
@@ -302,8 +302,8 @@ class GenericAgent(BaseAgent):
     async def _agentic_tool_loop(
         self,
         query: str,
-        auth: AuthContext,
-        state: AgentState | None,
+        auth: OrchidAuthContext,
+        state: OrchidAgentState | None,
         rag_data: list[dict[str, Any]],
         *,
         skip_tools: set[str] | None = None,
@@ -380,7 +380,7 @@ class GenericAgent(BaseAgent):
         self,
         caps: MCPCapabilities,
         rag_data: list[dict[str, Any]],
-        state: AgentState | None,
+        state: OrchidAgentState | None,
     ) -> str:
         """Build a rich system prompt from config + MCP metadata + RAG context."""
         parts = [self._config.prompt]
@@ -477,7 +477,7 @@ class GenericAgent(BaseAgent):
         self,
         fn_name: str,
         fn_args: dict[str, Any],
-        auth: AuthContext,
+        auth: OrchidAuthContext,
     ) -> str:
         """Call a built-in tool, injecting auth_context, and return JSON result."""
         try:
@@ -491,7 +491,7 @@ class GenericAgent(BaseAgent):
 
     # ── RAG tool cache ────────────────────────────────────────
 
-    async def _check_tool_cache(self, scope: RAGScope) -> dict[str, Any]:
+    async def _check_tool_cache(self, scope: OrchidRAGScope) -> dict[str, Any]:
         """Check RAG for cached tool results within TTL. Returns {tool_name: content}."""
         import asyncio as _asyncio
 

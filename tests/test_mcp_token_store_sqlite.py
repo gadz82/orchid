@@ -1,4 +1,4 @@
-"""Tests for SQLiteMCPTokenStore — in-memory SQLite token persistence."""
+"""Tests for OrchidSQLiteMCPTokenStore — in-memory SQLite token persistence."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ import time
 
 import pytest
 
-from orchid_ai.core.mcp import MCPTokenRecord
-from orchid_ai.persistence.mcp_token_sqlite import SQLiteMCPTokenStore
+from orchid_ai.core.mcp import OrchidMCPTokenRecord
+from orchid_ai.persistence.mcp_token_sqlite import OrchidSQLiteMCPTokenStore
 
 
 @pytest.fixture
 async def store():
     """Create an in-memory token store for each test."""
-    s = SQLiteMCPTokenStore(dsn=":memory:")
+    s = OrchidSQLiteMCPTokenStore(dsn=":memory:")
     await s.init_db()
     yield s
     await s.close()
@@ -25,8 +25,8 @@ def _make_record(
     user_id: str = "user1",
     access_token: str = "access-token-123",
     **kwargs,
-) -> MCPTokenRecord:
-    return MCPTokenRecord(
+) -> OrchidMCPTokenRecord:
+    return OrchidMCPTokenRecord(
         server_name=server_name,
         tenant_id=tenant_id,
         user_id=user_id,
@@ -37,11 +37,11 @@ def _make_record(
 
 @pytest.mark.asyncio
 class TestSQLiteMCPTokenStore:
-    async def test_get_token_returns_none_when_empty(self, store: SQLiteMCPTokenStore):
+    async def test_get_token_returns_none_when_empty(self, store: OrchidSQLiteMCPTokenStore):
         result = await store.get_token("t", "u", "s")
         assert result is None
 
-    async def test_save_and_get_token(self, store: SQLiteMCPTokenStore):
+    async def test_save_and_get_token(self, store: OrchidSQLiteMCPTokenStore):
         record = _make_record()
         await store.save_token(record)
 
@@ -52,7 +52,7 @@ class TestSQLiteMCPTokenStore:
         assert loaded.tenant_id == "tenant1"
         assert loaded.user_id == "user1"
 
-    async def test_save_token_upserts(self, store: SQLiteMCPTokenStore):
+    async def test_save_token_upserts(self, store: OrchidSQLiteMCPTokenStore):
         await store.save_token(_make_record(access_token="old-token"))
         await store.save_token(_make_record(access_token="new-token"))
 
@@ -60,7 +60,7 @@ class TestSQLiteMCPTokenStore:
         assert loaded is not None
         assert loaded.access_token == "new-token"
 
-    async def test_delete_token(self, store: SQLiteMCPTokenStore):
+    async def test_delete_token(self, store: OrchidSQLiteMCPTokenStore):
         await store.save_token(_make_record())
         deleted = await store.delete_token("tenant1", "user1", "ext-crm")
         assert deleted is True
@@ -68,11 +68,11 @@ class TestSQLiteMCPTokenStore:
         loaded = await store.get_token("tenant1", "user1", "ext-crm")
         assert loaded is None
 
-    async def test_delete_nonexistent_returns_false(self, store: SQLiteMCPTokenStore):
+    async def test_delete_nonexistent_returns_false(self, store: OrchidSQLiteMCPTokenStore):
         deleted = await store.delete_token("t", "u", "nonexistent")
         assert deleted is False
 
-    async def test_list_tokens(self, store: SQLiteMCPTokenStore):
+    async def test_list_tokens(self, store: OrchidSQLiteMCPTokenStore):
         await store.save_token(_make_record(server_name="server-a"))
         await store.save_token(_make_record(server_name="server-b"))
         await store.save_token(_make_record(server_name="server-c", tenant_id="other-tenant"))
@@ -82,12 +82,12 @@ class TestSQLiteMCPTokenStore:
         names = {t.server_name for t in tokens}
         assert names == {"server-a", "server-b"}
 
-    async def test_init_db_idempotent(self, store: SQLiteMCPTokenStore):
+    async def test_init_db_idempotent(self, store: OrchidSQLiteMCPTokenStore):
         """Calling init_db twice should not fail."""
         await store.init_db()  # already called in fixture
         # Should not raise
 
-    async def test_preserves_refresh_token_and_scopes(self, store: SQLiteMCPTokenStore):
+    async def test_preserves_refresh_token_and_scopes(self, store: OrchidSQLiteMCPTokenStore):
         record = _make_record(
             refresh_token="refresh-abc",
             scopes="openid crm.read",
@@ -101,7 +101,7 @@ class TestSQLiteMCPTokenStore:
         assert loaded.scopes == "openid crm.read"
         assert loaded.expires_at > 0
 
-    async def test_different_users_isolated(self, store: SQLiteMCPTokenStore):
+    async def test_different_users_isolated(self, store: OrchidSQLiteMCPTokenStore):
         await store.save_token(_make_record(user_id="alice", access_token="alice-token"))
         await store.save_token(_make_record(user_id="bob", access_token="bob-token"))
 

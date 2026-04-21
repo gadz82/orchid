@@ -83,18 +83,18 @@ This library is consumed by:
 ```
 orchid/
   core/             Pure ABCs -- ZERO external dependencies (only stdlib)
-    agent.py        BaseAgent ABC
-    state.py        AuthContext + AgentState
-    identity.py     IdentityResolver ABC
+    agent.py        OrchidAgent ABC
+    state.py        OrchidAuthContext + OrchidAgentState
+    identity.py     OrchidIdentityResolver ABC
     llm_provider.py LLMProvider ABC
-    mcp.py          MCPToolCaller / MCPDiscoverable ABCs
-    repository.py   VectorReader / VectorWriter / VectorStoreAdmin ABCs
+    mcp.py          OrchidMCPToolCaller / OrchidMCPDiscoverable ABCs
+    repository.py   OrchidVectorReader / OrchidVectorWriter / OrchidVectorStoreAdmin ABCs
   config/           YAML config loader + Pydantic schema + registries
   agents/           GenericAgent + collaborators (SkillDetector, MCPDispatcher, SkillExecutor)
   graph/            LangGraph supervisor + graph builder
   rag/              Scoping, indexing, embeddings, dynamic injection, Qdrant backend
   documents/        PDF/DOCX/XLSX/CSV/Image parsers + chunking pipeline
-  persistence/      ChatStorage ABC + SQLite (default) + PostgreSQL backends + migrations
+  persistence/      OrchidChatStorage ABC + SQLite (default) + PostgreSQL backends + migrations
   mcp/              StreamableHttpMCPClient
   llm_service.py    LiteLLMProvider (concrete LLMProvider)
   utils.py          Shared utilities
@@ -116,15 +116,15 @@ documents/   -> core/
 
 | ABC | File | Purpose |
 |-----|------|---------|
-| `BaseAgent` | `core/agent.py` | Agent identity, `run()`, `summarise()`, `fetch_rag_context()`, `extract_conversation_history()` |
-| `IdentityResolver` | `core/identity.py` | Bearer token -> AuthContext |
+| `OrchidAgent` | `core/agent.py` | Agent identity, `run()`, `summarise()`, `fetch_rag_context()`, `extract_conversation_history()` |
+| `OrchidIdentityResolver` | `core/identity.py` | Bearer token -> OrchidAuthContext |
 | `LLMProvider` | `core/llm_provider.py` | Abstract LLM completion |
-| `MCPToolCaller` | `core/mcp.py` | Call MCP tools |
-| `MCPDiscoverable` | `core/mcp.py` | Discover MCP capabilities |
-| `VectorReader` | `core/repository.py` | Vector store retrieval |
-| `VectorWriter` | `core/repository.py` | Vector store indexing |
-| `VectorStoreAdmin` | `core/repository.py` | Collection management |
-| `ChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
+| `OrchidMCPToolCaller` | `core/mcp.py` | Call MCP tools |
+| `OrchidMCPDiscoverable` | `core/mcp.py` | Discover MCP capabilities |
+| `OrchidVectorReader` | `core/repository.py` | Vector store retrieval |
+| `OrchidVectorWriter` | `core/repository.py` | Vector store indexing |
+| `OrchidVectorStoreAdmin` | `core/repository.py` | Collection management |
+| `OrchidChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
 
 ## OrchidRuntime
 
@@ -149,7 +149,7 @@ graph = build_graph(config=config, runtime=runtime)
 
 ### Custom Vector Store
 
-Plug in a Qdrant-backed reader (or any `VectorReader` implementation):
+Plug in a Qdrant-backed reader (or any `OrchidVectorReader` implementation):
 
 ```python
 from orchid_ai.rag.factory import build_reader
@@ -196,9 +196,9 @@ runtime = OrchidRuntime(
 ```python
 runtime = OrchidRuntime(
     default_model="openai/gpt-4o",        # LiteLLM model identifier
-    reader=my_qdrant_reader,               # VectorReader | None
+    reader=my_qdrant_reader,               # OrchidVectorReader | None
     llm_service=MyCustomProvider(),        # LLMProvider | None
-    mcp_client_factory=my_factory,         # Callable[[MCPServerConfig], MCPClient] | None
+    mcp_client_factory=my_factory,         # Callable[[OrchidMCPServerConfig], OrchidMCPClient] | None
 )
 graph = build_graph(config=config, runtime=runtime)
 ```
@@ -206,7 +206,7 @@ graph = build_graph(config=config, runtime=runtime)
 | Field | Type | Default |
 |-------|------|---------|
 | `default_model` | `str` | `"ollama/llama3.2"` |
-| `reader` | `VectorReader \| None` | `NullVectorReader` (no RAG) |
+| `reader` | `OrchidVectorReader \| None` | `NullVectorReader` (no RAG) |
 | `llm_service` | `LLMProvider \| None` | `LiteLLMProvider()` |
 | `mcp_client_factory` | `MCPClientFactory \| None` | `StreamableHttpMCPClient` factory |
 
@@ -347,7 +347,7 @@ Each step:
 
 - **`description`** -- Short description of the agent's domain and capabilities. The supervisor reads this to decide which agent(s) should handle a user's query. Write it from the supervisor's perspective: "Flight search and booking agent. Searches airlines, compares prices, and can hold reservations." A vague description leads to poor routing; a precise one ensures the right agent is selected.
 - **`prompt`** -- The system prompt sent to the LLM when this agent runs. Defines the agent's personality, expertise, and behavior rules. This is the most important field for controlling agent output quality. Include what the agent should focus on, how it should use tool results, and what format to use for responses.
-- **`class`** -- Dotted Python import path to a custom `BaseAgent` subclass (e.g. `"myapp.agents.hotels.HotelAgent"`). When `null` (the default), the built-in `GenericAgent` is used, which handles the standard 6-step flow (RAG retrieval, skill check, MCP tools, built-in tools, dynamic injection, LLM summarization) entirely from YAML config. Only set this when you need custom Python logic that `GenericAgent` can't express (e.g. agentic loops, custom API integrations, complex state management).
+- **`class`** -- Dotted Python import path to a custom `OrchidAgent` subclass (e.g. `"myapp.agents.hotels.HotelAgent"`). When `null` (the default), the built-in `GenericAgent` is used, which handles the standard 6-step flow (RAG retrieval, skill check, MCP tools, built-in tools, dynamic injection, LLM summarization) entirely from YAML config. Only set this when you need custom Python logic that `GenericAgent` can't express (e.g. agentic loops, custom API integrations, complex state management).
 - **`llm`** -- Per-agent LLM override with `model` and `temperature`. When set, this agent uses a different model than the default. Useful for assigning cheaper/faster models to simple agents and more capable models to complex ones. When `null`, inherits from `defaults.llm`.
 - **`rag`** -- Per-agent RAG settings (see `agents.<name>.rag` below). Each agent can have its own vector store namespace, retrieval depth, and cache TTL.
 - **`tools`** -- List of built-in tool names (strings) available to this agent. These reference tools declared in the root `tools` section. The agent's `GenericAgent` will call each listed tool during step 4 of its pipeline and include the results in the LLM context.
@@ -437,8 +437,8 @@ Each step:
 
 - **`mode`** -- How the MCP client authenticates with this server:
   - `"none"` (default) -- No authentication headers. Use for local MCP servers or remote servers without auth.
-  - `"passthrough"` -- Forwards the graph's `AuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider as the main application.
-  - `"oauth"` -- Per-user OAuth 2.0 flow with a third-party identity provider. Tokens are stored per-user, per-server in the `MCPTokenStore`. The frontend prompts users to authorize, and the framework handles token refresh automatically.
+  - `"passthrough"` -- Forwards the graph's `OrchidAuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider as the main application.
+  - `"oauth"` -- Per-user OAuth 2.0 flow with a third-party identity provider. Tokens are stored per-user, per-server in the `OrchidMCPTokenStore`. The frontend prompts users to authorize, and the framework handles token refresh automatically.
 - **`client_id`** -- OAuth client ID registered with the third-party provider. Required when `mode: "oauth"`.
 - **`authorization_endpoint`** -- OAuth authorization URL. Required for `mode: "oauth"` unless `issuer` is set for OIDC auto-discovery.
 - **`token_endpoint`** -- OAuth token exchange URL. Required for `mode: "oauth"` unless `issuer` is set.
@@ -538,8 +538,8 @@ Runtime configuration consumed by orchid-api and orchid-cli. Each nested YAML ke
 | `auth.identity_resolver_class` | `IDENTITY_RESOLVER_CLASS` | `""` |
 | `auth.domain` | `AUTH_DOMAIN` | `""` |
 
-- **`auth.dev_bypass`** -- When `true`, the API skips Bearer token validation and uses a dummy `AuthContext` with tenant `"99999"` and user `"dev-user-00000000"`. All requests are allowed without authentication. **Never enable in production.** Useful for local development and testing without an OAuth provider.
-- **`auth.identity_resolver_class`** -- Dotted import path to a custom `IdentityResolver` subclass (e.g. `"myapp.identity.MyIdentityResolver"`). The resolver receives the Bearer token from the `Authorization` header and returns an `AuthContext` with tenant/user information. When empty, only `dev_auth_bypass` works -- all other requests get a 503.
+- **`auth.dev_bypass`** -- When `true`, the API skips Bearer token validation and uses a dummy `OrchidAuthContext` with tenant `"99999"` and user `"dev-user-00000000"`. All requests are allowed without authentication. **Never enable in production.** Useful for local development and testing without an OAuth provider.
+- **`auth.identity_resolver_class`** -- Dotted import path to a custom `OrchidIdentityResolver` subclass (e.g. `"myapp.identity.MyIdentityResolver"`). The resolver receives the Bearer token from the `Authorization` header and returns an `OrchidAuthContext` with tenant/user information. When empty, only `dev_auth_bypass` works -- all other requests get a 503.
 - **`auth.domain`** -- Default platform domain passed to the identity resolver when the `x-auth-domain` header is missing from the request. Used by resolvers that need to know which tenant instance to authenticate against. When empty, the resolver must get the domain from another source.
 
 > **CLI OAuth support:** `orchid-cli` extends the `auth` section with an `auth.cli` subsection for OAuth 2.0 Authorization Code + PKCE login. This is a CLI-only feature -- the API uses its own FastAPI dependency injection for auth. See the [orchid-cli README](../orchid-cli/README.md#authentication) for details.
@@ -588,13 +588,13 @@ Runtime configuration consumed by orchid-api and orchid-cli. Each nested YAML ke
 
 | YAML Key | Env Var | Default |
 |----------|---------|---------|
-| `storage.class` | `CHAT_STORAGE_CLASS` | `"orchid_ai.persistence.sqlite.SQLiteChatStorage"` |
+| `storage.class` | `CHAT_STORAGE_CLASS` | `"orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"` |
 | `storage.dsn` | `CHAT_DB_DSN` | `"~/.orchid/chats.db"` |
 
-- **`storage.class`** -- Dotted import path to the `ChatStorage` implementation. The class is dynamically imported at startup. Built-in options:
-  - `orchid_ai.persistence.sqlite.SQLiteChatStorage` -- Default. Stores chats in a local SQLite file. Zero config, no external database needed. Best for development, demos, and single-user deployments.
-  - `orchid_ai.persistence.postgres.PostgresChatStorage` -- PostgreSQL backend. Requires `pip install "orchid-ai[postgres]"` and a running PostgreSQL instance. Best for production, multi-user, and Docker deployments.
-  - Custom backends: implement the `ChatStorage` ABC and reference your class here.
+- **`storage.class`** -- Dotted import path to the `OrchidChatStorage` implementation. The class is dynamically imported at startup. Built-in options:
+  - `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` -- Default. Stores chats in a local SQLite file. Zero config, no external database needed. Best for development, demos, and single-user deployments.
+  - `orchid_ai.persistence.postgres.OrchidPostgresChatStorage` -- PostgreSQL backend. Requires `pip install "orchid-ai[postgres]"` and a running PostgreSQL instance. Best for production, multi-user, and Docker deployments.
+  - Custom backends: implement the `OrchidChatStorage` ABC and reference your class here.
 - **`storage.dsn`** -- Database connection string. For SQLite: a file path (e.g. `"~/.orchid/chats.db"`, `"/data/chats.db"`). The directory is created automatically. For PostgreSQL: a full DSN (e.g. `"postgresql://user:pass@localhost:5432/orchid"`).
 
 #### `mcp`
@@ -937,7 +937,7 @@ upload:
 
 # ── Chat persistence ─────────────────────────────────────────
 storage:
-  class: orchid_ai.persistence.postgres.PostgresChatStorage
+  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
   dsn: postgresql://user:pass@localhost:5432/orchid
 
 # ── MCP server URLs ──────────────────────────────────────────
@@ -1076,7 +1076,7 @@ guardrails:
         scope="chat_agent"   Agent-private
 ```
 
-Always use `RAGScope` -- never raw `tenant_id` filters.
+Always use `OrchidRAGScope` -- never raw `tenant_id` filters.
 
 ## Embedding Dimensions
 

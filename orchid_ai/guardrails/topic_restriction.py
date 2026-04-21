@@ -12,14 +12,14 @@ custom guardrail backed by an embedding similarity model or LLM classifier.
 from __future__ import annotations
 
 from ..core.guardrails import (
-    Guardrail,
-    GuardrailAction,
-    GuardrailContext,
-    GuardrailResult,
+    OrchidGuardrail,
+    OrchidGuardrailAction,
+    OrchidGuardrailContext,
+    OrchidGuardrailResult,
 )
 
 
-class TopicRestrictionGuardrail(Guardrail):
+class TopicRestrictionGuardrail(OrchidGuardrail):
     """
     Block queries that don't match any of the allowed topics.
 
@@ -43,7 +43,7 @@ class TopicRestrictionGuardrail(Guardrail):
         allowed_topics: list[str] | None = None,
         threshold: float = 0.7,
     ) -> None:
-        self._fail_action = GuardrailAction(fail_action)
+        self._fail_action = OrchidGuardrailAction(fail_action)
         self._allowed_topics = [t.lower() for t in (allowed_topics or [])]
         self._threshold = threshold
 
@@ -51,19 +51,19 @@ class TopicRestrictionGuardrail(Guardrail):
     def name(self) -> str:
         return "topic_restriction"
 
-    async def check(self, content: str, context: GuardrailContext) -> GuardrailResult:
+    async def check(self, content: str, context: OrchidGuardrailContext) -> OrchidGuardrailResult:
         if not self._allowed_topics:
             # No restrictions configured — allow everything
-            return GuardrailResult.passed(self.name)
+            return OrchidGuardrailResult.passed(self.name)
 
         content_lower = content.lower()
 
         for topic in self._allowed_topics:
             if topic in content_lower:
-                return GuardrailResult.passed(self.name)
+                return OrchidGuardrailResult.passed(self.name)
 
         agent_label = f" for the {context.agent_name} agent" if context.agent_name else ""
-        return GuardrailResult(
+        return OrchidGuardrailResult(
             triggered=True,
             action=self._fail_action,
             guardrail_name=self.name,

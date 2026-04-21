@@ -7,21 +7,21 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from orchid_ai.core.mcp import MCPAuthRequiredError, MCPTokenRecord
-from orchid_ai.core.state import AuthContext
+from orchid_ai.core.mcp import OrchidMCPAuthRequiredError, OrchidMCPTokenRecord
+from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.mcp.client import StreamableHttpMCPClient
 
 
-def _auth() -> AuthContext:
-    return AuthContext(access_token="graph-token", tenant_key="t1", user_id="u1")
+def _auth() -> OrchidAuthContext:
+    return OrchidAuthContext(access_token="graph-token", tenant_key="t1", user_id="u1")
 
 
 def _token(
     *,
     expired: bool = False,
     refresh: bool = False,
-) -> MCPTokenRecord:
-    return MCPTokenRecord(
+) -> OrchidMCPTokenRecord:
+    return OrchidMCPTokenRecord(
         server_name="ext-crm",
         tenant_id="t1",
         user_id="u1",
@@ -76,7 +76,7 @@ class TestResolveAuthHeaders:
             auth_mode="oauth",
             token_store=store,
         )
-        with pytest.raises(MCPAuthRequiredError) as exc_info:
+        with pytest.raises(OrchidMCPAuthRequiredError) as exc_info:
             await client._resolve_auth_headers(_auth())
         assert exc_info.value.server_name == "ext-crm"
 
@@ -88,7 +88,7 @@ class TestResolveAuthHeaders:
             auth_mode="oauth",
             token_store=None,
         )
-        with pytest.raises(MCPAuthRequiredError):
+        with pytest.raises(OrchidMCPAuthRequiredError):
             await client._resolve_auth_headers(_auth())
 
     @pytest.mark.asyncio
@@ -102,23 +102,23 @@ class TestResolveAuthHeaders:
             auth_mode="oauth",
             token_store=store,
         )
-        with pytest.raises(MCPAuthRequiredError):
+        with pytest.raises(OrchidMCPAuthRequiredError):
             await client._resolve_auth_headers(_auth())
 
 
 class TestMCPAuthRequiredError:
     def test_has_server_name(self):
-        err = MCPAuthRequiredError("my-server")
+        err = OrchidMCPAuthRequiredError("my-server")
         assert err.server_name == "my-server"
         assert "my-server" in str(err)
 
     def test_is_exception(self):
-        assert issubclass(MCPAuthRequiredError, Exception)
+        assert issubclass(OrchidMCPAuthRequiredError, Exception)
 
 
 class TestMCPTokenRecord:
     def test_is_expired_when_past(self):
-        record = MCPTokenRecord(
+        record = OrchidMCPTokenRecord(
             server_name="s",
             tenant_id="t",
             user_id="u",
@@ -128,7 +128,7 @@ class TestMCPTokenRecord:
         assert record.is_expired is True
 
     def test_is_not_expired_when_future(self):
-        record = MCPTokenRecord(
+        record = OrchidMCPTokenRecord(
             server_name="s",
             tenant_id="t",
             user_id="u",
@@ -138,7 +138,7 @@ class TestMCPTokenRecord:
         assert record.is_expired is False
 
     def test_is_not_expired_when_zero(self):
-        record = MCPTokenRecord(
+        record = OrchidMCPTokenRecord(
             server_name="s",
             tenant_id="t",
             user_id="u",
@@ -148,7 +148,7 @@ class TestMCPTokenRecord:
         assert record.is_expired is False
 
     def test_is_refresh_available(self):
-        record = MCPTokenRecord(
+        record = OrchidMCPTokenRecord(
             server_name="s",
             tenant_id="t",
             user_id="u",
@@ -158,7 +158,7 @@ class TestMCPTokenRecord:
         assert record.is_refresh_available is True
 
     def test_is_refresh_not_available(self):
-        record = MCPTokenRecord(
+        record = OrchidMCPTokenRecord(
             server_name="s",
             tenant_id="t",
             user_id="u",
@@ -167,7 +167,7 @@ class TestMCPTokenRecord:
         assert record.is_refresh_available is False
 
     def test_bearer_header(self):
-        record = MCPTokenRecord(
+        record = OrchidMCPTokenRecord(
             server_name="s",
             tenant_id="t",
             user_id="u",

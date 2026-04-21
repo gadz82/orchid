@@ -9,29 +9,29 @@
 ```
 orchid/
   orchid_ai/              Package root (import as `from orchid_ai.xxx`)
-    __init__.py           SDK surface: BaseAgent, AuthContext, build_graph, load_config, etc.
+    __init__.py           SDK surface: OrchidAgent, OrchidAuthContext, build_graph, load_config, etc.
     core/                 Pure ABCs — ZERO external dependencies (only stdlib)
-      agent.py            BaseAgent ABC
-      state.py            AuthContext + AgentState
-      identity.py         IdentityResolver ABC
+      agent.py            OrchidAgent ABC
+      state.py            OrchidAuthContext + OrchidAgentState
+      identity.py         OrchidIdentityResolver ABC
       llm_provider.py     (REMOVED — use BaseChatModel from langchain-core)
-      mcp.py              MCPToolCaller / MCPDiscoverable ABCs
-      repository.py       VectorReader / VectorWriter / VectorStoreAdmin ABCs
+      mcp.py              OrchidMCPToolCaller / OrchidMCPDiscoverable ABCs
+      repository.py       OrchidVectorReader / OrchidVectorWriter / OrchidVectorStoreAdmin ABCs
     config/               YAML config loader + schema + tool registry (parameter metadata)
     agents/               GenericAgent + strategies (SkillDetector, MCPDispatcher, SkillExecutor)
     graph/                LangGraph wiring: supervisor.py, graph.py, state.py
     rag/                  Scopes, indexer, embeddings, factory, backends/qdrant.py
     documents/            Parsers (PDF/DOCX/XLSX/CSV/Image), chunker, pipeline
-    persistence/          ChatStorage + MCPTokenStore ABCs + factories + shared migrations:
-      sqlite.py           SQLiteChatStorage (default, aiosqlite — core dep)
-      postgres.py         PostgresChatStorage (optional, asyncpg — `pip install orchid-ai[postgres]`)
-      mcp_token_sqlite.py SQLiteMCPTokenStore (per-server OAuth tokens, same DB)
-      mcp_token_postgres.py PostgresMCPTokenStore (per-server OAuth tokens, same DB)
+    persistence/          OrchidChatStorage + OrchidMCPTokenStore ABCs + factories + shared migrations:
+      sqlite.py           OrchidSQLiteChatStorage (default, aiosqlite — core dep)
+      postgres.py         OrchidPostgresChatStorage (optional, asyncpg — `pip install orchid-ai[postgres]`)
+      mcp_token_sqlite.py OrchidSQLiteMCPTokenStore (per-server OAuth tokens, same DB)
+      mcp_token_postgres.py OrchidPostgresMCPTokenStore (per-server OAuth tokens, same DB)
       mcp_token_factory.py  build_mcp_token_store() factory
       migrations/         Shared migrations (v001 = chat schema, v002 = token schema)
-    mcp/                  StreamableHttpMCPClient + MCPAuthRegistry
+    mcp/                  StreamableHttpMCPClient + OrchidMCPAuthRegistry
       client.py           StreamableHttpMCPClient (dual-mode: none/passthrough/oauth)
-      auth_registry.py    MCPAuthRegistry — scans config for OAuth-requiring servers
+      auth_registry.py    OrchidMCPAuthRegistry — scans config for OAuth-requiring servers
     llm_factory.py        build_chat_model() — provider-first, ChatLiteLLM fallback
     utils.py              import_class() shared utility
   tests/                  384+ tests
@@ -54,15 +54,15 @@ documents/   → core/  (standalone)
 
 | ABC | File | Purpose |
 |-----|------|---------|
-| `BaseAgent` | `agent.py` | Agent identity + `run()`, `summarise()`, `fetch_rag_context()`, `extract_user_query()`, `extract_conversation_history()` |
-| `IdentityResolver` | `identity.py` | Bearer token -> AuthContext |
-| `MCPToolCaller` | `mcp.py` | Call MCP tools |
-| `MCPDiscoverable` | `mcp.py` | Discover MCP capabilities |
-| `MCPTokenStore` | `mcp.py` | Per-server OAuth token persistence |
-| `VectorReader` | `repository.py` | Vector store retrieval |
-| `VectorWriter` | `repository.py` | Vector store indexing |
-| `VectorStoreAdmin` | `repository.py` | Collection management |
-| `ChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
+| `OrchidAgent` | `agent.py` | Agent identity + `run()`, `summarise()`, `fetch_rag_context()`, `extract_user_query()`, `extract_conversation_history()` |
+| `OrchidIdentityResolver` | `identity.py` | Bearer token -> OrchidAuthContext |
+| `OrchidMCPToolCaller` | `mcp.py` | Call MCP tools |
+| `OrchidMCPDiscoverable` | `mcp.py` | Discover MCP capabilities |
+| `OrchidMCPTokenStore` | `mcp.py` | Per-server OAuth token persistence |
+| `OrchidVectorReader` | `repository.py` | Vector store retrieval |
+| `OrchidVectorWriter` | `repository.py` | Vector store indexing |
+| `OrchidVectorStoreAdmin` | `repository.py` | Collection management |
+| `OrchidChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
 
 **LLM abstraction:** Orchid uses LangChain's `BaseChatModel` directly (no custom ABC). Use `build_chat_model(model_string)` factory to create one from a LiteLLM-style model string.
 
@@ -95,11 +95,11 @@ documents/   → core/  (standalone)
 
 1. **`orchid/core/` = ZERO external dependencies.** Only Python stdlib imports. Every other module depends on `core/`. Violating this is an architectural bug.
 
-2. **No Qdrant imports outside `rag/backends/`.** All vector access goes through `VectorReader`/`VectorWriter`/`VectorStoreAdmin` ABCs in `core/repository.py`.
+2. **No Qdrant imports outside `rag/backends/`.** All vector access goes through `OrchidVectorReader`/`OrchidVectorWriter`/`OrchidVectorStoreAdmin` ABCs in `core/repository.py`.
 
-3. **Graph-level auth uses passthrough only.** The graph's `AuthContext` token is obtained ONCE at the API entry point (ADR-010). MCP servers with `auth.mode: passthrough` forward this token. MCP servers with `auth.mode: oauth` resolve their own per-user tokens from `MCPTokenStore`. MCP servers with `auth.mode: none` (default) send no auth headers.
+3. **Graph-level auth uses passthrough only.** The graph's `OrchidAuthContext` token is obtained ONCE at the API entry point (ADR-010). MCP servers with `auth.mode: passthrough` forward this token. MCP servers with `auth.mode: oauth` resolve their own per-user tokens from `OrchidMCPTokenStore`. MCP servers with `auth.mode: none` (default) send no auth headers.
 
-4. **RAG always uses `RAGScope`.** Never pass raw `tenant_id` filters. 5-level hierarchy: root -> tenant -> user -> chat -> agent.
+4. **RAG always uses `OrchidRAGScope`.** Never pass raw `tenant_id` filters. 5-level hierarchy: root -> tenant -> user -> chat -> agent.
 
 5. **Parse-once pattern for documents.** Call `extract_text()` once, pass to both prompt builder and `ingest_document(pre_extracted_text=...)`.
 
@@ -107,13 +107,13 @@ documents/   → core/  (standalone)
 
 7. **No vendor-specific code — including in comments and docstrings.** Platform integrations belong in consumer projects. Code, comments, docstrings, and examples inside `orchid/orchid_ai/` must NEVER reference specific consumer tools (course search, notifications, etc.), or any concrete product. Use generic terms ("tools requiring authenticated API access", not "any entity search, any entity management"). Violations in comments are as bad as violations in code — they create false coupling and mislead future contributors.
 
-8. **Consumer agents inherit from `BaseAgent`** and use `self.summarise()`, `self.fetch_rag_context()`, `self.extract_user_query()`, `self.extract_conversation_history()` — don't duplicate these methods.
+8. **Consumer agents inherit from `OrchidAgent`** and use `self.summarise()`, `self.fetch_rag_context()`, `self.extract_user_query()`, `self.extract_conversation_history()` — don't duplicate these methods.
 
-9. **Multi-turn conversation context is handled at framework level.** `BaseAgent.extract_conversation_history()` extracts clean dialogue from graph state. `summarise()` accepts `conversation_history` and `prior_tool_context` parameters. The supervisor uses configurable `history_max_turns` (default 20) and `history_max_chars` (default 1000) from `SupervisorConfig`. Opt-in **sliding-window summarization** (`history_summary_enabled`) compresses older turns via a cheap LLM call, keeping the most recent `history_summary_recent_turns` (default 10) exchanges verbatim.
+9. **Multi-turn conversation context is handled at framework level.** `OrchidAgent.extract_conversation_history()` extracts clean dialogue from graph state. `summarise()` accepts `conversation_history` and `prior_tool_context` parameters. The supervisor uses configurable `history_max_turns` (default 20) and `history_max_chars` (default 1000) from `OrchidSupervisorConfig`. Opt-in **sliding-window summarization** (`history_summary_enabled`) compresses older turns via a cheap LLM call, keeping the most recent `history_summary_recent_turns` (default 10) exchanges verbatim.
 
 10. **MCP communication boundaries use broad exception handling.** `mcp_dispatcher.py` and `strategies.py` catch `Exception` (not a narrow tuple) at server/tool call boundaries. This is intentional fault isolation — MCP servers can fail with HTTP errors (401, 500), transport errors, or protocol errors, and one failing server must not crash the entire agent. Always use `except Exception` at these boundaries; never narrow it to a specific tuple.
 
-11. **MCP servers support three auth modes** configured via `auth.mode` in `MCPServerConfig`: `none` (default — no auth headers, for local/unauthenticated servers), `passthrough` (forwards graph AuthContext bearer token), `oauth` (per-user tokens from MCPTokenStore with auto-refresh). The `MCPAuthRegistry` is built once at graph startup from `AgentsConfig` and exposes which servers require OAuth. `mcp_auth_status` is injected into graph state per-request so the supervisor can make auth-aware routing decisions.
+11. **MCP servers support three auth modes** configured via `auth.mode` in `OrchidMCPServerConfig`: `none` (default — no auth headers, for local/unauthenticated servers), `passthrough` (forwards graph OrchidAuthContext bearer token), `oauth` (per-user tokens from OrchidMCPTokenStore with auto-refresh). The `OrchidMCPAuthRegistry` is built once at graph startup from `OrchidAgentsConfig` and exposes which servers require OAuth. `mcp_auth_status` is injected into graph state per-request so the supervisor can make auth-aware routing decisions.
 
 12. **Built-in tool parameters are declared in YAML or auto-extracted.** The `tools:` section in `agents.yaml` supports an optional `parameters:` block per tool. When declared, YAML parameters take precedence. When omitted, parameters are auto-extracted from the Python function signature via `inspect`. Framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. Parameter metadata is used by the CLI skill generator to produce accurate documentation.
 
@@ -123,7 +123,7 @@ documents/   → core/  (standalone)
 
 **YAML only (most common):** Add entry to `agents.yaml`, `GenericAgent` handles everything.
 
-**Custom class:** Subclass `BaseAgent` in a consumer project, reference via dotted path in YAML:
+**Custom class:** Subclass `OrchidAgent` in a consumer project, reference via dotted path in YAML:
 ```yaml
 class: myproject.agents.custom.CustomAgent
 ```
@@ -131,9 +131,9 @@ class: myproject.agents.custom.CustomAgent
 ### RAG Scoping
 
 ```python
-from orchid_ai.rag.scopes import RAGScope
+from orchid_ai.rag.scopes import OrchidRAGScope
 
-scope = RAGScope(
+scope = OrchidRAGScope(
     tenant_id=auth.tenant_key,
     user_id=auth.user_uuid,
     chat_id=state.get("chat_id", ""),
@@ -159,7 +159,7 @@ Integrators override only what they need. All fields have sensible defaults.
 
 ### Strategy Pattern (Tool Calls)
 
-`all`, `sequential`, `llm_decides` are registered strategies. New ones: subclass `ToolCallStrategy` + `register_strategy()`.
+`all`, `sequential`, `llm_decides` are registered strategies. New ones: subclass `OrchidToolCallStrategy` + `register_strategy()`.
 
 ### LLM Usage
 
@@ -191,9 +191,9 @@ Switching models requires wiping and re-indexing Qdrant collections.
 
 - **Importing qdrant_client in agent code.** Use `self.reader.retrieve(...)` instead.
 - **Forgetting `from __future__ import annotations`** at the top of new files.
-- **Using `filters: dict` instead of `scope: RAGScope`** in retrieval calls.
+- **Using `filters: dict` instead of `scope: OrchidRAGScope`** in retrieval calls.
 - **Passing `tenant_id` directly** — use `auth.tenant_key` (which is `tenant_id or "default"`).
 - **Not handling `_reader` being `None`** — vector backend can be `null` in tests.
-- **Mutating `AuthContext`** — it's subclass-friendly but treat as immutable in framework code.
+- **Mutating `OrchidAuthContext`** — it's subclass-friendly but treat as immutable in framework code.
 - **Adding API/CLI code here** — those belong in `orchid-api/` and `orchid-cli/`.
 - **Catching only specific exceptions at MCP boundaries** — always use `except Exception` at server communication boundaries in `mcp_dispatcher.py` and `strategies.py`. HTTP libraries (httpx) raise exception types like `httpx.HTTPStatusError` (for 401/500) that are not subclasses of `ConnectionError`/`TimeoutError`/`OSError`. A narrow exception tuple lets these propagate and crash the agent.

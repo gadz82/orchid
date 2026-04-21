@@ -2,17 +2,17 @@
 Abstract chat storage interface.
 
 Any concrete backend (PostgreSQL, SQLite, MySQL, etc.) must implement
-the `ChatStorage` ABC. The API layer depends only on this interface.
+the `OrchidChatStorage` ABC. The API layer depends only on this interface.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from .models import ChatMessage, ChatSession
+from .models import OrchidChatMessage, OrchidChatSession
 
 
-class ChatStorage(ABC):
+class OrchidChatStorage(ABC):
     """Abstract base class for chat persistence backends."""
 
     # ── Lifecycle ────────────────────────────────────────────
@@ -33,7 +33,7 @@ class ChatStorage(ABC):
         tenant_id: str,
         user_id: str,
         title: str = "",
-    ) -> ChatSession:
+    ) -> OrchidChatSession:
         """Create a new chat session and return it."""
 
     @abstractmethod
@@ -41,11 +41,11 @@ class ChatStorage(ABC):
         self,
         tenant_id: str,
         user_id: str,
-    ) -> list[ChatSession]:
+    ) -> list[OrchidChatSession]:
         """List all chats for a user, most recently updated first."""
 
     @abstractmethod
-    async def get_chat(self, chat_id: str) -> ChatSession | None:
+    async def get_chat(self, chat_id: str) -> OrchidChatSession | None:
         """Get a single chat session by ID, or None."""
 
     @abstractmethod
@@ -70,7 +70,7 @@ class ChatStorage(ABC):
         content: str,
         agents_used: list[str] | None = None,
         metadata: dict | None = None,
-    ) -> ChatMessage:
+    ) -> OrchidChatMessage:
         """Add a message to a chat and touch the session's updated_at."""
 
     @abstractmethod
@@ -79,5 +79,5 @@ class ChatStorage(ABC):
         chat_id: str,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[ChatMessage]:
+    ) -> list[OrchidChatMessage]:
         """Get messages for a chat, oldest first."""

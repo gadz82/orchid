@@ -10,10 +10,10 @@ from orchid_ai.utils import import_class
 
 class TestImportClass:
     def test_valid_dotted_path(self):
-        cls = import_class("orchid_ai.persistence.models.ChatSession")
-        from orchid_ai.persistence.models import ChatSession
+        cls = import_class("orchid_ai.persistence.models.OrchidChatSession")
+        from orchid_ai.persistence.models import OrchidChatSession
 
-        assert cls is ChatSession
+        assert cls is OrchidChatSession
 
     def test_invalid_path_raises(self):
         with pytest.raises(ImportError, match="Cannot resolve class"):
@@ -26,14 +26,14 @@ class TestBuildChatStorage:
             build_chat_storage("nonexistent.module.FakeStorage", dsn="sqlite:///test.db")
 
     def test_non_chat_storage_class_raises(self):
-        """A class that exists but is NOT a ChatStorage subclass should raise TypeError."""
-        with pytest.raises(TypeError, match="not a ChatStorage subclass"):
-            build_chat_storage("orchid_ai.persistence.models.ChatSession", dsn="sqlite:///test.db")
+        """A class that exists but is NOT a OrchidChatStorage subclass should raise TypeError."""
+        with pytest.raises(TypeError, match="not a OrchidChatStorage subclass"):
+            build_chat_storage("orchid_ai.persistence.models.OrchidChatSession", dsn="sqlite:///test.db")
 
     def test_forwards_extra_migrations_package(self):
         """The factory threads ``extra_migrations_package`` into the concrete backend."""
         storage = build_chat_storage(
-            "orchid_ai.persistence.sqlite.SQLiteChatStorage",
+            "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
             dsn=":memory:",
             extra_migrations_package="my.integrator.migrations",
         )
@@ -43,7 +43,7 @@ class TestBuildChatStorage:
     def test_defaults_extra_migrations_package_to_none(self):
         """Callers that omit the kwarg get ``None`` (no extras discovered)."""
         storage = build_chat_storage(
-            "orchid_ai.persistence.sqlite.SQLiteChatStorage",
+            "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
             dsn=":memory:",
         )
         assert storage._migrator.extra_migrations_package is None

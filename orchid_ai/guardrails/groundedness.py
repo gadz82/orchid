@@ -19,10 +19,10 @@ from __future__ import annotations
 import re
 
 from ..core.guardrails import (
-    Guardrail,
-    GuardrailAction,
-    GuardrailContext,
-    GuardrailResult,
+    OrchidGuardrail,
+    OrchidGuardrailAction,
+    OrchidGuardrailContext,
+    OrchidGuardrailResult,
 )
 
 # Stop words to ignore when computing keyword overlap
@@ -143,7 +143,7 @@ def _extract_keywords(text: str) -> set[str]:
     return {w for w in words if w not in _STOP_WORDS}
 
 
-class GroundednessGuardrail(Guardrail):
+class GroundednessGuardrail(OrchidGuardrail):
     """
     Check that output content is grounded in the provided RAG context.
 
@@ -165,19 +165,19 @@ class GroundednessGuardrail(Guardrail):
         fail_action: str = "warn",
         min_overlap: float = 0.3,
     ) -> None:
-        self._fail_action = GuardrailAction(fail_action)
+        self._fail_action = OrchidGuardrailAction(fail_action)
         self._min_overlap = min_overlap
 
     @property
     def name(self) -> str:
         return "groundedness"
 
-    async def check(self, content: str, context: GuardrailContext) -> GuardrailResult:
+    async def check(self, content: str, context: OrchidGuardrailContext) -> OrchidGuardrailResult:
         # Extract RAG context from metadata
         rag_data = context.metadata.get("rag_context")
         if not rag_data:
             # No RAG context available — skip check (can't assess groundedness)
-            return GuardrailResult.passed(self.name)
+            return OrchidGuardrailResult.passed(self.name)
 
         # Normalize RAG context to a single string
         if isinstance(rag_data, list):
@@ -192,16 +192,16 @@ class GroundednessGuardrail(Guardrail):
         context_keywords = _extract_keywords(rag_text)
 
         if not response_keywords:
-            return GuardrailResult.passed(self.name)
+            return OrchidGuardrailResult.passed(self.name)
 
         # Compute overlap
         overlap = response_keywords & context_keywords
         overlap_ratio = len(overlap) / len(response_keywords)
 
         if overlap_ratio >= self._min_overlap:
-            return GuardrailResult.passed(self.name)
+            return OrchidGuardrailResult.passed(self.name)
 
-        return GuardrailResult(
+        return OrchidGuardrailResult(
             triggered=True,
             action=self._fail_action,
             guardrail_name=self.name,

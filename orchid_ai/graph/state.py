@@ -1,5 +1,5 @@
 """
-Graph-specific state — extends the core AgentState with LangGraph annotations.
+Graph-specific state — extends the core OrchidAgentState with LangGraph annotations.
 
 The core/ layer defines the *shape* (TypedDict with stdlib types).
 This module re-defines the state with:
@@ -17,7 +17,7 @@ from typing import Annotated, Any, Literal, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
-from ..core.state import AuthContext
+from ..core.state import OrchidAuthContext
 
 
 # ── Reducers ─────────────────────────────────────────────────
@@ -53,7 +53,7 @@ class GraphState(TypedDict, total=False):
     """
 
     messages: Annotated[list[BaseMessage], add_messages]
-    auth_context: AuthContext  # ADR-014: tenant key = auth_context.tenant_key (installation_id)
+    auth_context: OrchidAuthContext  # ADR-014: tenant key = auth_context.tenant_key (installation_id)
     chat_id: str  # chat session identifier for RAG scoping
     active_agents: Annotated[list[str], replace_list]
     mcp_context: Annotated[dict[str, Any], merge_dicts]

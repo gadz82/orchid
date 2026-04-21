@@ -12,11 +12,11 @@ from orchid_ai.agents.tools import (
     MCPToolWrapper,
     build_langchain_tools,
 )
-from orchid_ai.core.state import AuthContext
+from orchid_ai.core.state import OrchidAuthContext
 
 
-def _make_auth() -> AuthContext:
-    return AuthContext(access_token="test-token")
+def _make_auth() -> OrchidAuthContext:
+    return OrchidAuthContext(access_token="test-token")
 
 
 # ── MCPToolWrapper tests ────────────────────────────────────

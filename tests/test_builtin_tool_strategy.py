@@ -8,13 +8,13 @@ import pytest
 
 from orchid_ai.agents.generic_agent import GenericAgent
 from orchid_ai.agents.mcp_dispatcher import MCPCapabilities
-from orchid_ai.config.schema import AgentConfig, LLMConfig, RAGConfig
+from orchid_ai.config.schema import OrchidAgentConfig, OrchidLLMConfig, OrchidRAGConfig
 from orchid_ai.config.tool_registry import BuiltinToolEntry, ToolParameter
-from orchid_ai.core.state import AuthContext
+from orchid_ai.core.state import OrchidAuthContext
 
 
-def _make_auth() -> AuthContext:
-    return AuthContext(access_token="tok", tenant_key="t1", user_id="u1")
+def _make_auth() -> OrchidAuthContext:
+    return OrchidAuthContext(access_token="tok", tenant_key="t1", user_id="u1")
 
 
 def _make_ai_message(content: str | None = None, tool_calls: list | None = None):
@@ -26,13 +26,13 @@ def _make_ai_message(content: str | None = None, tool_calls: list | None = None)
 
 
 def _make_agent(tools: list[str]) -> GenericAgent:
-    config = AgentConfig(
+    config = OrchidAgentConfig(
         name="test_agent",
         description="test",
         prompt="test prompt",
         tools=tools,
-        rag=RAGConfig(enabled=False),
-        llm=LLMConfig(),
+        rag=OrchidRAGConfig(enabled=False),
+        llm=OrchidLLMConfig(),
     )
     reader = MagicMock()
     reader.retrieve = AsyncMock(return_value=[])

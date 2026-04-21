@@ -45,15 +45,20 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import END, StateGraph
 
 from ..agents.generic_agent import GenericAgent
-from ..config.schema import AgentConfig, AgentsConfig, GuardrailsConfig
+from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidGuardrailsConfig
 from ..config.registry import get_class
 from ..config.tool_registry import load_tools_from_config
-from ..core.agent import BaseAgent
-from ..core.guardrails import GuardrailAction, GuardrailChain, GuardrailContext, GuardrailDirection
-from ..core.repository import VectorReader
+from ..core.agent import OrchidAgent
+from ..core.guardrails import (
+    OrchidGuardrailAction,
+    OrchidGuardrailChain,
+    OrchidGuardrailContext,
+    OrchidGuardrailDirection,
+)
+from ..core.repository import OrchidVectorReader
 
 from langchain_core.language_models import BaseChatModel
-from ..mcp.auth_registry import MCPAuthRegistry
+from ..mcp.auth_registry import OrchidMCPAuthRegistry
 from ..runtime import MCPClientFactory, OrchidRuntime
 from .state import GraphState
 from .supervisor import create_supervisor_node, route_to_agents
@@ -62,12 +67,12 @@ logger = logging.getLogger(__name__)
 
 
 def _create_agent_node(
-    agent: BaseAgent,
-    input_guardrails: GuardrailChain | None = None,
-    output_guardrails: GuardrailChain | None = None,
+    agent: OrchidAgent,
+    input_guardrails: OrchidGuardrailChain | None = None,
+    output_guardrails: OrchidGuardrailChain | None = None,
 ):
     """
-    Wrap a BaseAgent into a LangGraph node function (closure).
+    Wrap a OrchidAgent into a LangGraph node function (closure).
 
     When per-agent guardrails are configured, input is checked before
     ``agent.run()`` and output is checked after.
@@ -79,8 +84,8 @@ def _create_agent_node(
         # ── Per-agent INPUT guardrails ──
         if input_guardrails and not input_guardrails.empty:
             query = agent.extract_user_query(state)
-            ctx = GuardrailContext(
-                direction=GuardrailDirection.INPUT,
+            ctx = OrchidGuardrailContext(
+                direction=OrchidGuardrailDirection.INPUT,
                 agent_name=agent.name,
                 tenant_key=auth.tenant_key if auth else "default",
                 user_id=auth.user_id if auth else "",
@@ -126,8 +131,8 @@ def _create_agent_node(
             agent_messages = agent_result.get("messages", [])
             if agent_messages:
                 response_text = str(agent_messages[-1].content) if hasattr(agent_messages[-1], "content") else ""
-                ctx = GuardrailContext(
-                    direction=GuardrailDirection.OUTPUT,
+                ctx = OrchidGuardrailContext(
+                    direction=OrchidGuardrailDirection.OUTPUT,
                     agent_name=agent.name,
                     tenant_key=auth.tenant_key if auth else "default",
                     user_id=auth.user_id if auth else "",
@@ -143,7 +148,7 @@ def _create_agent_node(
                         result.message,
                     )
                     agent_result["messages"] = [AIMessage(content=f"[{agent.name.title()} Agent] {result.message}")]
-                elif result.action == GuardrailAction.REDACT and result.redacted_content is not None:
+                elif result.action == OrchidGuardrailAction.REDACT and result.redacted_content is not None:
                     logger.info("[Guardrails] Agent '%s' output redacted by '%s'", agent.name, result.guardrail_name)
                     agent_result["messages"] = [AIMessage(content=result.redacted_content)]
 
@@ -158,15 +163,15 @@ def _create_agent_node(
 
 def _instantiate_agent(
     name: str,
-    agent_config: AgentConfig,
+    agent_config: OrchidAgentConfig,
     default_model: str,
-    reader: VectorReader,
+    reader: OrchidVectorReader,
     default_chat_model: BaseChatModel | None = None,
     default_fallback: str | None = None,
     default_retry: int = 0,
     mcp_client_factory: MCPClientFactory | None = None,
     summary_config: dict[str, Any] | None = None,
-) -> BaseAgent:
+) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
 
@@ -206,7 +211,7 @@ def _instantiate_agent(
     else:
         agent_chat_model = default_chat_model
 
-    # All kwargs are passed — BaseAgent accepts **_kwargs so subclasses
+    # All kwargs are passed — OrchidAgent accepts **_kwargs so subclasses
     # pick what they need and ignore the rest.  No inspect.signature sniffing.
     kwargs: dict[str, Any] = {
         "model_id": agent_model,
@@ -224,9 +229,9 @@ def _instantiate_agent(
 
 def _build_subgraph(
     parent_name: str,
-    agent_config: AgentConfig,
+    agent_config: OrchidAgentConfig,
     default_model: str,
-    reader: VectorReader,
+    reader: OrchidVectorReader,
     default_chat_model: BaseChatModel | None = None,
     default_fallback: str | None = None,
     default_retry: int = 0,
@@ -238,7 +243,7 @@ def _build_subgraph(
     Returns a compiled LangGraph sub-graph that the parent graph
     treats as a single node.
     """
-    children_agents: list[BaseAgent] = []
+    children_agents: list[OrchidAgent] = []
     for child_name, child_config in (agent_config.children or {}).items():
         child_agent = _instantiate_agent(
             child_name,
@@ -277,8 +282,8 @@ def _build_subgraph(
 
 
 def _build_guardrail_chains(
-    guardrails_config: GuardrailsConfig,
-) -> tuple[GuardrailChain, GuardrailChain]:
+    guardrails_config: OrchidGuardrailsConfig,
+) -> tuple[OrchidGuardrailChain, OrchidGuardrailChain]:
     """Build input and output guardrail chains from YAML config."""
     from ..guardrails.registry import build_guardrail_chain
 
@@ -291,20 +296,20 @@ def _build_guardrail_chains(
     )
 
 
-def _create_global_input_guardrail_node(chain: GuardrailChain):
+def _create_global_input_guardrail_node(chain: OrchidGuardrailChain):
     """Create a LangGraph node that runs global input guardrails."""
 
     async def input_guardrails_node(state: GraphState) -> GraphState:
         """Global input guardrails — runs before the supervisor."""
-        from ..core.agent import BaseAgent
+        from ..core.agent import OrchidAgent
 
-        query = BaseAgent.extract_user_query(state)
+        query = OrchidAgent.extract_user_query(state)
         if not query:
             return state
 
         auth = state.get("auth_context")
-        ctx = GuardrailContext(
-            direction=GuardrailDirection.INPUT,
+        ctx = OrchidGuardrailContext(
+            direction=OrchidGuardrailDirection.INPUT,
             tenant_key=auth.tenant_key if auth else "default",
             user_id=auth.user_id if auth else "",
             chat_id=state.get("chat_id", ""),
@@ -320,7 +325,7 @@ def _create_global_input_guardrail_node(chain: GuardrailChain):
                 "pending_agents": [],
             }
 
-        if result.action == GuardrailAction.REDACT and result.redacted_content is not None:
+        if result.action == OrchidGuardrailAction.REDACT and result.redacted_content is not None:
             logger.info("[Guardrails] Global input redacted by '%s'", result.guardrail_name)
             # Replace the last human message with redacted version
             from langchain_core.messages import HumanMessage
@@ -335,7 +340,7 @@ def _create_global_input_guardrail_node(chain: GuardrailChain):
     return input_guardrails_node
 
 
-def _create_global_output_guardrail_node(chain: GuardrailChain):
+def _create_global_output_guardrail_node(chain: OrchidGuardrailChain):
     """Create a LangGraph node that runs global output guardrails."""
 
     async def output_guardrails_node(state: GraphState) -> GraphState:
@@ -345,8 +350,8 @@ def _create_global_output_guardrail_node(chain: GuardrailChain):
             return state
 
         auth = state.get("auth_context")
-        ctx = GuardrailContext(
-            direction=GuardrailDirection.OUTPUT,
+        ctx = OrchidGuardrailContext(
+            direction=OrchidGuardrailDirection.OUTPUT,
             tenant_key=auth.tenant_key if auth else "default",
             user_id=auth.user_id if auth else "",
             chat_id=state.get("chat_id", ""),
@@ -361,7 +366,7 @@ def _create_global_output_guardrail_node(chain: GuardrailChain):
                 "final_response": result.message,
             }
 
-        if result.action == GuardrailAction.REDACT and result.redacted_content is not None:
+        if result.action == OrchidGuardrailAction.REDACT and result.redacted_content is not None:
             logger.info("[Guardrails] Global output redacted by '%s'", result.guardrail_name)
             return {
                 "messages": [AIMessage(content=result.redacted_content)],
@@ -389,7 +394,7 @@ def _route_after_supervisor(state: GraphState) -> str:
 
 def build_graph(
     *,
-    config: AgentsConfig,
+    config: OrchidAgentsConfig,
     runtime: OrchidRuntime,
 ) -> Any:  # returns CompiledGraph
     """
@@ -397,7 +402,7 @@ def build_graph(
 
     Parameters
     ----------
-    config : AgentsConfig
+    config : OrchidAgentsConfig
         Parsed and validated YAML configuration.
     runtime : OrchidRuntime
         Pre-configured runtime with all dependencies (reader, LLM provider,
@@ -430,7 +435,7 @@ def build_graph(
         )
 
     # ── Build MCP auth registry (scans all agents for OAuth servers) ──
-    auth_registry = MCPAuthRegistry.from_config(config)
+    auth_registry = OrchidMCPAuthRegistry.from_config(config)
     runtime.mcp_auth_registry = auth_registry
 
     # ── Build MCP factory (enhanced with token_store for OAuth servers) ──
@@ -452,14 +457,14 @@ def build_graph(
         logger.info("[Graph] global output guardrails: %s", global_output_chain)
 
     # ── Instantiate agents from config ──
-    agents: list[BaseAgent] = []
-    agent_guardrails: dict[str, tuple[GuardrailChain, GuardrailChain]] = {}
+    agents: list[OrchidAgent] = []
+    agent_guardrails: dict[str, tuple[OrchidGuardrailChain, OrchidGuardrailChain]] = {}
     subgraph_nodes: dict[str, Any] = {}
 
     # Build agent descriptions directly from config (no proxy needed)
     agent_descriptions: dict[str, str] = {name: cfg.description for name, cfg in config.agents.items()}
 
-    # Build summary config dict from SupervisorConfig (passed to GenericAgent)
+    # Build summary config dict from OrchidSupervisorConfig (passed to GenericAgent)
     sup = config.supervisor
     summary_cfg: dict[str, Any] | None = None
     if sup.history_summary_enabled:
@@ -508,7 +513,7 @@ def build_graph(
             )
 
     # ── Wire agent peers (for cross-agent skill steps) ──
-    agent_map: dict[str, BaseAgent] = {a.name: a for a in agents}
+    agent_map: dict[str, OrchidAgent] = {a.name: a for a in agents}
     for agent in agents:
         if not isinstance(agent, GenericAgent):
             continue
