@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.3.2 (2026-04-21)
+
+### Bug Fixes
+
+- Add beta disclaimer to highlight work-in-progress status and fixing pipeline pypa behaviour on
+  release phase.
+  ([`8a18b9a`](https://github.com/gadz82/orchid/commit/8a18b9a4cee81666abe02d67e5c588712f039f0d))
+
+
 ## v1.3.1 (2026-04-20)
 
 ### Bug Fixes
