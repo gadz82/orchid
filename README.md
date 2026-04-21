@@ -8,6 +8,8 @@ A platform-agnostic multi-agent AI framework built on [LangGraph](https://github
 
 Orchid lets you define AI agents via YAML configuration, orchestrate them with a supervisor, connect external tools via MCP servers, and augment responses with hierarchical RAG — all without writing agent code.
 
+## BETA - This is a work in progress.
+
 ## Features
 
 - **YAML-driven agents** -- define agents, tools, skills, and prompts in `agents.yaml`
