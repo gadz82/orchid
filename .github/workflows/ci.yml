@@ -139,16 +139,29 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
       # 1. Bump version, commit, tag, push
+      #
+      # Detect "nothing to release" by comparing the version in
+      # ``pyproject.toml`` before and after the bump — an idempotent,
+      # locale-independent check.  The previous ``grep -q "no release
+      # will be made"`` was case-sensitive and silently missed python-
+      # semantic-release's capital-N "No release will be made", which
+      # caused the publish steps to run with the stale pre-bump wheel
+      # and fail on PyPI with ``400 File already exists``.
       - name: Bump version & tag
         id: version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUTPUT=$(semantic-release version --push --tag --commit 2>&1) || true
-          echo "$OUTPUT"
-          if echo "$OUTPUT" | grep -q "no release will be made"; then
+          before=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          semantic-release version --push --tag --commit || true
+          after=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "before=$before"
+          echo "after=$after"
+          if [ "$before" = "$after" ]; then
+            echo "No version bump — skipping publish steps."
             echo "released=false" >> "$GITHUB_OUTPUT"
           else
+            echo "Bumped $before → $after."
             echo "released=true" >> "$GITHUB_OUTPUT"
           fi
       # 2. Build wheel + sdist with bumped version
@@ -162,6 +175,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: semantic-release publish
       # 4. Publish to PyPI via trusted publishing (OIDC)
+      #
+      # ``skip-existing: true`` makes the upload idempotent — a re-run
+      # whose wheel/sdist is already on PyPI logs a warning instead of
+      # failing the job with ``400 File already exists``.  This mirrors
+      # semantic-release's own ``HTTPError``-swallowing behaviour for
+      # GitHub asset uploads, so a partial previous run that left 1.3.x
+      # already published can be safely re-triggered.
       - name: Publish to PyPI
         if: steps.version.outputs.released == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
