@@ -13,11 +13,21 @@ orchid/persistence/                   ← LIBRARY (framework + built-in backends
   postgres.py                           OrchidPostgresChatStorage — built-in (requires asyncpg)
   factory.py                            build_chat_storage(class_path, dsn) — dynamic import
   models.py                             OrchidChatSession, OrchidChatMessage — pure dataclasses
+
+  mcp_token_sqlite.py                   OrchidSQLiteMCPTokenStore — per-user OAuth tokens
+  mcp_token_postgres.py                 OrchidPostgresMCPTokenStore
+  mcp_token_factory.py                  build_mcp_token_store(class_path, dsn)
+
+  mcp_client_registration_sqlite.py     OrchidSQLiteMCPClientRegistrationStore —
+                                         per-server discovered endpoints + DCR
+                                         credentials (MCP 2025-03-26 / RFC 7591)
+  mcp_client_registration_postgres.py   OrchidPostgresMCPClientRegistrationStore
+  mcp_client_registration_factory.py    build_mcp_client_registration_store(class_path, dsn)
+
   migrations/
     runner.py                           OrchidMigrationRunner base + discover_migrations(package)
-    v001_initial_schema.py              Dialect-aware schema for chat_sessions,
-                                        chat_messages, and mcp_oauth_tokens (PG + SQLite)
-
+    v001_initial_schema.py              chat_sessions, chat_messages, mcp_oauth_tokens
+    v002_mcp_client_registrations.py    mcp_client_registrations (MCP 2025-03-26 DCR)
 ```
 
 Consumer projects can provide their own storage backends (e.g. PostgreSQL with custom migrations) by subclassing `OrchidChatStorage` and referencing via dotted import path.

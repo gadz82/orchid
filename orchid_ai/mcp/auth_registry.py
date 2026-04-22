@@ -1,21 +1,24 @@
 """
 Immutable registry of MCP servers that require per-server OAuth.
 
-Built once from ``OrchidAgentsConfig`` at graph startup via
-``OrchidMCPAuthRegistry.from_config(config)``.  Scans all agents' MCP
-servers and collects those with ``auth.mode == "oauth"``.  When the
-same server name appears in multiple agents their ``agent_names``
-lists are merged.
+Under the MCP 2025-03-26 authorization spec, the framework no longer
+needs (or accepts) static ``client_id`` / ``authorization_endpoint`` /
+``token_endpoint`` values in YAML — those are discovered at runtime
+from the server's 401 response (see :mod:`orchid_ai.mcp.discovery`).
+The registry therefore only tracks **which** servers are declared
+``auth.mode: oauth`` and which agents depend on them; all other
+metadata comes from :class:`OrchidMCPClientRegistrationStore` once
+discovery has run.
 
-The registry is stored on ``OrchidRuntime.mcp_auth_registry`` and
-exposed to the API layer for authorization-status endpoints and
-pre-flight auth checks.
+Built once from :class:`~orchid_ai.config.schema.OrchidAgentsConfig`
+at graph startup via :meth:`OrchidMCPAuthRegistry.from_config`.  When
+the same server name appears in multiple agents their ``agent_names``
+lists are merged into a single tuple.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -27,22 +30,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class OrchidMCPOAuthServerInfo:
-    """Static OAuth metadata for a single MCP server.
+    """Identity of a per-server OAuth MCP server.
 
-    ``client_secret`` is resolved from the ``client_secret_env``
-    environment variable at registry-build time.  An empty string means
-    "public client" (PKCE-only) — confidential clients must set the env
-    var before the API server starts.
+    Intentionally narrow: the framework only needs the server name, the
+    MCP endpoint URL (so the API layer can probe it for the
+    ``WWW-Authenticate`` header on first Connect), and the list of
+    agents that depend on it.  Everything else (authorization-server
+    endpoints, client credentials, scopes) is discovered at runtime and
+    persisted in :class:`OrchidMCPClientRegistrationStore`.
     """
 
     server_name: str
-    client_id: str
-    authorization_endpoint: str
-    token_endpoint: str
-    scopes: str
-    issuer: str
+    url: str
     agent_names: tuple[str, ...]  # frozen → must be tuple, not list
-    client_secret: str = ""  # resolved from client_secret_env at build time
 
 
 @dataclass
@@ -82,83 +82,45 @@ class OrchidMCPAuthRegistry:
         """Scan all agents and collect OAuth-requiring MCP servers.
 
         When the same ``server_name`` appears in multiple agents their
-        ``agent_names`` are merged into a single tuple.
+        ``agent_names`` are merged into a single tuple.  Child-agent
+        names are qualified as ``"{parent}.{child}"`` so the same server
+        referenced by both a parent and a child yields two entries in
+        the merged list.
         """
-        server_map: dict[str, dict] = {}  # server_name → builder dict
+        # server_name → {"url": str, "agents": list[str]}
+        server_map: dict[str, dict] = {}
 
-        def _build_entry(mcp_server, agent_ref: str) -> dict:
-            """Turn an ``OrchidMCPServerConfig`` into a registry builder dict.
-
-            ``client_secret`` is resolved once here from the
-            ``client_secret_env`` name so downstream code never has to
-            touch ``os.environ`` again and tests can monkeypatch the env
-            before calling ``from_config``.
-            """
-            client_secret = ""
-            if mcp_server.auth.client_secret_env:
-                client_secret = os.environ.get(mcp_server.auth.client_secret_env, "")
-                if not client_secret:
+        def _collect(mcp_servers, agent_ref: str) -> None:
+            for server in mcp_servers:
+                if server.auth.mode != "oauth":
+                    continue
+                entry = server_map.setdefault(server.name, {"url": server.url, "agents": []})
+                if agent_ref not in entry["agents"]:
+                    entry["agents"].append(agent_ref)
+                # First URL seen wins; a later duplicate with a different
+                # URL is a config mistake we surface once, loudly.
+                if entry["url"] != server.url:
                     logger.warning(
-                        "[OrchidMCPAuthRegistry] client_secret_env=%r for server '%s' "
-                        "is unset in the process environment — token exchange will "
-                        "be attempted without a client secret",
-                        mcp_server.auth.client_secret_env,
-                        mcp_server.name,
+                        "[OrchidMCPAuthRegistry] Server '%s' declared with "
+                        "conflicting URLs (%r vs %r) — using the first",
+                        server.name,
+                        entry["url"],
+                        server.url,
                     )
-            return {
-                "server_name": mcp_server.name,
-                "client_id": mcp_server.auth.client_id,
-                "client_secret": client_secret,
-                "authorization_endpoint": mcp_server.auth.authorization_endpoint,
-                "token_endpoint": mcp_server.auth.token_endpoint,
-                "scopes": mcp_server.auth.scopes,
-                "issuer": mcp_server.auth.issuer,
-                "agent_names": [agent_ref],
-            }
 
         for agent_name, agent_config in config.agents.items():
-            for mcp_server in agent_config.mcp_servers:
-                if mcp_server.auth.mode != "oauth":
-                    continue
-
-                name = mcp_server.name
-                if name in server_map:
-                    # Merge agent names
-                    existing = server_map[name]
-                    if agent_name not in existing["agent_names"]:
-                        existing["agent_names"].append(agent_name)
-                else:
-                    server_map[name] = _build_entry(mcp_server, agent_name)
-
-            # Recurse into children if present
+            _collect(agent_config.mcp_servers, agent_name)
             if agent_config.children:
                 for child_name, child_config in agent_config.children.items():
-                    for mcp_server in child_config.mcp_servers:
-                        if mcp_server.auth.mode != "oauth":
-                            continue
+                    _collect(child_config.mcp_servers, f"{agent_name}.{child_name}")
 
-                        name = mcp_server.name
-                        qualified_name = f"{agent_name}.{child_name}"
-                        if name in server_map:
-                            existing = server_map[name]
-                            if qualified_name not in existing["agent_names"]:
-                                existing["agent_names"].append(qualified_name)
-                        else:
-                            server_map[name] = _build_entry(mcp_server, qualified_name)
-
-        # Build frozen dataclass instances
         servers = {
             name: OrchidMCPOAuthServerInfo(
-                server_name=data["server_name"],
-                client_id=data["client_id"],
-                client_secret=data["client_secret"],
-                authorization_endpoint=data["authorization_endpoint"],
-                token_endpoint=data["token_endpoint"],
-                scopes=data["scopes"],
-                issuer=data["issuer"],
-                agent_names=tuple(data["agent_names"]),
+                server_name=name,
+                url=entry["url"],
+                agent_names=tuple(entry["agents"]),
             )
-            for name, data in server_map.items()
+            for name, entry in server_map.items()
         }
 
         if servers:

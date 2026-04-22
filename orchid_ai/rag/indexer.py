@@ -13,7 +13,7 @@ Usage (startup hook):
     from orchid_ai.rag.indexer import StaticIndexer
 
     indexer = StaticIndexer(writer=reader)
-    indexer.register_namespace("learning", shared_docs, tenant_docs_fn)
+    indexer.register_namespace("knowledge-base", shared_docs, tenant_docs_fn)
     await indexer.index_all(tenant_key="12345")
 """
 
@@ -53,7 +53,7 @@ class StaticIndexer:
         Parameters
         ----------
         namespace : str
-            The vector store collection name (e.g. ``"learning"``).
+            The vector store collection name (e.g. ``"knowledge-base"``).
         shared_docs : list[Document]
             Documents visible to all tenants (``tenant_id = "__shared__"``).
         tenant_docs_fn : callable, optional

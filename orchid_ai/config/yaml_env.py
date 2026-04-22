@@ -49,12 +49,11 @@ YAML_TO_ENV: dict[tuple[str, str], str] = {
     ("storage", "class"): "CHAT_STORAGE_CLASS",
     ("storage", "dsn"): "CHAT_DB_DSN",
     ("storage", "extra_migrations_package"): "CHAT_EXTRA_MIGRATIONS_PACKAGE",
-    # ── mcp ───────────────────────────────────────────────────
-    ("mcp", "catalog_url"): "MCP_CATALOG_URL",
-    ("mcp", "notifications_url"): "MCP_NOTIFICATIONS_URL",
     # ── mcp_auth ──────────────────────────────────────────────
     ("mcp_auth", "token_store_class"): "MCP_TOKEN_STORE_CLASS",
     ("mcp_auth", "token_store_dsn"): "MCP_TOKEN_STORE_DSN",
+    ("mcp_auth", "client_registration_store_class"): "MCP_CLIENT_REGISTRATION_STORE_CLASS",
+    ("mcp_auth", "client_registration_store_dsn"): "MCP_CLIENT_REGISTRATION_STORE_DSN",
     # ── checkpointer ─────────────────────────────────────────
     ("checkpointer", "type"): "CHECKPOINTER_TYPE",
     ("checkpointer", "dsn"): "CHECKPOINTER_DSN",

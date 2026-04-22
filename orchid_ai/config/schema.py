@@ -105,45 +105,45 @@ class OrchidMCPAuthConfig(BaseModel):
 
     - ``none`` (default): no authentication headers are sent.  Suitable
       for local MCP servers or remote servers that do not require auth.
-    - ``passthrough``: forwards the graph's ``OrchidAuthContext`` bearer token
-      unchanged — the MCP server shares the same identity provider.
-    - ``oauth``: the server requires its own OAuth 2.0 flow with a
-      third-party identity provider.  Tokens are stored per-user,
-      per-server in the ``OrchidMCPTokenStore``.
+    - ``passthrough``: forwards the graph's ``OrchidAuthContext`` bearer
+      token unchanged — the MCP server shares the same identity provider
+      as the API.  ADR-010 — the single-token-in-the-graph rule.
+    - ``oauth``: the MCP server requires its own OAuth 2.0 flow.  The
+      framework follows the MCP 2025-03-26 authorization spec and
+      discovers everything at runtime from the server's 401 response:
 
-    For ``oauth`` mode, provide either ``issuer`` (OIDC auto-discovery)
-    or explicit ``authorization_endpoint`` + ``token_endpoint``.
+        * Protected resource metadata (RFC 9728) — from the 401's
+          ``WWW-Authenticate: Bearer resource_metadata="…"`` header.
+        * Authorization server metadata (RFC 8414) — from
+          ``/.well-known/oauth-authorization-server`` on the selected
+          authorization server.
+        * Dynamic client registration (RFC 7591) — POST'd to the
+          advertised ``registration_endpoint``.
+
+      No ``client_id``, ``client_secret``, ``authorization_endpoint`` or
+      ``token_endpoint`` values live in YAML.  The authorization server
+      MUST expose RFC 7591 dynamic client registration; if it does not,
+      integrators supply a pre-seeded
+      :class:`~orchid_ai.core.mcp.OrchidMCPClientRegistrationStore` row
+      with the relevant endpoints + credentials before first use.
 
     Example YAML::
 
-        auth:
-          mode: oauth
-          client_id: orchid-crm-integration
-          client_secret_env: CRM_OAUTH_CLIENT_SECRET    # confidential clients only
-          issuer: https://auth.crm-provider.com
-          scopes: "openid crm.read crm.write"
-
-    ``client_secret_env`` is the name of an environment variable whose
-    value is forwarded during the ``authorization_code`` token exchange
-    (and subsequent refresh-token exchanges).  Public clients (PKCE-only,
-    no secret) must leave it empty.  The value itself is **never** read
-    from YAML to avoid checking secrets into source control.
+        mcp_servers:
+          - name: crm-backend
+            url: https://crm.example.com/mcp
+            auth:
+              mode: oauth    # everything else is discovered at runtime
     """
 
     mode: Literal["none", "passthrough", "oauth"] = "none"
-    client_id: str = ""
-    client_secret_env: str = ""  # env var name for confidential-client secret (never the value)
-    authorization_endpoint: str = ""  # explicit, OR use issuer for OIDC discovery
-    token_endpoint: str = ""
-    scopes: str = "openid"
-    issuer: str = ""  # OIDC auto-discovery endpoint
 
 
 class OrchidMCPServerConfig(BaseModel):
     """An MCP server connected to an agent.
 
     ``tools``, ``prompts``, and ``resources`` each accept either:
-      - An explicit allow-list (e.g. ``["list_types", "create_notification"]``)
+      - An explicit allow-list (e.g. ``["search_items", "create_record"]``)
       - The wildcard ``"*"`` to discover ALL capabilities from the server
 
     When any of them is ``"*"``, the corresponding ``discover_all_*`` flag is
@@ -392,7 +392,7 @@ class OrchidAgentConfig(BaseModel):
 
     When ``class_path`` is ``None``, the ``GenericAgent`` is used.
     When set, it must be either:
-      - A dotted Python import path (e.g. ``src.agents.learning.LearningAgent``)
+      - A dotted Python import path (e.g. ``myapp.agents.support.SupportAgent``)
       - A short name registered in the agent class registry
     """
 

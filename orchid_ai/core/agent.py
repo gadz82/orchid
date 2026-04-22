@@ -61,7 +61,7 @@ class OrchidAgent(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Unique agent identifier, e.g. 'notifications'."""
+        """Unique agent identifier, e.g. 'knowledge-base'."""
         ...
 
     @property
@@ -70,13 +70,13 @@ class OrchidAgent(ABC):
         """
         Human-readable description used by the Supervisor LLM
         to decide whether to activate this agent.
-        e.g. 'Manages notifications: create, list, templates.'
+        e.g. 'Handles knowledge-base lookups, document retrieval, and FAQs.'
         """
         ...
 
     @property
     def rag_namespace(self) -> str:
-        """Vector store namespace, e.g. 'notifications'.
+        """Vector store namespace, e.g. 'knowledge-base'.
 
         Override if the agent uses RAG.  Default: empty string (no RAG).
         """
@@ -153,7 +153,7 @@ class OrchidAgent(ABC):
             Messages whose content starts with any of these prefixes are
             dropped entirely (e.g. internal supervisor routing messages).
         strip_prefixes : tuple[str, ...]
-            Prefixes to strip from assistant messages (e.g. ``"[Notifications Agent]\\n"``).
+            Prefixes to strip from assistant messages (e.g. ``"[MyAgent]\\n"``).
             Only the first matching prefix is stripped.
         """
         all_messages = state.get("messages", [])

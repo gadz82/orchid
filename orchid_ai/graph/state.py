@@ -24,7 +24,7 @@ from ..core.state import OrchidAuthContext
 
 
 def merge_dicts(existing: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, Any]:
-    """Shallow merge — each sub-agent writes a unique key (e.g. "learning", "notifications")."""
+    """Shallow merge — each sub-agent writes a unique key (e.g. "knowledge-base", "messaging")."""
     base = existing or {}
     update = new or {}
     return {**base, **update}

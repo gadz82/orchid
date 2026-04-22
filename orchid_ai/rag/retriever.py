@@ -14,17 +14,17 @@ Example (standalone)::
 
     retriever = OrchidRetriever(
         reader=qdrant_reader,
-        namespace="learning",
+        namespace="knowledge-base",
         scope=scope,
         k=5,
     )
-    docs = await retriever.ainvoke("What is machine learning?")
+    docs = await retriever.ainvoke("How do I request vacation time?")
 
 Example (multi-query via GenericAgent)::
 
     # In agents.yaml:
     agents:
-      learning:
+      knowledge-base:
         rag:
           retriever_type: multi_query
           k: 5

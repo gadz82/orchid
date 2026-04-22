@@ -52,7 +52,7 @@ When indexing documents, set scope metadata explicitly:
 - **Never import `qdrant_client` outside `backends/qdrant.py`.** Other files use `OrchidVectorReader`/`OrchidVectorWriter` from `core/repository.py`.
 - **Embedding model dimensions are critical.** `nomic-embed-text` = 768-d, `text-embedding-3-small` = 1536-d. Changing models requires re-creating Qdrant collections.
 - **`inject_to_rag()` is safe to call on `NullVectorReader`** — it checks `isinstance(reader, OrchidVectorWriter)` first.
-- **Namespaces = Qdrant collection names.** One collection per domain (e.g., `learning`, `notifications`, `uploads`). Tenant isolation is via payload filtering, NOT separate collections.
+- **Namespaces = Qdrant collection names.** One collection per domain (e.g., `knowledge-base`, `messaging`, `uploads`). Tenant isolation is via payload filtering, NOT separate collections.
 
 ## QdrantRepository Notes
 

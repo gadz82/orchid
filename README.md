@@ -308,7 +308,7 @@ Orchid uses two configuration files:
 - **`handler`** -- Dotted Python import path to the tool function (e.g. `"myapp.tools.weather.get_weather"`). The function is imported via `importlib` at graph build time. It must be callable with keyword arguments `query` and `context`, and must be importable from the working directory.
 - **`description`** -- Human-readable description of what the tool does. This is included in the LLM prompt so the model understands when and how to use the tool. A good description helps the LLM decide whether to call this tool for a given query. Be specific: "Get current weather temperature and conditions for a city name" is better than "Weather tool".
 - **`parameters`** -- Optional parameter declarations for the tool. When provided, these take precedence over auto-extracted parameters from the function signature. Each parameter is a dict with `type` (string/int/float/bool), `description`, `required` (bool), and `default`. When omitted, parameters are auto-extracted from the Python function signature via `inspect` — framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. This metadata is used by the CLI skill generator (`orchid skill generate`) to produce accurate Claude Code skill documentation.
-- **`inject_to_rag`** -- When `true`, the tool's return value is stored as a document in the Qdrant vector store after execution. This creates a cache: on future queries, the framework can retrieve the cached result from RAG instead of re-calling the tool (if `rag_ttl > 0`). Useful for expensive API calls whose results don't change frequently (e.g. course catalogs, product listings). Default `false` means results are used once and discarded.
+- **`inject_to_rag`** -- When `true`, the tool's return value is stored as a document in the Qdrant vector store after execution. This creates a cache: on future queries, the framework can retrieve the cached result from RAG instead of re-calling the tool (if `rag_ttl > 0`). Useful for expensive API calls whose results don't change frequently (e.g. catalog snapshots, reference data). Default `false` means results are used once and discarded.
 - **`rag_ttl`** -- Per-tool override for the RAG cache time-to-live (in seconds). When `null`, the agent's `rag.rag_ttl` is used. When set to a positive integer, this tool's cached results expire after that many seconds. Set to `0` to disable caching for this specific tool even if the agent has a default TTL. Useful when different tools have different freshness requirements (e.g. exchange rates: 300s, restaurant menus: 86400s).
 
 #### `skills.<name>` (Orchestrator Skills)
@@ -401,8 +401,8 @@ Each step:
 - **`transport`** -- The MCP transport protocol. `"streamable_http"` is the standard stateless protocol (recommended). `"sse"` uses Server-Sent Events for streaming responses. Most MCP servers use `streamable_http`.
 - **`url`** -- The MCP server's HTTP endpoint. Supports environment variable interpolation with `${VAR_NAME}` syntax (e.g. `"${AIRLINE_MCP_URL}"`). Variables are resolved from the environment at config load time.
 - **`tools`** -- Either an explicit list of `ToolConfig` objects (specifying which tools to use from this server) or the wildcard `"*"` to auto-discover all tools at runtime via `list_tools()`. An explicit list acts as an allow-list: only listed tools are called, even if the server offers more. Use `"*"` for development/exploration; use explicit lists in production for predictability and security.
-- **`prompts`** -- Prompt template names to load from the MCP server, or `"*"` to load all. Prompts are predefined query templates that the server provides (e.g. a "course_schema" prompt that returns the data schema). Loaded prompts are included in the agent's context.
-- **`resources`** -- Resource URIs to load from the MCP server, or `"*"` to load all. Resources are static data endpoints (e.g. `"courses/"` returns a list of available courses). Loaded resources are included in the agent's context.
+- **`prompts`** -- Prompt template names to load from the MCP server, or `"*"` to load all. Prompts are predefined query templates that the server provides (e.g. a `"catalog_schema"` prompt that returns the data schema). Loaded prompts are included in the agent's context.
+- **`resources`** -- Resource URIs to load from the MCP server, or `"*"` to load all. Resources are static data endpoints (e.g. `"catalog/"` returns a list of available items). Loaded resources are included in the agent's context.
 - **`tool_call_strategy`** -- Controls how multiple tools on this server are executed:
   - `"all"` -- Call every tool in the list simultaneously and collect all results. Fastest, but tools run independently without seeing each other's output.
   - `"sequential"` -- Call tools one by one in order. Each tool receives the accumulated results from previous tools as a `previous_results` argument. Use when tools depend on each other (e.g. search then filter then sort).
@@ -431,21 +431,19 @@ Each step:
 | Field | Type | Default |
 |-------|------|---------|
 | `mode` | `"none"` / `"passthrough"` / `"oauth"` | `"none"` |
-| `client_id` | str | `""` |
-| `authorization_endpoint` | str | `""` |
-| `token_endpoint` | str | `""` |
-| `scopes` | str | `"openid"` |
-| `issuer` | str | `""` |
+
+YAML carries ONLY the auth mode. Nothing else — no `client_id`, no
+`client_secret`, no endpoints — needs to live in configuration.
 
 - **`mode`** -- How the MCP client authenticates with this server:
   - `"none"` (default) -- No authentication headers. Use for local MCP servers or remote servers without auth.
-  - `"passthrough"` -- Forwards the graph's `OrchidAuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider as the main application.
-  - `"oauth"` -- Per-user OAuth 2.0 flow with a third-party identity provider. Tokens are stored per-user, per-server in the `OrchidMCPTokenStore`. The frontend prompts users to authorize, and the framework handles token refresh automatically.
-- **`client_id`** -- OAuth client ID registered with the third-party provider. Required when `mode: "oauth"`.
-- **`authorization_endpoint`** -- OAuth authorization URL. Required for `mode: "oauth"` unless `issuer` is set for OIDC auto-discovery.
-- **`token_endpoint`** -- OAuth token exchange URL. Required for `mode: "oauth"` unless `issuer` is set.
-- **`scopes`** -- Space-separated OAuth scopes. Default `"openid"`.
-- **`issuer`** -- OIDC issuer URL for auto-discovery. When set, `authorization_endpoint` and `token_endpoint` are resolved automatically from the `.well-known/openid-configuration` document.
+  - `"passthrough"` -- Forwards the graph's `OrchidAuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider as the main application (ADR-010).
+  - `"oauth"` -- Per-user OAuth 2.0 flow with the MCP server's authorization server. The framework follows the **MCP 2025-03-26 authorization spec**: on the first 401 it consumes the `WWW-Authenticate: Bearer resource_metadata="…"` header (RFC 9728), fetches the authorization server metadata (RFC 8414), dynamically registers a client (RFC 7591), and persists the resulting endpoints + credentials to `OrchidMCPClientRegistrationStore`. Per-user tokens land in `OrchidMCPTokenStore` and are refreshed against the discovered token endpoint automatically.
+
+The authorization server MUST advertise `registration_endpoint` in its
+RFC 8414 metadata. If it doesn't, discovery fails with a clear error —
+integrators whose IdP lacks DCR should seed `OrchidMCPClientRegistrationStore`
+manually with the relevant endpoints + client credentials before first use.
 
 Example:
 
@@ -463,15 +461,12 @@ mcp_servers:
     auth:
       mode: passthrough
 
-  # OAuth -- third-party provider with OIDC discovery
+  # OAuth -- everything discovered at runtime from the MCP server's 401
   - name: external-crm
     url: ${CRM_MCP_URL}
     tools: "*"
     auth:
       mode: oauth
-      client_id: orchid-crm-integration
-      issuer: https://auth.crm-provider.com
-      scopes: "openid crm.read crm.write"
 ```
 
 #### `agents.<name>.skills.<name>` (Agent Skills)
@@ -598,16 +593,6 @@ Runtime configuration consumed by orchid-api and orchid-cli. Each nested YAML ke
   - `orchid_ai.persistence.postgres.OrchidPostgresChatStorage` -- PostgreSQL backend. Requires `pip install "orchid-ai[postgres]"` and a running PostgreSQL instance. Best for production, multi-user, and Docker deployments.
   - Custom backends: implement the `OrchidChatStorage` ABC and reference your class here.
 - **`storage.dsn`** -- Database connection string. For SQLite: a file path (e.g. `"~/.orchid/chats.db"`, `"/data/chats.db"`). The directory is created automatically. For PostgreSQL: a full DSN (e.g. `"postgresql://user:pass@localhost:5432/orchid"`).
-
-#### `mcp`
-
-| YAML Key | Env Var | Default |
-|----------|---------|---------|
-| `mcp.catalog_url` | `MCP_CATALOG_URL` | `""` |
-| `mcp.notifications_url` | `MCP_NOTIFICATIONS_URL` | `""` |
-
-- **`mcp.catalog_url`** -- URL of the MCP catalog server. This is a consumer-specific setting used by platform integrations that need a centralized catalog of available MCP tools. When empty, no catalog is used.
-- **`mcp.notifications_url`** -- URL of the MCP notifications server. Consumer-specific setting for platform integrations that support push notifications via MCP. When empty, notification features are disabled.
 
 #### `tracing`
 
@@ -941,11 +926,6 @@ upload:
 storage:
   class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
   dsn: postgresql://user:pass@localhost:5432/orchid
-
-# ── MCP server URLs ──────────────────────────────────────────
-mcp:
-  catalog_url: http://localhost:3001
-  notifications_url: http://localhost:3002
 
 # ── Observability ────────────────────────────────────────────
 tracing:

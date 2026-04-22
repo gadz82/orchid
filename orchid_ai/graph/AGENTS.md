@@ -38,12 +38,12 @@ class GraphState(TypedDict, total=False):
 The supervisor decides routing via LLM:
 
 ```json
-{"execution": "parallel",   "agents": ["learning", "notifications"]}
-{"execution": "sequential", "agents": ["learning", "notifications"]}
-{"execution": "skill",      "skill": "remind_incomplete_users"}
+{"execution": "parallel",   "agents": ["knowledge-base", "messaging"]}
+{"execution": "sequential", "agents": ["knowledge-base", "messaging"]}
+{"execution": "skill",      "skill": "notify_matching_users"}
 ```
 
-**Sequential flow:** Only the first agent is activated. After it returns to the supervisor, the next agent in `pending_agents` is activated. This enables dependent workflows (e.g., Learning finds users → Notifications creates alert for those users).
+**Sequential flow:** Only the first agent is activated. After it returns to the supervisor, the next agent in `pending_agents` is activated. This enables dependent workflows (e.g., one agent finds a set of matching users, the next agent creates alerts for them).
 
 **Skill flow:** Expands the skill into a sequential pipeline with per-step instructions stored in `skill_instructions`.
 

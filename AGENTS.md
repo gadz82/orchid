@@ -105,7 +105,7 @@ documents/   → core/  (standalone)
 
 6. **Imports are `from orchid_ai.xxx`, not `from src.xxx`.** The three-package split uses `orchid_ai.` as the import root.
 
-7. **No vendor-specific code — including in comments and docstrings.** Platform integrations belong in consumer projects. Code, comments, docstrings, and examples inside `orchid/orchid_ai/` must NEVER reference specific consumer tools (course search, notifications, etc.), or any concrete product. Use generic terms ("tools requiring authenticated API access", not "any entity search, any entity management"). Violations in comments are as bad as violations in code — they create false coupling and mislead future contributors.
+7. **No vendor-specific code — including in comments and docstrings.** Platform integrations belong in consumer projects. Code, comments, docstrings, and examples inside `orchid/orchid_ai/` must NEVER reference any concrete product, vendor name, or domain-specific object (e.g. specific business entities like "orders", "courses", "tickets" — unless used as a purely generic illustrative example that could apply to any integrator). Use domain-neutral placeholders (e.g. `knowledge-base`, `search`, `records`, `catalog`) when examples are unavoidable. Violations in comments are as bad as violations in code — they create false coupling and mislead future contributors.
 
 8. **Consumer agents inherit from `OrchidAgent`** and use `self.summarise()`, `self.fetch_rag_context()`, `self.extract_user_query()`, `self.extract_conversation_history()` — don't duplicate these methods.
 

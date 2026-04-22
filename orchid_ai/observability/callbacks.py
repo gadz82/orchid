@@ -18,7 +18,7 @@ Example::
     #     "tool_calls": 2,
     #     "retries": 0,
     #     "avg_llm_latency_s": 0.842,
-    #     "agent_latencies_s": {"learning": 1.23, "notifications": 0.95},
+    #     "agent_latencies_s": {"knowledge-base": 1.23, "messaging": 0.95},
     #     ...
     # }
 """
