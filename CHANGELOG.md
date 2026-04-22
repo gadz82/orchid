@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.4 (2026-04-22)
+
+### Bug Fixes
+
+- Batch embedding limits for main providers.
+  ([`7f143ef`](https://github.com/gadz82/orchid/commit/7f143ef15016debde6debd90d0abeb698731e4c0))
+
+
 ## v1.3.3 (2026-04-21)
 
 ### Bug Fixes
