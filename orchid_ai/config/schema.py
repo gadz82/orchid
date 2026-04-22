@@ -119,12 +119,20 @@ class OrchidMCPAuthConfig(BaseModel):
         auth:
           mode: oauth
           client_id: orchid-crm-integration
+          client_secret_env: CRM_OAUTH_CLIENT_SECRET    # confidential clients only
           issuer: https://auth.crm-provider.com
           scopes: "openid crm.read crm.write"
+
+    ``client_secret_env`` is the name of an environment variable whose
+    value is forwarded during the ``authorization_code`` token exchange
+    (and subsequent refresh-token exchanges).  Public clients (PKCE-only,
+    no secret) must leave it empty.  The value itself is **never** read
+    from YAML to avoid checking secrets into source control.
     """
 
     mode: Literal["none", "passthrough", "oauth"] = "none"
     client_id: str = ""
+    client_secret_env: str = ""  # env var name for confidential-client secret (never the value)
     authorization_endpoint: str = ""  # explicit, OR use issuer for OIDC discovery
     token_endpoint: str = ""
     scopes: str = "openid"

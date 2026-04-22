@@ -135,6 +135,15 @@ class OrchidRuntime:
         """
         from .mcp.client import StreamableHttpMCPClient
 
+        # Resolve the client secret from the configured env-var name.
+        # Mirrors ``OrchidMCPAuthRegistry`` — YAML holds the NAME, never
+        # the value, so secrets stay out of source control.
+        import os as _os
+
+        client_secret = ""
+        if server_config.auth.client_secret_env:
+            client_secret = _os.environ.get(server_config.auth.client_secret_env, "")
+
         return StreamableHttpMCPClient(
             server_config.url,
             server_type=server_config.type,
@@ -145,4 +154,5 @@ class OrchidRuntime:
             token_store=token_store,
             token_endpoint=server_config.auth.token_endpoint,
             client_id=server_config.auth.client_id,
+            client_secret=client_secret,
         )

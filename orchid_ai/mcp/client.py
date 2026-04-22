@@ -67,6 +67,7 @@ class StreamableHttpMCPClient(OrchidMCPClient):
         token_store: Any | None = None,  # OrchidMCPTokenStore (lazy import to avoid circular)
         token_endpoint: str = "",
         client_id: str = "",
+        client_secret: str = "",
     ) -> None:
         self._url = url
         self._server_type = server_type
@@ -79,6 +80,7 @@ class StreamableHttpMCPClient(OrchidMCPClient):
         self._token_store = token_store
         self._token_endpoint = token_endpoint
         self._client_id = client_id
+        self._client_secret = client_secret
 
     @property
     def server_url(self) -> str:
@@ -258,6 +260,10 @@ class StreamableHttpMCPClient(OrchidMCPClient):
         try:
             import httpx
 
+            # Mirror the token-exchange path in ``orchid_api.routers.mcp_auth``:
+            # confidential clients authenticate via HTTP Basic (RFC 6749
+            # §2.3.1); public clients pass ``client_id`` in the form body.
+            request_auth = (self._client_id, self._client_secret) if self._client_secret else None
             async with httpx.AsyncClient(timeout=15.0) as http:
                 resp = await http.post(
                     self._token_endpoint,
@@ -266,6 +272,7 @@ class StreamableHttpMCPClient(OrchidMCPClient):
                         "refresh_token": record.refresh_token,
                         "client_id": self._client_id,
                     },
+                    auth=request_auth,
                 )
                 resp.raise_for_status()
                 data = resp.json()

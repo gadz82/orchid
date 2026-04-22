@@ -38,6 +38,106 @@ class TestMCPAuthRegistry:
         assert registry.empty
         assert registry.oauth_servers == {}
 
+    def test_resolves_client_secret_from_env(self, monkeypatch):
+        """``client_secret_env`` → env var → stored on OrchidMCPOAuthServerInfo.
+
+        Regression for confidential-client OAuth flows (e.g. Docebo's
+        ``authorization_code`` grant).  The YAML holds only the env-var
+        *name*; the actual secret is resolved once at ``from_config``
+        time so callers never have to poke ``os.environ`` again.
+        """
+        monkeypatch.setenv("CRM_OAUTH_SECRET", "super-secret-value")
+        config = _make_config(
+            {
+                "sales": OrchidAgentConfig(
+                    description="test",
+                    prompt="test",
+                    mcp_servers=[
+                        OrchidMCPServerConfig(
+                            name="ext-crm",
+                            url="https://crm.example.com/mcp",
+                            auth=OrchidMCPAuthConfig(
+                                mode="oauth",
+                                client_id="orchid-crm",
+                                client_secret_env="CRM_OAUTH_SECRET",
+                                authorization_endpoint="https://crm.example.com/oauth2/authorize",
+                                token_endpoint="https://crm.example.com/oauth2/token",
+                                scopes="openid crm.read",
+                            ),
+                        ),
+                    ],
+                ),
+            }
+        )
+        registry = OrchidMCPAuthRegistry.from_config(config)
+        info = registry.get_server("ext-crm")
+        assert info is not None
+        assert info.client_secret == "super-secret-value"
+
+    def test_missing_client_secret_env_warns_and_defaults_empty(self, monkeypatch, caplog):
+        """Unset env var → empty client_secret + a WARNING log line.
+
+        This is the 'misconfigured' path: the YAML declared a secret is
+        needed but the operator forgot to populate the env.  We don't
+        want to crash — the public-client (PKCE-only) flow still works
+        if the IdP allows it — but we MUST log loudly so the mistake
+        is visible in container startup logs.
+        """
+        monkeypatch.delenv("UNSET_OAUTH_SECRET", raising=False)
+        config = _make_config(
+            {
+                "sales": OrchidAgentConfig(
+                    description="test",
+                    prompt="test",
+                    mcp_servers=[
+                        OrchidMCPServerConfig(
+                            name="ext-crm",
+                            url="https://crm.example.com/mcp",
+                            auth=OrchidMCPAuthConfig(
+                                mode="oauth",
+                                client_id="orchid-crm",
+                                client_secret_env="UNSET_OAUTH_SECRET",
+                                authorization_endpoint="https://crm.example.com/oauth2/authorize",
+                                token_endpoint="https://crm.example.com/oauth2/token",
+                            ),
+                        ),
+                    ],
+                ),
+            }
+        )
+        with caplog.at_level("WARNING", logger="orchid_ai.mcp.auth_registry"):
+            registry = OrchidMCPAuthRegistry.from_config(config)
+        info = registry.get_server("ext-crm")
+        assert info is not None
+        assert info.client_secret == ""
+        assert any("UNSET_OAUTH_SECRET" in r.message for r in caplog.records)
+
+    def test_no_client_secret_env_leaves_secret_empty(self):
+        """Public clients (PKCE-only) omit ``client_secret_env`` entirely."""
+        config = _make_config(
+            {
+                "sales": OrchidAgentConfig(
+                    description="test",
+                    prompt="test",
+                    mcp_servers=[
+                        OrchidMCPServerConfig(
+                            name="ext-crm",
+                            url="https://crm.example.com/mcp",
+                            auth=OrchidMCPAuthConfig(
+                                mode="oauth",
+                                client_id="orchid-crm",
+                                issuer="https://auth.crm.example.com",
+                            ),
+                        ),
+                    ],
+                ),
+            }
+        )
+        registry = OrchidMCPAuthRegistry.from_config(config)
+        info = registry.get_server("ext-crm")
+        assert info is not None
+        assert info.client_secret == ""
+
     def test_discovers_oauth_servers(self):
         config = _make_config(
             {
