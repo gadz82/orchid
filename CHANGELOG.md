@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.6 (2026-04-22)
+
+### Bug Fixes
+
+- Mcp oauth discovery, implementation of 2025-03-26 spec flow compliance.
+  ([`195116a`](https://github.com/gadz82/orchid/commit/195116af684ae6b7cf4ec12eecb3427ad0d0bb95))
+
+
 ## v1.3.5 (2026-04-22)
 
 ### Bug Fixes
