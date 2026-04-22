@@ -189,6 +189,8 @@ class Orchid:
         chat_extra_migrations_package: str | None = None,
         mcp_token_store_class: str = "",
         mcp_token_store_dsn: str = "",
+        mcp_client_registration_store_class: str = "",
+        mcp_client_registration_store_dsn: str = "",
         checkpointer_type: str = "",
         checkpointer_dsn: str = "",
         startup_hook: str = "",
@@ -270,6 +272,8 @@ class Orchid:
             chat_extra_migrations_package=chat_extra_migrations_package,
             mcp_token_store_class=mcp_token_store_class,
             mcp_token_store_dsn=mcp_token_store_dsn,
+            mcp_client_registration_store_class=mcp_client_registration_store_class,
+            mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
             checkpointer_type=checkpointer_type,
             checkpointer_dsn=checkpointer_dsn,
             startup_hook=startup_hook,
@@ -555,10 +559,13 @@ class Orchid:
                 config=self._config,
                 chat_repo=self._chat_repo,  # type: ignore[arg-type]
                 mcp_token_store=self._mcp_token_store,  # type: ignore[arg-type]
+                mcp_client_registration_store=self._runtime.mcp_client_registration_store,  # type: ignore[arg-type]
             )
         )
         self._mcp_token_store = None
         self._chat_repo = None
+        if self._runtime is not None:
+            self._runtime.mcp_client_registration_store = None
 
     # ── Internal helpers ────────────────────────────────────
 

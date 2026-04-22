@@ -42,9 +42,9 @@ async def inject_to_rag(
         The vector store backend.  Writing only happens when the store
         implements ``OrchidVectorWriter``; otherwise this is a safe no-op.
     mcp_data : dict
-        Raw tool results (e.g. ``{"courses": "...", "enrollments": "..."}``).
+        Raw tool results (e.g. ``{"search_results": "...", "user_records": "..."}``).
     namespace : str
-        Collection name (e.g. ``"learning"``, ``"notifications"``).
+        Collection name (e.g. ``"knowledge-base"``, ``"messaging"``).
     scope : OrchidRAGScope
         Hierarchical scope — determines where the data lands.
     source_tool : str

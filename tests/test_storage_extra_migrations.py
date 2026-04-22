@@ -83,16 +83,22 @@ async def test_integrator_migration_runs_after_framework() -> None:
         # The integrator table must exist.
         cursor = await storage._conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' "
-            "AND name IN ('chat_sessions', 'mcp_oauth_tokens', 'integrator_widgets')"
+            "AND name IN ('chat_sessions', 'mcp_oauth_tokens', "
+            "'mcp_client_registrations', 'integrator_widgets')"
         )
         tables = {row[0] async for row in cursor}
-        assert tables == {"chat_sessions", "mcp_oauth_tokens", "integrator_widgets"}
+        assert tables == {
+            "chat_sessions",
+            "mcp_oauth_tokens",
+            "mcp_client_registrations",
+            "integrator_widgets",
+        }
 
-        # The integrator version is recorded with the ``ext:`` prefix,
-        # the framework v001 is bare.
+        # Framework migrations run first (bare keys), integrator
+        # migration runs last with the ``ext:`` prefix.
         cursor = await storage._conn.execute("SELECT version FROM _migrations ORDER BY version")
         versions = [row[0] async for row in cursor]
-        assert versions == ["001", "ext:001"]
+        assert versions == ["001", "002", "ext:001"]
     finally:
         await storage.close()
 
@@ -104,16 +110,18 @@ async def test_without_extras_only_framework_tables() -> None:
     try:
         cursor = await storage._conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' "
-            "AND name IN ('chat_sessions', 'mcp_oauth_tokens', 'integrator_widgets')"
+            "AND name IN ('chat_sessions', 'mcp_oauth_tokens', "
+            "'mcp_client_registrations', 'integrator_widgets')"
         )
         tables = {row[0] async for row in cursor}
         assert "chat_sessions" in tables
-        assert "mcp_oauth_tokens" in tables  # from the merged v001
+        assert "mcp_oauth_tokens" in tables
+        assert "mcp_client_registrations" in tables  # framework v002
         assert "integrator_widgets" not in tables
 
-        cursor = await storage._conn.execute("SELECT version FROM _migrations")
+        cursor = await storage._conn.execute("SELECT version FROM _migrations ORDER BY version")
         versions = [row[0] async for row in cursor]
-        # Only framework v001 — no v002, no ext:*.
-        assert versions == ["001"]
+        # Both framework migrations — no integrator extras.
+        assert versions == ["001", "002"]
     finally:
         await storage.close()

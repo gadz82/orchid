@@ -1,4 +1,9 @@
-"""Tests for OrchidMCPAuthRegistry — scans OrchidAgentsConfig for OAuth-requiring MCP servers."""
+"""Tests for OrchidMCPAuthRegistry — scans OrchidAgentsConfig for OAuth-requiring MCP servers.
+
+After the MCP 2025-03-26 spec migration the registry is a thin
+"which agents depend on which OAuth servers?" mapping — endpoints and
+credentials are discovered at runtime.  These tests lock that contract.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +19,14 @@ from orchid_ai.mcp.auth_registry import OrchidMCPAuthRegistry
 def _make_config(agents: dict) -> OrchidAgentsConfig:
     """Build a minimal OrchidAgentsConfig with the given agents dict."""
     return OrchidAgentsConfig(agents=agents)
+
+
+def _oauth_server(name: str) -> OrchidMCPServerConfig:
+    return OrchidMCPServerConfig(
+        name=name,
+        url=f"https://{name}.example.com/mcp",
+        auth=OrchidMCPAuthConfig(mode="oauth"),
+    )
 
 
 class TestMCPAuthRegistry:
@@ -38,106 +51,6 @@ class TestMCPAuthRegistry:
         assert registry.empty
         assert registry.oauth_servers == {}
 
-    def test_resolves_client_secret_from_env(self, monkeypatch):
-        """``client_secret_env`` → env var → stored on OrchidMCPOAuthServerInfo.
-
-        Regression for confidential-client OAuth flows (e.g. Docebo's
-        ``authorization_code`` grant).  The YAML holds only the env-var
-        *name*; the actual secret is resolved once at ``from_config``
-        time so callers never have to poke ``os.environ`` again.
-        """
-        monkeypatch.setenv("CRM_OAUTH_SECRET", "super-secret-value")
-        config = _make_config(
-            {
-                "sales": OrchidAgentConfig(
-                    description="test",
-                    prompt="test",
-                    mcp_servers=[
-                        OrchidMCPServerConfig(
-                            name="ext-crm",
-                            url="https://crm.example.com/mcp",
-                            auth=OrchidMCPAuthConfig(
-                                mode="oauth",
-                                client_id="orchid-crm",
-                                client_secret_env="CRM_OAUTH_SECRET",
-                                authorization_endpoint="https://crm.example.com/oauth2/authorize",
-                                token_endpoint="https://crm.example.com/oauth2/token",
-                                scopes="openid crm.read",
-                            ),
-                        ),
-                    ],
-                ),
-            }
-        )
-        registry = OrchidMCPAuthRegistry.from_config(config)
-        info = registry.get_server("ext-crm")
-        assert info is not None
-        assert info.client_secret == "super-secret-value"
-
-    def test_missing_client_secret_env_warns_and_defaults_empty(self, monkeypatch, caplog):
-        """Unset env var → empty client_secret + a WARNING log line.
-
-        This is the 'misconfigured' path: the YAML declared a secret is
-        needed but the operator forgot to populate the env.  We don't
-        want to crash — the public-client (PKCE-only) flow still works
-        if the IdP allows it — but we MUST log loudly so the mistake
-        is visible in container startup logs.
-        """
-        monkeypatch.delenv("UNSET_OAUTH_SECRET", raising=False)
-        config = _make_config(
-            {
-                "sales": OrchidAgentConfig(
-                    description="test",
-                    prompt="test",
-                    mcp_servers=[
-                        OrchidMCPServerConfig(
-                            name="ext-crm",
-                            url="https://crm.example.com/mcp",
-                            auth=OrchidMCPAuthConfig(
-                                mode="oauth",
-                                client_id="orchid-crm",
-                                client_secret_env="UNSET_OAUTH_SECRET",
-                                authorization_endpoint="https://crm.example.com/oauth2/authorize",
-                                token_endpoint="https://crm.example.com/oauth2/token",
-                            ),
-                        ),
-                    ],
-                ),
-            }
-        )
-        with caplog.at_level("WARNING", logger="orchid_ai.mcp.auth_registry"):
-            registry = OrchidMCPAuthRegistry.from_config(config)
-        info = registry.get_server("ext-crm")
-        assert info is not None
-        assert info.client_secret == ""
-        assert any("UNSET_OAUTH_SECRET" in r.message for r in caplog.records)
-
-    def test_no_client_secret_env_leaves_secret_empty(self):
-        """Public clients (PKCE-only) omit ``client_secret_env`` entirely."""
-        config = _make_config(
-            {
-                "sales": OrchidAgentConfig(
-                    description="test",
-                    prompt="test",
-                    mcp_servers=[
-                        OrchidMCPServerConfig(
-                            name="ext-crm",
-                            url="https://crm.example.com/mcp",
-                            auth=OrchidMCPAuthConfig(
-                                mode="oauth",
-                                client_id="orchid-crm",
-                                issuer="https://auth.crm.example.com",
-                            ),
-                        ),
-                    ],
-                ),
-            }
-        )
-        registry = OrchidMCPAuthRegistry.from_config(config)
-        info = registry.get_server("ext-crm")
-        assert info is not None
-        assert info.client_secret == ""
-
     def test_discovers_oauth_servers(self):
         config = _make_config(
             {
@@ -146,16 +59,7 @@ class TestMCPAuthRegistry:
                     prompt="test",
                     mcp_servers=[
                         OrchidMCPServerConfig(name="internal", url="http://localhost/mcp"),
-                        OrchidMCPServerConfig(
-                            name="ext-crm",
-                            url="https://crm.example.com/mcp",
-                            auth=OrchidMCPAuthConfig(
-                                mode="oauth",
-                                client_id="orchid-crm",
-                                issuer="https://auth.crm.example.com",
-                                scopes="openid crm.read",
-                            ),
-                        ),
+                        _oauth_server("ext-crm"),
                     ],
                 ),
             }
@@ -165,27 +69,49 @@ class TestMCPAuthRegistry:
         assert "ext-crm" in registry.oauth_servers
         info = registry.get_server("ext-crm")
         assert info is not None
-        assert info.client_id == "orchid-crm"
+        assert info.server_name == "ext-crm"
         assert info.agent_names == ("sales",)
+
+    def test_info_contains_no_static_credentials(self):
+        """Registry info is intentionally minimal — credentials live in the discovery store."""
+        config = _make_config(
+            {
+                "sales": OrchidAgentConfig(
+                    description="t",
+                    prompt="t",
+                    mcp_servers=[_oauth_server("ext-crm")],
+                ),
+            }
+        )
+        registry = OrchidMCPAuthRegistry.from_config(config)
+        info = registry.get_server("ext-crm")
+        assert info is not None
+        for legacy in (
+            "client_id",
+            "client_secret",
+            "authorization_endpoint",
+            "token_endpoint",
+            "scopes",
+            "issuer",
+        ):
+            assert not hasattr(info, legacy), (
+                f"registry info leaked legacy field '{legacy}' — belongs in the "
+                f"OrchidMCPClientRegistrationStore, not the registry"
+            )
 
     def test_merges_agent_names_for_same_server(self):
         """Same MCP server in multiple agents → merged agent_names."""
-        crm_auth = OrchidMCPAuthConfig(mode="oauth", client_id="crm", issuer="https://auth.crm.com")
         config = _make_config(
             {
                 "sales": OrchidAgentConfig(
                     description="sales",
-                    prompt="test",
-                    mcp_servers=[
-                        OrchidMCPServerConfig(name="ext-crm", url="https://crm/mcp", auth=crm_auth),
-                    ],
+                    prompt="t",
+                    mcp_servers=[_oauth_server("ext-crm")],
                 ),
                 "support": OrchidAgentConfig(
                     description="support",
-                    prompt="test",
-                    mcp_servers=[
-                        OrchidMCPServerConfig(name="ext-crm", url="https://crm/mcp", auth=crm_auth),
-                    ],
+                    prompt="t",
+                    mcp_servers=[_oauth_server("ext-crm")],
                 ),
             }
         )
@@ -200,13 +126,7 @@ class TestMCPAuthRegistry:
                 "agent1": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    mcp_servers=[
-                        OrchidMCPServerConfig(
-                            name="ext",
-                            url="https://ext/mcp",
-                            auth=OrchidMCPAuthConfig(mode="oauth", client_id="x"),
-                        ),
-                    ],
+                    mcp_servers=[_oauth_server("ext")],
                 ),
             }
         )
@@ -226,11 +146,29 @@ class TestMCPAuthRegistry:
                 "agent1": OrchidAgentConfig(
                     description="test",
                     prompt="test",
-                    mcp_servers=[
-                        OrchidMCPServerConfig(name="local", url="http://localhost/mcp"),
-                    ],
+                    mcp_servers=[OrchidMCPServerConfig(name="local", url="http://localhost/mcp")],
                 ),
             }
         )
         registry = OrchidMCPAuthRegistry.from_config(config)
         assert registry.empty
+
+    def test_child_agent_names_qualified(self):
+        """Child-agent references are prefixed ``{parent}.{child}``."""
+        parent = OrchidAgentConfig(
+            description="parent",
+            prompt="t",
+            mcp_servers=[],
+            children={
+                "child-a": OrchidAgentConfig(
+                    description="child",
+                    prompt="t",
+                    mcp_servers=[_oauth_server("ext")],
+                ),
+            },
+        )
+        config = _make_config({"parent": parent})
+        registry = OrchidMCPAuthRegistry.from_config(config)
+        info = registry.get_server("ext")
+        assert info is not None
+        assert info.agent_names == ("parent.child-a",)

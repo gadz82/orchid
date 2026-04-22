@@ -30,7 +30,10 @@ from .core.identity import OrchidIdentityError, OrchidIdentityResolver
 from .core.mcp import (
     OrchidMCPAuthRequiredError,
     OrchidMCPClient,
+    OrchidMCPClientRegistration,
+    OrchidMCPClientRegistrationStore,
     OrchidMCPDiscoverable,
+    OrchidMCPDiscoveryError,
     OrchidMCPTokenRecord,
     OrchidMCPTokenStore,
     OrchidMCPToolCaller,
@@ -50,6 +53,11 @@ from .graph.supervisor import OrchidRoutingDecision
 from .guardrails import build_guardrail_chain, register_guardrail
 from .llm_factory import build_chat_model
 from .mcp.auth_registry import OrchidMCPAuthRegistry, OrchidMCPOAuthServerInfo
+from .mcp.discovery import (
+    OrchidMCPAuthDiscovery,
+    extract_resource_metadata_url,
+    probe_mcp_server_for_resource_metadata,
+)
 from .mcp.oauth_state import (
     OrchidInMemoryOAuthStateStore,
     OrchidOAuthPendingState,
@@ -61,6 +69,8 @@ from .observability.callbacks import OrchidMetricsHandler
 from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
 from .persistence.base import OrchidChatStorage
 from .persistence.factory import build_chat_storage
+from .persistence.mcp_client_registration_factory import build_mcp_client_registration_store
+from .persistence.mcp_client_registration_sqlite import OrchidSQLiteMCPClientRegistrationStore
 from .persistence.mcp_token_factory import build_mcp_token_store
 from .persistence.mcp_token_sqlite import OrchidSQLiteMCPTokenStore
 from .persistence.sqlite import OrchidSQLiteChatStorage
@@ -89,6 +99,7 @@ __all__ = [
     "OrchidIdentityError",
     "OrchidIdentityResolver",
     "OrchidMCPClient",
+    "OrchidMCPClientRegistrationStore",
     "OrchidMCPDiscoverable",
     "OrchidMCPToolCaller",
     "OrchidMCPTokenStore",
@@ -98,9 +109,14 @@ __all__ = [
     "OrchidVectorWriter",
     # ── Data / result types ───────────────────────────
     "Document",
+    "OrchidMCPAuthDiscovery",
     "OrchidMCPAuthRegistry",
     "OrchidMCPAuthRequiredError",
+    "OrchidMCPClientRegistration",
+    "OrchidMCPDiscoveryError",
     "OrchidMCPOAuthServerInfo",
+    "extract_resource_metadata_url",
+    "probe_mcp_server_for_resource_metadata",
     "OrchidMCPTokenRecord",
     "OrchidMCPToolResult",
     "OrchidRAGScope",
@@ -123,6 +139,7 @@ __all__ = [
     "register_guardrail",
     # ── Built-in backends ─────────────────────────────
     "OrchidSQLiteChatStorage",
+    "OrchidSQLiteMCPClientRegistrationStore",
     "OrchidSQLiteMCPTokenStore",
     # ── Runtime + observability ───────────────────────
     "OrchidRuntime",
@@ -132,6 +149,7 @@ __all__ = [
     "build_chat_storage",
     "build_checkpointer",
     "build_graph",
+    "build_mcp_client_registration_store",
     "build_mcp_token_store",
     "build_reader",
     "iter_entry_point_plugins",

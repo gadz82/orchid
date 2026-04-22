@@ -2,7 +2,7 @@
 Qdrant implementation of OrchidVectorStoreRepository — multi-tenant (ADR-014).
 
 Multi-tenancy strategy:
-  - **One Qdrant collection per domain** (e.g. ``learning``, ``notifications``).
+  - **One Qdrant collection per domain** (e.g. ``knowledge-base``, ``uploads``).
   - **Payload-based tenant filtering**: every point has a ``tenant_id`` field
     whose value is the tenant identifier from the resolved identity.
   - **Shared data** uses ``tenant_id = "__shared__"`` and is included in
@@ -47,7 +47,7 @@ class QdrantRepository(OrchidVectorStoreRepository):
     """
     Qdrant-backed vector store with per-tenant isolation (ADR-014).
 
-    Each ``namespace`` maps to a Qdrant **collection** (e.g. ``learning``).
+    Each ``namespace`` maps to a Qdrant **collection** (e.g. ``knowledge-base``).
     Tenant isolation is enforced via a ``tenant_id`` payload field on every
     point, and all reads filter on ``[tenant_id, "__shared__"]``.
     """

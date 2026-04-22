@@ -65,9 +65,7 @@ class StreamableHttpMCPClient(OrchidMCPClient):
         server_name: str = "",
         auth_mode: str = "passthrough",
         token_store: Any | None = None,  # OrchidMCPTokenStore (lazy import to avoid circular)
-        token_endpoint: str = "",
-        client_id: str = "",
-        client_secret: str = "",
+        registration_store: Any | None = None,  # OrchidMCPClientRegistrationStore
     ) -> None:
         self._url = url
         self._server_type = server_type
@@ -78,9 +76,10 @@ class StreamableHttpMCPClient(OrchidMCPClient):
         self._server_name = server_name or url
         self._auth_mode = auth_mode
         self._token_store = token_store
-        self._token_endpoint = token_endpoint
-        self._client_id = client_id
-        self._client_secret = client_secret
+        #: Per-server discovered metadata + DCR credentials — consulted
+        #: on every oauth-mode token refresh so we use the right
+        #: endpoints and auth method without anything in YAML.
+        self._registration_store = registration_store
 
     @property
     def server_url(self) -> str:
@@ -248,33 +247,65 @@ class StreamableHttpMCPClient(OrchidMCPClient):
     async def _refresh_oauth_token(self, record: Any) -> Any:
         """Exchange a refresh token for a new access token.
 
-        On failure, returns the stale record unchanged — the caller
+        Endpoints + client credentials are fetched from the
+        :class:`OrchidMCPClientRegistrationStore` row that discovery
+        populated — nothing is read from YAML for oauth-mode refresh.
+        On failure, returns the stale record unchanged; the caller
         checks ``is_expired`` and raises ``OrchidMCPAuthRequiredError``.
         """
         import time as _time
 
-        if not self._token_endpoint:
-            logger.warning("[MCP] No token_endpoint for '%s' — cannot refresh", self._server_name)
+        if self._registration_store is None:
+            logger.warning(
+                "[MCP] No registration_store for '%s' — cannot refresh oauth token",
+                self._server_name,
+            )
+            return record
+
+        registration = await self._registration_store.get(self._server_name)
+        if registration is None or not registration.token_endpoint:
+            logger.warning(
+                "[MCP] No stored registration for '%s' — cannot refresh",
+                self._server_name,
+            )
             return record
 
         try:
             import httpx
 
-            # Mirror the token-exchange path in ``orchid_api.routers.mcp_auth``:
-            # confidential clients authenticate via HTTP Basic (RFC 6749
-            # §2.3.1); public clients pass ``client_id`` in the form body.
-            request_auth = (self._client_id, self._client_secret) if self._client_secret else None
+            # Send client credentials via the request body
+            # ("client_secret_post").  Discovery records the advertised
+            # ``token_endpoint_auth_methods_supported`` on the
+            # registration; when the authorization server declares Basic
+            # we respect that, otherwise we default to body-form —
+            # duplicating ``client_id`` across Basic + body breaks
+            # strict OAuth2 servers with ``invalid_request``.
+            request_data: dict[str, Any] = {
+                "grant_type": "refresh_token",
+                "refresh_token": record.refresh_token,
+                "client_id": registration.client_id,
+            }
+            basic_auth = None
+            if registration.client_secret:
+                if registration.uses_basic_auth:
+                    basic_auth = (registration.client_id, registration.client_secret)
+                else:
+                    request_data["client_secret"] = registration.client_secret
+
             async with httpx.AsyncClient(timeout=15.0) as http:
                 resp = await http.post(
-                    self._token_endpoint,
-                    data={
-                        "grant_type": "refresh_token",
-                        "refresh_token": record.refresh_token,
-                        "client_id": self._client_id,
-                    },
-                    auth=request_auth,
+                    registration.token_endpoint,
+                    data=request_data,
+                    auth=basic_auth,
                 )
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    logger.warning(
+                        "[MCP] Refresh rejected by '%s' (%d): %s",
+                        registration.token_endpoint,
+                        resp.status_code,
+                        resp.text[:500],
+                    )
+                    return record
                 data = resp.json()
 
             from ..core.mcp import OrchidMCPTokenRecord

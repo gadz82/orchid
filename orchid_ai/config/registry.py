@@ -3,8 +3,8 @@ Agent class registry — maps YAML ``class`` values to Python classes.
 
 Resolution order:
   1. ``None`` → ``GenericAgent`` (default, config-driven)
-  2. Short name in registry (e.g. ``"learning"``) → pre-registered class
-  3. Dotted import path (e.g. ``"orchid_ai.agents.learning.LearningAgent"``) → dynamic import
+  2. Short name in registry (e.g. ``"support"``) → pre-registered class
+  3. Dotted import path (e.g. ``"myapp.agents.support.SupportAgent"``) → dynamic import
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def get_class(class_path: str | None) -> type[OrchidAgent]:
     class_path : str | None
         - ``None`` → returns ``GenericAgent``
         - Short name in registry → returns pre-registered class
-        - Dotted path (e.g. ``"orchid_ai.agents.learning.LearningAgent"``) → dynamic import
+        - Dotted path (e.g. ``"myapp.agents.support.SupportAgent"``) → dynamic import
 
     Returns
     -------

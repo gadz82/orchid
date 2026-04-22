@@ -36,10 +36,11 @@ from typing import Any
 from .config.loader import load_config
 from .config.schema import OrchidAgentsConfig
 from .config.yaml_env import apply_yaml_to_env
-from .core.mcp import OrchidMCPTokenStore
+from .core.mcp import OrchidMCPClientRegistrationStore, OrchidMCPTokenStore
 from .core.repository import OrchidVectorReader, OrchidVectorStoreAdmin
 from .persistence.base import OrchidChatStorage
 from .persistence.factory import build_chat_storage
+from .persistence.mcp_client_registration_factory import build_mcp_client_registration_store
 from .persistence.mcp_token_factory import build_mcp_token_store
 from .rag.factory import build_reader
 from .runtime import OrchidRuntime
@@ -56,6 +57,9 @@ _DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 _DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
 _DEFAULT_STORAGE_DSN = "~/.orchid/chats.db"
 _DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore"
+_DEFAULT_REGISTRATION_STORE_CLASS = (
+    "orchid_ai.persistence.mcp_client_registration_sqlite.OrchidSQLiteMCPClientRegistrationStore"
+)
 
 
 @dataclass
@@ -70,6 +74,7 @@ class _BootstrapResult:
     config: OrchidAgentsConfig
     chat_repo: OrchidChatStorage
     mcp_token_store: OrchidMCPTokenStore
+    mcp_client_registration_store: OrchidMCPClientRegistrationStore
 
 
 @dataclass(frozen=True)
@@ -92,6 +97,8 @@ class _ResolvedOverrides:
     extra_migrations_package: str | None
     token_store_class: str
     token_store_dsn: str
+    registration_store_class: str
+    registration_store_dsn: str
     checkpointer_type: str
     checkpointer_dsn: str
     startup_hook: str
@@ -112,6 +119,8 @@ async def _build_runtime(
     chat_extra_migrations_package: str | None = None,
     mcp_token_store_class: str = "",
     mcp_token_store_dsn: str = "",
+    mcp_client_registration_store_class: str = "",
+    mcp_client_registration_store_dsn: str = "",
     checkpointer_type: str = "",
     checkpointer_dsn: str = "",
     startup_hook: str = "",
@@ -184,6 +193,8 @@ async def _build_runtime(
         chat_extra_migrations_package=chat_extra_migrations_package,
         mcp_token_store_class=mcp_token_store_class,
         mcp_token_store_dsn=mcp_token_store_dsn,
+        mcp_client_registration_store_class=mcp_client_registration_store_class,
+        mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
         checkpointer_type=checkpointer_type,
         checkpointer_dsn=checkpointer_dsn,
         startup_hook=startup_hook,
@@ -196,8 +207,8 @@ async def _build_runtime(
     # ── 4. Reader + pre-created collections ───────────────────
     reader = await _prepare_reader(overrides, agents_config)
 
-    # ── 5. Persistence (chat storage + MCP token store) ──────
-    chat_repo, mcp_token_store = await _build_persistence(overrides)
+    # ── 5. Persistence (chat storage + MCP token + registration stores) ──
+    chat_repo, mcp_token_store, mcp_client_registration_store = await _build_persistence(overrides)
 
     # ── 6. Startup hook (optional) ───────────────────────────
     await _run_startup_hook(overrides.startup_hook, reader, startup_hook_kwargs)
@@ -207,6 +218,7 @@ async def _build_runtime(
         default_model=overrides.model,
         reader=reader,
         mcp_token_store=mcp_token_store,
+        mcp_client_registration_store=mcp_client_registration_store,
         **overrides.runtime_overrides,
     )
     await _attach_checkpointer(runtime, overrides.checkpointer_type, overrides.checkpointer_dsn)
@@ -224,6 +236,7 @@ async def _build_runtime(
         config=agents_config,
         chat_repo=chat_repo,
         mcp_token_store=mcp_token_store,
+        mcp_client_registration_store=mcp_client_registration_store,
     )
 
 
@@ -242,6 +255,8 @@ def _resolve_overrides(
     chat_extra_migrations_package: str | None,
     mcp_token_store_class: str,
     mcp_token_store_dsn: str,
+    mcp_client_registration_store_class: str,
+    mcp_client_registration_store_dsn: str,
     checkpointer_type: str,
     checkpointer_dsn: str,
     startup_hook: str,
@@ -263,6 +278,14 @@ def _resolve_overrides(
             mcp_token_store_class or os.environ.get("MCP_TOKEN_STORE_CLASS", "") or _DEFAULT_TOKEN_STORE_CLASS
         ),
         token_store_dsn=mcp_token_store_dsn or os.environ.get("MCP_TOKEN_STORE_DSN", "") or storage_dsn,
+        registration_store_class=(
+            mcp_client_registration_store_class
+            or os.environ.get("MCP_CLIENT_REGISTRATION_STORE_CLASS", "")
+            or _DEFAULT_REGISTRATION_STORE_CLASS
+        ),
+        registration_store_dsn=(
+            mcp_client_registration_store_dsn or os.environ.get("MCP_CLIENT_REGISTRATION_STORE_DSN", "") or storage_dsn
+        ),
         checkpointer_type=checkpointer_type or os.environ.get("CHECKPOINTER_TYPE", ""),
         checkpointer_dsn=checkpointer_dsn or os.environ.get("CHECKPOINTER_DSN", ""),
         startup_hook=startup_hook or os.environ.get("STARTUP_HOOK", ""),
@@ -305,11 +328,14 @@ async def _prepare_reader(
 
 async def _build_persistence(
     overrides: _ResolvedOverrides,
-) -> tuple[OrchidChatStorage, OrchidMCPTokenStore]:
-    """Initialise chat storage and MCP token store (idempotent ``init_db``).
+) -> tuple[OrchidChatStorage, OrchidMCPTokenStore, OrchidMCPClientRegistrationStore]:
+    """Initialise chat storage + MCP token store + registration store.
 
-    Both stores share the integrator ``extra_migrations_package`` (they
-    share the underlying DB), so a single YAML entry covers both.
+    All three stores share the integrator ``extra_migrations_package``
+    (they share the underlying DB), so a single YAML entry covers them
+    all.  Each ``init_db`` is idempotent — the v001 + v002 migrations
+    each ``CREATE TABLE IF NOT EXISTS`` so calling three stores against
+    the same DSN is safe.
     """
     chat_repo = build_chat_storage(
         class_path=overrides.storage_class,
@@ -324,7 +350,14 @@ async def _build_persistence(
         extra_migrations_package=overrides.extra_migrations_package,
     )
     await mcp_token_store.init_db()
-    return chat_repo, mcp_token_store
+
+    mcp_client_registration_store = build_mcp_client_registration_store(
+        class_path=overrides.registration_store_class,
+        dsn=overrides.registration_store_dsn,
+        extra_migrations_package=overrides.extra_migrations_package,
+    )
+    await mcp_client_registration_store.init_db()
+    return chat_repo, mcp_token_store, mcp_client_registration_store
 
 
 async def _run_startup_hook(
@@ -412,6 +445,9 @@ async def _teardown_runtime(result: _BootstrapResult) -> None:
 
         await shutdown_checkpointer(result.runtime.checkpointer)
         result.runtime.checkpointer = None
+
+    if result.mcp_client_registration_store is not None:
+        await result.mcp_client_registration_store.close()
 
     if result.mcp_token_store is not None:
         await result.mcp_token_store.close()

@@ -41,13 +41,15 @@ All ABCs live in `orchid_ai/core/mcp.py` and `orchid_ai/mcp/oauth_state.py`.
 
 ## Auth modes (per-server)
 
-Configured in `agents.yaml` via `OrchidMCPServerConfig.auth`:
+Configured in `agents.yaml` via `OrchidMCPServerConfig.auth`. Only `mode`
+is carried in YAML — everything else is either handled by the graph
+(`passthrough`) or discovered at runtime (`oauth`).
 
 | Mode | Behaviour |
 |------|-----------|
 | `none` (default) | No auth headers. For local/unauthenticated servers. |
-| `passthrough` | Forwards the graph's `OrchidAuthContext` bearer token on every MCP call. |
-| `oauth` | Per-user token resolved from `OrchidMCPTokenStore`, auto-refreshed. |
+| `passthrough` | Forwards the graph's `OrchidAuthContext` bearer token on every MCP call — ADR-010, unchanged. |
+| `oauth` | **MCP 2025-03-26 flow.** On the first 401 the framework runs RFC 9728 → RFC 8414 → RFC 7591 discovery and dynamically registers a client. Per-user tokens are stored in `OrchidMCPTokenStore`, per-server endpoints + DCR credentials in `OrchidMCPClientRegistrationStore`. |
 
 ```yaml
 mcp_servers:
@@ -60,16 +62,38 @@ mcp_servers:
     auth:
       mode: passthrough          # uses graph bearer token
 
-  - name: google-drive
-    url: https://drive-mcp.example.com/mcp
+  - name: external-crm
+    url: https://crm.example.com/mcp
     auth:
-      mode: oauth
-      authorize_url: https://accounts.google.com/o/oauth2/v2/auth
-      token_url: https://oauth2.googleapis.com/token
-      scopes: ["https://www.googleapis.com/auth/drive.readonly"]
-      client_id_env: GDRIVE_CLIENT_ID
-      client_secret_env: GDRIVE_CLIENT_SECRET
+      mode: oauth                # that's it — framework handles the rest
 ```
+
+## MCP 2025-03-26 authorization flow (what happens on `mode: oauth`)
+
+1. First tool call hits the MCP server with no auth.
+2. Server returns `401 + WWW-Authenticate: Bearer resource_metadata="…"`.
+3. Framework (via `OrchidMCPAuthDiscovery` in `discovery.py`) fetches:
+   - **Protected Resource Metadata** (RFC 9728) — names the auth server(s).
+   - **Authorization Server Metadata** (RFC 8414) — endpoints + supported
+     auth methods / grant types / PKCE / scopes.
+   - **Dynamic Client Registration** (RFC 7591) — POST's client metadata
+     (redirect URI + supported grants) and receives a fresh `client_id`
+     (+ optional `client_secret`) for that server.
+4. The resulting `OrchidMCPClientRegistration` is persisted — one row per
+   MCP server — so every subsequent container lifetime reuses the same
+   registration instead of creating a new one on each boot.
+5. `OrchidMCPAuthRequiredError` is raised to the agent boundary; the
+   API's `/mcp/auth/*` router drives the browser half of the dance
+   (authorization URL + PKCE callback + token storage).
+6. Subsequent user turns resolve the per-user token from
+   `OrchidMCPTokenStore` and auto-refresh against the discovered token
+   endpoint using the stored credentials.
+
+The authorization server MUST advertise `registration_endpoint` in its
+RFC 8414 metadata. If it doesn't, discovery fails with an
+`OrchidMCPDiscoveryError` naming the missing piece. Integrators whose
+IdP lacks DCR pre-seed `OrchidMCPClientRegistrationStore` with the
+relevant endpoints + credentials before first use.
 
 ## Per-request wiring (graph state)
 
@@ -116,6 +140,11 @@ RedisStateStore)` at startup — the factory then accepts the short name.
 - Using `passthrough` auth for a server that requires per-user OAuth. The
   graph's bearer token is a single-identity token; per-user APIs need
   `oauth` mode.
-- Hardcoding OAuth client secrets in `agents.yaml`. Use the `*_env`
-  suffixed keys (e.g. `client_secret_env: GDRIVE_CLIENT_SECRET`) to
-  resolve from the process environment instead.
+- Putting client credentials or endpoint URLs in `agents.yaml`. The
+  MCP 2025-03-26 schema accepts only `mode:` — anything else is either
+  rejected by Pydantic or silently ignored. Endpoints + credentials
+  live in the discovered `OrchidMCPClientRegistration` row.
+- Pointing at an authorization server that doesn't expose RFC 7591
+  dynamic client registration. Discovery fails loudly with an
+  `OrchidMCPDiscoveryError`. For IdPs without DCR, seed
+  `OrchidMCPClientRegistrationStore` manually before first use.

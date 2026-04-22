@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Callable
 
 from langchain_core.language_models import BaseChatModel
 
-from .core.mcp import OrchidMCPClient, OrchidMCPTokenStore
+from .core.mcp import OrchidMCPClient, OrchidMCPClientRegistrationStore, OrchidMCPTokenStore
 from .core.repository import OrchidVectorReader
 
 if TYPE_CHECKING:
@@ -84,6 +84,7 @@ class OrchidRuntime:
     chat_model: BaseChatModel | None = None
     mcp_client_factory: MCPClientFactory | None = None
     mcp_token_store: OrchidMCPTokenStore | None = None
+    mcp_client_registration_store: OrchidMCPClientRegistrationStore | None = None
     mcp_auth_registry: OrchidMCPAuthRegistry | None = field(default=None)
     checkpointer: BaseCheckpointSaver | None = None
 
@@ -107,13 +108,19 @@ class OrchidRuntime:
         """Return the configured MCP factory, falling back to the default.
 
         When no explicit ``mcp_client_factory`` was supplied, returns a
-        callable bound to this runtime's :attr:`mcp_token_store`, so
-        ``oauth`` servers can resolve per-user tokens.
+        callable bound to this runtime's token + client-registration
+        stores so ``oauth`` servers can resolve per-user tokens and
+        refresh them against the discovered token endpoint.
         """
         if self.mcp_client_factory is not None:
             return self.mcp_client_factory
         token_store = self.mcp_token_store
-        return lambda cfg: self.default_mcp_client_factory(cfg, token_store=token_store)
+        registration_store = self.mcp_client_registration_store
+        return lambda cfg: self.default_mcp_client_factory(
+            cfg,
+            token_store=token_store,
+            registration_store=registration_store,
+        )
 
     # ── Default MCP factory (override in subclasses) ────────────
 
@@ -122,27 +129,22 @@ class OrchidRuntime:
         server_config: OrchidMCPServerConfig,
         *,
         token_store: OrchidMCPTokenStore | None = None,
+        registration_store: OrchidMCPClientRegistrationStore | None = None,
     ) -> OrchidMCPClient:
         """Create a ``StreamableHttpMCPClient`` from the server config.
 
         Override in a subclass to change the default transport / client
         without having to supply a full ``mcp_client_factory`` callable.
 
-        Auth modes:
+        Auth modes (unchanged contract):
           - ``none`` (default): no auth headers sent.
           - ``passthrough``: forwards the graph ``OrchidAuthContext`` bearer token.
-          - ``oauth``: resolves per-user tokens from the *token_store*.
+          - ``oauth``: resolves per-user tokens from *token_store* and
+            refreshes against the discovered endpoint persisted in
+            *registration_store* (populated by the API's auth router on
+            first Connect click).
         """
         from .mcp.client import StreamableHttpMCPClient
-
-        # Resolve the client secret from the configured env-var name.
-        # Mirrors ``OrchidMCPAuthRegistry`` — YAML holds the NAME, never
-        # the value, so secrets stay out of source control.
-        import os as _os
-
-        client_secret = ""
-        if server_config.auth.client_secret_env:
-            client_secret = _os.environ.get(server_config.auth.client_secret_env, "")
 
         return StreamableHttpMCPClient(
             server_config.url,
@@ -152,7 +154,5 @@ class OrchidRuntime:
             server_name=server_config.name,
             auth_mode=server_config.auth.mode,
             token_store=token_store,
-            token_endpoint=server_config.auth.token_endpoint,
-            client_id=server_config.auth.client_id,
-            client_secret=client_secret,
+            registration_store=registration_store,
         )

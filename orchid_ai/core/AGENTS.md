@@ -58,7 +58,7 @@ The `scope` parameter in `retrieve()` is a `OrchidRAGScope` — NOT a raw dict. 
 
 ```python
 OrchidAgent(ABC)
-  .name → str              # unique identifier (e.g., "learning")
+  .name → str              # unique identifier (e.g., "knowledge-base")
   .description → str       # Supervisor reads this to decide routing
   .rag_namespace → str     # Qdrant collection name
   .run(state) → OrchidAgentState # the main agent logic
