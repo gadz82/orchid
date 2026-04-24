@@ -11,7 +11,10 @@ import pytest
 
 from orchid_ai.core.auth_config import (
     OrchidAuthConfigProvider,
+    OrchidAuthExchangeClient,
+    OrchidAuthExchangeError,
     OrchidUpstreamOAuthConfig,
+    OrchidUpstreamTokenResponse,
 )
 
 
@@ -86,6 +89,21 @@ def test_config_optional_fields_default_cleanly() -> None:
     # Platform domain defaults to None — downstream consumers fall
     # back to their own heuristics (e.g. email-domain derivation).
     assert cfg.auth_domain is None
+    # Exchange-via-api defaults to False so Phase 1 deployments keep
+    # doing their own code exchange.
+    assert cfg.exchange_via_api is False
+
+
+def test_config_opts_in_to_exchange_via_api() -> None:
+    """Non-default value flips on the server-side exchange proxy flag."""
+    cfg = OrchidUpstreamOAuthConfig(
+        issuer_url="i",
+        authorization_endpoint="a",
+        token_endpoint="t",
+        client_id="c",
+        exchange_via_api=True,
+    )
+    assert cfg.exchange_via_api is True
 
 
 def test_config_carries_json_path_hints() -> None:
@@ -127,3 +145,77 @@ def test_config_disallows_extra_kwargs() -> None:
             client_id="c",
             extra="nope",  # type: ignore[call-arg]
         )
+
+
+# ── OrchidUpstreamTokenResponse dataclass shape ────────────
+
+
+def test_token_response_is_frozen() -> None:
+    r = OrchidUpstreamTokenResponse(access_token="at-1")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        r.access_token = "at-2"  # type: ignore[misc]
+
+
+def test_token_response_defaults() -> None:
+    r = OrchidUpstreamTokenResponse(access_token="at-1")
+    assert r.token_type == "Bearer"
+    assert r.refresh_token is None
+    assert r.expires_in is None
+    assert r.scope is None
+
+
+# ── OrchidAuthExchangeClient ABC ───────────────────────────
+
+
+def test_exchange_client_is_abstract() -> None:
+    with pytest.raises(TypeError):
+        OrchidAuthExchangeClient()  # type: ignore[abstract]
+
+
+@pytest.mark.asyncio
+async def test_concrete_exchange_client_roundtrip() -> None:
+    """A minimal subclass returning a canned response must satisfy the ABC."""
+
+    class FakeExchange(OrchidAuthExchangeClient):
+        async def exchange_code(
+            self,
+            *,
+            code: str,
+            redirect_uri: str,
+            code_verifier: str | None = None,
+        ) -> OrchidUpstreamTokenResponse:
+            return OrchidUpstreamTokenResponse(
+                access_token=f"at-for-{code}",
+                refresh_token="rt-xyz",
+                expires_in=3600,
+                scope="api",
+            )
+
+    r = await FakeExchange().exchange_code(
+        code="abc",
+        redirect_uri="http://localhost/cb",
+        code_verifier="v",
+    )
+    assert r.access_token == "at-for-abc"
+    assert r.refresh_token == "rt-xyz"
+    assert r.expires_in == 3600
+    assert r.scope == "api"
+
+
+# ── OrchidAuthExchangeError ────────────────────────────────
+
+
+def test_exchange_error_carries_status_code() -> None:
+    err = OrchidAuthExchangeError("invalid_grant", status_code=400)
+    assert str(err) == "invalid_grant"
+    assert err.status_code == 400
+
+
+def test_exchange_error_default_status_code_is_zero() -> None:
+    err = OrchidAuthExchangeError("unreachable")
+    assert err.status_code == 0
+
+
+def test_exchange_error_is_exception_subclass() -> None:
+    with pytest.raises(OrchidAuthExchangeError):
+        raise OrchidAuthExchangeError("boom")

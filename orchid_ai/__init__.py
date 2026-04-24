@@ -26,7 +26,13 @@ from .core.guardrails import (
     OrchidGuardrailDirection,
     OrchidGuardrailResult,
 )
-from .core.auth_config import OrchidAuthConfigProvider, OrchidUpstreamOAuthConfig
+from .core.auth_config import (
+    OrchidAuthConfigProvider,
+    OrchidAuthExchangeClient,
+    OrchidAuthExchangeError,
+    OrchidUpstreamOAuthConfig,
+    OrchidUpstreamTokenResponse,
+)
 from .core.identity import OrchidIdentityError, OrchidIdentityResolver
 from .core.mcp import (
     OrchidMCPAuthRequiredError,
@@ -97,6 +103,8 @@ __all__ = [
     "OrchidAgentState",
     "OrchidAuthConfigProvider",
     "OrchidAuthContext",
+    "OrchidAuthExchangeClient",
+    "OrchidAuthExchangeError",
     "OrchidChatStorage",
     "OrchidIdentityError",
     "OrchidIdentityResolver",
@@ -125,6 +133,7 @@ __all__ = [
     "OrchidRoutingDecision",
     "OrchidSearchResult",
     "OrchidUpstreamOAuthConfig",
+    "OrchidUpstreamTokenResponse",
     # ── MCP OAuth state store ─────────────────────────
     "OrchidInMemoryOAuthStateStore",
     "OrchidOAuthPendingState",
