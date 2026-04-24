@@ -187,6 +187,40 @@ ruff format orchid_ai/        # format
 
 Switching models requires wiping and re-indexing Qdrant collections.
 
+## MCP gateway exposure config (optional)
+
+`OrchidAgentsConfig.mcp_gateway` lets integrators customise how Orchid's
+MCP-facing gateway (e.g. `orchid-mcp`) presents itself to host LLMs:
+
+- **Tool overrides** — replace default `title` / `description` for
+  specific tool names.
+- **MCP Prompts** — pre-canned templates with `{{var}}` substitution.
+
+The block is **entirely optional** — a YAML without `mcp_gateway:`
+parses into an empty config (`default_factory`), and nothing in
+`orchid/` depends on it being populated. Data-only: the framework
+library does not render templates or track which tools a gateway
+actually exposes (platform-agnostic, keeps the hard-rule boundary).
+
+```yaml
+mcp_gateway:
+  tools:
+    orchid_ask:
+      title: "Ask the Docebo AI"
+      description: "Route a question to the Docebo learning agents."
+  prompts:
+    - name: compliance_report
+      description: "Generate a compliance-completion report."
+      arguments:
+        - { name: department, required: true }
+      template: |
+        Produce a compliance report for {{department}}.
+```
+
+Classes live in `orchid_ai/config/mcp_gateway.py`. Env-var overrides +
+external prompts-file loading happen upstream in `orchid-api`'s
+`mcp_gateway.py`; the framework library has no env-var logic.
+
 ## Common Pitfalls
 
 - **Importing qdrant_client in agent code.** Use `self.reader.retrieve(...)` instead.

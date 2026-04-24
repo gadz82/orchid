@@ -1070,6 +1070,34 @@ Always use `OrchidRAGScope` -- never raw `tenant_id` filters.
 
 Switching models requires wiping and re-indexing Qdrant collections.
 
+## MCP gateway exposure (optional)
+
+`OrchidAgentsConfig` includes an **optional** `mcp_gateway` field that
+lets integrators customise how Orchid is presented to MCP clients via
+the `orchid-mcp` gateway — tool title/description overrides + MCP
+Prompt templates. The block is entirely optional — empty by default,
+ignored when not populated.
+
+```yaml
+# agents.yaml
+mcp_gateway:
+  tools:
+    orchid_ask:
+      title: "Ask the Docebo AI"
+      description: "Route questions to the Docebo learning agents."
+  prompts:
+    - name: compliance_report
+      description: "Generate a compliance-completion report."
+      arguments:
+        - { name: department, required: true }
+      template: |
+        Produce a compliance report for {{department}}.
+```
+
+Exposed via `orchid-api`'s `GET /mcp-gateway/config` endpoint. Env-var
+overrides (`ORCHID_MCP_GATEWAY_TOOL_*`, `ORCHID_MCP_GATEWAY_PROMPTS_FILE`)
+live in `orchid-api`, not here.
+
 ## Testing
 
 ```bash

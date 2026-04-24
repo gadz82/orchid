@@ -18,6 +18,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from .mcp_gateway import OrchidMCPGatewayConfig
+
 
 # ── Leaf configs ──────────────────────────────────────────────
 
@@ -484,6 +486,13 @@ class OrchidAgentsConfig(BaseModel):
 
     # Global guardrails — applied to all requests (ADR-018)
     guardrails: OrchidGuardrailsConfig = Field(default_factory=OrchidGuardrailsConfig)
+
+    # MCP gateway exposure — tool title/description overrides + MCP Prompts.
+    # Consumed by any MCP-facing gateway (e.g. ``orchid-mcp``) to customise
+    # how Orchid is presented to the host LLM.  Purely declarative — the
+    # framework library does not render or validate tool/prompt semantics,
+    # only the shape of the data.
+    mcp_gateway: OrchidMCPGatewayConfig = Field(default_factory=OrchidMCPGatewayConfig)
 
     agents: dict[str, OrchidAgentConfig] = Field(default_factory=dict)
 
