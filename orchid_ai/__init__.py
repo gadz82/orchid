@@ -46,6 +46,14 @@ from .core.mcp import (
     OrchidMCPToolCaller,
     OrchidMCPToolResult,
 )
+from .core.mcp_gateway_state import (
+    OrchidMCPGatewayAuthCode,
+    OrchidMCPGatewayAuthCodeStore,
+    OrchidMCPGatewayClient,
+    OrchidMCPGatewayClientStore,
+    OrchidMCPGatewayToken,
+    OrchidMCPGatewayTokenStore,
+)
 from .core.repository import (
     Document,
     OrchidSearchResult,
@@ -111,6 +119,9 @@ __all__ = [
     "OrchidMCPClient",
     "OrchidMCPClientRegistrationStore",
     "OrchidMCPDiscoverable",
+    "OrchidMCPGatewayAuthCodeStore",
+    "OrchidMCPGatewayClientStore",
+    "OrchidMCPGatewayTokenStore",
     "OrchidMCPToolCaller",
     "OrchidMCPTokenStore",
     "OrchidVectorReader",
@@ -124,6 +135,9 @@ __all__ = [
     "OrchidMCPAuthRequiredError",
     "OrchidMCPClientRegistration",
     "OrchidMCPDiscoveryError",
+    "OrchidMCPGatewayAuthCode",
+    "OrchidMCPGatewayClient",
+    "OrchidMCPGatewayToken",
     "OrchidMCPOAuthServerInfo",
     "extract_resource_metadata_url",
     "probe_mcp_server_for_resource_metadata",

@@ -191,6 +191,8 @@ class Orchid:
         mcp_token_store_dsn: str = "",
         mcp_client_registration_store_class: str = "",
         mcp_client_registration_store_dsn: str = "",
+        mcp_gateway_state_store_class: str = "",
+        mcp_gateway_state_store_dsn: str = "",
         checkpointer_type: str = "",
         checkpointer_dsn: str = "",
         startup_hook: str = "",
@@ -274,6 +276,8 @@ class Orchid:
             mcp_token_store_dsn=mcp_token_store_dsn,
             mcp_client_registration_store_class=mcp_client_registration_store_class,
             mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+            mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+            mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
             checkpointer_type=checkpointer_type,
             checkpointer_dsn=checkpointer_dsn,
             startup_hook=startup_hook,
@@ -560,12 +564,16 @@ class Orchid:
                 chat_repo=self._chat_repo,  # type: ignore[arg-type]
                 mcp_token_store=self._mcp_token_store,  # type: ignore[arg-type]
                 mcp_client_registration_store=self._runtime.mcp_client_registration_store,  # type: ignore[arg-type]
+                mcp_gateway_state_store=self._runtime.mcp_gateway_client_store,  # type: ignore[arg-type]
             )
         )
         self._mcp_token_store = None
         self._chat_repo = None
         if self._runtime is not None:
             self._runtime.mcp_client_registration_store = None
+            self._runtime.mcp_gateway_client_store = None
+            self._runtime.mcp_gateway_auth_code_store = None
+            self._runtime.mcp_gateway_token_store = None
 
     # ── Internal helpers ────────────────────────────────────
 

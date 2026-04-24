@@ -37,10 +37,14 @@ from .config.loader import load_config
 from .config.schema import OrchidAgentsConfig
 from .config.yaml_env import apply_yaml_to_env
 from .core.mcp import OrchidMCPClientRegistrationStore, OrchidMCPTokenStore
+from .core.mcp_gateway_state import (
+    OrchidMCPGatewayClientStore,
+)
 from .core.repository import OrchidVectorReader, OrchidVectorStoreAdmin
 from .persistence.base import OrchidChatStorage
 from .persistence.factory import build_chat_storage
 from .persistence.mcp_client_registration_factory import build_mcp_client_registration_store
+from .persistence.mcp_gateway_state_factory import build_mcp_gateway_state_store
 from .persistence.mcp_token_factory import build_mcp_token_store
 from .rag.factory import build_reader
 from .runtime import OrchidRuntime
@@ -60,6 +64,7 @@ _DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.OrchidSQLit
 _DEFAULT_REGISTRATION_STORE_CLASS = (
     "orchid_ai.persistence.mcp_client_registration_sqlite.OrchidSQLiteMCPClientRegistrationStore"
 )
+_DEFAULT_GATEWAY_STATE_STORE_CLASS = "orchid_ai.persistence.mcp_gateway_state_sqlite.OrchidSQLiteMCPGatewayStateStore"
 
 
 @dataclass
@@ -75,6 +80,10 @@ class _BootstrapResult:
     chat_repo: OrchidChatStorage
     mcp_token_store: OrchidMCPTokenStore
     mcp_client_registration_store: OrchidMCPClientRegistrationStore
+    #: The three inbound-gateway ABCs are implemented by a single
+    #: concrete class (see :func:`build_mcp_gateway_state_store`) —
+    #: we keep one typed reference for lifecycle management.
+    mcp_gateway_state_store: OrchidMCPGatewayClientStore
 
 
 @dataclass(frozen=True)
@@ -99,6 +108,8 @@ class _ResolvedOverrides:
     token_store_dsn: str
     registration_store_class: str
     registration_store_dsn: str
+    gateway_state_store_class: str
+    gateway_state_store_dsn: str
     checkpointer_type: str
     checkpointer_dsn: str
     startup_hook: str
@@ -121,6 +132,8 @@ async def _build_runtime(
     mcp_token_store_dsn: str = "",
     mcp_client_registration_store_class: str = "",
     mcp_client_registration_store_dsn: str = "",
+    mcp_gateway_state_store_class: str = "",
+    mcp_gateway_state_store_dsn: str = "",
     checkpointer_type: str = "",
     checkpointer_dsn: str = "",
     startup_hook: str = "",
@@ -195,6 +208,8 @@ async def _build_runtime(
         mcp_token_store_dsn=mcp_token_store_dsn,
         mcp_client_registration_store_class=mcp_client_registration_store_class,
         mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+        mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+        mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
         checkpointer_type=checkpointer_type,
         checkpointer_dsn=checkpointer_dsn,
         startup_hook=startup_hook,
@@ -207,8 +222,14 @@ async def _build_runtime(
     # ── 4. Reader + pre-created collections ───────────────────
     reader = await _prepare_reader(overrides, agents_config)
 
-    # ── 5. Persistence (chat storage + MCP token + registration stores) ──
-    chat_repo, mcp_token_store, mcp_client_registration_store = await _build_persistence(overrides)
+    # ── 5. Persistence (chat storage + MCP token + registration +
+    #      MCP gateway-state stores) ──
+    (
+        chat_repo,
+        mcp_token_store,
+        mcp_client_registration_store,
+        mcp_gateway_state_store,
+    ) = await _build_persistence(overrides)
 
     # ── 6. Startup hook (optional) ───────────────────────────
     await _run_startup_hook(overrides.startup_hook, reader, startup_hook_kwargs)
@@ -219,6 +240,9 @@ async def _build_runtime(
         reader=reader,
         mcp_token_store=mcp_token_store,
         mcp_client_registration_store=mcp_client_registration_store,
+        mcp_gateway_client_store=mcp_gateway_state_store,
+        mcp_gateway_auth_code_store=mcp_gateway_state_store,  # type: ignore[arg-type]
+        mcp_gateway_token_store=mcp_gateway_state_store,  # type: ignore[arg-type]
         **overrides.runtime_overrides,
     )
     await _attach_checkpointer(runtime, overrides.checkpointer_type, overrides.checkpointer_dsn)
@@ -237,6 +261,7 @@ async def _build_runtime(
         chat_repo=chat_repo,
         mcp_token_store=mcp_token_store,
         mcp_client_registration_store=mcp_client_registration_store,
+        mcp_gateway_state_store=mcp_gateway_state_store,
     )
 
 
@@ -257,6 +282,8 @@ def _resolve_overrides(
     mcp_token_store_dsn: str,
     mcp_client_registration_store_class: str,
     mcp_client_registration_store_dsn: str,
+    mcp_gateway_state_store_class: str,
+    mcp_gateway_state_store_dsn: str,
     checkpointer_type: str,
     checkpointer_dsn: str,
     startup_hook: str,
@@ -285,6 +312,14 @@ def _resolve_overrides(
         ),
         registration_store_dsn=(
             mcp_client_registration_store_dsn or os.environ.get("MCP_CLIENT_REGISTRATION_STORE_DSN", "") or storage_dsn
+        ),
+        gateway_state_store_class=(
+            mcp_gateway_state_store_class
+            or os.environ.get("MCP_GATEWAY_STATE_STORE_CLASS", "")
+            or _DEFAULT_GATEWAY_STATE_STORE_CLASS
+        ),
+        gateway_state_store_dsn=(
+            mcp_gateway_state_store_dsn or os.environ.get("MCP_GATEWAY_STATE_STORE_DSN", "") or storage_dsn
         ),
         checkpointer_type=checkpointer_type or os.environ.get("CHECKPOINTER_TYPE", ""),
         checkpointer_dsn=checkpointer_dsn or os.environ.get("CHECKPOINTER_DSN", ""),
@@ -328,14 +363,25 @@ async def _prepare_reader(
 
 async def _build_persistence(
     overrides: _ResolvedOverrides,
-) -> tuple[OrchidChatStorage, OrchidMCPTokenStore, OrchidMCPClientRegistrationStore]:
-    """Initialise chat storage + MCP token store + registration store.
+) -> tuple[
+    OrchidChatStorage,
+    OrchidMCPTokenStore,
+    OrchidMCPClientRegistrationStore,
+    OrchidMCPGatewayClientStore,
+]:
+    """Initialise every framework-owned store.
 
-    All three stores share the integrator ``extra_migrations_package``
+    All four stores share the integrator ``extra_migrations_package``
     (they share the underlying DB), so a single YAML entry covers them
-    all.  Each ``init_db`` is idempotent — the v001 + v002 migrations
-    each ``CREATE TABLE IF NOT EXISTS`` so calling three stores against
-    the same DSN is safe.
+    all.  Each ``init_db`` is idempotent — the unified v001 migration
+    uses ``CREATE TABLE IF NOT EXISTS`` throughout so calling the
+    four stores against the same DSN is safe.
+
+    The returned :class:`OrchidMCPGatewayClientStore` is the same
+    underlying instance that also implements
+    :class:`OrchidMCPGatewayAuthCodeStore` and
+    :class:`OrchidMCPGatewayTokenStore` — the caller splits the
+    reference into three typed views at the runtime-wiring layer.
     """
     chat_repo = build_chat_storage(
         class_path=overrides.storage_class,
@@ -357,7 +403,20 @@ async def _build_persistence(
         extra_migrations_package=overrides.extra_migrations_package,
     )
     await mcp_client_registration_store.init_db()
-    return chat_repo, mcp_token_store, mcp_client_registration_store
+
+    mcp_gateway_state_store = build_mcp_gateway_state_store(
+        class_path=overrides.gateway_state_store_class,
+        dsn=overrides.gateway_state_store_dsn,
+        extra_migrations_package=overrides.extra_migrations_package,
+    )
+    await mcp_gateway_state_store.init_db()
+
+    return (
+        chat_repo,
+        mcp_token_store,
+        mcp_client_registration_store,
+        mcp_gateway_state_store,
+    )
 
 
 async def _run_startup_hook(
@@ -445,6 +504,9 @@ async def _teardown_runtime(result: _BootstrapResult) -> None:
 
         await shutdown_checkpointer(result.runtime.checkpointer)
         result.runtime.checkpointer = None
+
+    if result.mcp_gateway_state_store is not None:
+        await result.mcp_gateway_state_store.close()
 
     if result.mcp_client_registration_store is not None:
         await result.mcp_client_registration_store.close()
