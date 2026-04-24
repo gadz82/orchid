@@ -7,6 +7,12 @@ Public API:
 """
 
 from .loader import load_config
+from .mcp_gateway import (
+    OrchidMCPGatewayConfig,
+    OrchidMCPGatewayPrompt,
+    OrchidMCPGatewayPromptArgument,
+    OrchidMCPGatewayToolOverride,
+)
 from .registry import get_class, register
 from .schema import (
     OrchidAgentConfig,
@@ -22,6 +28,10 @@ __all__ = [
     "OrchidAgentConfig",
     "OrchidAgentSkillConfig",
     "OrchidBuiltinToolConfig",
+    "OrchidMCPGatewayConfig",
+    "OrchidMCPGatewayPrompt",
+    "OrchidMCPGatewayPromptArgument",
+    "OrchidMCPGatewayToolOverride",
     "OrchidOrchestratorSkillConfig",
     "load_config",
     "register",
