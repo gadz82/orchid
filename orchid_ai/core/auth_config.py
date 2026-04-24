@@ -1,14 +1,29 @@
 """
-Abstract upstream-OAuth discovery — consumers provide concrete
-implementations that resolve their platform's well-known endpoints
-from whatever tenant-scoped configuration they hold (typically a
-domain from ``orchid.yml``).
+Abstract upstream-OAuth discovery + code-exchange — consumers
+provide concrete implementations that resolve their platform's
+well-known endpoints (from whatever tenant-scoped configuration
+they hold, typically a domain from ``orchid.yml``) and,
+optionally, perform the secret-bearing authorization-code exchange
+on behalf of downstream OAuth clients.
 
-The output of a provider is an :class:`OrchidUpstreamOAuthConfig`:
-**non-secret** public discovery info that orchid-api safely exposes
-to downstream OAuth clients (the MCP gateway, Next.js frontends)
-over an unauthenticated endpoint.  Never includes ``client_secret``,
-access tokens, refresh tokens, or any user-identifying data.
+Two ABCs live here:
+
+- :class:`OrchidAuthConfigProvider` returns
+  :class:`OrchidUpstreamOAuthConfig`: **non-secret** public
+  discovery info that orchid-api safely exposes to downstream OAuth
+  clients (the MCP gateway, Next.js frontends) over an
+  unauthenticated endpoint.  Never includes ``client_secret``,
+  access tokens, refresh tokens, or any user-identifying data.
+
+- :class:`OrchidAuthExchangeClient` wraps the
+  ``grant_type=authorization_code`` exchange against the upstream
+  IdP's token endpoint.  The implementation holds the upstream
+  ``client_secret`` and is exposed over orchid-api's
+  ``POST /auth/exchange-code`` so downstream clients can migrate
+  from confidential-client (secret on the MCP gateway) to public
+  PKCE-only clients (secret held only by orchid-api).  This is the
+  Phase 2 boundary in the auth-centralisation roadmap — it removes
+  the last copy of ``client_secret`` from the gateway layer.
 
 This module uses ONLY stdlib types — safe for ``core/``.
 """
@@ -87,6 +102,16 @@ class OrchidUpstreamOAuthConfig:
     #: email under a wrapper object (``"data.email"``).  ``None``
     #: means "use the standard OIDC top-level ``email``".
     userinfo_email_path: str | None = None
+    #: When ``True``, orchid-api advertises a server-side
+    #: ``POST /auth/exchange-code`` endpoint that the downstream
+    #: OAuth client (MCP gateway, Next.js frontends) should use
+    #: instead of calling the upstream IdP's ``token_endpoint``
+    #: directly.  Operationally: the ``client_secret`` lives on
+    #: orchid-api only; downstream clients become public PKCE
+    #: clients and no longer hold secrets.  ``False`` (the default)
+    #: preserves Phase 1 behaviour — the downstream client exchanges
+    #: the code itself using its own copy of the secret.
+    exchange_via_api: bool = False
 
 
 class OrchidAuthConfigProvider(ABC):
@@ -124,5 +149,100 @@ class OrchidAuthConfigProvider(ABC):
             supplied).  Downstream consumers treat ``None`` as
             "discovery unavailable" and either fall back to their own
             env-var overrides or refuse to start.
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class OrchidUpstreamTokenResponse:
+    """
+    Normalised token response from an upstream OAuth2 / OIDC
+    ``grant_type=authorization_code`` (or ``refresh_token``) exchange.
+
+    Mirrors RFC 6749 §5.1 — the downstream consumer passes these
+    values into its own internal state (e.g. the MCP gateway stores
+    ``access_token`` on the :class:`GatewayTokenRecord` it mints
+    for the end-user).
+    """
+
+    access_token: str
+    token_type: str = "Bearer"
+    refresh_token: str | None = None
+    #: Seconds until ``access_token`` expires, as reported by the
+    #: upstream.  Absolute expiry is computed by the consumer.
+    expires_in: int | None = None
+    scope: str | None = None
+
+
+class OrchidAuthExchangeError(Exception):
+    """Raised when an upstream code exchange fails.
+
+    ``status_code`` mirrors the upstream HTTP status when the
+    failure originated at the IdP (useful for mapping back to an
+    appropriate response code in orchid-api's endpoint).  ``0``
+    means the exchange failed without reaching the upstream
+    (misconfiguration, network, etc.).
+    """
+
+    def __init__(self, message: str, status_code: int = 0) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class OrchidAuthExchangeClient(ABC):
+    """
+    Performs the secret-bearing upstream-OAuth code exchange on behalf
+    of downstream public clients.
+
+    Lives on the orchid-api side so the downstream consumers (MCP
+    gateway, Next.js frontends) can drop their copy of
+    ``client_secret`` and become public PKCE clients.  orchid-api
+    exposes this via ``POST /auth/exchange-code`` (see
+    :mod:`orchid_api.routers.auth_exchange`).
+
+    Implementations read the upstream endpoint + credentials at
+    construction time (typically from environment variables
+    mirrored from ``orchid.yml``) and perform a single POST to the
+    upstream ``token_endpoint`` per ``exchange_code`` call.
+
+    The companion :class:`OrchidAuthConfigProvider` tells the
+    downstream whether this client is wired (by setting
+    :attr:`OrchidUpstreamOAuthConfig.exchange_via_api` ``True``);
+    without that signal the downstream falls back to direct
+    exchange with the upstream IdP using its own secret copy.
+    """
+
+    @abstractmethod
+    async def exchange_code(
+        self,
+        *,
+        code: str,
+        redirect_uri: str,
+        code_verifier: str | None = None,
+    ) -> OrchidUpstreamTokenResponse:
+        """
+        Exchange an upstream authorization code for an access token.
+
+        Parameters
+        ----------
+        code : str
+            The ``code`` value the upstream IdP issued when the user
+            completed the browser-based authorization flow.
+        redirect_uri : str
+            The redirect URI the downstream consumer registered with
+            the upstream IdP.  Must match byte-for-byte what was
+            sent on ``/authorize``; required for the exchange per
+            RFC 6749 §4.1.3.
+        code_verifier : str | None
+            The PKCE verifier matching the challenge sent on
+            ``/authorize``.  Required when the upstream enforces
+            PKCE (all MCP 2025-03-26 clients do).
+
+        Raises
+        ------
+        OrchidAuthExchangeError
+            If the upstream rejected the exchange (invalid_grant,
+            invalid_client, …) or the exchange didn't reach the
+            upstream at all.
         """
         ...
