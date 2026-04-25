@@ -124,6 +124,16 @@ class OrchidMCPGatewayToken:
     the user (subject, authDomain, …) — stored as an opaque dict so
     the downstream consumers (``OrchidIdentityResolver``) can evolve
     independently of the schema.
+
+    The ``idp_*`` fields carry the **upstream** access / refresh
+    tokens the gateway obtained during the browser-based OAuth
+    dance.  They live here (in addition to the upstream access
+    token that usually doubles as ``identity["bearer"]``) so the
+    gateway's ``/token?grant_type=refresh_token`` handler can kick
+    off an upstream refresh when the user's bearer is about to
+    expire, rather than rotating gateway tokens that still wrap a
+    stale upstream credential.  Phase 4 of the auth-centralisation
+    roadmap.
     """
 
     access_token: str
@@ -134,6 +144,21 @@ class OrchidMCPGatewayToken:
     scopes: list[str]
     #: Absolute expiry, seconds since epoch.
     expires_at: float
+    #: Upstream IdP access token (typically echoed under
+    #: ``identity["bearer"]`` by passthrough-style resolvers, kept
+    #: here explicitly so the refresh flow has a single canonical
+    #: source).  Empty string when the gateway wasn't given one.
+    idp_access_token: str = ""
+    #: Upstream IdP refresh token.  When present, a gateway-side
+    #: ``/token?grant_type=refresh_token`` call can swap it for a
+    #: fresh upstream access/refresh pair before minting new gateway
+    #: tokens.  Empty string when the upstream didn't issue one.
+    idp_refresh_token: str = ""
+    #: Absolute expiry of :attr:`idp_access_token`, seconds since
+    #: epoch.  ``0.0`` means "unknown" — the refresh path should
+    #: fall back to calling the upstream on every rotation rather
+    #: than relying on this field for skew-aware decisions.
+    idp_expires_at: float = 0.0
 
 
 # ── Persistence ABCs ──────────────────────────────────────────────

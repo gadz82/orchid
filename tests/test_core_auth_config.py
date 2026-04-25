@@ -92,6 +92,9 @@ def test_config_optional_fields_default_cleanly() -> None:
     # Exchange-via-api defaults to False so Phase 1 deployments keep
     # doing their own code exchange.
     assert cfg.exchange_via_api is False
+    # Resolve-via-api defaults to False so pre-Phase-4 deployments
+    # keep hitting the upstream userinfo endpoint themselves.
+    assert cfg.resolve_via_api is False
 
 
 def test_config_opts_in_to_exchange_via_api() -> None:
@@ -104,6 +107,37 @@ def test_config_opts_in_to_exchange_via_api() -> None:
         exchange_via_api=True,
     )
     assert cfg.exchange_via_api is True
+
+
+def test_config_opts_in_to_resolve_via_api() -> None:
+    """Non-default value flips on the server-side identity-resolver flag."""
+    cfg = OrchidUpstreamOAuthConfig(
+        issuer_url="i",
+        authorization_endpoint="a",
+        token_endpoint="t",
+        client_id="c",
+        resolve_via_api=True,
+    )
+    assert cfg.resolve_via_api is True
+    # And the two flags are independent — opting in to one doesn't
+    # force the other on.
+    assert cfg.exchange_via_api is False
+
+
+def test_config_opts_in_to_refresh_via_api() -> None:
+    """Non-default value flips on the server-side refresh flag."""
+    cfg = OrchidUpstreamOAuthConfig(
+        issuer_url="i",
+        authorization_endpoint="a",
+        token_endpoint="t",
+        client_id="c",
+        refresh_via_api=True,
+    )
+    assert cfg.refresh_via_api is True
+    # All four flags are independent — opting in to one doesn't
+    # force the others on.
+    assert cfg.exchange_via_api is False
+    assert cfg.resolve_via_api is False
 
 
 def test_config_carries_json_path_hints() -> None:
@@ -200,6 +234,63 @@ async def test_concrete_exchange_client_roundtrip() -> None:
     assert r.refresh_token == "rt-xyz"
     assert r.expires_in == 3600
     assert r.scope == "api"
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_defaults_to_not_implemented() -> None:
+    """The base ABC keeps Phase-2 subclasses instantiable; they just
+    can't perform refreshes.  The gate in
+    ``/auth-info``'s ``refresh_via_api`` flag relies on this default
+    behaviour — a Phase-2 deployment must not advertise the feature.
+    """
+
+    class Phase2ExchangeOnly(OrchidAuthExchangeClient):
+        async def exchange_code(
+            self,
+            *,
+            code: str,
+            redirect_uri: str,
+            code_verifier: str | None = None,
+        ) -> OrchidUpstreamTokenResponse:
+            return OrchidUpstreamTokenResponse(access_token="at")
+
+    with pytest.raises(NotImplementedError) as exc:
+        await Phase2ExchangeOnly().refresh_token(refresh_token="rt-1")
+    assert "Phase2ExchangeOnly" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_concrete_refresh_roundtrip() -> None:
+    """A subclass that overrides ``refresh_token`` works exactly like
+    :meth:`exchange_code` — same response dataclass, same error
+    handling contract.
+    """
+
+    class FullExchange(OrchidAuthExchangeClient):
+        async def exchange_code(
+            self,
+            *,
+            code: str,
+            redirect_uri: str,
+            code_verifier: str | None = None,
+        ) -> OrchidUpstreamTokenResponse:
+            return OrchidUpstreamTokenResponse(access_token="at")
+
+        async def refresh_token(
+            self,
+            *,
+            refresh_token: str,
+        ) -> OrchidUpstreamTokenResponse:
+            return OrchidUpstreamTokenResponse(
+                access_token=f"refreshed-for-{refresh_token}",
+                refresh_token="rt-rotated",
+                expires_in=1200,
+            )
+
+    r = await FullExchange().refresh_token(refresh_token="rt-old")
+    assert r.access_token == "refreshed-for-rt-old"
+    assert r.refresh_token == "rt-rotated"
+    assert r.expires_in == 1200
 
 
 # ── OrchidAuthExchangeError ────────────────────────────────

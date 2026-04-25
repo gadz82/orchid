@@ -202,8 +202,9 @@ class OrchidPostgresMCPGatewayStateStore(
                 """
                 INSERT INTO mcp_gateway_tokens
                     (access_token, refresh_token, client_id, subject, identity,
-                     scopes, expires_at)
-                VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)
+                     scopes, expires_at,
+                     idp_access_token, idp_refresh_token, idp_expires_at)
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9, $10)
                 """,
                 record.access_token,
                 record.refresh_token,
@@ -212,6 +213,9 @@ class OrchidPostgresMCPGatewayStateStore(
                 json.dumps(record.identity),
                 json.dumps(record.scopes),
                 float(record.expires_at),
+                record.idp_access_token,
+                record.idp_refresh_token,
+                float(record.idp_expires_at),
             )
 
     async def get_by_access_token(
@@ -301,6 +305,9 @@ def _row_to_token(row: Any) -> OrchidMCPGatewayToken:
         identity=_decode_jsonb(row["identity"]) or {},
         scopes=_decode_jsonb(row["scopes"]) or [],
         expires_at=float(row["expires_at"]),
+        idp_access_token=row["idp_access_token"] or "",
+        idp_refresh_token=row["idp_refresh_token"] or "",
+        idp_expires_at=float(row["idp_expires_at"] or 0.0),
     )
 
 

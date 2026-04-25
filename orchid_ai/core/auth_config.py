@@ -112,6 +112,29 @@ class OrchidUpstreamOAuthConfig:
     #: preserves Phase 1 behaviour — the downstream client exchanges
     #: the code itself using its own copy of the secret.
     exchange_via_api: bool = False
+    #: When ``True``, orchid-api advertises a server-side
+    #: ``POST /auth/resolve-identity`` endpoint that the downstream
+    #: OAuth client should use to turn an upstream access token into
+    #: an :class:`OrchidAuthContext`-flavoured identity payload
+    #: (``subject`` / ``bearer`` / ``auth_domain``), instead of
+    #: calling the upstream ``userinfo_endpoint`` itself.  Removes
+    #: the last piece of upstream-specific config (userinfo URL +
+    #: JSON-path hints for non-OIDC shapes) from the downstream —
+    #: Phase 4 of the auth-centralisation roadmap.  ``False`` (the
+    #: default) preserves pre-Phase-4 behaviour.
+    resolve_via_api: bool = False
+    #: When ``True``, orchid-api advertises a server-side
+    #: ``POST /auth/refresh-token`` endpoint — the refresh grant
+    #: equivalent of :attr:`exchange_via_api`.  Downstream OAuth
+    #: clients that stashed an upstream ``refresh_token`` post a
+    #: refresh request here and let orchid-api's
+    #: :class:`OrchidAuthExchangeClient` (with the
+    #: ``client_secret``) perform the upstream exchange.  Gated on
+    #: the client actually implementing :meth:`refresh_token` —
+    #: otherwise orchid-api's endpoint 503s and downstream clients
+    #: fall back to direct upstream refresh (if they hold a secret)
+    #: or re-authentication.
+    refresh_via_api: bool = False
 
 
 class OrchidAuthConfigProvider(ABC):
@@ -246,3 +269,60 @@ class OrchidAuthExchangeClient(ABC):
             upstream at all.
         """
         ...
+
+    async def refresh_token(
+        self,
+        *,
+        refresh_token: str,
+    ) -> OrchidUpstreamTokenResponse:
+        """
+        Exchange an upstream refresh token for a fresh access token.
+
+        Parallel to :meth:`exchange_code` — lives here rather than in
+        a separate ABC because the same ``client_secret`` protects
+        both grant types against the same ``token_endpoint``, and
+        consumers almost always implement them as a pair.
+
+        Phase 4 of the auth-centralisation roadmap.  Default
+        implementation raises :class:`NotImplementedError` so
+        existing :class:`OrchidAuthExchangeClient` subclasses
+        (written for Phase 2) keep instantiating cleanly; an
+        operator who hasn't implemented it yet sees a useful error
+        if a downstream client actually tries to use it via
+        ``POST /auth/refresh-token``.
+
+        Parameters
+        ----------
+        refresh_token : str
+            The opaque upstream refresh token the downstream
+            consumer obtained from a prior :meth:`exchange_code` (or
+            a prior :meth:`refresh_token`).
+
+        Returns
+        -------
+        OrchidUpstreamTokenResponse
+            Fresh access token plus a (possibly rotated) refresh
+            token.  OAuth 2.1 recommends upstream implementations
+            rotate on every refresh; the consumer should update its
+            stored ``refresh_token`` with the new value if present.
+
+        Raises
+        ------
+        OrchidAuthExchangeError
+            Semantically identical to :meth:`exchange_code` —
+            ``invalid_grant`` when the refresh token was revoked or
+            expired, ``invalid_client`` when the credentials don't
+            match, ``status_code=0`` when the request didn't reach
+            the upstream.
+        NotImplementedError
+            When the concrete subclass hasn't implemented the
+            refresh grant yet.  Downstream clients can detect this
+            via the ``refresh_via_api`` discovery flag — orchid-api
+            only advertises the feature when the wired client
+            overrides this method.
+        """
+        raise NotImplementedError(
+            "OrchidAuthExchangeClient.refresh_token is not implemented by "
+            f"{type(self).__name__}.  Advertising refresh_via_api=True in "
+            "OrchidUpstreamOAuthConfig requires a concrete implementation."
+        )
