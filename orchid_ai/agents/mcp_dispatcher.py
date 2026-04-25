@@ -280,10 +280,11 @@ class MCPDispatcher:
                         caps.raw_tools.append(t)
                         caps.tool_client_map[t["name"]] = (client, server_config)
                     logger.info(
-                        "[%s] Discovered %d tools from '%s'",
+                        "[%s] Discovered %d tools from '%s': %s",
                         agent_name,
                         len(raw_tools),
                         server_name,
+                        [t["name"] for t in raw_tools],
                     )
                 except Exception as exc:
                     # Broad catch: MCP servers can fail with HTTP errors (401, 500),

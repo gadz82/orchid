@@ -143,7 +143,14 @@ _PG_UP = [
         subject                        TEXT NOT NULL,
         identity                       JSONB NOT NULL,
         scopes                         JSONB NOT NULL,
-        expires_at                     DOUBLE PRECISION NOT NULL
+        expires_at                     DOUBLE PRECISION NOT NULL,
+        -- Phase 4: upstream IdP tokens carried alongside so the
+        -- gateway's refresh flow can rotate them without a fresh
+        -- browser-based re-authentication.  Empty string / 0.0
+        -- defaults cover records written before Phase 4 went live.
+        idp_access_token               TEXT NOT NULL DEFAULT '',
+        idp_refresh_token              TEXT NOT NULL DEFAULT '',
+        idp_expires_at                 DOUBLE PRECISION NOT NULL DEFAULT 0
     )
     """,
     """
@@ -266,7 +273,11 @@ _SQLITE_UP = [
         subject                        TEXT NOT NULL,
         identity                       TEXT NOT NULL,
         scopes                         TEXT NOT NULL,
-        expires_at                     REAL NOT NULL
+        expires_at                     REAL NOT NULL,
+        -- Phase 4 upstream-token columns; see Postgres block above.
+        idp_access_token               TEXT NOT NULL DEFAULT '',
+        idp_refresh_token              TEXT NOT NULL DEFAULT '',
+        idp_expires_at                 REAL NOT NULL DEFAULT 0
     )
     """,
     """

@@ -225,8 +225,9 @@ class OrchidSQLiteMCPGatewayStateStore(
         conn = self._require_conn()
         await conn.execute(
             "INSERT INTO mcp_gateway_tokens "
-            "(access_token, refresh_token, client_id, subject, identity, scopes, expires_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(access_token, refresh_token, client_id, subject, identity, scopes, expires_at, "
+            " idp_access_token, idp_refresh_token, idp_expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 record.access_token,
                 record.refresh_token,
@@ -235,6 +236,9 @@ class OrchidSQLiteMCPGatewayStateStore(
                 json.dumps(record.identity),
                 json.dumps(record.scopes),
                 float(record.expires_at),
+                record.idp_access_token,
+                record.idp_refresh_token,
+                float(record.idp_expires_at),
             ),
         )
         await conn.commit()
@@ -324,6 +328,9 @@ def _row_to_token(row: aiosqlite.Row) -> OrchidMCPGatewayToken:
         identity=json.loads(row["identity"]),
         scopes=json.loads(row["scopes"]),
         expires_at=float(row["expires_at"]),
+        idp_access_token=row["idp_access_token"] or "",
+        idp_refresh_token=row["idp_refresh_token"] or "",
+        idp_expires_at=float(row["idp_expires_at"] or 0.0),
     )
 
 

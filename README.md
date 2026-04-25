@@ -119,14 +119,25 @@ documents/   -> core/
 | ABC | File | Purpose |
 |-----|------|---------|
 | `OrchidAgent` | `core/agent.py` | Agent identity, `run()`, `summarise()`, `fetch_rag_context()`, `extract_conversation_history()` |
-| `OrchidIdentityResolver` | `core/identity.py` | Bearer token -> OrchidAuthContext |
-| `LLMProvider` | `core/llm_provider.py` | Abstract LLM completion |
+| `OrchidIdentityResolver` | `core/identity.py` | Bearer token → `OrchidAuthContext` (per-request validation **and** the `/auth/resolve-identity` bridge — Phase 4A) |
+| `OrchidAuthConfigProvider` | `core/auth_config.py` | Resolves non-secret upstream-OAuth discovery (Phase 1) |
+| `OrchidAuthExchangeClient` | `core/auth_config.py` | Server-side authorization-code (Phase 2) + refresh-token (Phase 4B) exchange |
 | `OrchidMCPToolCaller` | `core/mcp.py` | Call MCP tools |
 | `OrchidMCPDiscoverable` | `core/mcp.py` | Discover MCP capabilities |
+| `OrchidMCPTokenStore` | `core/mcp.py` | Per-user outbound OAuth token persistence |
+| `OrchidMCPClientRegistrationStore` | `core/mcp.py` | Per-server discovered endpoints + DCR creds |
+| `OrchidMCPGatewayClientStore` / `…AuthCodeStore` / `…TokenStore` | `core/mcp_gateway_state.py` | Inbound MCP gateway state (Phase 3 — DCR clients, in-flight auth codes, issued tokens) |
 | `OrchidVectorReader` | `core/repository.py` | Vector store retrieval |
 | `OrchidVectorWriter` | `core/repository.py` | Vector store indexing |
 | `OrchidVectorStoreAdmin` | `core/repository.py` | Collection management |
 | `OrchidChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
+
+The auth-centralisation ABCs (`OrchidAuthConfigProvider`, `OrchidAuthExchangeClient`,
+`OrchidIdentityResolver`, three `OrchidMCPGateway*Store`s) collectively let
+`orchid-api` host every secret-bearing OAuth call on behalf of downstream
+public PKCE clients (the MCP gateway, Next.js frontends). Full architectural
+walkthrough + per-phase migration matrix in
+[.knowledge/auth-centralisation.md](../.knowledge/auth-centralisation.md).
 
 ## OrchidRuntime
 
