@@ -82,9 +82,9 @@ class OrchidUpstreamOAuthConfig:
     #: Platform domain that downstream consumers should attach to
     #: authenticated requests as ``X-Auth-Domain`` (or equivalent).
     #: Distinct from the user's email domain — for a single-tenant
-    #: Docebo deploy this is the tenant host (e.g.
-    #: ``mytenant.docebosaas.com``).  The MCP gateway uses this to
-    #: tell orchid-api which Docebo platform to validate tokens
+    #: deployment this is the tenant host (e.g.
+    #: ``mytenant.example.com``).  The MCP gateway uses this to
+    #: tell orchid-api which platform tenant to validate tokens
     #: against, overriding whatever the identity resolver might
     #: infer from user claims.  ``None`` → consumers fall back to
     #: heuristics (typically email-domain derivation).

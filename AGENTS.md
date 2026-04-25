@@ -220,8 +220,8 @@ actually exposes (platform-agnostic, keeps the hard-rule boundary).
 mcp_gateway:
   tools:
     orchid_ask:
-      title: "Ask the Docebo AI"
-      description: "Route a question to the Docebo learning agents."
+      title: "Ask the Acme Knowledge Base"
+      description: "Route a question to the Acme support agents."
   prompts:
     - name: compliance_report
       description: "Generate a compliance-completion report."
