@@ -1094,8 +1094,8 @@ ignored when not populated.
 mcp_gateway:
   tools:
     orchid_ask:
-      title: "Ask the Docebo AI"
-      description: "Route questions to the Docebo learning agents."
+      title: "Ask the Acme Knowledge Base"
+      description: "Route questions to the Acme support agents."
   prompts:
     - name: compliance_report
       description: "Generate a compliance-completion report."

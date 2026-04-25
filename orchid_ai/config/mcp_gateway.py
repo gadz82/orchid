@@ -6,8 +6,8 @@ Describes how an integrator wants Orchid's MCP-facing surface
 
 * **Tool overrides** — replace the default ``title`` / ``description``
   of tools the gateway registers, so the host LLM sees integrator-
-  provided context (e.g. "Ask the Docebo AI" instead of the framework
-  default "Ask Orchid").
+  provided context (e.g. "Ask the Acme Knowledge Base" instead of the
+  framework default "Ask Orchid").
 
 * **MCP Prompts** — pre-canned prompt templates (MCP spec: ``prompts/list``
   / ``prompts/get``) that the host LLM can discover and expand via the
@@ -111,10 +111,10 @@ class OrchidMCPGatewayConfig(BaseModel):
         mcp_gateway:
           tools:
             orchid_ask:
-              title: "Ask the Docebo AI"
-              description: "Route a question to the Docebo learning-platform agents."
+              title: "Ask the Acme Knowledge Base"
+              description: "Route a question to the Acme support agents."
             orchid_upload_file:
-              description: "Index a file into the chat's RAG scope for course analysis."
+              description: "Index a file into the chat's RAG scope for analysis."
           prompts:
             - name: compliance_report
               title: "Compliance report"
@@ -124,14 +124,14 @@ class OrchidMCPGatewayConfig(BaseModel):
                   description: "Department to filter by"
                   required: true
               template: |
-                Using the learning agent, produce a compliance-completion report
-                for the {{department}} department.
+                Using the knowledge-base agent, produce a compliance-completion
+                report for the {{department}} department.
 
     Programmatic construction is equivalent — pass nested dicts or
     model instances and Pydantic coerces::
 
         cfg = OrchidMCPGatewayConfig(
-            tools={"orchid_ask": {"title": "Ask the Docebo AI"}},
+            tools={"orchid_ask": {"title": "Ask the Acme Knowledge Base"}},
             prompts=[
                 OrchidMCPGatewayPrompt(
                     name="hello",

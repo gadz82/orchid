@@ -104,10 +104,10 @@ class TestGatewayConfig:
 
     def test_tool_dict_coercion(self):
         cfg = OrchidMCPGatewayConfig(
-            tools={"orchid_ask": {"title": "Ask Docebo"}},
+            tools={"orchid_ask": {"title": "Ask Acme"}},
         )
         assert isinstance(cfg.tools["orchid_ask"], OrchidMCPGatewayToolOverride)
-        assert cfg.tools["orchid_ask"].title == "Ask Docebo"
+        assert cfg.tools["orchid_ask"].title == "Ask Acme"
 
     def test_rejects_duplicate_prompt_names(self):
         with pytest.raises(ValidationError, match="Duplicate prompt name"):
@@ -155,7 +155,7 @@ class TestAgentsConfigIntegration:
     def test_inline_construction(self):
         cfg = OrchidAgentsConfig(
             mcp_gateway={
-                "tools": {"orchid_ask": {"title": "Ask Docebo"}},
+                "tools": {"orchid_ask": {"title": "Ask Acme"}},
                 "prompts": [
                     {
                         "name": "compliance_report",
@@ -169,7 +169,7 @@ class TestAgentsConfigIntegration:
                 ],
             }
         )
-        assert cfg.mcp_gateway.tools["orchid_ask"].title == "Ask Docebo"
+        assert cfg.mcp_gateway.tools["orchid_ask"].title == "Ask Acme"
         assert cfg.mcp_gateway.prompts[0].name == "compliance_report"
         assert cfg.mcp_gateway.prompts[0].arguments[0].required is True
 
@@ -179,7 +179,7 @@ class TestAgentsConfigIntegration:
             "mcp_gateway": {
                 "tools": {
                     "orchid_ask": {
-                        "title": "Ask the Docebo AI",
+                        "title": "Ask the Acme Knowledge Base",
                         "description": "Route a question to the agents.",
                     },
                 },
@@ -197,6 +197,6 @@ class TestAgentsConfigIntegration:
         path.write_text(yaml.safe_dump(agents_yaml))
 
         cfg = load_config(str(path))
-        assert cfg.mcp_gateway.tools["orchid_ask"].title == "Ask the Docebo AI"
+        assert cfg.mcp_gateway.tools["orchid_ask"].title == "Ask the Acme Knowledge Base"
         assert cfg.mcp_gateway.prompts[0].template == "Hello, {{who}}."
         assert cfg.mcp_gateway.prompts[0].arguments[0].name == "who"
