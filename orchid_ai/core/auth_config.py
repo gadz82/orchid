@@ -160,9 +160,22 @@ class OrchidAuthConfigProvider(ABC):
     """
 
     @abstractmethod
-    def get_oauth_config(self) -> OrchidUpstreamOAuthConfig | None:
+    def get_oauth_config(
+        self,
+        *,
+        domain: str | None = None,
+    ) -> OrchidUpstreamOAuthConfig | None:
         """
         Return non-secret upstream-OAuth discovery info.
+
+        ``domain`` is an optional **per-request** tenant hint —
+        downstream consumers that serve many tenants from a single
+        orchid-api deployment can pass the user-supplied platform
+        host on each ``GET /auth-info?domain=…`` call so the
+        provider builds tenant-scoped URLs (e.g.
+        ``https://{domain}/oauth2/authorize``).  Single-tenant
+        deployments ignore the parameter and return their fixed
+        operator-level config.
 
         Returns
         -------
@@ -242,6 +255,7 @@ class OrchidAuthExchangeClient(ABC):
         code: str,
         redirect_uri: str,
         code_verifier: str | None = None,
+        domain: str | None = None,
     ) -> OrchidUpstreamTokenResponse:
         """
         Exchange an upstream authorization code for an access token.
@@ -260,6 +274,13 @@ class OrchidAuthExchangeClient(ABC):
             The PKCE verifier matching the challenge sent on
             ``/authorize``.  Required when the upstream enforces
             PKCE (all MCP 2025-03-26 clients do).
+        domain : str | None
+            Optional **per-request** tenant hint.  Multi-tenant
+            consumers (one orchid-api fronting many tenant hosts)
+            forward the user-supplied domain on every exchange so
+            the implementation can route to the correct upstream
+            ``token_endpoint``.  Single-tenant deployments ignore the
+            parameter and use their fixed operator-level config.
 
         Raises
         ------
@@ -274,6 +295,7 @@ class OrchidAuthExchangeClient(ABC):
         self,
         *,
         refresh_token: str,
+        domain: str | None = None,
     ) -> OrchidUpstreamTokenResponse:
         """
         Exchange an upstream refresh token for a fresh access token.
@@ -297,6 +319,11 @@ class OrchidAuthExchangeClient(ABC):
             The opaque upstream refresh token the downstream
             consumer obtained from a prior :meth:`exchange_code` (or
             a prior :meth:`refresh_token`).
+        domain : str | None
+            Optional **per-request** tenant hint — same semantics as
+            on :meth:`exchange_code`.  Multi-tenant consumers forward
+            the user's platform host so refreshes route to the right
+            upstream ``token_endpoint``.
 
         Returns
         -------
