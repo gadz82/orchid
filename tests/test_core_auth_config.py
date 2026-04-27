@@ -217,6 +217,7 @@ async def test_concrete_exchange_client_roundtrip() -> None:
             code: str,
             redirect_uri: str,
             code_verifier: str | None = None,
+            domain: str | None = None,
         ) -> OrchidUpstreamTokenResponse:
             return OrchidUpstreamTokenResponse(
                 access_token=f"at-for-{code}",
@@ -251,6 +252,7 @@ async def test_refresh_token_defaults_to_not_implemented() -> None:
             code: str,
             redirect_uri: str,
             code_verifier: str | None = None,
+            domain: str | None = None,
         ) -> OrchidUpstreamTokenResponse:
             return OrchidUpstreamTokenResponse(access_token="at")
 
@@ -273,6 +275,7 @@ async def test_concrete_refresh_roundtrip() -> None:
             code: str,
             redirect_uri: str,
             code_verifier: str | None = None,
+            domain: str | None = None,
         ) -> OrchidUpstreamTokenResponse:
             return OrchidUpstreamTokenResponse(access_token="at")
 
@@ -280,6 +283,7 @@ async def test_concrete_refresh_roundtrip() -> None:
             self,
             *,
             refresh_token: str,
+            domain: str | None = None,
         ) -> OrchidUpstreamTokenResponse:
             return OrchidUpstreamTokenResponse(
                 access_token=f"refreshed-for-{refresh_token}",
