@@ -396,6 +396,7 @@ def build_graph(
     *,
     config: OrchidAgentsConfig,
     runtime: OrchidRuntime,
+    agents_out: dict[str, OrchidAgent] | None = None,
 ) -> Any:  # returns CompiledGraph
     """
     Build and compile the full agent graph from YAML configuration (ADR-016, ADR-018).
@@ -407,6 +408,14 @@ def build_graph(
     runtime : OrchidRuntime
         Pre-configured runtime with all dependencies (reader, LLM provider,
         MCP client factory).
+    agents_out : dict[str, OrchidAgent] | None
+        Optional mutable dict that will be populated with the
+        instantiated top-level :class:`OrchidAgent` instances keyed by
+        name.  Lets callers (notably :class:`orchid_ai.Orchid`) reach
+        the same client instances the graph wired in for proactive
+        cache warming via
+        :class:`orchid_ai.mcp.session_warmer.OrchidSessionWarmer`.
+        Child agents inside compiled subgraphs are not exposed.
     """
     from ..llm_factory import build_chat_model as _build_chat_model
 
@@ -514,6 +523,12 @@ def build_graph(
 
     # ── Wire agent peers (for cross-agent skill steps) ──
     agent_map: dict[str, OrchidAgent] = {a.name: a for a in agents}
+
+    # Expose the materialised agents to the caller so the Orchid
+    # facade can build an OrchidSessionWarmer over the same client
+    # instances we just wired into the graph.
+    if agents_out is not None:
+        agents_out.update(agent_map)
     for agent in agents:
         if not isinstance(agent, GenericAgent):
             continue

@@ -1,10 +1,13 @@
 """
 Concrete MCP client — supports Streamable HTTP and SSE transports.
 
-Capabilities (tools, prompts, resources) are cached with a configurable TTL
-so that discovery happens once and subsequent requests reuse the cache.
-Only ``call_tool``, ``get_prompt``, and ``read_resource`` open fresh
-connections on every invocation (they carry request-specific data).
+Capabilities (tools, prompts, resources) live in a session-bounded
+in-memory cache.  Discovery runs once on first use (or proactively via
+:meth:`warm_cache`, driven by :class:`OrchidSessionWarmer`); the cache
+survives for the lifetime of the process and is flushed only via
+explicit :meth:`invalidate_cache` calls.  Only ``call_tool``,
+``get_prompt``, and ``read_resource`` open fresh connections on every
+invocation (they carry request-specific data).
 
 Transport is selected via ``transport`` parameter:
   - ``"streamable_http"`` (default) — modern MCP protocol, uses POST
@@ -14,7 +17,7 @@ Transport is selected via ``transport`` parameter:
 from __future__ import annotations
 
 import logging
-import time
+import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -29,8 +32,6 @@ from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CACHE_TTL = 300  # 5 minutes
-
 
 @dataclass
 class _CapabilitiesCache:
@@ -42,13 +43,17 @@ class _CapabilitiesCache:
     resource_contents: dict[str, str] = field(default_factory=dict)
     rendered_prompts: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     populated: bool = False
-    timestamp: float = 0.0
 
 
 class StreamableHttpMCPClient(OrchidMCPClient):
     """MCP client that connects via Streamable HTTP or SSE transport.
 
-    Capabilities are discovered once and cached for ``cache_ttl`` seconds.
+    Capabilities are discovered once on first use (or on
+    :meth:`warm_cache`) and live for the lifetime of the process —
+    only :meth:`invalidate_cache` flushes the cache.  Use
+    :class:`orchid_ai.mcp.session_warmer.OrchidSessionWarmer` to
+    populate caches at the right lifecycle boundary so the per-request
+    hot path stops paying the discovery cost.
 
     When ``auth_mode`` is ``"oauth"``, the client resolves per-user
     tokens from the ``token_store`` instead of using the graph's
@@ -60,17 +65,25 @@ class StreamableHttpMCPClient(OrchidMCPClient):
         url: str,
         server_type: str = "local",
         transport: str = "streamable_http",
-        cache_ttl: float = DEFAULT_CACHE_TTL,
         *,
         server_name: str = "",
         auth_mode: str = "passthrough",
         token_store: Any | None = None,  # OrchidMCPTokenStore (lazy import to avoid circular)
         registration_store: Any | None = None,  # OrchidMCPClientRegistrationStore
+        cache_ttl: float | None = None,  # deprecated — see warning below
     ) -> None:
+        if cache_ttl is not None:
+            warnings.warn(
+                "cache_ttl is deprecated and ignored — MCP capability "
+                "caches now live for the process lifetime and are "
+                "flushed only via explicit invalidate_cache() calls. "
+                "See orchid_ai.mcp.session_warmer for the new lifecycle.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._url = url
         self._server_type = server_type
         self._transport = transport
-        self._cache_ttl = cache_ttl
         self._cache = _CapabilitiesCache()
         # Per-server OAuth fields
         self._server_name = server_name or url
@@ -88,8 +101,12 @@ class StreamableHttpMCPClient(OrchidMCPClient):
     # ── Cache management ─────────────────────────────────────
 
     def _cache_valid(self) -> bool:
-        """Return True if the cache is populated and not expired."""
-        return self._cache.populated and (time.monotonic() - self._cache.timestamp) < self._cache_ttl
+        """Return True if the cache has been populated.
+
+        The cache lives for the lifetime of the process — it is flushed
+        only via :meth:`invalidate_cache` (or a new admin endpoint).
+        """
+        return self._cache.populated
 
     def invalidate_cache(self) -> None:
         """Force re-discovery on next call."""
@@ -191,7 +208,6 @@ class StreamableHttpMCPClient(OrchidMCPClient):
                 logger.warning("[MCP] list_resources failed for %s: %s", self._url, exc)
 
         self._cache.populated = True
-        self._cache.timestamp = time.monotonic()
         logger.info(
             "[MCP] Cache populated for %s: %d tools, %d prompts (%d rendered), %d resources (%d read)",
             self._url,

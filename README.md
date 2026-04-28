@@ -405,7 +405,6 @@ Each step:
 | `prompts` | list / `"*"` | `[]` |
 | `resources` | list / `"*"` | `[]` |
 | `tool_call_strategy` | `"all"` / `"sequential"` / `"llm_decides"` | `"all"` |
-| `cache_ttl` | int | `300` |
 
 - **`name`** -- Unique identifier for this MCP server within the agent. Used in logging, error messages, and as a key when referencing the server in skill steps (`source: "airline-api"`). Must be unique per agent.
 - **`type`** -- Whether the MCP server runs as a local process (`"local"`) or as a remote HTTP service (`"remote"`). Local servers are co-deployed with the agent (e.g. in the same Docker network). Remote servers are external services accessed over the network. This affects connection handling and error retry behavior.
@@ -419,7 +418,8 @@ Each step:
   - `"sequential"` -- Call tools one by one in order. Each tool receives the accumulated results from previous tools as a `previous_results` argument. Use when tools depend on each other (e.g. search then filter then sort).
   - `"llm_decides"` -- Ask the LLM to decide which tools to call and with what arguments. The LLM sees all available tools and the user query, then generates tool calls. Most flexible but slower and uses more tokens.
 - **`auth`** -- Per-server authentication configuration (see `agents.<name>.mcp_servers[].auth` below). Determines how the client authenticates with this MCP server. Defaults to `mode: "none"` (no auth headers).
-- **`cache_ttl`** -- How long (in seconds) to cache the results of capability discovery (`list_tools()`, `list_prompts()`, `list_resources()`). When using wildcard discovery (`"*"`), the framework calls the server's discovery endpoints and caches the results for this duration. `0` = re-discover on every request. `300` (5 min default) is a good balance for development. Increase in production where capabilities rarely change.
+
+> **Capability cache lifetime:** discovery results (`list_tools()`, `list_prompts()`, `list_resources()`) are cached for the lifetime of the process and warmed proactively at startup / session start by `OrchidSessionWarmer` -- the per-request hot path stops paying the discovery cost. The legacy `cache_ttl` field is no longer accepted in YAML; flush stale capabilities via `OrchidMCPClient.invalidate_cache()` (or a future admin endpoint).
 
 > **Fault isolation:** MCP server communication boundaries use broad exception handling. If a server returns HTTP errors (401 Unauthorized, 500 Internal Server Error), connection failures, or protocol errors, the agent logs a warning and continues with the remaining servers and tools -- it does not crash or retry endlessly. This applies to tool execution (strategies), capability discovery (`render_capabilities`), and the `fetch()` dispatcher. One failing MCP server never takes down the entire agent.
 
@@ -762,7 +762,6 @@ agents:
         transport: streamable_http
         url: "${AIRLINE_MCP_URL}"
         tool_call_strategy: sequential
-        cache_ttl: 600
         tools:
           - name: search_flights
             arguments:
@@ -785,7 +784,6 @@ agents:
         transport: streamable_http
         url: "http://localhost:3002"
         tool_call_strategy: all
-        cache_ttl: 300
         tools: "*"                   # discover all tools at runtime
         prompts: "*"                 # discover all prompts at runtime
         resources: "*"               # discover all resources at runtime
@@ -848,7 +846,6 @@ agents:
         transport: sse             # SSE transport variant
         url: "${BOOKING_MCP_URL}"
         tool_call_strategy: llm_decides
-        cache_ttl: 0               # no capability caching
         tools:
           - name: search_hotels
             inject_to_rag: true
