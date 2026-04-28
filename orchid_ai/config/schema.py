@@ -151,6 +151,12 @@ class OrchidMCPServerConfig(BaseModel):
     When any of them is ``"*"``, the corresponding ``discover_all_*`` flag is
     set and the allow-list is cleared — the agent will call ``list_tools()``,
     ``list_prompts()``, or ``list_resources()`` at runtime.
+
+    Capability caches now live for the process lifetime (driven by
+    :class:`~orchid_ai.mcp.session_warmer.OrchidSessionWarmer`); the
+    legacy ``cache_ttl`` field is no longer accepted in YAML.  Stale
+    tools are flushed via explicit :meth:`OrchidMCPClient.invalidate_cache`
+    or a future admin endpoint.
     """
 
     name: str
@@ -162,7 +168,6 @@ class OrchidMCPServerConfig(BaseModel):
     prompts: list[str] = Field(default_factory=list)  # prompt names to load (or "*")
     resources: list[str] = Field(default_factory=list)  # resource URIs/names to load (or "*")
     tool_call_strategy: Literal["all", "sequential", "llm_decides"] = "all"
-    cache_ttl: int = 300  # seconds — capabilities cache lifetime (0 = no cache)
     discover_all_tools: bool = False
     discover_all_prompts: bool = False
     discover_all_resources: bool = False
@@ -178,6 +183,12 @@ class OrchidMCPServerConfig(BaseModel):
         """Convert ``"*"`` / ``["*"]`` into the corresponding ``discover_all_*`` flags."""
         if not isinstance(data, dict):
             return data
+
+        # Quietly drop the legacy ``cache_ttl`` field if a YAML file
+        # still carries it — the new lifecycle ignores it.  We strip it
+        # rather than raise so existing configs keep loading.
+        if "cache_ttl" in data:
+            data = {k: v for k, v in data.items() if k != "cache_ttl"}
 
         for field, flag in [
             ("tools", "discover_all_tools"),

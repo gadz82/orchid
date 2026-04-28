@@ -164,7 +164,6 @@ class OrchidRuntime:
             server_config.url,
             server_type=server_config.type,
             transport=server_config.transport,
-            cache_ttl=server_config.cache_ttl,
             server_name=server_config.name,
             auth_mode=server_config.auth.mode,
             token_store=token_store,

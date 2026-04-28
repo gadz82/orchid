@@ -73,6 +73,7 @@ from .mcp.discovery import (
     extract_resource_metadata_url,
     probe_mcp_server_for_resource_metadata,
 )
+from .mcp.inventory import OrchidMCPServerEntry, OrchidMCPServerInventory
 from .mcp.oauth_state import (
     OrchidInMemoryOAuthStateStore,
     OrchidOAuthPendingState,
@@ -80,6 +81,7 @@ from .mcp.oauth_state import (
     build_oauth_state_store,
     register_oauth_state_store,
 )
+from .mcp.session_warmer import OrchidSessionWarmer, OrchidWarmReport
 from .observability.callbacks import OrchidMetricsHandler
 from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
 from .persistence.base import OrchidChatStorage
@@ -139,6 +141,10 @@ __all__ = [
     "OrchidMCPGatewayClient",
     "OrchidMCPGatewayToken",
     "OrchidMCPOAuthServerInfo",
+    "OrchidMCPServerEntry",
+    "OrchidMCPServerInventory",
+    "OrchidSessionWarmer",
+    "OrchidWarmReport",
     "extract_resource_metadata_url",
     "probe_mcp_server_for_resource_metadata",
     "OrchidMCPTokenRecord",

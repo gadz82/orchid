@@ -97,11 +97,26 @@ class BuiltinToolWrapper(BaseTool):
             result = await call_tool(self.name, auth_context=self.auth, **kwargs)
             return json.dumps(result, default=str) if not isinstance(result, str) else result
         except Exception as exc:
-            logger.error(
-                "[%s] Built-in tool '%s' exception: %s",
+            # Default level: one-line summary so an LLM-driven retry
+            # loop doesn't dump the same six-frame traceback two or
+            # three times per turn.  Operators who want the stack pop
+            # it out by setting ``LOGLEVEL=DEBUG`` (or attaching an
+            # ``exc_info`` formatter on the ``orchid_ai.agents.tools``
+            # logger).  This is the right balance for built-in tool
+            # errors, which are almost always operational ("missing
+            # field X") rather than programming bugs — the message
+            # alone tells you what to fix.
+            logger.warning(
+                "[%s] Built-in tool '%s' raised %s: %s",
                 self.agent_name,
                 self.name,
+                type(exc).__name__,
                 exc,
+            )
+            logger.debug(
+                "[%s] Built-in tool '%s' full traceback:",
+                self.agent_name,
+                self.name,
                 exc_info=True,
             )
             return f"[Tool error] {exc}"

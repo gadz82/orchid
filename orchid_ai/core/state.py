@@ -98,6 +98,67 @@ class OrchidAuthContext:
         """Ready-to-use Authorization header for MCP passthrough."""
         return {"Authorization": f"Bearer {self.access_token}"}
 
+    # ── Persistence round-trip ──────────────────────────────
+    #
+    # Long-running clients (the orchid-cli, primarily) need to
+    # cache an :class:`OrchidIdentityResolver` result on disk so
+    # subsequent commands can reuse the resolved identity without
+    # re-calling the upstream IdP every time.  The pair below
+    # defines the contract:
+    #
+    #   ``to_storage_dict()``     — capture every field a caller
+    #                               needs to recreate ``self``,
+    #                               EXCLUDING ``access_token`` and
+    #                               ``expires_at`` (those live in
+    #                               the surrounding token record
+    #                               and should be passed to
+    #                               ``from_storage_dict()`` fresh
+    #                               at restore time).
+    #   ``from_storage_dict()``   — reconstruct an instance from
+    #                               that dict + the always-fresh
+    #                               ``access_token`` / ``expires_at``.
+    #
+    # Subclasses with typed attributes (e.g. a platform-specific
+    # ``.domain`` / ``.tenant_uuid`` exposed alongside the base
+    # contract) override BOTH methods to round-trip those attributes;
+    # the default base-class implementation handles
+    # ``tenant_key`` / ``user_id`` / ``extra`` only.
+
+    def to_storage_dict(self) -> dict[str, Any]:
+        """Serialise non-secret state for the token store.
+
+        The returned dict MUST be JSON-serialisable.  Do NOT include
+        ``access_token`` or ``expires_at`` — those live one level up
+        in the token record (where refresh rotates them) and are
+        passed back into :meth:`from_storage_dict` as kwargs.
+        """
+        return {
+            "tenant_key": self._tenant_key,
+            "user_id": self._user_id,
+            "extra": dict(self.extra),
+        }
+
+    @classmethod
+    def from_storage_dict(
+        cls,
+        *,
+        access_token: str,
+        expires_at: float,
+        state: dict[str, Any],
+    ) -> "OrchidAuthContext":
+        """Reconstruct an instance from :meth:`to_storage_dict` output.
+
+        ``access_token`` and ``expires_at`` are passed fresh from the
+        surrounding token record (post-refresh, if applicable).
+        """
+        return cls(
+            access_token=access_token,
+            tenant_key=state.get("tenant_key", "default"),
+            user_id=state.get("user_id", ""),
+            expires_at=expires_at,
+            extra=dict(state.get("extra") or {}),
+        )
+
     def __repr__(self) -> str:
         return (
             f"{type(self).__name__}("
