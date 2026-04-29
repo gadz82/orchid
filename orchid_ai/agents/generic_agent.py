@@ -38,6 +38,7 @@ from .skill_detector import SkillDetector
 from .skill_executor import SkillExecutor
 
 logger = logging.getLogger(__name__)
+perf_logger = logging.getLogger("orchid.perf")
 
 _wall_clock = time.time  # cache TTL must use wall clock — dynamic.py stores time.time()
 
@@ -115,26 +116,68 @@ class GenericAgent(OrchidAgent):
         raw_query = self.extract_user_query(state)
 
         # Reformulate query using conversation history for better search/tool precision
+        reformulate_start = time.perf_counter()
         if self._config.rag.reformulate_queries and self._chat_model:
             query = await self.reformulate_query(raw_query, state)
+            reformulate_elapsed = (time.perf_counter() - reformulate_start) * 1000
+            perf_logger.info("[PERF][agent=%s] step=reformulate_query took %.1f ms", self.name, reformulate_elapsed)
         else:
             query = raw_query
 
         scope = self._build_scope(auth, state)
 
+        rag_start = time.perf_counter()
         rag_data = await self._step_rag_retrieval(query, scope)
+        rag_elapsed = (time.perf_counter() - rag_start) * 1000
+        perf_logger.info(
+            "[PERF][agent=%s] step=rag_retrieval took %.1f ms (docs=%d, k=%d, namespace=%s)",
+            self.name,
+            rag_elapsed,
+            len(rag_data),
+            self._config.rag.k,
+            self._config.rag.namespace,
+        )
+
+        cache_start = time.perf_counter()
         cached_tools = await self._step_cache_check(scope)
+        cache_elapsed = (time.perf_counter() - cache_start) * 1000
+        if self._config.injectable_tool_ttls:
+            perf_logger.info(
+                "[PERF][agent=%s] step=cache_check took %.1f ms (cache_hits=%d)",
+                self.name,
+                cache_elapsed,
+                len(cached_tools),
+            )
 
         # Skill check — if matched, run the skill and skip the agentic loop
+        skill_start = time.perf_counter()
         skill_name = await self._detect_skill(query)
+        skill_detect_elapsed = (time.perf_counter() - skill_start) * 1000
+        if self._config.skills:
+            perf_logger.info(
+                "[PERF][agent=%s] step=skill_detect took %.1f ms (matched=%s)",
+                self.name,
+                skill_detect_elapsed,
+                skill_name or "none",
+            )
         if skill_name:
             logger.info("[%s] Running agent skill '%s'", self.name, skill_name)
             skill = self._config.skills[skill_name]
+            skill_run_start = time.perf_counter()
             mcp_data = await self._skill_executor.run_skill(skill_name, skill.steps, query, auth)
+            skill_run_elapsed = (time.perf_counter() - skill_run_start) * 1000
+            perf_logger.info(
+                "[PERF][agent=%s] step=skill_run name=%s took %.1f ms (tool_results=%d)",
+                self.name,
+                skill_name,
+                skill_run_elapsed,
+                len(mcp_data),
+            )
             final_text = None
         else:
             # Unified agentic loop: MCP + built-in tools in a single
             # native tool_calls conversation with duplicate detection.
+            loop_start = time.perf_counter()
             final_text, mcp_data = await self._agentic_tool_loop(
                 query,
                 auth,
@@ -142,17 +185,41 @@ class GenericAgent(OrchidAgent):
                 rag_data,
                 skip_tools=set(cached_tools.keys()),
             )
+            loop_elapsed = (time.perf_counter() - loop_start) * 1000
+            perf_logger.info(
+                "[PERF][agent=%s] step=agentic_loop took %.1f ms (tool_results=%d, produced_text=%s)",
+                self.name,
+                loop_elapsed,
+                len(mcp_data),
+                bool(final_text),
+            )
             if cached_tools:
                 mcp_data = {**cached_tools, **mcp_data}
 
+        inject_start = time.perf_counter()
         await self._step_dynamic_injection(mcp_data, scope)
+        inject_elapsed = (time.perf_counter() - inject_start) * 1000
+        if self._config.injectable_tools:
+            perf_logger.info(
+                "[PERF][agent=%s] step=dynamic_injection took %.1f ms",
+                self.name,
+                inject_elapsed,
+            )
 
         # When the agentic loop produced a final text response the
         # summarisation step is redundant — the LLM already synthesised.
         if final_text:
             summary = final_text
         else:
+            summarise_start = time.perf_counter()
             summary = await self._step_summarise(query, mcp_data, rag_data, state)
+            summarise_elapsed = (time.perf_counter() - summarise_start) * 1000
+            perf_logger.info(
+                "[PERF][agent=%s] step=summarise took %.1f ms (out_chars=%d)",
+                self.name,
+                summarise_elapsed,
+                len(summary),
+            )
 
         return {
             "messages": [AIMessage(content=f"[{self.name.title()} Agent]\n{summary}")],
@@ -410,10 +477,13 @@ class GenericAgent(OrchidAgent):
             for name, content in caps.resource_contents.items():
                 parts.append(f"\n[{name}]\n{content[:2000]}")
 
-        # RAG context
+        # RAG context — cap configurable per-agent via
+        # ``rag.max_context_chars`` (defaults to 3000).  Bump it for
+        # catalog-style agents where the RAG IS the source of truth.
         if rag_data:
+            cap = self._config.rag.max_context_chars or 3000
             parts.append("\n--- Background Knowledge (RAG) ---")
-            parts.append(json.dumps(rag_data, indent=2, default=str)[:3000])
+            parts.append(json.dumps(rag_data, indent=2, default=str)[:cap])
 
         return "\n".join(parts)
 

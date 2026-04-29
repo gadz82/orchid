@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any
 
 from langchain_core.tools import BaseTool
@@ -34,6 +35,7 @@ from ..core.mcp import OrchidMCPToolCaller
 from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
+perf_logger = logging.getLogger("orchid.perf")
 
 
 class MCPToolWrapper(BaseTool):
@@ -55,14 +57,32 @@ class MCPToolWrapper(BaseTool):
         raise NotImplementedError("MCPToolWrapper is async-only; use ainvoke()")
 
     async def _arun(self, **kwargs: Any) -> str:
+        call_start = time.perf_counter()
         try:
             result = await self.mcp_client.call_tool(self.name, kwargs, self.auth)
+            elapsed = (time.perf_counter() - call_start) * 1000
             text = result.text
             if result.is_error:
                 text = f"[Tool error] {text}"
                 logger.warning("[%s] MCP tool '%s' returned error: %s", self.agent_name, self.name, text[:300])
+            perf_logger.info(
+                "[PERF][agent=%s][mcp.call] tool=%s took %.1f ms (out_chars=%d, error=%s)",
+                self.agent_name,
+                self.name,
+                elapsed,
+                len(text),
+                result.is_error,
+            )
             return text
         except Exception as exc:
+            elapsed = (time.perf_counter() - call_start) * 1000
+            perf_logger.warning(
+                "[PERF][agent=%s][mcp.call] tool=%s FAILED after %.1f ms: %s",
+                self.agent_name,
+                self.name,
+                elapsed,
+                type(exc).__name__,
+            )
             logger.error(
                 "[%s] MCP tool '%s' exception: %s",
                 self.agent_name,
@@ -93,10 +113,28 @@ class BuiltinToolWrapper(BaseTool):
     async def _arun(self, **kwargs: Any) -> str:
         from ..config.tool_registry import call_tool
 
+        call_start = time.perf_counter()
         try:
             result = await call_tool(self.name, auth_context=self.auth, **kwargs)
-            return json.dumps(result, default=str) if not isinstance(result, str) else result
+            elapsed = (time.perf_counter() - call_start) * 1000
+            text = json.dumps(result, default=str) if not isinstance(result, str) else result
+            perf_logger.info(
+                "[PERF][agent=%s][builtin.call] tool=%s took %.1f ms (out_chars=%d)",
+                self.agent_name,
+                self.name,
+                elapsed,
+                len(text),
+            )
+            return text
         except Exception as exc:
+            elapsed = (time.perf_counter() - call_start) * 1000
+            perf_logger.warning(
+                "[PERF][agent=%s][builtin.call] tool=%s FAILED after %.1f ms: %s",
+                self.agent_name,
+                self.name,
+                elapsed,
+                type(exc).__name__,
+            )
             # Default level: one-line summary so an LLM-driven retry
             # loop doesn't dump the same six-frame traceback two or
             # three times per turn.  Operators who want the stack pop

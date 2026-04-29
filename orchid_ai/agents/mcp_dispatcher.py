@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,6 +14,7 @@ from ..core.mcp import OrchidMCPAuthRequiredError, OrchidMCPClient
 from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
+perf_logger = logging.getLogger("orchid.perf")
 
 
 @dataclass
@@ -258,6 +260,7 @@ class MCPDispatcher:
         ``tool_call_strategy`` YAML setting is not consulted here.
         """
         caps = MCPCapabilities()
+        render_start = time.perf_counter()
 
         if not self._clients or not self._configs:
             return caps
@@ -268,11 +271,21 @@ class MCPDispatcher:
 
             client = self._clients[i]
             server_name = server_config.name
+            srv_start = time.perf_counter()
 
             # ── Tools ──────────────────────────────────────────
             if server_config.discover_all_tools or server_config.tools:
                 try:
+                    list_tools_start = time.perf_counter()
                     raw_tools = await client.list_tools(auth)
+                    list_tools_elapsed = (time.perf_counter() - list_tools_start) * 1000
+                    perf_logger.info(
+                        "[PERF][agent=%s][mcp] list_tools server=%s took %.1f ms (raw_count=%d)",
+                        agent_name,
+                        server_name,
+                        list_tools_elapsed,
+                        len(raw_tools),
+                    )
                     if not server_config.discover_all_tools:
                         whitelist = {t.name for t in server_config.tools}
                         raw_tools = [t for t in raw_tools if t["name"] in whitelist]
@@ -294,7 +307,16 @@ class MCPDispatcher:
             # ── Prompts ────────────────────────────────────────
             if server_config.discover_all_prompts or server_config.prompts:
                 try:
+                    list_prompts_start = time.perf_counter()
                     prompts = await client.list_prompts(auth)
+                    list_prompts_elapsed = (time.perf_counter() - list_prompts_start) * 1000
+                    perf_logger.info(
+                        "[PERF][agent=%s][mcp] list_prompts server=%s took %.1f ms (count=%d)",
+                        agent_name,
+                        server_name,
+                        list_prompts_elapsed,
+                        len(prompts),
+                    )
                     if not server_config.discover_all_prompts and server_config.prompts:
                         allowed = set(server_config.prompts)
                         prompts = [p for p in prompts if p["name"] in allowed]
@@ -334,7 +356,16 @@ class MCPDispatcher:
             # ── Resources ──────────────────────────────────────
             if server_config.discover_all_resources or server_config.resources:
                 try:
+                    list_resources_start = time.perf_counter()
                     resources = await client.list_resources(auth)
+                    list_resources_elapsed = (time.perf_counter() - list_resources_start) * 1000
+                    perf_logger.info(
+                        "[PERF][agent=%s][mcp] list_resources server=%s took %.1f ms (count=%d)",
+                        agent_name,
+                        server_name,
+                        list_resources_elapsed,
+                        len(resources),
+                    )
                     if not server_config.discover_all_resources and server_config.resources:
                         allowed = set(server_config.resources)
                         resources = [r for r in resources if r["name"] in allowed or r.get("uri") in allowed]
@@ -342,7 +373,12 @@ class MCPDispatcher:
                     for res in resources:
                         try:
                             content = await client.read_resource(res["uri"], auth)
-                            caps.resource_contents[res["name"]] = content
+                            # ``read_resource`` returns "" for resources whose
+                            # initial pre-read failed (negative cache hit) —
+                            # skip storing them so the agent's system prompt
+                            # doesn't grow empty ``[name]\n`` blocks.
+                            if content:
+                                caps.resource_contents[res["name"]] = content
                         except Exception as exc:
                             logger.warning(
                                 "[%s] Could not read resource '%s' from '%s': %s",
@@ -354,10 +390,26 @@ class MCPDispatcher:
                 except Exception as exc:
                     logger.warning("[%s] Could not list resources from '%s': %s", agent_name, server_name, exc)
 
+            srv_elapsed = (time.perf_counter() - srv_start) * 1000
+            perf_logger.info(
+                "[PERF][agent=%s][mcp] discover server=%s took %.1f ms",
+                agent_name,
+                server_name,
+                srv_elapsed,
+            )
+
         # asyncio.gather runs coroutines on a single thread; they only
         # interleave at await points, so concurrent mutation of ``caps``
         # (list.append / dict.__setitem__) is safe without locks.
         await asyncio.gather(*(_render_server(i, cfg) for i, cfg in enumerate(self._configs)))
+        render_elapsed = (time.perf_counter() - render_start) * 1000
+        perf_logger.info(
+            "[PERF][agent=%s][mcp] render_capabilities total=%.1f ms (servers=%d, tools_total=%d)",
+            agent_name,
+            render_elapsed,
+            len(self._configs),
+            len(caps.raw_tools),
+        )
         return caps
 
     # ── MCP tools → litellm format ─────────────────────────────

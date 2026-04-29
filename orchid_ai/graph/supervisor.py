@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.graph import END
@@ -63,6 +64,7 @@ class OrchidRoutingDecision(BaseModel):
 
 
 logger = logging.getLogger(__name__)
+perf_logger = logging.getLogger("orchid.perf")
 
 # ── Prompt templates ─────────────────────────────────────────
 
@@ -141,29 +143,84 @@ def create_supervisor_node(
     chat_model: BaseChatModel | None = None,
     orchestrator_skills: dict[str, OrchidOrchestratorSkillConfig] | None = None,
     supervisor_config: OrchidSupervisorConfig | None = None,
+    routing_chat_model: BaseChatModel | None = None,
 ):
     """
     Return a LangGraph node function with *model*, *agent_descriptions*,
     *chat_model*, and *orchestrator_skills* captured via closure — no
     module-level globals (ADR-008 Composition Root).
+
+    When ``routing_chat_model`` is provided, the supervisor uses it for
+    the cheap routing + sequential-advance phases (short structured
+    classifications and one-line handoff messages) instead of the
+    main ``chat_model`` reserved for synthesis.  Falls back to
+    ``chat_model`` when ``None`` (default — backwards-compatible).
     """
     skills = orchestrator_skills or {}
     sup_config = supervisor_config or OrchidSupervisorConfig()
+    # Route + advance phases use the cheaper model when configured;
+    # synthesis always uses the main chat_model.
+    route_chat_model = routing_chat_model or chat_model
 
     async def supervisor_node(state: GraphState) -> GraphState:
         pending = state.get("pending_agents", [])
         has_mcp_data = bool(state.get("mcp_context"))
+        start = time.perf_counter()
 
         # ── Case 1: Sequential pipeline in progress — advance to next agent ──
         if pending and has_mcp_data:
-            return await _advance_sequential(state, model, agent_descriptions, pending, sup_config, chat_model)
+            perf_logger.info("[PERF][supervisor] phase=advance_sequential next=%s pending=%s", pending[0], pending[1:])
+            result = await _advance_sequential(state, model, agent_descriptions, pending, sup_config, route_chat_model)
+            elapsed = (time.perf_counter() - start) * 1000
+            perf_logger.info("[PERF][supervisor] phase=advance_sequential took %.1f ms", elapsed)
+            return result
 
         # ── Case 2: All agents done (no pending) + data collected → synthesise ──
         if has_mcp_data and not pending and not state.get("active_agents"):
-            return await _synthesise(state, model, sup_config, chat_model)
+            # ── Fast path: skip the synthesis LLM call when exactly one
+            # agent ran this turn and produced final text.  The agent's
+            # response is already user-ready (the agentic loop's last
+            # LLM call synthesised it from RAG + tools); a second pass
+            # at the supervisor level just rewrites it at the cost of
+            # 5-15 s and ~6-10 k tokens of input on every turn.  Multi-
+            # agent fan-in and sequential pipelines still go through
+            # ``_synthesise`` so their outputs get merged.
+            if sup_config.skip_synthesis_when_single_agent:
+                single = _extract_single_agent_response(state)
+                if single is not None:
+                    perf_logger.info(
+                        "[PERF][supervisor] phase=synthesise_skipped (single-agent fast path, %d chars)",
+                        len(single),
+                    )
+                    logger.info(
+                        "[Supervisor] synthesis skipped — single agent produced final text (%d chars)", len(single)
+                    )
+                    return {
+                        "messages": [AIMessage(content=single)],
+                        "final_response": single,
+                        "active_agents": [],
+                        "pending_agents": [],
+                    }
+
+            perf_logger.info(
+                "[PERF][supervisor] phase=synthesise (mcp_keys=%s)", list(state.get("mcp_context", {}).keys())
+            )
+            result = await _synthesise(state, model, sup_config, chat_model)
+            elapsed = (time.perf_counter() - start) * 1000
+            perf_logger.info("[PERF][supervisor] phase=synthesise took %.1f ms", elapsed)
+            return result
 
         # ── Case 3: First entry — analyse intent and route ──
-        return await _route(state, model, agent_descriptions, skills, sup_config, chat_model)
+        perf_logger.info("[PERF][supervisor] phase=route (initial intent analysis)")
+        result = await _route(state, model, agent_descriptions, skills, sup_config, route_chat_model)
+        elapsed = (time.perf_counter() - start) * 1000
+        perf_logger.info(
+            "[PERF][supervisor] phase=route took %.1f ms (active=%s pending=%s)",
+            elapsed,
+            result.get("active_agents", []),
+            result.get("pending_agents", []),
+        )
+        return result
 
     return supervisor_node
 
@@ -228,6 +285,69 @@ def _filter_internal_messages(
                 continue
         filtered.append(msg)
     return filtered
+
+
+def _extract_single_agent_response(state: GraphState) -> str | None:
+    """Return an agent's final text when exactly one agent ran this turn.
+
+    Walks the messages added since the last ``HumanMessage`` and counts
+    how many distinct ``[X Agent]\\n…`` outputs were produced.  Returns
+    the (prefix-stripped) text only when:
+
+    * exactly one agent message is present in the current turn,
+    * its content is non-empty after stripping the prefix.
+
+    Returns ``None`` in every other case — multi-agent fan-in,
+    sequential pipelines, skill executions (multiple agents), or empty
+    agent output — so synthesis still runs and merges results.
+    """
+    messages = state.get("messages", [])
+    if not messages:
+        return None
+
+    # Find the index of the last user (human) message so we only look
+    # at this turn's agent output.  ``HumanMessage`` covers both the
+    # langchain-core class and the ``type == "human"`` duck-type used
+    # in some test doubles.
+    last_user_idx = -1
+    for i, msg in enumerate(messages):
+        if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
+            last_user_idx = i
+    if last_user_idx < 0:
+        return None
+
+    current_turn = messages[last_user_idx + 1 :]
+
+    agent_outputs: list[str] = []
+    for msg in current_turn:
+        if not (isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai")):
+            continue
+        content = str(getattr(msg, "content", "") or "")
+        if not content:
+            continue
+        # Skip supervisor internal messages (routing dispatch banners,
+        # handoff prefixes) — those aren't agent outputs.
+        if content.startswith("[Supervisor"):
+            continue
+        # Skip messages with pending tool calls — those aren't final answers.
+        if getattr(msg, "tool_calls", None):
+            continue
+        # Strip the ``[Foo Agent]\n`` prefix added by ``GenericAgent.run``.
+        # Only treat messages that carry that prefix as agent outputs;
+        # bare AIMessages without a prefix could be from anywhere.
+        if not (content.startswith("[") and "Agent]\n" in content[:80]):
+            continue
+        # Extract the text after the prefix
+        newline_idx = content.find("\n")
+        if newline_idx < 0:
+            continue
+        body = content[newline_idx + 1 :].strip()
+        if body:
+            agent_outputs.append(body)
+
+    if len(agent_outputs) != 1:
+        return None
+    return agent_outputs[0]
 
 
 def _to_llm_messages(
@@ -336,7 +456,10 @@ async def _route(
             raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
 
         structured_model = chat_model.with_structured_output(OrchidRoutingDecision)
+        llm_start = time.perf_counter()
         decision: OrchidRoutingDecision = await structured_model.ainvoke(llm_messages, temperature=0)
+        llm_elapsed = (time.perf_counter() - llm_start) * 1000
+        perf_logger.info("[PERF][supervisor.route] structured LLM call took %.1f ms", llm_elapsed)
         logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
         # Handle LLM API failures gracefully
@@ -529,7 +652,10 @@ async def _advance_sequential(
         )
 
     try:
+        llm_start = time.perf_counter()
         handoff = await _llm_complete(chat_model, model, llm_messages, temperature=0.2)
+        llm_elapsed = (time.perf_counter() - llm_start) * 1000
+        perf_logger.info("[PERF][supervisor.advance] handoff LLM call took %.1f ms", llm_elapsed)
         logger.info(
             "[Supervisor] sequential advance → %s (pending: %s): %s",
             next_agent,
@@ -631,7 +757,12 @@ async def _synthesise(
         )
 
     try:
+        llm_start = time.perf_counter()
         final = await _llm_complete(chat_model, model, llm_messages, temperature=0.3)
+        llm_elapsed = (time.perf_counter() - llm_start) * 1000
+        perf_logger.info(
+            "[PERF][supervisor.synth] synthesis LLM call took %.1f ms (out_chars=%d)", llm_elapsed, len(final)
+        )
         logger.info("[Supervisor] synthesis complete (%d chars)", len(final))
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
         # Handle LLM API failures gracefully
