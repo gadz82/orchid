@@ -419,7 +419,7 @@ Each step:
   - `"llm_decides"` -- Ask the LLM to decide which tools to call and with what arguments. The LLM sees all available tools and the user query, then generates tool calls. Most flexible but slower and uses more tokens.
 - **`auth`** -- Per-server authentication configuration (see `agents.<name>.mcp_servers[].auth` below). Determines how the client authenticates with this MCP server. Defaults to `mode: "none"` (no auth headers).
 
-> **Capability cache lifetime:** discovery results (`list_tools()`, `list_prompts()`, `list_resources()`) are cached for the lifetime of the process and warmed proactively at startup / session start by `OrchidSessionWarmer` -- the per-request hot path stops paying the discovery cost. The legacy `cache_ttl` field is no longer accepted in YAML; flush stale capabilities via `OrchidMCPClient.invalidate_cache()` (or a future admin endpoint).
+> **Capability cache lifetime:** discovery results (`list_tools()`, `list_prompts()`, `list_resources()`) are cached for the lifetime of the process and warmed proactively at startup / session start by `OrchidSessionWarmer` -- the per-request hot path stops paying the discovery cost. Flush stale capabilities via `OrchidMCPClient.invalidate_cache()` (or a future admin endpoint).
 
 > **Fault isolation:** MCP server communication boundaries use broad exception handling. If a server returns HTTP errors (401 Unauthorized, 500 Internal Server Error), connection failures, or protocol errors, the agent logs a warning and continues with the remaining servers and tools -- it does not crash or retry endlessly. This applies to tool execution (strategies), capability discovery (`render_capabilities`), and the `fetch()` dispatcher. One failing MCP server never takes down the entire agent.
 

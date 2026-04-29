@@ -8,11 +8,11 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from orchid_ai.config.schema import OrchidSupervisorConfig
-from orchid_ai.graph.supervisor import (
+from orchid_ai.graph._supervisor_helpers import (
     _extract_single_agent_response,
     _filter_internal_messages,
-    create_supervisor_node,
 )
+from orchid_ai.graph.supervisor import create_supervisor_node
 
 
 class TestFilterInternalMessages:

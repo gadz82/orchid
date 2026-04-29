@@ -41,7 +41,7 @@ def _make_agent(tools: list[str]) -> GenericAgent:
     chat_model.bind_tools = MagicMock(return_value=chat_model)  # bind_tools returns self
     return GenericAgent(
         config=config,
-        llm="test-model",
+        model_id="test-model",
         reader=reader,
         mcp_clients=[],
         chat_model=chat_model,

@@ -1,5 +1,5 @@
 """
-Supervisor node — intent analysis + routing + synthesis (ADR-013).
+Supervisor node — intent analysis + routing (ADR-013).
 
 The Supervisor is the ONLY entry point of the graph.
 It does NOT have access to MCP servers or vector stores.
@@ -7,8 +7,8 @@ Its job:
   1. Analyse user intent via LLM
   2. Choose execution mode: **parallel** or **sequential**
   3. Route to one or more specialised sub-agents
-  4. On re-entry after a sequential step, advance the pipeline
-  5. After all agents complete, synthesise a final response
+  4. Delegate sequential advancement to :class:`SequentialAdvancer`
+  5. Delegate final synthesis to :class:`ResponseSynthesizer`
 
 Execution modes (ADR-013):
   - parallel   → all agents run simultaneously via Send() fan-out
@@ -20,22 +20,28 @@ Prompts are configurable via ``OrchidSupervisorConfig`` in agents.yaml.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
-
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from langgraph.graph import END
-from langgraph.types import Send
-
 from typing import Literal as TypingLiteral
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langgraph.graph import END
+from langgraph.types import Send
 from pydantic import BaseModel, Field
 
-from ..core.agent import OrchidAgent
 from ..config.schema import OrchidOrchestratorSkillConfig, OrchidSupervisorConfig
+from ..core.agent import OrchidAgent
+from .sequential_advancer import SequentialAdvancer
 from .state import GraphState
+from .synthesizer import ResponseSynthesizer
+
+__all__ = [
+    "OrchidRoutingDecision",
+    "ROUTING_SYSTEM_PROMPT",
+    "create_supervisor_node",
+    "route_to_agents",
+]
 
 
 # ── Structured output model for routing ──────────────────────
@@ -66,7 +72,7 @@ class OrchidRoutingDecision(BaseModel):
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
 
-# ── Prompt templates ─────────────────────────────────────────
+# ── Prompt template for routing ──────────────────────────────
 
 ROUTING_SYSTEM_PROMPT = """\
 You are the Supervisor of the {assistant_name}.
@@ -105,34 +111,6 @@ FIELD INSTRUCTIONS (you MUST follow these):
   general knowledge). Otherwise null.
 """
 
-SEQUENTIAL_ADVANCE_SYSTEM_PROMPT = """\
-You are the Supervisor of the {assistant_name}.
-A sub-agent has just completed a step in a sequential pipeline.
-
-Previous agent results are in the conversation.
-The NEXT agent in the pipeline is: **{next_agent}** ({next_description}).
-Remaining pipeline: {remaining}
-{skill_instruction_section}
-Your job: write a brief handoff message that summarises what was found so far
-and what the next agent should focus on.  This message will be visible to the
-next agent in the conversation history.
-
-Be concise — one or two sentences.
-"""
-
-SYNTHESIS_SYSTEM_PROMPT = """\
-You are the Supervisor of the {assistant_name}.
-The specialised sub-agents have completed their work.
-
-IMPORTANT: Only answer the user's LATEST question or request.
-The conversation history is provided for context only — do NOT
-repeat or re-answer previous questions.
-
-Combine agent results into a single coherent answer for the LATEST query.
-Be concise but complete.  If data was retrieved, summarise it meaningfully.
-Do NOT mention internal routing or agent names to the user.
-"""
-
 
 # ── Factory ──────────────────────────────────────────────────
 
@@ -162,6 +140,18 @@ def create_supervisor_node(
     # synthesis always uses the main chat_model.
     route_chat_model = routing_chat_model or chat_model
 
+    advancer = SequentialAdvancer(
+        model=model,
+        agent_descriptions=agent_descriptions,
+        supervisor_config=sup_config,
+        chat_model=route_chat_model,
+    )
+    synthesizer = ResponseSynthesizer(
+        model=model,
+        supervisor_config=sup_config,
+        chat_model=chat_model,
+    )
+
     async def supervisor_node(state: GraphState) -> GraphState:
         pending = state.get("pending_agents", [])
         has_mcp_data = bool(state.get("mcp_context"))
@@ -169,43 +159,23 @@ def create_supervisor_node(
 
         # ── Case 1: Sequential pipeline in progress — advance to next agent ──
         if pending and has_mcp_data:
-            perf_logger.info("[PERF][supervisor] phase=advance_sequential next=%s pending=%s", pending[0], pending[1:])
-            result = await _advance_sequential(state, model, agent_descriptions, pending, sup_config, route_chat_model)
+            perf_logger.info(
+                "[PERF][supervisor] phase=advance_sequential next=%s pending=%s",
+                pending[0],
+                pending[1:],
+            )
+            result = await advancer.advance(state, pending)
             elapsed = (time.perf_counter() - start) * 1000
             perf_logger.info("[PERF][supervisor] phase=advance_sequential took %.1f ms", elapsed)
             return result
 
         # ── Case 2: All agents done (no pending) + data collected → synthesise ──
         if has_mcp_data and not pending and not state.get("active_agents"):
-            # ── Fast path: skip the synthesis LLM call when exactly one
-            # agent ran this turn and produced final text.  The agent's
-            # response is already user-ready (the agentic loop's last
-            # LLM call synthesised it from RAG + tools); a second pass
-            # at the supervisor level just rewrites it at the cost of
-            # 5-15 s and ~6-10 k tokens of input on every turn.  Multi-
-            # agent fan-in and sequential pipelines still go through
-            # ``_synthesise`` so their outputs get merged.
-            if sup_config.skip_synthesis_when_single_agent:
-                single = _extract_single_agent_response(state)
-                if single is not None:
-                    perf_logger.info(
-                        "[PERF][supervisor] phase=synthesise_skipped (single-agent fast path, %d chars)",
-                        len(single),
-                    )
-                    logger.info(
-                        "[Supervisor] synthesis skipped — single agent produced final text (%d chars)", len(single)
-                    )
-                    return {
-                        "messages": [AIMessage(content=single)],
-                        "final_response": single,
-                        "active_agents": [],
-                        "pending_agents": [],
-                    }
-
             perf_logger.info(
-                "[PERF][supervisor] phase=synthesise (mcp_keys=%s)", list(state.get("mcp_context", {}).keys())
+                "[PERF][supervisor] phase=synthesise (mcp_keys=%s)",
+                list(state.get("mcp_context", {}).keys()),
             )
-            result = await _synthesise(state, model, sup_config, chat_model)
+            result = await synthesizer.synthesise(state)
             elapsed = (time.perf_counter() - start) * 1000
             perf_logger.info("[PERF][supervisor] phase=synthesise took %.1f ms", elapsed)
             return result
@@ -268,120 +238,7 @@ def route_to_agents(state: GraphState) -> list[Send] | str:
         return f"{active[0]}_agent"
 
 
-# ── Internal helpers ─────────────────────────────────────────
-
-
-def _filter_internal_messages(
-    messages: list[BaseMessage],
-    *,
-    skip_prefixes: tuple[str, ...] = ("[Supervisor",),
-) -> list[BaseMessage]:
-    """Remove internal routing messages (e.g. supervisor dispatches) from a message list."""
-    filtered: list[BaseMessage] = []
-    for msg in messages:
-        if isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai"):
-            content = str(msg.content) if hasattr(msg, "content") else str(msg)
-            if any(content.startswith(prefix) for prefix in skip_prefixes):
-                continue
-        filtered.append(msg)
-    return filtered
-
-
-def _extract_single_agent_response(state: GraphState) -> str | None:
-    """Return an agent's final text when exactly one agent ran this turn.
-
-    Walks the messages added since the last ``HumanMessage`` and counts
-    how many distinct ``[X Agent]\\n…`` outputs were produced.  Returns
-    the (prefix-stripped) text only when:
-
-    * exactly one agent message is present in the current turn,
-    * its content is non-empty after stripping the prefix.
-
-    Returns ``None`` in every other case — multi-agent fan-in,
-    sequential pipelines, skill executions (multiple agents), or empty
-    agent output — so synthesis still runs and merges results.
-    """
-    messages = state.get("messages", [])
-    if not messages:
-        return None
-
-    # Find the index of the last user (human) message so we only look
-    # at this turn's agent output.  ``HumanMessage`` covers both the
-    # langchain-core class and the ``type == "human"`` duck-type used
-    # in some test doubles.
-    last_user_idx = -1
-    for i, msg in enumerate(messages):
-        if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
-            last_user_idx = i
-    if last_user_idx < 0:
-        return None
-
-    current_turn = messages[last_user_idx + 1 :]
-
-    agent_outputs: list[str] = []
-    for msg in current_turn:
-        if not (isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai")):
-            continue
-        content = str(getattr(msg, "content", "") or "")
-        if not content:
-            continue
-        # Skip supervisor internal messages (routing dispatch banners,
-        # handoff prefixes) — those aren't agent outputs.
-        if content.startswith("[Supervisor"):
-            continue
-        # Skip messages with pending tool calls — those aren't final answers.
-        if getattr(msg, "tool_calls", None):
-            continue
-        # Strip the ``[Foo Agent]\n`` prefix added by ``GenericAgent.run``.
-        # Only treat messages that carry that prefix as agent outputs;
-        # bare AIMessages without a prefix could be from anywhere.
-        if not (content.startswith("[") and "Agent]\n" in content[:80]):
-            continue
-        # Extract the text after the prefix
-        newline_idx = content.find("\n")
-        if newline_idx < 0:
-            continue
-        body = content[newline_idx + 1 :].strip()
-        if body:
-            agent_outputs.append(body)
-
-    if len(agent_outputs) != 1:
-        return None
-    return agent_outputs[0]
-
-
-def _to_llm_messages(
-    system: str,
-    state_messages: list[BaseMessage],
-) -> list[dict[str, str]]:
-    """Convert LangGraph messages to the [{role, content}] format used by BaseChatModel."""
-    llm_msgs: list[dict[str, str]] = [{"role": "system", "content": system}]
-    for msg in state_messages:
-        if isinstance(msg, HumanMessage):
-            llm_msgs.append({"role": "user", "content": str(msg.content)})
-        elif isinstance(msg, AIMessage):
-            llm_msgs.append({"role": "assistant", "content": str(msg.content)})
-    return llm_msgs
-
-
-async def _llm_complete(
-    chat_model: BaseChatModel | None,
-    model: str,
-    messages: list[dict[str, str]],
-    *,
-    temperature: float = 0.0,
-    response_format: dict[str, str] | None = None,
-) -> str:
-    """Call LLM via the injected BaseChatModel."""
-    if not chat_model:
-        raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
-    kwargs: dict = {"temperature": temperature}
-    if response_format:
-        # Use with_structured_output for json_object format if supported,
-        # otherwise pass as model_kwargs
-        kwargs["response_format"] = response_format
-    result = await chat_model.ainvoke(messages, **kwargs)
-    return result.content or ""
+# ── Routing phase ────────────────────────────────────────────
 
 
 async def _route(
@@ -581,208 +438,3 @@ async def _route(
             "execution_mode": "parallel",
             "messages": [AIMessage(content=f"[Supervisor] Parallel dispatch: {', '.join(valid)}")],
         }
-
-
-async def _advance_sequential(
-    state: GraphState,
-    model: str,
-    agent_descriptions: dict[str, str],
-    pending: list[str],
-    supervisor_config: OrchidSupervisorConfig | None = None,
-    chat_model: BaseChatModel | None = None,
-) -> GraphState:
-    """
-    Advance the sequential pipeline: activate the next agent,
-    with a handoff message that summarises what was found so far.
-    """
-    next_agent = pending[0]
-    remaining = pending[1:]
-
-    next_desc = agent_descriptions.get(next_agent, "")
-    remaining_str = " → ".join(remaining) if remaining else "(last step)"
-
-    # Include skill instruction for the next agent if available
-    skill_instructions = state.get("skill_instructions", {})
-    instruction = skill_instructions.get(next_agent, "")
-    skill_instruction_section = f"\nSKILL INSTRUCTION for {next_agent}: {instruction}\n" if instruction else ""
-
-    # Generate a handoff message so the next agent has context
-    sup = supervisor_config or OrchidSupervisorConfig()
-    advance_template = sup.sequential_advance_prompt or SEQUENTIAL_ADVANCE_SYSTEM_PROMPT
-    system = advance_template.format(
-        assistant_name=sup.assistant_name,
-        next_agent=next_agent,
-        next_description=next_desc,
-        remaining=remaining_str,
-        skill_instruction_section=skill_instruction_section,
-    )
-
-    # Build clean history using the shared framework helper
-    history = OrchidAgent.extract_conversation_history(
-        state,
-        max_turns=sup.history_max_turns,
-        max_chars=sup.history_max_chars,
-    )
-
-    # Compress older turns when sliding-window summarization is enabled
-    if history and sup.history_summary_enabled and chat_model:
-        history = await OrchidAgent.compress_conversation_history(
-            history,
-            chat_model=chat_model,
-            recent_turns=sup.history_summary_recent_turns,
-        )
-
-    # Filter conversation summaries from history — they're internal
-    clean_history = (
-        [m for m in history if not m.get("content", "").startswith("[Conversation summary]")] if history else []
-    )
-
-    llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    llm_messages.extend(clean_history)
-
-    # Inject current MCP data so the LLM knows what was collected
-    mcp_ctx = state.get("mcp_context", {})
-    if mcp_ctx:
-        context_blob = json.dumps(mcp_ctx, indent=2, default=str)
-        llm_messages.append(
-            {
-                "role": "user",
-                "content": f"Data collected so far:\n```json\n{context_blob}\n```",
-            }
-        )
-
-    try:
-        llm_start = time.perf_counter()
-        handoff = await _llm_complete(chat_model, model, llm_messages, temperature=0.2)
-        llm_elapsed = (time.perf_counter() - llm_start) * 1000
-        perf_logger.info("[PERF][supervisor.advance] handoff LLM call took %.1f ms", llm_elapsed)
-        logger.info(
-            "[Supervisor] sequential advance → %s (pending: %s): %s",
-            next_agent,
-            remaining,
-            handoff[:100],
-        )
-    except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
-        # Handle LLM API failures gracefully - use default handoff
-        logger.error("[Supervisor] LLM API error during sequential handoff: %s", exc, exc_info=True)
-        handoff = f"Continue with {next_agent} to address the user's request."
-
-    return {
-        "active_agents": [next_agent],
-        "pending_agents": remaining,
-        "execution_mode": "sequential",
-        "messages": [AIMessage(content=f"[Supervisor → {next_agent}] {handoff}")],
-    }
-
-
-async def _synthesise(
-    state: GraphState,
-    model: str,
-    supervisor_config: OrchidSupervisorConfig | None = None,
-    chat_model: BaseChatModel | None = None,
-) -> GraphState:
-    """Combine sub-agent results into a final user-facing response."""
-    sup = supervisor_config or OrchidSupervisorConfig()
-    all_messages = state.get("messages", [])
-
-    # ── Split messages: prior history vs current turn ──
-    # Current turn = last user message + all messages after it
-    last_user_idx = -1
-    for i, msg in enumerate(all_messages):
-        if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
-            last_user_idx = i
-
-    if last_user_idx > 0:
-        current_turn = all_messages[last_user_idx:]
-    else:
-        current_turn = all_messages
-
-    # ── Build LLM messages ──
-    synthesis_template = sup.synthesis_system_prompt or SYNTHESIS_SYSTEM_PROMPT
-    synthesis_prompt = synthesis_template.format(assistant_name=sup.assistant_name)
-    llm_messages: list[dict[str, str]] = [
-        {"role": "system", "content": synthesis_prompt},
-    ]
-
-    # Use the shared framework helper for clean, configurable history.
-    # extract_conversation_history already filters [Supervisor messages,
-    # excludes the last user message, and respects turn/char limits.
-    history = OrchidAgent.extract_conversation_history(
-        state,
-        max_turns=sup.history_max_turns,
-        max_chars=sup.history_max_chars,
-    )
-
-    # Compress older turns when sliding-window summarization is enabled
-    if history and sup.history_summary_enabled and chat_model:
-        history = await OrchidAgent.compress_conversation_history(
-            history,
-            chat_model=chat_model,
-            recent_turns=sup.history_summary_recent_turns,
-        )
-
-    if history:
-        # Filter out conversation summaries — they're for context compression,
-        # not for reproduction in the final response.
-        visible_history = [m for m in history if not m.get("content", "").startswith("[Conversation summary]")]
-        if visible_history:
-            llm_messages.append(
-                {
-                    "role": "user",
-                    "content": "Previous conversation (for context only — do NOT re-answer or reproduce any of this):\n"
-                    + "\n".join(f"  {m['role']}: {m['content']}" for m in visible_history),
-                }
-            )
-
-    # Add the current turn messages, filtering out internal routing noise
-    for msg in current_turn:
-        content = str(msg.content) if hasattr(msg, "content") else str(msg)
-        if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
-            llm_messages.append({"role": "user", "content": content})
-        elif isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai"):
-            # Skip internal supervisor messages and conversation summaries
-            if content.startswith("[Supervisor") or content.startswith("[Conversation summary]"):
-                continue
-            llm_messages.append({"role": "assistant", "content": content})
-
-    # Inject MCP context as additional grounding
-    mcp_ctx = state.get("mcp_context", {})
-    if mcp_ctx:
-        context_blob = json.dumps(mcp_ctx, indent=2, default=str)
-        llm_messages.append(
-            {
-                "role": "user",
-                "content": f"Sub-agent data (for reference):\n```json\n{context_blob}\n```",
-            }
-        )
-
-    try:
-        llm_start = time.perf_counter()
-        final = await _llm_complete(chat_model, model, llm_messages, temperature=0.3)
-        llm_elapsed = (time.perf_counter() - llm_start) * 1000
-        perf_logger.info(
-            "[PERF][supervisor.synth] synthesis LLM call took %.1f ms (out_chars=%d)", llm_elapsed, len(final)
-        )
-        logger.info("[Supervisor] synthesis complete (%d chars)", len(final))
-    except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
-        # Handle LLM API failures gracefully
-        logger.error("[Supervisor] LLM API error during synthesis: %s", exc, exc_info=True)
-        error_msg = str(exc)
-        if "503" in error_msg or "high demand" in error_msg.lower():
-            final = (
-                "I'm currently experiencing high demand and cannot synthesize the results. "
-                "Please try again in a few moments."
-            )
-        elif "rate limit" in error_msg.lower():
-            final = "I've hit my rate limit. Please try again in a few moments."
-        else:
-            final = (
-                f"I encountered an error while synthesizing the response: {error_msg[:200]}. Please try again later."
-            )
-
-    return {
-        "messages": [AIMessage(content=final)],
-        "final_response": final,
-        "active_agents": [],
-        "pending_agents": [],
-    }

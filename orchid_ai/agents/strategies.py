@@ -202,8 +202,7 @@ class LLMDecidesStrategy(OrchidToolCallStrategy):
         except Exception as exc:
             logger.error("[%s] LLM API error during tool decision: %s", agent_name, exc, exc_info=True)
             # Fallback: call all tools
-            fallback = CallAllStrategy()
-            return await fallback.execute(client, tools, query, auth, agent_name=agent_name)
+            return await get_strategy("all").execute(client, tools, query, auth, agent_name=agent_name)
 
         try:
             decisions = json.loads(raw)
@@ -211,8 +210,7 @@ class LLMDecidesStrategy(OrchidToolCallStrategy):
                 decisions = decisions.get("tools", [])
         except json.JSONDecodeError:
             logger.warning("[%s] LLM tool decision was not valid JSON: %s", agent_name, raw[:200])
-            fallback = CallAllStrategy()
-            return await fallback.execute(client, tools, query, auth, agent_name=agent_name)
+            return await get_strategy("all").execute(client, tools, query, auth, agent_name=agent_name)
 
         # Execute decided tools
         allowed = {t["name"] for t in relevant_tools}
@@ -277,9 +275,14 @@ def clear_strategies() -> None:
 
 
 def get_strategy(name: str) -> OrchidToolCallStrategy:
-    """Look up and instantiate a tool call strategy by name."""
+    """Look up and instantiate a tool call strategy by name.
+
+    Falls back to whatever is registered under ``"all"`` when the name
+    is unknown — this lets integrators override the default by
+    re-registering ``"all"`` without editing this function.
+    """
     cls = STRATEGY_REGISTRY.get(name)
-    if not cls:
+    if cls is None:
         logger.warning("Unknown tool call strategy '%s', falling back to 'all'", name)
-        cls = CallAllStrategy
+        cls = STRATEGY_REGISTRY.get("all", CallAllStrategy)
     return cls()

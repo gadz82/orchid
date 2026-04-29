@@ -17,7 +17,6 @@ Transport is selected via ``transport`` parameter:
 from __future__ import annotations
 
 import logging
-import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -76,17 +75,7 @@ class StreamableHttpMCPClient(OrchidMCPClient):
         auth_mode: str = "passthrough",
         token_store: Any | None = None,  # OrchidMCPTokenStore (lazy import to avoid circular)
         registration_store: Any | None = None,  # OrchidMCPClientRegistrationStore
-        cache_ttl: float | None = None,  # deprecated — see warning below
     ) -> None:
-        if cache_ttl is not None:
-            warnings.warn(
-                "cache_ttl is deprecated and ignored — MCP capability "
-                "caches now live for the process lifetime and are "
-                "flushed only via explicit invalidate_cache() calls. "
-                "See orchid_ai.mcp.session_warmer for the new lifecycle.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         self._url = url
         self._server_type = server_type
         self._transport = transport

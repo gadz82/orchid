@@ -101,3 +101,17 @@ class TestMCPServerConfigAuth:
         cfg = OrchidMCPServerConfig(**data)
         assert cfg.discover_all_tools is True
         assert cfg.auth.mode == "passthrough"
+
+
+class TestServerConfigStrictExtras:
+    """``extra='forbid'`` rejects unknown fields so typos surface immediately."""
+
+    def test_unknown_field_is_rejected(self):
+        with pytest.raises(Exception) as exc_info:
+            OrchidMCPServerConfig(
+                name="srv",
+                url="https://srv.example.com/mcp",
+                tool_call_strateegy="all",  # typo
+            )
+        # Pydantic's default forbid-extra error mentions the offending field
+        assert "tool_call_strateegy" in str(exc_info.value).lower() or "extra" in str(exc_info.value).lower()

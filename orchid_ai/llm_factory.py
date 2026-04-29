@@ -49,12 +49,17 @@ class ProviderEntry:
     strip_prefix : str | None
         Prefix to strip from the model name before passing to the
         constructor.  ``None`` keeps the full string.
+    api_key_kwarg : str
+        Constructor kwarg name to use for the API key (e.g. ``api_key``,
+        ``google_api_key``). Lets new providers register without editing
+        :func:`_resolve_provider_kwargs`.
     """
 
     prefix: str
     module_path: str
     class_name: str
     strip_prefix: str | None
+    api_key_kwarg: str = "api_key"
 
 
 # Provider prefix → entry.  Looked up by prefix when ``build_chat_model``
@@ -64,8 +69,12 @@ _PROVIDER_MAP: dict[str, ProviderEntry] = {
     "openai/": ProviderEntry("openai/", "langchain_openai", "ChatOpenAI", "openai/"),
     "anthropic/": ProviderEntry("anthropic/", "langchain_anthropic", "ChatAnthropic", "anthropic/"),
     "claude-": ProviderEntry("claude-", "langchain_anthropic", "ChatAnthropic", None),
-    "gemini/": ProviderEntry("gemini/", "langchain_google_genai", "ChatGoogleGenerativeAI", "gemini/"),
-    "google/": ProviderEntry("google/", "langchain_google_genai", "ChatGoogleGenerativeAI", "google/"),
+    "gemini/": ProviderEntry(
+        "gemini/", "langchain_google_genai", "ChatGoogleGenerativeAI", "gemini/", api_key_kwarg="google_api_key"
+    ),
+    "google/": ProviderEntry(
+        "google/", "langchain_google_genai", "ChatGoogleGenerativeAI", "google/", api_key_kwarg="google_api_key"
+    ),
     "ollama/": ProviderEntry("ollama/", "langchain_ollama", "ChatOllama", "ollama/"),
     "ollama_chat/": ProviderEntry("ollama_chat/", "langchain_ollama", "ChatOllama", "ollama_chat/"),
     "groq/": ProviderEntry("groq/", "langchain_groq", "ChatGroq", "groq/"),
@@ -90,6 +99,7 @@ def register_provider(
     *,
     api_key_env: str = "",
     api_base_env: str = "",
+    api_key_kwarg: str = "api_key",
 ) -> None:
     """Register a custom LLM provider for ``build_chat_model()``.
 
@@ -110,6 +120,10 @@ def register_provider(
         Environment variable name for the API key (optional).
     api_base_env : str
         Environment variable name for the API base URL (optional).
+    api_key_kwarg : str
+        Constructor kwarg name to pass the API key as. Defaults to
+        ``"api_key"``; some providers use a different name (e.g.
+        ``"google_api_key"``).
     """
     if prefix in _PROVIDER_MAP:
         existing = _PROVIDER_MAP[prefix]
@@ -121,7 +135,13 @@ def register_provider(
             module_path,
             class_name,
         )
-    _PROVIDER_MAP[prefix] = ProviderEntry(prefix, module_path, class_name, strip_prefix)
+    _PROVIDER_MAP[prefix] = ProviderEntry(
+        prefix=prefix,
+        module_path=module_path,
+        class_name=class_name,
+        strip_prefix=strip_prefix,
+        api_key_kwarg=api_key_kwarg,
+    )
     if api_key_env:
         _PROVIDER_API_KEY_ENV[prefix] = api_key_env
     if api_base_env:
@@ -220,7 +240,7 @@ def _build_single_model(
             cls = getattr(mod, entry.class_name)
 
             model_name = model[len(entry.strip_prefix) :] if entry.strip_prefix else model
-            provider_kwargs = _resolve_provider_kwargs(prefix, model_name, temperature, **kwargs)
+            provider_kwargs = _resolve_provider_kwargs(entry, model_name, temperature, **kwargs)
 
             instance = cls(**provider_kwargs)
             logger.info(
@@ -252,39 +272,34 @@ def _build_single_model(
 
 
 def _resolve_provider_kwargs(
-    prefix: str,
+    entry: ProviderEntry,
     model_name: str,
     temperature: float,
     **extra: Any,
 ) -> dict[str, Any]:
-    """Build constructor kwargs for a provider-specific ChatModel."""
+    """Build constructor kwargs for a provider-specific ChatModel.
+
+    The provider-specific kwarg name for the API key (``api_key`` vs
+    ``google_api_key`` vs whatever a future provider needs) lives on
+    :class:`ProviderEntry` so adding a new provider only requires a
+    registry entry — never an edit here.
+    """
     provider_kwargs: dict[str, Any] = {
         "model": model_name,
         "temperature": temperature,
     }
 
-    # Inject API key from environment
-    env_key = _PROVIDER_API_KEY_ENV.get(prefix)
+    env_key = _PROVIDER_API_KEY_ENV.get(entry.prefix)
     if env_key:
         api_key = os.environ.get(env_key, "")
         if api_key:
-            # Different providers use different kwarg names
-            if prefix in ("openai/", "groq/", "mistral/"):
-                provider_kwargs["api_key"] = api_key
-            elif prefix in ("anthropic/", "claude-"):
-                provider_kwargs["api_key"] = api_key
-            elif prefix in ("gemini/", "google/"):
-                provider_kwargs["google_api_key"] = api_key
+            provider_kwargs[entry.api_key_kwarg] = api_key
 
-    # Inject API base URL
-    env_base = _PROVIDER_API_BASE_ENV.get(prefix)
+    env_base = _PROVIDER_API_BASE_ENV.get(entry.prefix)
     if env_base:
         api_base = os.environ.get(env_base, "")
         if api_base:
-            if prefix.startswith("ollama"):
-                provider_kwargs["base_url"] = api_base
-            else:
-                provider_kwargs["base_url"] = api_base
+            provider_kwargs["base_url"] = api_base
 
     provider_kwargs.update(extra)
     return provider_kwargs

@@ -6,6 +6,8 @@ Public API:
   register / get_class  → agent class registry
 """
 
+from __future__ import annotations
+
 from .loader import load_config
 from .mcp_gateway import (
     OrchidMCPGatewayConfig,

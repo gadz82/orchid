@@ -2,8 +2,8 @@
 Hierarchical RAG scoping — 5-level partition scheme.
 
 ``OrchidRAGScope`` lives in ``core/scopes.py`` (zero external deps) and is
-re-exported here for backward compatibility.  The Qdrant-specific
-``build_qdrant_filter()`` stays here because it depends on ``qdrant_client``.
+re-exported here so callers can pull the scope dataclass and the
+backend-specific ``build_qdrant_filter()`` from a single module.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from qdrant_client.models import (
     MatchValue,
 )
 
-# Re-export from core for backward compatibility
 from ..core.scopes import SHARED_TENANT, OrchidRAGScope
 
 __all__ = ["SHARED_TENANT", "OrchidRAGScope", "build_qdrant_filter"]

@@ -1,1 +1,3 @@
-# RAG pipeline package — implementations pending
+"""RAG pipeline package."""
+
+from __future__ import annotations

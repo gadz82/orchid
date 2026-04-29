@@ -130,6 +130,27 @@ class OrchidPostgresMCPTokenStore(OrchidMCPTokenStore):
             )
         return [_row_to_record(r) for r in rows]
 
+    async def cleanup_expired(self, *, before: float | None = None) -> int:
+        """Single ``DELETE`` purging rows whose ``expires_at`` is in the past.
+
+        Returns the number of rows actually deleted (parsed from the
+        asyncpg command-tag string ``"DELETE N"``).
+        """
+        import time as _time
+
+        cutoff = before if before is not None else _time.time()
+        async with self._pool.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM mcp_oauth_tokens WHERE expires_at > 0 AND expires_at < $1",
+                cutoff,
+            )
+        if isinstance(result, str) and result.startswith("DELETE "):
+            try:
+                return int(result.split(" ", 1)[1])
+            except ValueError:
+                return 0
+        return 0
+
 
 # ── Row mapper ──────────────────────────────────────────────
 

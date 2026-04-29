@@ -26,7 +26,7 @@ class _TestAgent(OrchidAgent):
 def _make_agent(*, chat_model=None):
     mock_reader = MagicMock()
     mock_reader.retrieve = AsyncMock(return_value=[])
-    return _TestAgent(llm="test-model", reader=mock_reader, chat_model=chat_model)
+    return _TestAgent(model_id="test-model", reader=mock_reader, chat_model=chat_model)
 
 
 def _make_state(query: str, history: list | None = None):

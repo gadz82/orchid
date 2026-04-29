@@ -135,17 +135,16 @@ Caches are populated proactively by `OrchidSessionWarmer`:
 |----------|---------|------------------|
 | Process startup | `Orchid.warm_unauthenticated_capabilities()` from `orchid-api` lifespan / `orchid-cli` bootstrap | every `auth.mode: none` server |
 | User session start | `OrchidSessionWarmer.warm_for_user(auth)` from `POST /session/warm` (or the lazy backstop on first authenticated request) | every `passthrough` + `oauth` server |
-| Per-server post-OAuth | `warm_one_for_user(auth, server_name)` from `oauth_callback` / `orchid mcp authorize` | the freshly-authorized server |
+| Per-server post-OAuth | `warm_one_for_user(auth, server_name)` from `oauth_callback` | the freshly-authorized server |
 
 The supervisor / agentic loop hot path stops issuing discovery RPCs
 once the cache is populated — `MCPDispatcher.render_capabilities` uses
 the cached result from each `OrchidMCPClient.list_*` call. The cache
 TTL is gone; manual invalidation is the only way to flush.
 
-The `OrchidMCPServerConfig.cache_ttl` YAML field is no longer accepted
-(the schema silently strips it for backwards compatibility); the
-`StreamableHttpMCPClient(... cache_ttl=...)` kwarg emits a
-`DeprecationWarning` when supplied.
+The `OrchidMCPServerConfig.cache_ttl` YAML field is rejected by
+Pydantic (`extra="forbid"`); the `StreamableHttpMCPClient` constructor
+no longer accepts a `cache_ttl=` kwarg.
 
 ## OAuth state store
 
