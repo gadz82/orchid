@@ -42,6 +42,12 @@ class _CapabilitiesCache:
     resources: list[dict[str, Any]] = field(default_factory=list)
     resource_contents: dict[str, str] = field(default_factory=dict)
     rendered_prompts: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: Negative cache for resources whose initial ``read_resource`` call
+    #: failed (server-side ENOENT, transport timeout, …).  Subsequent
+    #: ``read_resource`` calls return an empty string instead of paying
+    #: the round-trip cost again — the failure is permanent until
+    #: :meth:`invalidate_cache` is called.
+    failed_resource_uris: set[str] = field(default_factory=set)
     populated: bool = False
 
 
@@ -203,6 +209,11 @@ class StreamableHttpMCPClient(OrchidMCPClient):
                                 parts.append(f"[binary data, {len(content.blob)} bytes]")
                         self._cache.resource_contents[res["name"]] = "\n".join(parts)
                     except Exception as exc:
+                        # Negative-cache the failed URI so subsequent
+                        # ``read_resource`` calls don't pay the
+                        # round-trip cost again.  The failure is
+                        # permanent until ``invalidate_cache`` is called.
+                        self._cache.failed_resource_uris.add(res["uri"])
                         logger.warning("[MCP] Could not pre-read resource '%s': %s", res["uri"], exc)
             except Exception as exc:
                 logger.warning("[MCP] list_resources failed for %s: %s", self._url, exc)
@@ -447,7 +458,18 @@ class StreamableHttpMCPClient(OrchidMCPClient):
             ]
 
     async def read_resource(self, uri: str, auth: OrchidAuthContext) -> str:
-        """Read resource content (cached if previously discovered)."""
+        """Read resource content (cached if previously discovered).
+
+        Resources whose initial pre-read failed are negative-cached: a
+        repeat call returns an empty string immediately rather than
+        re-attempting a network round-trip every request.  The negative
+        cache is cleared by :meth:`invalidate_cache`.
+        """
+        # Negative cache short-circuit — avoid retrying known-failed URIs
+        if uri in self._cache.failed_resource_uris:
+            logger.debug("[MCP] Resource '%s' previously failed; returning empty (negative cache)", uri)
+            return ""
+
         # Check cache by URI or name
         for res_name, content in self._cache.resource_contents.items():
             if res_name == uri:
@@ -457,13 +479,17 @@ class StreamableHttpMCPClient(OrchidMCPClient):
             if res["uri"] == uri and res["name"] in self._cache.resource_contents:
                 return self._cache.resource_contents[res["name"]]
 
-        # Not cached — fetch live
-        async with self._connect(auth) as session:
-            result = await session.read_resource(uri)
-            parts: list[str] = []
-            for content in result.contents:
-                if hasattr(content, "text"):
-                    parts.append(content.text)
-                elif hasattr(content, "blob"):
-                    parts.append(f"[binary data, {len(content.blob)} bytes]")
-            return "\n".join(parts)
+        # Not cached — fetch live, negative-caching on failure
+        try:
+            async with self._connect(auth) as session:
+                result = await session.read_resource(uri)
+                parts: list[str] = []
+                for content in result.contents:
+                    if hasattr(content, "text"):
+                        parts.append(content.text)
+                    elif hasattr(content, "blob"):
+                        parts.append(f"[binary data, {len(content.blob)} bytes]")
+                return "\n".join(parts)
+        except Exception:
+            self._cache.failed_resource_uris.add(uri)
+            raise

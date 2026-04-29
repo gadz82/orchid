@@ -131,13 +131,21 @@ class OrchidMetricsHandler(BaseCallbackHandler):
 
     def on_chain_start(
         self,
-        serialized: dict[str, Any],
+        serialized: dict[str, Any] | None,
         inputs: dict[str, Any],
         *,
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
-        name = serialized.get("name", "")
+        # LangGraph emits ``serialized=None`` for some internal chain
+        # transitions (e.g. conditional-edge dispatch); fall back to
+        # ``kwargs["name"]`` when present so we still register the agent
+        # node start time.
+        name = ""
+        if serialized:
+            name = serialized.get("name", "") or ""
+        if not name:
+            name = kwargs.get("name", "") or ""
         if name.endswith("_agent"):
             agent_name = name.removesuffix("_agent")
             self._agent_start_times[run_id] = (agent_name, time.monotonic())

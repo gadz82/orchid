@@ -67,6 +67,12 @@ class OrchidRAGDefaultsConfig(BaseModel):
     rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
     reformulate_queries: bool = True  # rewrite queries using conversation history
     retriever_type: Literal["simple", "multi_query"] = "simple"
+    #: Maximum number of characters of retrieved RAG context injected
+    #: into the agent's system prompt.  The framework JSON-pretty-prints
+    #: the retrieved docs and slices the result at this boundary.
+    #: Increase for catalog-style agents whose RAG IS the source of
+    #: truth (default 3000 truncates large catalogs mid-document).
+    max_context_chars: int = 3000
 
 
 class OrchidRAGConfig(BaseModel):
@@ -80,6 +86,12 @@ class OrchidRAGConfig(BaseModel):
     When ``retriever_type`` is ``None`` (the YAML default), the value
     is inherited from ``defaults.rag.retriever_type``.  Set it
     explicitly to override the default.
+
+    ``max_context_chars`` (``None`` = inherit) sets the upper bound on
+    how much of the retrieved RAG context is inlined into the agent's
+    system prompt before truncation.  Bump it for agents whose RAG is
+    authoritative (catalogs / reference data) so the LLM sees the full
+    set instead of a slice.
     """
 
     namespace: str = ""
@@ -88,6 +100,7 @@ class OrchidRAGConfig(BaseModel):
     reformulate_queries: bool = True  # rewrite queries using conversation history
     retriever_type: Literal["simple", "multi_query"] | None = None  # None = inherit from defaults
     rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
+    max_context_chars: int | None = None  # None = inherit from defaults.rag.max_context_chars
 
 
 class OrchidToolConfig(BaseModel):
@@ -390,10 +403,28 @@ class OrchidSupervisorConfig(BaseModel):
     history_max_turns: int = 20
     history_max_chars: int = 1000
 
+    #: Optional cheaper / faster LLM used for the supervisor's routing
+    #: + sequential-advance phases.  Those calls are short structured
+    #: classifications and one-line handoff messages — they don't need
+    #: the same model as the synthesis pass.  When ``None``, both
+    #: phases reuse the supervisor's main ``chat_model``.  Example:
+    #: ``routing_model: gemini/gemini-2.5-flash-lite``.
+    routing_model: str | None = None
+
     # ── Sliding-window summarization (context compression) ──
     history_summary_enabled: bool = True
     history_summary_model: str | None = None  # None = use the supervisor model
     history_summary_recent_turns: int = 10  # keep last N turns verbatim
+
+    # ── Synthesis fast-path ─────────────────────────────────
+    #: When exactly one agent ran in the current turn and it produced a
+    #: substantive final text response, return that text directly
+    #: instead of running the supervisor synthesis LLM call.  Saves the
+    #: cost of a redundant rewrite (typically 5–15 s on Gemini Flash
+    #: with full conversation + tool-context injected).  Multi-agent
+    #: turns and sequential pipelines still go through synthesis so
+    #: their outputs can be merged.
+    skip_synthesis_when_single_agent: bool = True
 
 
 # ── Agent config (recursive for nesting) ─────────────────────
@@ -540,6 +571,8 @@ def _apply_defaults(
         agent.rag.reformulate_queries = False
     if agent.rag.retriever_type is None:
         agent.rag.retriever_type = defaults.rag.retriever_type
+    if agent.rag.max_context_chars is None:
+        agent.rag.max_context_chars = defaults.rag.max_context_chars
 
     # Collect injectable MCP tool names + TTLs
     agent_ttl = agent.rag.rag_ttl
