@@ -10,6 +10,8 @@ Architectural rule (ADR-008):
     third-party library inside this package is a bug.
 """
 
+from __future__ import annotations
+
 from .state import OrchidAgentState, OrchidAuthContext
 from .agent import OrchidAgent
 from .repository import (

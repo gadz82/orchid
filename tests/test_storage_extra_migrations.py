@@ -94,11 +94,11 @@ async def test_integrator_migration_runs_after_framework() -> None:
             "integrator_widgets",
         }
 
-        # Framework migrations run first (bare keys), integrator
+        # Framework migration runs first (bare key), integrator
         # migration runs last with the ``ext:`` prefix.
         cursor = await storage._conn.execute("SELECT version FROM _migrations ORDER BY version")
         versions = [row[0] async for row in cursor]
-        assert versions == ["001", "002", "ext:001"]
+        assert versions == ["001", "ext:001"]
     finally:
         await storage.close()
 
@@ -116,12 +116,12 @@ async def test_without_extras_only_framework_tables() -> None:
         tables = {row[0] async for row in cursor}
         assert "chat_sessions" in tables
         assert "mcp_oauth_tokens" in tables
-        assert "mcp_client_registrations" in tables  # framework v002
+        assert "mcp_client_registrations" in tables  # unified v001
         assert "integrator_widgets" not in tables
 
         cursor = await storage._conn.execute("SELECT version FROM _migrations ORDER BY version")
         versions = [row[0] async for row in cursor]
-        # Both framework migrations — no integrator extras.
-        assert versions == ["001", "002"]
+        # Unified framework migration — no integrator extras.
+        assert versions == ["001"]
     finally:
         await storage.close()

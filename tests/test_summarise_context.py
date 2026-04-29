@@ -30,7 +30,7 @@ def _make_agent() -> _StubAgent:
     chat_model = MagicMock()
     chat_model.ainvoke = AsyncMock(return_value=MagicMock(content="summary text"))
     reader = MagicMock()
-    return _StubAgent(llm="test-model", reader=reader, chat_model=chat_model)
+    return _StubAgent(model_id="test-model", reader=reader, chat_model=chat_model)
 
 
 # ── Tests ──────────────────────────────────────────────────

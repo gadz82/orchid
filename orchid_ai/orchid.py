@@ -40,10 +40,13 @@ from .bootstrap import _build_runtime
 from .config.schema import OrchidAgentsConfig
 from .core.state import OrchidAuthContext
 from .graph.graph import build_graph
+from .mcp.inventory import OrchidMCPServerInventory
+from .mcp.session_warmer import OrchidSessionWarmer, OrchidWarmReport
 from .persistence.base import OrchidChatStorage
 from .runtime import OrchidRuntime
 
 if TYPE_CHECKING:
+    from .core.agent import OrchidAgent  # noqa: F401
     from .core.mcp import OrchidMCPTokenStore
 
 logger = logging.getLogger(__name__)
@@ -169,7 +172,10 @@ class Orchid:
         self._mcp_token_store = mcp_token_store
         self._owns_resources = _owns_resources
         self._closed = False
-        self._graph = build_graph(config=config, runtime=runtime)
+        self._agents: dict[str, OrchidAgent] = {}
+        self._graph = build_graph(config=config, runtime=runtime, agents_out=self._agents)
+        self._inventory = OrchidMCPServerInventory.from_config(config)
+        self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)
 
     # ── Construction helpers ─────────────────────────────────
 
@@ -191,6 +197,8 @@ class Orchid:
         mcp_token_store_dsn: str = "",
         mcp_client_registration_store_class: str = "",
         mcp_client_registration_store_dsn: str = "",
+        mcp_gateway_state_store_class: str = "",
+        mcp_gateway_state_store_dsn: str = "",
         checkpointer_type: str = "",
         checkpointer_dsn: str = "",
         startup_hook: str = "",
@@ -274,6 +282,8 @@ class Orchid:
             mcp_token_store_dsn=mcp_token_store_dsn,
             mcp_client_registration_store_class=mcp_client_registration_store_class,
             mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+            mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+            mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
             checkpointer_type=checkpointer_type,
             checkpointer_dsn=checkpointer_dsn,
             startup_hook=startup_hook,
@@ -318,6 +328,35 @@ class Orchid:
     def chat_repo(self) -> OrchidChatStorage | None:
         """Chat storage backend, or ``None`` when running without persistence."""
         return self._chat_repo
+
+    @property
+    def session_warmer(self) -> OrchidSessionWarmer:
+        """The :class:`OrchidSessionWarmer` bound to this client.
+
+        Drives proactive warming of MCP capability caches at the right
+        lifecycle boundaries.  Use
+        :meth:`warm_unauthenticated_capabilities` for the convenience
+        startup hook; integrators with a per-user session start (or
+        OAuth-callback handler) call ``session_warmer.warm_for_user`` /
+        ``session_warmer.warm_one_for_user`` directly.
+        """
+        return self._session_warmer
+
+    @property
+    def server_inventory(self) -> OrchidMCPServerInventory:
+        """Read-only inventory of every MCP server declared in the config."""
+        return self._inventory
+
+    async def warm_unauthenticated_capabilities(self) -> OrchidWarmReport:
+        """Convenience for ``self.session_warmer.warm_unauthenticated()``.
+
+        Call this once at startup (orchid-api lifespan / orchid-cli
+        bootstrap) so ``auth.mode: none`` MCP servers populate their
+        capability caches before the first chat invocation.  Failures
+        are reported in the returned :class:`OrchidWarmReport` and
+        never raise — the caller logs and moves on.
+        """
+        return await self._session_warmer.warm_unauthenticated()
 
     @property
     def mcp_token_store(self) -> "OrchidMCPTokenStore | None":
@@ -560,12 +599,16 @@ class Orchid:
                 chat_repo=self._chat_repo,  # type: ignore[arg-type]
                 mcp_token_store=self._mcp_token_store,  # type: ignore[arg-type]
                 mcp_client_registration_store=self._runtime.mcp_client_registration_store,  # type: ignore[arg-type]
+                mcp_gateway_state_store=self._runtime.mcp_gateway_client_store,  # type: ignore[arg-type]
             )
         )
         self._mcp_token_store = None
         self._chat_repo = None
         if self._runtime is not None:
             self._runtime.mcp_client_registration_store = None
+            self._runtime.mcp_gateway_client_store = None
+            self._runtime.mcp_gateway_auth_code_store = None
+            self._runtime.mcp_gateway_token_store = None
 
     # ── Internal helpers ────────────────────────────────────
 

@@ -53,3 +53,23 @@ def test_identity_error_default_status_code():
 def test_identity_error_is_exception():
     with pytest.raises(OrchidIdentityError):
         raise OrchidIdentityError("fail", status_code=500)
+
+
+# ── Resolver security contract is documented ──
+
+
+def test_resolver_docstring_states_token_only_tenant_rule():
+    """The resolver's docstring carries a security contract: ``tenant_key``
+    and ``user_id`` MUST come from the token, never from a client-supplied
+    value. Consumer projects rely on that wording when building custom
+    resolvers, so guard against accidental wording drift."""
+    doc = (OrchidIdentityResolver.__doc__ or "").lower()
+    assert "tenant_key" in doc
+    assert "user_id" in doc
+    assert "must not" in doc or "must " in doc, "contract should use a normative MUST"
+    assert "domain" in doc, "domain must be called out as a routing hint, not identity"
+
+
+def test_resolve_docstring_marks_domain_as_routing_hint():
+    doc = (OrchidIdentityResolver.resolve.__doc__ or "").lower()
+    assert "routing hint" in doc or "never" in doc

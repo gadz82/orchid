@@ -1,8 +1,9 @@
 """SQLite round-trip tests for :class:`OrchidSQLiteMCPClientRegistrationStore`.
 
 Keep these lightweight — storage is a thin SQL wrapper and the schema
-is locked by the v002 migration.  Anything more elaborate belongs in
-the discovery tests where the store is one of several dependencies.
+is locked by the unified v001 migration.  Anything more elaborate
+belongs in the discovery tests where the store is one of several
+dependencies.
 """
 
 from __future__ import annotations

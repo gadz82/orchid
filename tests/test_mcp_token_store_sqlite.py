@@ -109,3 +109,40 @@ class TestSQLiteMCPTokenStore:
         bob = await store.get_token("tenant1", "bob", "ext-crm")
         assert alice is not None and alice.access_token == "alice-token"
         assert bob is not None and bob.access_token == "bob-token"
+
+    # ── cleanup_expired ──────────────────────────────────────────
+
+    async def test_cleanup_expired_purges_only_past_rows(self, store: OrchidSQLiteMCPTokenStore):
+        """Rows with ``expires_at`` in the past go; live + no-expiry rows stay.
+
+        ``expires_at == 0`` means "no expiry info" and is preserved by
+        contract — only rows the operator explicitly stamped get purged.
+        """
+        now = time.time()
+        await store.save_token(_make_record(server_name="expired", expires_at=now - 100))
+        await store.save_token(_make_record(server_name="live", expires_at=now + 3600))
+        await store.save_token(_make_record(server_name="no-expiry", expires_at=0.0))
+
+        removed = await store.cleanup_expired()
+
+        assert removed == 1
+        assert await store.get_token("tenant1", "user1", "expired") is None
+        assert await store.get_token("tenant1", "user1", "live") is not None
+        assert await store.get_token("tenant1", "user1", "no-expiry") is not None
+
+    async def test_cleanup_expired_respects_explicit_cutoff(self, store: OrchidSQLiteMCPTokenStore):
+        """An explicit ``before`` lets callers purge rows that will
+        expire shortly — useful for batch jobs that want a margin."""
+        base = 1_000_000.0
+        await store.save_token(_make_record(server_name="will-expire-soon", expires_at=base + 60))
+        await store.save_token(_make_record(server_name="future", expires_at=base + 7200))
+
+        # Cut off two minutes from now → first row goes, second stays.
+        removed = await store.cleanup_expired(before=base + 120)
+
+        assert removed == 1
+        assert (await store.get_token("tenant1", "user1", "will-expire-soon")) is None
+        assert await store.get_token("tenant1", "user1", "future") is not None
+
+    async def test_cleanup_expired_returns_zero_on_empty_store(self, store: OrchidSQLiteMCPTokenStore):
+        assert await store.cleanup_expired() == 0

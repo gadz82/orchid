@@ -1,1 +1,3 @@
-# Vector DB backend implementations (Qdrant, AOSS) — pending
+"""Vector DB backend implementations."""
+
+from __future__ import annotations

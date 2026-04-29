@@ -26,6 +26,13 @@ from .core.guardrails import (
     OrchidGuardrailDirection,
     OrchidGuardrailResult,
 )
+from .core.auth_config import (
+    OrchidAuthConfigProvider,
+    OrchidAuthExchangeClient,
+    OrchidAuthExchangeError,
+    OrchidUpstreamOAuthConfig,
+    OrchidUpstreamTokenResponse,
+)
 from .core.identity import OrchidIdentityError, OrchidIdentityResolver
 from .core.mcp import (
     OrchidMCPAuthRequiredError,
@@ -38,6 +45,14 @@ from .core.mcp import (
     OrchidMCPTokenStore,
     OrchidMCPToolCaller,
     OrchidMCPToolResult,
+)
+from .core.mcp_gateway_state import (
+    OrchidMCPGatewayAuthCode,
+    OrchidMCPGatewayAuthCodeStore,
+    OrchidMCPGatewayClient,
+    OrchidMCPGatewayClientStore,
+    OrchidMCPGatewayToken,
+    OrchidMCPGatewayTokenStore,
 )
 from .core.repository import (
     Document,
@@ -58,6 +73,7 @@ from .mcp.discovery import (
     extract_resource_metadata_url,
     probe_mcp_server_for_resource_metadata,
 )
+from .mcp.inventory import OrchidMCPServerEntry, OrchidMCPServerInventory
 from .mcp.oauth_state import (
     OrchidInMemoryOAuthStateStore,
     OrchidOAuthPendingState,
@@ -65,6 +81,7 @@ from .mcp.oauth_state import (
     build_oauth_state_store,
     register_oauth_state_store,
 )
+from .mcp.session_warmer import OrchidSessionWarmer, OrchidWarmReport
 from .observability.callbacks import OrchidMetricsHandler
 from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
 from .persistence.base import OrchidChatStorage
@@ -94,13 +111,19 @@ __all__ = [
     # ── Core ABCs (integrator subclass targets) ───────
     "OrchidAgent",
     "OrchidAgentState",
+    "OrchidAuthConfigProvider",
     "OrchidAuthContext",
+    "OrchidAuthExchangeClient",
+    "OrchidAuthExchangeError",
     "OrchidChatStorage",
     "OrchidIdentityError",
     "OrchidIdentityResolver",
     "OrchidMCPClient",
     "OrchidMCPClientRegistrationStore",
     "OrchidMCPDiscoverable",
+    "OrchidMCPGatewayAuthCodeStore",
+    "OrchidMCPGatewayClientStore",
+    "OrchidMCPGatewayTokenStore",
     "OrchidMCPToolCaller",
     "OrchidMCPTokenStore",
     "OrchidVectorReader",
@@ -114,7 +137,14 @@ __all__ = [
     "OrchidMCPAuthRequiredError",
     "OrchidMCPClientRegistration",
     "OrchidMCPDiscoveryError",
+    "OrchidMCPGatewayAuthCode",
+    "OrchidMCPGatewayClient",
+    "OrchidMCPGatewayToken",
     "OrchidMCPOAuthServerInfo",
+    "OrchidMCPServerEntry",
+    "OrchidMCPServerInventory",
+    "OrchidSessionWarmer",
+    "OrchidWarmReport",
     "extract_resource_metadata_url",
     "probe_mcp_server_for_resource_metadata",
     "OrchidMCPTokenRecord",
@@ -122,6 +152,8 @@ __all__ = [
     "OrchidRAGScope",
     "OrchidRoutingDecision",
     "OrchidSearchResult",
+    "OrchidUpstreamOAuthConfig",
+    "OrchidUpstreamTokenResponse",
     # ── MCP OAuth state store ─────────────────────────
     "OrchidInMemoryOAuthStateStore",
     "OrchidOAuthPendingState",

@@ -6,7 +6,15 @@ Public API:
   register / get_class  → agent class registry
 """
 
+from __future__ import annotations
+
 from .loader import load_config
+from .mcp_gateway import (
+    OrchidMCPGatewayConfig,
+    OrchidMCPGatewayPrompt,
+    OrchidMCPGatewayPromptArgument,
+    OrchidMCPGatewayToolOverride,
+)
 from .registry import get_class, register
 from .schema import (
     OrchidAgentConfig,
@@ -22,6 +30,10 @@ __all__ = [
     "OrchidAgentConfig",
     "OrchidAgentSkillConfig",
     "OrchidBuiltinToolConfig",
+    "OrchidMCPGatewayConfig",
+    "OrchidMCPGatewayPrompt",
+    "OrchidMCPGatewayPromptArgument",
+    "OrchidMCPGatewayToolOverride",
     "OrchidOrchestratorSkillConfig",
     "load_config",
     "register",

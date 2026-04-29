@@ -120,6 +120,21 @@ class OrchidSQLiteMCPTokenStore(OrchidMCPTokenStore):
         rows = await cursor.fetchall()
         return [_row_to_record(r) for r in rows]
 
+    async def cleanup_expired(self, *, before: float | None = None) -> int:
+        """Single ``DELETE`` purging rows whose ``expires_at`` is in the past.
+
+        Safe to run while the gateway is serving traffic — callers
+        check ``record.is_expired`` before use, so an expired row is
+        unreachable to any live request before this method runs.
+        """
+        cutoff = before if before is not None else time.time()
+        cursor = await self._conn.execute(
+            "DELETE FROM mcp_oauth_tokens WHERE expires_at > 0 AND expires_at < ?",
+            (cutoff,),
+        )
+        await self._conn.commit()
+        return cursor.rowcount
+
 
 # ── Row mapper ──────────────────────────────────────────────
 
