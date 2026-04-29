@@ -23,6 +23,19 @@ class OrchidIdentityResolver(ABC):
     (e.g. a platform-specific token endpoint, or a standard
     OIDC userinfo endpoint) to validate the token and extract
     identity claims.
+
+    Security contract
+    -----------------
+    The returned ``OrchidAuthContext.tenant_key`` and ``user_id`` MUST be
+    derived **exclusively from data that the upstream IdP attests** —
+    typically a verified JWT claim (``iss``, ``sub``, a custom tenant
+    claim) or a server-side lookup keyed by the token. Implementations
+    MUST NOT trust the ``domain`` argument, request headers, query
+    string, or any other client-supplied value when populating these
+    fields: those are attacker-controlled, and a mistake here cross-pollutes
+    RAG namespaces, chat ownership, and MCP tokens between tenants. The
+    ``domain`` parameter is a routing hint for multi-IdP deployments
+    only; it never decides ``tenant_key``.
     """
 
     @abstractmethod
@@ -34,6 +47,9 @@ class OrchidIdentityResolver(ABC):
         ----------
         domain : str
             Tenant domain (e.g. ``acme.example.com``), without protocol.
+            Used only to pick which IdP to call — never to populate
+            ``tenant_key`` directly. See the class-level security
+            contract.
         bearer_token : str
             The raw access token (without ``Bearer `` prefix).
 

@@ -54,6 +54,53 @@ class TestRAGConfig:
         cfg = OrchidRAGConfig()
         assert not hasattr(cfg, "dynamic_injection")
 
+    def test_max_context_chars_defaults_to_none_for_inheritance(self):
+        # Per-agent default is None so the validator can substitute the
+        # ``defaults.rag.max_context_chars`` value at config-load time.
+        cfg = OrchidRAGConfig()
+        assert cfg.max_context_chars is None
+
+    def test_max_context_chars_explicit_override(self):
+        cfg = OrchidRAGConfig(max_context_chars=20000)
+        assert cfg.max_context_chars == 20000
+
+    def test_defaults_max_context_chars_is_3000(self):
+        # The library-level default keeps the legacy 3000-char cap so
+        # existing integrators see no behaviour change.
+        from orchid_ai.config.schema import OrchidRAGDefaultsConfig
+
+        defaults = OrchidRAGDefaultsConfig()
+        assert defaults.max_context_chars == 3000
+
+    def test_per_agent_max_context_chars_inherits_from_defaults(self):
+        # When the per-agent value is None, ``_apply_defaults`` should
+        # fill it from ``defaults.rag.max_context_chars``.
+        from orchid_ai.config.schema import (
+            OrchidAgentsConfig,
+            OrchidDefaultsConfig,
+            OrchidRAGDefaultsConfig,
+        )
+
+        cfg = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(rag=OrchidRAGDefaultsConfig(max_context_chars=15000)),
+            agents={
+                "alpha": OrchidAgentConfig(
+                    description="alpha",
+                    prompt="x",
+                    rag=OrchidRAGConfig(namespace="alpha"),
+                ),
+                "beta": OrchidAgentConfig(
+                    description="beta",
+                    prompt="x",
+                    rag=OrchidRAGConfig(namespace="beta", max_context_chars=42),
+                ),
+            },
+        )
+        # alpha has no explicit cap → inherits the default
+        assert cfg.agents["alpha"].rag.max_context_chars == 15000
+        # beta keeps its explicit override
+        assert cfg.agents["beta"].rag.max_context_chars == 42
+
 
 # ── OrchidMCPServerConfig ─────────────────────────────────────────
 
@@ -202,6 +249,24 @@ class TestSupervisorConfig:
         cfg = OrchidSupervisorConfig(history_max_turns=5, history_max_chars=500)
         assert cfg.history_max_turns == 5
         assert cfg.history_max_chars == 500
+
+    def test_routing_model_defaults_to_none(self):
+        # When unset, both routing/advance phases reuse the synthesis
+        # ``chat_model`` — backwards-compatible behaviour.
+        cfg = OrchidSupervisorConfig()
+        assert cfg.routing_model is None
+
+    def test_routing_model_explicit_override(self):
+        cfg = OrchidSupervisorConfig(routing_model="gemini/gemini-2.5-flash-lite")
+        assert cfg.routing_model == "gemini/gemini-2.5-flash-lite"
+
+    def test_skip_synthesis_when_single_agent_default_true(self):
+        cfg = OrchidSupervisorConfig()
+        assert cfg.skip_synthesis_when_single_agent is True
+
+    def test_skip_synthesis_when_single_agent_opt_out(self):
+        cfg = OrchidSupervisorConfig(skip_synthesis_when_single_agent=False)
+        assert cfg.skip_synthesis_when_single_agent is False
 
 
 # ── OrchidAgentConfig ─────────────────────────────────────────────

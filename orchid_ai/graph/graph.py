@@ -39,6 +39,7 @@ Graph topology (ADR-013 — parallel vs sequential, ADR-018 — guardrails):
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from langchain_core.messages import AIMessage
@@ -64,6 +65,7 @@ from .state import GraphState
 from .supervisor import create_supervisor_node, route_to_agents
 
 logger = logging.getLogger(__name__)
+perf_logger = logging.getLogger("orchid.perf")
 
 
 def _create_agent_node(
@@ -105,6 +107,8 @@ def _create_agent_node(
                 }
 
         # ── Run agent ──
+        agent_start = time.perf_counter()
+        perf_logger.info("[PERF][agent=%s] >>> START", agent.name)
         try:
             agent_result = await agent.run(state)
         except Exception as exc:
@@ -124,6 +128,8 @@ def _create_agent_node(
                     )
                 ],
             }
+        agent_elapsed = (time.perf_counter() - agent_start) * 1000
+        perf_logger.info("[PERF][agent=%s] <<< DONE total=%.1f ms", agent.name, agent_elapsed)
 
         # ── Per-agent OUTPUT guardrails ──
         if output_guardrails and not output_guardrails.empty:
@@ -396,6 +402,7 @@ def build_graph(
     *,
     config: OrchidAgentsConfig,
     runtime: OrchidRuntime,
+    agents_out: dict[str, OrchidAgent] | None = None,
 ) -> Any:  # returns CompiledGraph
     """
     Build and compile the full agent graph from YAML configuration (ADR-016, ADR-018).
@@ -407,6 +414,14 @@ def build_graph(
     runtime : OrchidRuntime
         Pre-configured runtime with all dependencies (reader, LLM provider,
         MCP client factory).
+    agents_out : dict[str, OrchidAgent] | None
+        Optional mutable dict that will be populated with the
+        instantiated top-level :class:`OrchidAgent` instances keyed by
+        name.  Lets callers (notably :class:`orchid_ai.Orchid`) reach
+        the same client instances the graph wired in for proactive
+        cache warming via
+        :class:`orchid_ai.mcp.session_warmer.OrchidSessionWarmer`.
+        Child agents inside compiled subgraphs are not exposed.
     """
     from ..llm_factory import build_chat_model as _build_chat_model
 
@@ -514,6 +529,12 @@ def build_graph(
 
     # ── Wire agent peers (for cross-agent skill steps) ──
     agent_map: dict[str, OrchidAgent] = {a.name: a for a in agents}
+
+    # Expose the materialised agents to the caller so the Orchid
+    # facade can build an OrchidSessionWarmer over the same client
+    # instances we just wired into the graph.
+    if agents_out is not None:
+        agents_out.update(agent_map)
     for agent in agents:
         if not isinstance(agent, GenericAgent):
             continue
@@ -539,6 +560,19 @@ def build_graph(
     else:
         supervisor_chat_model = default_chat_model
 
+    # ── Optional routing/advance chat model (cheaper, for short calls) ──
+    # When ``supervisor.routing_model`` is set, build a separate
+    # ``BaseChatModel`` for the supervisor's routing + sequential-
+    # advance phases.  Synthesis still uses ``supervisor_chat_model``.
+    routing_chat_model: BaseChatModel | None = None
+    if sup.routing_model and sup.routing_model != default_model:
+        routing_chat_model = _build_chat_model(
+            sup.routing_model,
+            fallback_model=sup_fallback,
+            retry_attempts=default_retry,
+        )
+        logger.info("[Graph] supervisor routing_model=%s (separate from synthesis model)", sup.routing_model)
+
     # ── Supervisor ──
     supervisor_node = create_supervisor_node(
         default_model,
@@ -546,6 +580,7 @@ def build_graph(
         chat_model=supervisor_chat_model,
         orchestrator_skills=config.skills or None,
         supervisor_config=config.supervisor,
+        routing_chat_model=routing_chat_model,
     )
 
     # ── Build graph ──

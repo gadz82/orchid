@@ -328,7 +328,7 @@ class TestParentDocumentRetrieval:
             async def run(self, state):
                 pass
 
-        agent = _TestAgent(llm="test", reader=mock_reader)
+        agent = _TestAgent(model_id="test", reader=mock_reader)
         result = await agent.fetch_rag_context("query", _make_scope())
 
         assert len(result) == 1
@@ -367,7 +367,7 @@ class TestParentDocumentRetrieval:
             async def run(self, state):
                 pass
 
-        agent = _TestAgent(llm="test", reader=mock_reader)
+        agent = _TestAgent(model_id="test", reader=mock_reader)
         result = await agent.fetch_rag_context("query", _make_scope())
 
         assert len(result) == 1

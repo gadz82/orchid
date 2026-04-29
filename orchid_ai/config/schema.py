@@ -1,559 +1,64 @@
-"""
-Pydantic v2 models for the agents.yaml configuration schema (ADR-016, ADR-017, ADR-018).
+"""Backward-compatible re-exports for the agents.yaml configuration schema.
 
-The ``class`` YAML key is mapped to ``class_path`` to avoid the Python
-reserved word.  A model validator on ``OrchidAgentConfig`` merges in default
-values from the parent ``OrchidAgentsConfig.defaults``.
+Originally a single 612-line module bundling 19 Pydantic classes plus
+the defaults-merging pass; the contracts now live in themed sibling
+files. The single import path ``orchid_ai.config.schema`` is unchanged
+for every consumer.
 
-ADR-017 additions: OrchidBuiltinToolConfig, OrchidAgentSkillStepConfig, OrchidAgentSkillConfig,
-OrchidOrchestratorSkillStepConfig, OrchidOrchestratorSkillConfig.
-
-ADR-018 additions: OrchidGuardrailRuleConfig, OrchidGuardrailsConfig for global and
-per-agent input/output guardrails.
+Themed modules:
+  - :mod:`schema_llm` — LLM configuration
+  - :mod:`schema_rag` — RAG settings (defaults + per-agent overrides)
+  - :mod:`schema_mcp` — MCP server / tool / auth-mode configs
+  - :mod:`schema_skills` — Built-in tools and skills (ADR-017)
+  - :mod:`schema_guardrails` — Guardrail rule + chain configs (ADR-018)
+  - :mod:`schema_supervisor` — Supervisor + execution-hint configs
+  - :mod:`schema_agent` — :class:`OrchidAgentConfig`,
+                         :class:`OrchidDefaultsConfig`,
+                         :class:`OrchidAgentsConfig`,
+                         and the ``_apply_defaults`` recursive merger.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
-
-from pydantic import BaseModel, Field, model_validator
-
-
-# ── Leaf configs ──────────────────────────────────────────────
-
-
-class OrchidLLMConfig(BaseModel):
-    """LLM settings — can appear at defaults or agent level.
-
-    The model string uses LiteLLM's ``provider/model-name`` format:
-      - ``gemini/gemini-2.5-flash``          → Google AI Studio
-      - ``groq/llama-3.3-70b-versatile``     → Groq
-      - ``anthropic/claude-sonnet-4-20250514``  → Anthropic
-      - ``ollama/llama3.2``                  → Local Ollama
-      - ``openai/gpt-4o``                   → OpenAI
-
-    The optional ``fallback_model`` is tried automatically when the
-    primary model fails (503, rate limit, timeout).  When set at
-    ``defaults.llm`` level, it applies to all agents and the supervisor
-    unless overridden per-agent or per-supervisor.
-
-    Example YAML::
-
-        defaults:
-          llm:
-            model: gemini/gemini-2.5-flash
-            fallback_model: ollama/llama3.2
-
-        agents:
-          critical-agent:
-            llm:
-              model: openai/gpt-4o
-              fallback_model: anthropic/claude-sonnet-4-20250514
-    """
-
-    model: str = "gemini/gemini-2.5-flash"
-    temperature: float = 0.2
-    fallback_model: str | None = None
-    retry_attempts: int = 0  # 0 = disabled; when > 0, transient errors retry with exponential backoff
-
-
-class OrchidRAGDefaultsConfig(BaseModel):
-    """Default RAG settings inherited by all agents."""
-
-    k: int = 5
-    enabled: bool = True
-    rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
-    reformulate_queries: bool = True  # rewrite queries using conversation history
-    retriever_type: Literal["simple", "multi_query"] = "simple"
-
-
-class OrchidRAGConfig(BaseModel):
-    """Per-agent RAG settings.
-
-    ``retriever_type`` controls the retrieval strategy:
-    - ``simple`` (default) — single vector similarity search per query.
-    - ``multi_query`` — LLM generates query variations for broader
-      recall, then results are merged and deduplicated.
-
-    When ``retriever_type`` is ``None`` (the YAML default), the value
-    is inherited from ``defaults.rag.retriever_type``.  Set it
-    explicitly to override the default.
-    """
-
-    namespace: str = ""
-    k: int = 5
-    enabled: bool = True
-    reformulate_queries: bool = True  # rewrite queries using conversation history
-    retriever_type: Literal["simple", "multi_query"] | None = None  # None = inherit from defaults
-    rag_ttl: int = 0  # seconds; 0 = no cache (always call tools)
-
-
-class OrchidToolConfig(BaseModel):
-    """A single MCP tool available to an agent."""
-
-    name: str
-    arguments: dict[str, Any] = Field(default_factory=dict)
-    inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
-    rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
-    requires_approval: bool = False  # pause and ask user before executing (HITL)
-
-
-class OrchidMCPAuthConfig(BaseModel):
-    """Per-server authentication configuration.
-
-    Determines how the MCP client authenticates with the server:
-
-    - ``none`` (default): no authentication headers are sent.  Suitable
-      for local MCP servers or remote servers that do not require auth.
-    - ``passthrough``: forwards the graph's ``OrchidAuthContext`` bearer
-      token unchanged — the MCP server shares the same identity provider
-      as the API.  ADR-010 — the single-token-in-the-graph rule.
-    - ``oauth``: the MCP server requires its own OAuth 2.0 flow.  The
-      framework follows the MCP 2025-03-26 authorization spec and
-      discovers everything at runtime from the server's 401 response:
-
-        * Protected resource metadata (RFC 9728) — from the 401's
-          ``WWW-Authenticate: Bearer resource_metadata="…"`` header.
-        * Authorization server metadata (RFC 8414) — from
-          ``/.well-known/oauth-authorization-server`` on the selected
-          authorization server.
-        * Dynamic client registration (RFC 7591) — POST'd to the
-          advertised ``registration_endpoint``.
-
-      No ``client_id``, ``client_secret``, ``authorization_endpoint`` or
-      ``token_endpoint`` values live in YAML.  The authorization server
-      MUST expose RFC 7591 dynamic client registration; if it does not,
-      integrators supply a pre-seeded
-      :class:`~orchid_ai.core.mcp.OrchidMCPClientRegistrationStore` row
-      with the relevant endpoints + credentials before first use.
-
-    Example YAML::
-
-        mcp_servers:
-          - name: crm-backend
-            url: https://crm.example.com/mcp
-            auth:
-              mode: oauth    # everything else is discovered at runtime
-    """
-
-    mode: Literal["none", "passthrough", "oauth"] = "none"
-
-
-class OrchidMCPServerConfig(BaseModel):
-    """An MCP server connected to an agent.
-
-    ``tools``, ``prompts``, and ``resources`` each accept either:
-      - An explicit allow-list (e.g. ``["search_items", "create_record"]``)
-      - The wildcard ``"*"`` to discover ALL capabilities from the server
-
-    When any of them is ``"*"``, the corresponding ``discover_all_*`` flag is
-    set and the allow-list is cleared — the agent will call ``list_tools()``,
-    ``list_prompts()``, or ``list_resources()`` at runtime.
-    """
-
-    name: str
-    type: Literal["local", "remote"] = "local"
-    transport: Literal["streamable_http", "sse"] = "streamable_http"
-    url: str  # supports ${ENV_VAR} interpolation (resolved by loader)
-    auth: OrchidMCPAuthConfig = Field(default_factory=OrchidMCPAuthConfig)
-    tools: list[OrchidToolConfig] = Field(default_factory=list)
-    prompts: list[str] = Field(default_factory=list)  # prompt names to load (or "*")
-    resources: list[str] = Field(default_factory=list)  # resource URIs/names to load (or "*")
-    tool_call_strategy: Literal["all", "sequential", "llm_decides"] = "all"
-    cache_ttl: int = 300  # seconds — capabilities cache lifetime (0 = no cache)
-    discover_all_tools: bool = False
-    discover_all_prompts: bool = False
-    discover_all_resources: bool = False
-
-    @property
-    def discover_all(self) -> bool:
-        """True when ALL capabilities (tools + prompts + resources) are wildcarded."""
-        return self.discover_all_tools and self.discover_all_prompts and self.discover_all_resources
-
-    @model_validator(mode="before")
-    @classmethod
-    def _handle_wildcards(cls, data: Any) -> Any:
-        """Convert ``"*"`` / ``["*"]`` into the corresponding ``discover_all_*`` flags."""
-        if not isinstance(data, dict):
-            return data
-
-        for field, flag in [
-            ("tools", "discover_all_tools"),
-            ("prompts", "discover_all_prompts"),
-            ("resources", "discover_all_resources"),
-        ]:
-            value = data.get(field)
-            if value == "*" or value == ["*"]:
-                data[field] = []
-                data[flag] = True
-
-        return data
-
-
-class ExecutionHints(BaseModel):
-    """Hints for the Supervisor when routing."""
-
-    parallel_safe: bool = True
-
-
-# ── Built-in tools + Skills (ADR-017) ────────────────────────
-
-
-class BuiltinToolParameter(BaseModel):
-    """A single parameter of a built-in tool.
-
-    Declared in YAML to document the tool's interface for LLM-based
-    invocation and Claude Code skill generation.  When omitted in YAML,
-    parameters are auto-extracted from the Python function signature
-    at registration time.
-
-    Example YAML::
-
-        parameters:
-          player_name:
-            type: string
-            description: "Full or partial player name"
-            required: false
-            default: ""
-    """
-
-    type: str = "string"  # string, int, float, bool
-    description: str = ""
-    required: bool = True
-    default: Any = None
-
-
-class OrchidBuiltinToolConfig(BaseModel):
-    """A built-in Python tool declared at the YAML top level."""
-
-    handler: str  # dotted import path, e.g. "myproject.tools.dates.format_date"
-    description: str = ""
-    parameters: dict[str, BuiltinToolParameter] = Field(default_factory=dict)
-    inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
-    rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
-    requires_approval: bool = False  # pause and ask user before executing (HITL)
-
-
-class OrchidAgentSkillStepConfig(BaseModel):
-    """A single step in an agent-level skill.
-
-    A step is either a **tool call** (``tool`` + ``source``) or an
-    **agent invocation** (``agent`` + ``instruction``).  Exactly one
-    of ``tool`` or ``agent`` must be set.
-
-    Agent invocation lets a skill call another agent directly without
-    passing through the Supervisor.  The invoked agent runs its full
-    pipeline (RAG + MCP + LLM) and its results chain forward via
-    ``previous_results`` like any other step.
-    """
-
-    # ── Tool call fields (existing) ──
-    tool: str | None = None  # tool name (MCP tool or built-in tool)
-    source: str | None = None  # MCP server name, "builtin", or None (= builtin)
-    arguments: dict[str, Any] = Field(default_factory=dict)
-
-    # ── Agent invocation fields (new) ──
-    agent: str | None = None  # name of another agent to invoke
-    instruction: str = ""  # query/instruction sent to the invoked agent
-
-    @property
-    def step_key(self) -> str:
-        """Canonical key for this step (tool name or agent name)."""
-        return self.tool or self.agent or "unknown"
-
-    @model_validator(mode="after")
-    def _check_step_type(self) -> OrchidAgentSkillStepConfig:
-        if self.tool and self.agent:
-            raise ValueError("A skill step must set either 'tool' or 'agent', not both")
-        if not self.tool and not self.agent:
-            raise ValueError("A skill step must set either 'tool' or 'agent'")
-        return self
-
-
-class OrchidAgentSkillConfig(BaseModel):
-    """A multi-step workflow within a single agent's domain."""
-
-    description: str = ""
-    steps: list[OrchidAgentSkillStepConfig]
-
-
-class OrchidOrchestratorSkillStepConfig(BaseModel):
-    """A single step in an orchestrator-level (cross-agent) skill."""
-
-    agent: str  # agent name to invoke
-    instruction: str = ""  # hint passed to the agent via the supervisor
-
-
-class OrchidOrchestratorSkillConfig(BaseModel):
-    """A cross-agent workflow defined at the YAML top level."""
-
-    description: str = ""
-    steps: list[OrchidOrchestratorSkillStepConfig]
-
-
-# ── Guardrails config (ADR-018) ─────────────────────────────
-
-
-class OrchidGuardrailRuleConfig(BaseModel):
-    """A single guardrail rule declaration.
-
-    Maps to a registered guardrail type in the guardrail registry.
-    The ``config`` dict is passed as keyword arguments to the guardrail
-    constructor.
-
-    Example YAML::
-
-        - type: content_safety
-          fail_action: block
-          config:
-            categories: [self_harm, violence]
-        - type: pii_detection
-          fail_action: redact
-          config:
-            entities: [email, phone, ssn]
-    """
-
-    type: str  # registered guardrail type name (e.g. "content_safety")
-    fail_action: Literal["block", "warn", "redact", "log"] = "block"
-    config: dict[str, Any] = Field(default_factory=dict)
-
-
-class OrchidGuardrailsConfig(BaseModel):
-    """Input and output guardrail chains.
-
-    Used at both the global level (``orchid.yml``) and per-agent level
-    (``agents.yaml``).  Global guardrails run on every request; per-agent
-    guardrails run only when that agent is active.
-
-    Example YAML::
-
-        guardrails:
-          input:
-            - type: prompt_injection
-              fail_action: block
-            - type: max_length
-              fail_action: block
-              config:
-                max_characters: 10000
-          output:
-            - type: pii_detection
-              fail_action: redact
-              config:
-                entities: [email, ssn]
-    """
-
-    input: list[OrchidGuardrailRuleConfig] = Field(default_factory=list)
-    output: list[OrchidGuardrailRuleConfig] = Field(default_factory=list)
-
-
-# ── Supervisor config ────────────────────────────────────────
-
-
-class OrchidSupervisorConfig(BaseModel):
-    """Supervisor prompt and behavior configuration.
-
-    Allows consumers to customize the assistant name, prompts, and
-    conversation history limits without modifying library code.
-    When prompt fields are ``None``, the default templates in
-    ``supervisor.py`` are used.
-
-    History settings control how much prior conversation context is
-    passed to the LLM during routing, synthesis, and sequential
-    handoff steps:
-
-    - ``history_max_turns``: maximum user/assistant exchange pairs
-      to include.  Default 20 (= up to 40 messages).
-    - ``history_max_chars``: maximum characters per individual
-      message before truncation.  Default 1000.  Truncated messages
-      get an ``…`` suffix.
-    """
-
-    assistant_name: str = "AI assistant"
-    fallback_model: str | None = None  # fallback LLM for supervisor (overrides defaults.llm.fallback_model)
-    streaming_enabled: bool = True  # enable SSE streaming for responses (default: on)
-    routing_system_prompt: str | None = None
-    synthesis_system_prompt: str | None = None
-    sequential_advance_prompt: str | None = None
-    history_max_turns: int = 20
-    history_max_chars: int = 1000
-
-    # ── Sliding-window summarization (context compression) ──
-    history_summary_enabled: bool = True
-    history_summary_model: str | None = None  # None = use the supervisor model
-    history_summary_recent_turns: int = 10  # keep last N turns verbatim
-
-
-# ── Agent config (recursive for nesting) ─────────────────────
-
-
-class OrchidAgentConfig(BaseModel):
-    """
-    Configuration for a single agent.
-
-    When ``class_path`` is ``None``, the ``GenericAgent`` is used.
-    When set, it must be either:
-      - A dotted Python import path (e.g. ``myapp.agents.support.SupportAgent``)
-      - A short name registered in the agent class registry
-    """
-
-    # Set programmatically by the loader (= the YAML dict key)
-    name: str = ""
-
-    description: str
-    prompt: str
-
-    # ``class`` in YAML → ``class_path`` in Python (reserved word)
-    class_path: str | None = Field(default=None, alias="class")
-
-    rag: OrchidRAGConfig = Field(default_factory=OrchidRAGConfig)
-    mcp_servers: list[OrchidMCPServerConfig] = Field(default_factory=list)
-    llm: OrchidLLMConfig | None = None
-    execution_hints: ExecutionHints = Field(default_factory=ExecutionHints)
-
-    # Built-in tools available to this agent (ADR-017)
-    tools: list[str] = Field(default_factory=list)
-
-    # Agent-level skills — multi-step workflows within this agent (ADR-017)
-    skills: dict[str, OrchidAgentSkillConfig] = Field(default_factory=dict)
-
-    # Per-agent guardrails (ADR-018)
-    guardrails: OrchidGuardrailsConfig = Field(default_factory=OrchidGuardrailsConfig)
-
-    # Recursive nesting — sub-agents under this agent
-    children: dict[str, OrchidAgentConfig] | None = None
-
-    # Computed at validation — tool names whose results are injected to RAG
-    injectable_tools: set[str] = Field(default_factory=set, exclude=True)
-
-    # Computed at validation — tool name → effective TTL (seconds) for RAG cache
-    # Only includes tools with inject_to_rag=True AND effective TTL > 0
-    injectable_tool_ttls: dict[str, int] = Field(default_factory=dict, exclude=True)
-
-    # Computed at validation — tool names that require human approval (HITL)
-    approval_tools: set[str] = Field(default_factory=set, exclude=True)
-
-    model_config = {"populate_by_name": True}
-
-
-# ── Defaults config ──────────────────────────────────────────
-
-
-class OrchidDefaultsConfig(BaseModel):
-    """Top-level defaults inherited by every agent.
-
-    ``cache_enabled`` activates a global in-memory LLM response cache
-    via LangChain's ``set_llm_cache(InMemoryCache())``.  Identical
-    prompts return cached results, reducing latency and cost.  Cache
-    lives for the process lifetime (reset on restart).
-
-    Example YAML::
-
-        defaults:
-          cache_enabled: true
-          llm:
-            model: gemini/gemini-2.5-flash
-    """
-
-    llm: OrchidLLMConfig = Field(default_factory=OrchidLLMConfig)
-    rag: OrchidRAGDefaultsConfig = Field(default_factory=OrchidRAGDefaultsConfig)
-    cache_enabled: bool = False
-
-
-# ── Root config ──────────────────────────────────────────────
-
-
-class OrchidAgentsConfig(BaseModel):
-    """
-    Root configuration loaded from agents.yaml.
-
-    After validation, each ``OrchidAgentConfig`` has its defaults merged in
-    and its ``name`` set from the YAML dict key.
-    """
-
-    version: str = "1"
-    defaults: OrchidDefaultsConfig = Field(default_factory=OrchidDefaultsConfig)
-
-    # Global built-in tool declarations (ADR-017)
-    tools: dict[str, OrchidBuiltinToolConfig] = Field(default_factory=dict)
-
-    # Orchestrator-level skills — cross-agent workflows (ADR-017)
-    skills: dict[str, OrchidOrchestratorSkillConfig] = Field(default_factory=dict)
-
-    # Supervisor configuration — prompt customization
-    supervisor: OrchidSupervisorConfig = Field(default_factory=OrchidSupervisorConfig)
-
-    # Global guardrails — applied to all requests (ADR-018)
-    guardrails: OrchidGuardrailsConfig = Field(default_factory=OrchidGuardrailsConfig)
-
-    agents: dict[str, OrchidAgentConfig] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def _apply_defaults_and_names(self) -> OrchidAgentsConfig:
-        """Merge defaults into each agent and set names recursively."""
-        for agent_name, agent in self.agents.items():
-            _apply_defaults(agent, agent_name, self.defaults, self.tools)
-        return self
-
-
-def _apply_defaults(
-    agent: OrchidAgentConfig,
-    name: str,
-    defaults: OrchidDefaultsConfig,
-    global_tools: dict[str, OrchidBuiltinToolConfig] | None = None,
-) -> None:
-    """Recursively apply default values and set agent names."""
-    # Set name from dict key
-    agent.name = name
-
-    # Merge LLM defaults
-    if agent.llm is None:
-        agent.llm = defaults.llm.model_copy()
-
-    # Merge RAG defaults (only if not explicitly set to non-default)
-    if agent.rag.k == 5 and defaults.rag.k != 5:
-        agent.rag.k = defaults.rag.k
-    if agent.rag.enabled and not defaults.rag.enabled:
-        agent.rag.enabled = defaults.rag.enabled
-    if agent.rag.rag_ttl == 0 and defaults.rag.rag_ttl != 0:
-        agent.rag.rag_ttl = defaults.rag.rag_ttl
-    if not defaults.rag.reformulate_queries:
-        agent.rag.reformulate_queries = False
-    if agent.rag.retriever_type is None:
-        agent.rag.retriever_type = defaults.rag.retriever_type
-
-    # Collect injectable MCP tool names + TTLs
-    agent_ttl = agent.rag.rag_ttl
-    for server in agent.mcp_servers:
-        for tool in server.tools:
-            if isinstance(tool, OrchidToolConfig) and tool.inject_to_rag:
-                agent.injectable_tools.add(tool.name)
-                effective_ttl = tool.rag_ttl if tool.rag_ttl is not None else agent_ttl
-                if effective_ttl > 0:
-                    agent.injectable_tool_ttls[tool.name] = effective_ttl
-
-    # Collect injectable built-in tool names + TTLs
-    if global_tools:
-        for tool_name in agent.tools:
-            tool_cfg = global_tools.get(tool_name)
-            if tool_cfg and tool_cfg.inject_to_rag:
-                key = f"builtin_{tool_name}"
-                agent.injectable_tools.add(key)
-                effective_ttl = tool_cfg.rag_ttl if tool_cfg.rag_ttl is not None else agent_ttl
-                if effective_ttl > 0:
-                    agent.injectable_tool_ttls[key] = effective_ttl
-
-    # Collect tools requiring human approval (HITL)
-    for server in agent.mcp_servers:
-        for tool in server.tools:
-            if isinstance(tool, OrchidToolConfig) and tool.requires_approval:
-                agent.approval_tools.add(tool.name)
-    if global_tools:
-        for tool_name in agent.tools:
-            tool_cfg = global_tools.get(tool_name)
-            if tool_cfg and tool_cfg.requires_approval:
-                agent.approval_tools.add(tool_name)
-
-    # Recurse into children
-    if agent.children:
-        for child_name, child in agent.children.items():
-            _apply_defaults(child, child_name, defaults, global_tools)
+from .schema_agent import (
+    OrchidAgentConfig,
+    OrchidAgentsConfig,
+    OrchidDefaultsConfig,
+    _apply_defaults,
+)
+from .schema_guardrails import OrchidGuardrailRuleConfig, OrchidGuardrailsConfig
+from .schema_llm import OrchidLLMConfig
+from .schema_mcp import OrchidMCPAuthConfig, OrchidMCPServerConfig, OrchidToolConfig
+from .schema_rag import OrchidRAGConfig, OrchidRAGDefaultsConfig
+from .schema_skills import (
+    BuiltinToolParameter,
+    OrchidAgentSkillConfig,
+    OrchidAgentSkillStepConfig,
+    OrchidBuiltinToolConfig,
+    OrchidOrchestratorSkillConfig,
+    OrchidOrchestratorSkillStepConfig,
+)
+from .schema_supervisor import ExecutionHints, OrchidSupervisorConfig
+
+__all__ = [
+    "BuiltinToolParameter",
+    "ExecutionHints",
+    "OrchidAgentConfig",
+    "OrchidAgentSkillConfig",
+    "OrchidAgentSkillStepConfig",
+    "OrchidAgentsConfig",
+    "OrchidBuiltinToolConfig",
+    "OrchidDefaultsConfig",
+    "OrchidGuardrailRuleConfig",
+    "OrchidGuardrailsConfig",
+    "OrchidLLMConfig",
+    "OrchidMCPAuthConfig",
+    "OrchidMCPServerConfig",
+    "OrchidOrchestratorSkillConfig",
+    "OrchidOrchestratorSkillStepConfig",
+    "OrchidRAGConfig",
+    "OrchidRAGDefaultsConfig",
+    "OrchidSupervisorConfig",
+    "OrchidToolConfig",
+    "_apply_defaults",
+]

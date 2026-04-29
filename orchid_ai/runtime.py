@@ -30,6 +30,11 @@ from typing import TYPE_CHECKING, Callable
 from langchain_core.language_models import BaseChatModel
 
 from .core.mcp import OrchidMCPClient, OrchidMCPClientRegistrationStore, OrchidMCPTokenStore
+from .core.mcp_gateway_state import (
+    OrchidMCPGatewayAuthCodeStore,
+    OrchidMCPGatewayClientStore,
+    OrchidMCPGatewayTokenStore,
+)
 from .core.repository import OrchidVectorReader
 
 if TYPE_CHECKING:
@@ -85,6 +90,15 @@ class OrchidRuntime:
     mcp_client_factory: MCPClientFactory | None = None
     mcp_token_store: OrchidMCPTokenStore | None = None
     mcp_client_registration_store: OrchidMCPClientRegistrationStore | None = None
+    #: Shared store for the inbound MCP gateway's OAuth state
+    #: (RFC 7591 DCR clients, in-flight auth codes, issued tokens).
+    #: A single instance implements all three ABCs — the three typed
+    #: references below point at the same object for type-safety.
+    #: ``None`` when the gateway runs against its own local stores
+    #: (Phase 1 memory / Phase 2 file) rather than orchid-api.
+    mcp_gateway_client_store: OrchidMCPGatewayClientStore | None = None
+    mcp_gateway_auth_code_store: OrchidMCPGatewayAuthCodeStore | None = None
+    mcp_gateway_token_store: OrchidMCPGatewayTokenStore | None = None
     mcp_auth_registry: OrchidMCPAuthRegistry | None = field(default=None)
     checkpointer: BaseCheckpointSaver | None = None
 
@@ -150,7 +164,6 @@ class OrchidRuntime:
             server_config.url,
             server_type=server_config.type,
             transport=server_config.transport,
-            cache_ttl=server_config.cache_ttl,
             server_name=server_config.name,
             auth_mode=server_config.auth.mode,
             token_store=token_store,

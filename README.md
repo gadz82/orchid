@@ -119,14 +119,25 @@ documents/   -> core/
 | ABC | File | Purpose |
 |-----|------|---------|
 | `OrchidAgent` | `core/agent.py` | Agent identity, `run()`, `summarise()`, `fetch_rag_context()`, `extract_conversation_history()` |
-| `OrchidIdentityResolver` | `core/identity.py` | Bearer token -> OrchidAuthContext |
-| `LLMProvider` | `core/llm_provider.py` | Abstract LLM completion |
+| `OrchidIdentityResolver` | `core/identity.py` | Bearer token → `OrchidAuthContext` (per-request validation **and** the `/auth/resolve-identity` bridge — Phase 4A) |
+| `OrchidAuthConfigProvider` | `core/auth_config.py` | Resolves non-secret upstream-OAuth discovery (Phase 1) |
+| `OrchidAuthExchangeClient` | `core/auth_config.py` | Server-side authorization-code (Phase 2) + refresh-token (Phase 4B) exchange |
 | `OrchidMCPToolCaller` | `core/mcp.py` | Call MCP tools |
 | `OrchidMCPDiscoverable` | `core/mcp.py` | Discover MCP capabilities |
+| `OrchidMCPTokenStore` | `core/mcp.py` | Per-user outbound OAuth token persistence |
+| `OrchidMCPClientRegistrationStore` | `core/mcp.py` | Per-server discovered endpoints + DCR creds |
+| `OrchidMCPGatewayClientStore` / `…AuthCodeStore` / `…TokenStore` | `core/mcp_gateway_state.py` | Inbound MCP gateway state (Phase 3 — DCR clients, in-flight auth codes, issued tokens) |
 | `OrchidVectorReader` | `core/repository.py` | Vector store retrieval |
 | `OrchidVectorWriter` | `core/repository.py` | Vector store indexing |
 | `OrchidVectorStoreAdmin` | `core/repository.py` | Collection management |
 | `OrchidChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
+
+The auth-centralisation ABCs (`OrchidAuthConfigProvider`, `OrchidAuthExchangeClient`,
+`OrchidIdentityResolver`, three `OrchidMCPGateway*Store`s) collectively let
+`orchid-api` host every secret-bearing OAuth call on behalf of downstream
+public PKCE clients (the MCP gateway, Next.js frontends). Full architectural
+walkthrough + per-phase migration matrix in
+[.knowledge/auth-centralisation.md](../.knowledge/auth-centralisation.md).
 
 ## OrchidRuntime
 
@@ -394,7 +405,6 @@ Each step:
 | `prompts` | list / `"*"` | `[]` |
 | `resources` | list / `"*"` | `[]` |
 | `tool_call_strategy` | `"all"` / `"sequential"` / `"llm_decides"` | `"all"` |
-| `cache_ttl` | int | `300` |
 
 - **`name`** -- Unique identifier for this MCP server within the agent. Used in logging, error messages, and as a key when referencing the server in skill steps (`source: "airline-api"`). Must be unique per agent.
 - **`type`** -- Whether the MCP server runs as a local process (`"local"`) or as a remote HTTP service (`"remote"`). Local servers are co-deployed with the agent (e.g. in the same Docker network). Remote servers are external services accessed over the network. This affects connection handling and error retry behavior.
@@ -408,7 +418,8 @@ Each step:
   - `"sequential"` -- Call tools one by one in order. Each tool receives the accumulated results from previous tools as a `previous_results` argument. Use when tools depend on each other (e.g. search then filter then sort).
   - `"llm_decides"` -- Ask the LLM to decide which tools to call and with what arguments. The LLM sees all available tools and the user query, then generates tool calls. Most flexible but slower and uses more tokens.
 - **`auth`** -- Per-server authentication configuration (see `agents.<name>.mcp_servers[].auth` below). Determines how the client authenticates with this MCP server. Defaults to `mode: "none"` (no auth headers).
-- **`cache_ttl`** -- How long (in seconds) to cache the results of capability discovery (`list_tools()`, `list_prompts()`, `list_resources()`). When using wildcard discovery (`"*"`), the framework calls the server's discovery endpoints and caches the results for this duration. `0` = re-discover on every request. `300` (5 min default) is a good balance for development. Increase in production where capabilities rarely change.
+
+> **Capability cache lifetime:** discovery results (`list_tools()`, `list_prompts()`, `list_resources()`) are cached for the lifetime of the process and warmed proactively at startup / session start by `OrchidSessionWarmer` -- the per-request hot path stops paying the discovery cost. Flush stale capabilities via `OrchidMCPClient.invalidate_cache()` (or a future admin endpoint).
 
 > **Fault isolation:** MCP server communication boundaries use broad exception handling. If a server returns HTTP errors (401 Unauthorized, 500 Internal Server Error), connection failures, or protocol errors, the agent logs a warning and continues with the remaining servers and tools -- it does not crash or retry endlessly. This applies to tool execution (strategies), capability discovery (`render_capabilities`), and the `fetch()` dispatcher. One failing MCP server never takes down the entire agent.
 
@@ -751,7 +762,6 @@ agents:
         transport: streamable_http
         url: "${AIRLINE_MCP_URL}"
         tool_call_strategy: sequential
-        cache_ttl: 600
         tools:
           - name: search_flights
             arguments:
@@ -774,7 +784,6 @@ agents:
         transport: streamable_http
         url: "http://localhost:3002"
         tool_call_strategy: all
-        cache_ttl: 300
         tools: "*"                   # discover all tools at runtime
         prompts: "*"                 # discover all prompts at runtime
         resources: "*"               # discover all resources at runtime
@@ -837,7 +846,6 @@ agents:
         transport: sse             # SSE transport variant
         url: "${BOOKING_MCP_URL}"
         tool_call_strategy: llm_decides
-        cache_ttl: 0               # no capability caching
         tools:
           - name: search_hotels
             inject_to_rag: true
@@ -1069,6 +1077,34 @@ Always use `OrchidRAGScope` -- never raw `tenant_id` filters.
 | gemini/gemini-embedding-001 | 3072 |
 
 Switching models requires wiping and re-indexing Qdrant collections.
+
+## MCP gateway exposure (optional)
+
+`OrchidAgentsConfig` includes an **optional** `mcp_gateway` field that
+lets integrators customise how Orchid is presented to MCP clients via
+the `orchid-mcp` gateway — tool title/description overrides + MCP
+Prompt templates. The block is entirely optional — empty by default,
+ignored when not populated.
+
+```yaml
+# agents.yaml
+mcp_gateway:
+  tools:
+    orchid_ask:
+      title: "Ask the Acme Knowledge Base"
+      description: "Route questions to the Acme support agents."
+  prompts:
+    - name: compliance_report
+      description: "Generate a compliance-completion report."
+      arguments:
+        - { name: department, required: true }
+      template: |
+        Produce a compliance report for {{department}}.
+```
+
+Exposed via `orchid-api`'s `GET /mcp-gateway/config` endpoint. Env-var
+overrides (`ORCHID_MCP_GATEWAY_TOOL_*`, `ORCHID_MCP_GATEWAY_PROMPTS_FILE`)
+live in `orchid-api`, not here.
 
 ## Testing
 

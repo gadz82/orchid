@@ -13,28 +13,36 @@ orchid/
     core/                 Pure ABCs — ZERO external dependencies (only stdlib)
       agent.py            OrchidAgent ABC
       state.py            OrchidAuthContext + OrchidAgentState
-      identity.py         OrchidIdentityResolver ABC
-      llm_provider.py     (REMOVED — use BaseChatModel from langchain-core)
-      mcp.py              OrchidMCPToolCaller / OrchidMCPDiscoverable ABCs
+      identity.py         OrchidIdentityResolver ABC (also powers /auth/resolve-identity)
+      auth_config.py      OrchidAuthConfigProvider + OrchidAuthExchangeClient
+                            (Phases 1, 2, 4B — exchange + refresh ABCs and discovery shape)
+      mcp.py              OrchidMCPToolCaller / OrchidMCPDiscoverable / OrchidMCPTokenStore ABCs
+      mcp_gateway_state.py
+                          OrchidMCPGatewayClientStore / …AuthCodeStore / …TokenStore ABCs
+                            (Phase 3 — inbound gateway DCR clients + auth codes + tokens)
       repository.py       OrchidVectorReader / OrchidVectorWriter / OrchidVectorStoreAdmin ABCs
     config/               YAML config loader + schema + tool registry (parameter metadata)
     agents/               GenericAgent + strategies (SkillDetector, MCPDispatcher, SkillExecutor)
     graph/                LangGraph wiring: supervisor.py, graph.py, state.py
     rag/                  Scopes, indexer, embeddings, factory, backends/qdrant.py
     documents/            Parsers (PDF/DOCX/XLSX/CSV/Image), chunker, pipeline
-    persistence/          OrchidChatStorage + OrchidMCPTokenStore ABCs + factories + shared migrations:
-      sqlite.py           OrchidSQLiteChatStorage (default, aiosqlite — core dep)
-      postgres.py         OrchidPostgresChatStorage (optional, asyncpg — `pip install orchid-ai[postgres]`)
-      mcp_token_sqlite.py OrchidSQLiteMCPTokenStore (per-server OAuth tokens, same DB)
-      mcp_token_postgres.py OrchidPostgresMCPTokenStore (per-server OAuth tokens, same DB)
-      mcp_token_factory.py  build_mcp_token_store() factory
-      migrations/         Shared migrations (v001 = chat schema, v002 = token schema)
+    persistence/          OrchidChatStorage + OrchidMCPTokenStore + Phase-3 stores + shared migrations:
+      sqlite.py                       OrchidSQLiteChatStorage (default, aiosqlite — core dep)
+      postgres.py                     OrchidPostgresChatStorage (optional, asyncpg)
+      mcp_token_sqlite.py             OrchidSQLiteMCPTokenStore (outbound MCP OAuth tokens)
+      mcp_token_postgres.py           OrchidPostgresMCPTokenStore
+      mcp_token_factory.py            build_mcp_token_store()
+      mcp_client_registration_*.py    Per-server discovered endpoints + DCR creds (RFC 7591)
+      mcp_gateway_state_sqlite.py     Phase 3 inbound gateway-state store (SQLite)
+      mcp_gateway_state_postgres.py   Phase 3 inbound gateway-state store (Postgres)
+      mcp_gateway_state_factory.py    build_mcp_gateway_state_store()
+      migrations/                     Unified v001 — chat + outbound MCP + inbound gateway tables
     mcp/                  StreamableHttpMCPClient + OrchidMCPAuthRegistry
       client.py           StreamableHttpMCPClient (dual-mode: none/passthrough/oauth)
       auth_registry.py    OrchidMCPAuthRegistry — scans config for OAuth-requiring servers
     llm_factory.py        build_chat_model() — provider-first, ChatLiteLLM fallback
     utils.py              import_class() shared utility
-  tests/                  384+ tests
+  tests/                  720+ tests
   pyproject.toml
 ```
 
@@ -55,10 +63,16 @@ documents/   → core/  (standalone)
 | ABC | File | Purpose |
 |-----|------|---------|
 | `OrchidAgent` | `agent.py` | Agent identity + `run()`, `summarise()`, `fetch_rag_context()`, `extract_user_query()`, `extract_conversation_history()` |
-| `OrchidIdentityResolver` | `identity.py` | Bearer token -> OrchidAuthContext |
+| `OrchidIdentityResolver` | `identity.py` | Bearer token → `OrchidAuthContext` (also drives `/auth/resolve-identity` per Phase 4A) |
+| `OrchidAuthConfigProvider` | `auth_config.py` | Resolves non-secret upstream-OAuth discovery for `/auth-info` (Phase 1) |
+| `OrchidAuthExchangeClient` | `auth_config.py` | Server-side authorization-code (Phase 2) + refresh-token (Phase 4B) exchange — holds `client_secret` |
 | `OrchidMCPToolCaller` | `mcp.py` | Call MCP tools |
 | `OrchidMCPDiscoverable` | `mcp.py` | Discover MCP capabilities |
-| `OrchidMCPTokenStore` | `mcp.py` | Per-server OAuth token persistence |
+| `OrchidMCPTokenStore` | `mcp.py` | Per-user outbound OAuth token persistence |
+| `OrchidMCPClientRegistrationStore` | `mcp.py` | Per-server discovered endpoints + DCR creds (RFC 7591) |
+| `OrchidMCPGatewayClientStore` | `mcp_gateway_state.py` | Inbound DCR client registrations (Phase 3) |
+| `OrchidMCPGatewayAuthCodeStore` | `mcp_gateway_state.py` | Inbound in-flight auth codes (Phase 3) |
+| `OrchidMCPGatewayTokenStore` | `mcp_gateway_state.py` | Inbound issued access + refresh + IdP-token records (Phase 3 + 4B) |
 | `OrchidVectorReader` | `repository.py` | Vector store retrieval |
 | `OrchidVectorWriter` | `repository.py` | Vector store indexing |
 | `OrchidVectorStoreAdmin` | `repository.py` | Collection management |
@@ -171,7 +185,7 @@ Integrators override only what they need. All fields have sensible defaults.
 
 ```bash
 cd orchid && source .venv/bin/activate
-pytest tests/ -x              # all tests (328+)
+pytest tests/ -x              # all tests (720+)
 pytest tests/ -k "test_scopes"  # specific
 ruff check orchid_ai/         # lint
 ruff format orchid_ai/        # format
@@ -187,6 +201,52 @@ ruff format orchid_ai/        # format
 
 Switching models requires wiping and re-indexing Qdrant collections.
 
+## MCP gateway exposure config (optional)
+
+`OrchidAgentsConfig.mcp_gateway` lets integrators customise how Orchid's
+MCP-facing gateway (e.g. `orchid-mcp`) presents itself to host LLMs:
+
+- **Tool overrides** — replace default `title` / `description` for
+  specific tool names.
+- **MCP Prompts** — pre-canned templates with `{{var}}` substitution.
+
+The block is **entirely optional** — a YAML without `mcp_gateway:`
+parses into an empty config (`default_factory`), and nothing in
+`orchid/` depends on it being populated. Data-only: the framework
+library does not render templates or track which tools a gateway
+actually exposes (platform-agnostic, keeps the hard-rule boundary).
+
+```yaml
+mcp_gateway:
+  tools:
+    orchid_ask:
+      title: "Ask the Acme Knowledge Base"
+      description: "Route a question to the Acme support agents."
+  prompts:
+    - name: compliance_report
+      description: "Generate a compliance-completion report."
+      arguments:
+        - { name: department, required: true }
+      template: |
+        Produce a compliance report for {{department}}.
+```
+
+Classes live in `orchid_ai/config/mcp_gateway.py`. Env-var overrides +
+external prompts-file loading happen upstream in `orchid-api`'s
+`mcp_gateway.py`; the framework library has no env-var logic.
+
+## Auth-centralisation ABCs (Phases 1–5)
+
+The framework library carries the abstract auth surface; concrete
+implementations live in consumer projects. See
+[.knowledge/auth-centralisation.md](../.knowledge/auth-centralisation.md)
+for the full architectural narrative + migration matrix.
+
+- **Phase 1** — `OrchidAuthConfigProvider` resolves the non-secret upstream-OAuth discovery shape (`OrchidUpstreamOAuthConfig`) consumed by `orchid-api`'s `/auth-info`. Pure: no network calls, no side effects; reads env vars seeded from `orchid.yml`.
+- **Phase 2 / 4B** — `OrchidAuthExchangeClient` holds the upstream `client_secret` and performs the authorization-code (`exchange_code`) and refresh-token (`refresh_token`) grants on behalf of downstream public PKCE clients. Default `refresh_token` raises `NotImplementedError` — Phase-2-only consumers don't break, and the `/auth-info` flag gating `refresh_via_api` checks the method override identity.
+- **Phase 3** — three `OrchidMCPGatewayClient/AuthCode/Token Store` ABCs back the inbound MCP gateway's OAuth state. One concrete class implements all three against the shared chat DB (SQLite / Postgres). `OrchidMCPGatewayToken` carries `idp_access_token` + `idp_refresh_token` + `idp_expires_at` so Phase 4B's refresh path has the upstream pair to swap.
+- **Phase 4A** — `OrchidIdentityResolver` (already pre-existing) does double-duty: per-request bearer validation AND the upstream-token → identity bridge exposed at `/auth/resolve-identity`.
+
 ## Common Pitfalls
 
 - **Importing qdrant_client in agent code.** Use `self.reader.retrieve(...)` instead.
@@ -197,3 +257,4 @@ Switching models requires wiping and re-indexing Qdrant collections.
 - **Mutating `OrchidAuthContext`** — it's subclass-friendly but treat as immutable in framework code.
 - **Adding API/CLI code here** — those belong in `orchid-api/` and `orchid-cli/`.
 - **Catching only specific exceptions at MCP boundaries** — always use `except Exception` at server communication boundaries in `mcp_dispatcher.py` and `strategies.py`. HTTP libraries (httpx) raise exception types like `httpx.HTTPStatusError` (for 401/500) that are not subclasses of `ConnectionError`/`TimeoutError`/`OSError`. A narrow exception tuple lets these propagate and crash the agent.
+- **Adding HTTP / fetch logic to `OrchidAuthConfigProvider`** — it's a pure config-resolution ABC. Network calls to validate the discovery block happen one layer up in `orchid-api`'s router.

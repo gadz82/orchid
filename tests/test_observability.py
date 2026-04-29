@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from uuid import uuid4
 
+import pytest
 from langchain_core.outputs import LLMResult
 
 from orchid_ai.observability.callbacks import OrchidMetricsHandler
+from orchid_ai.observability.perf import PERF_LOGGER_NAME, configure_perf_logger
 
 
 class TestOrchidMetricsHandlerInit:
@@ -164,6 +167,41 @@ class TestAgentTracking:
         assert metrics["agent_call_counts"]["learning"] == 1
         assert metrics["agent_call_counts"]["notifications"] == 1
 
+    def test_serialized_none_does_not_crash(self):
+        # LangGraph passes serialized=None for some internal chain transitions.
+        # Regression: previously this raised AttributeError on .get().
+        h = OrchidMetricsHandler()
+        run_id = uuid4()
+
+        h.on_chain_start(None, {}, run_id=run_id)
+        h.on_chain_end({}, run_id=run_id)
+
+        metrics = h.get_metrics()
+        assert metrics["agent_latencies_s"] == {}
+        assert metrics["agent_call_counts"] == {}
+
+    def test_agent_name_resolved_from_kwargs_when_serialized_none(self):
+        # When serialized=None, fall back to kwargs["name"] so agent
+        # nodes still get tracked.
+        h = OrchidMetricsHandler()
+        run_id = uuid4()
+
+        h.on_chain_start(None, {}, run_id=run_id, name="learning_agent")
+        h.on_chain_end({}, run_id=run_id)
+
+        metrics = h.get_metrics()
+        assert metrics["agent_call_counts"].get("learning") == 1
+
+    def test_serialized_dict_without_name_does_not_crash(self):
+        h = OrchidMetricsHandler()
+        run_id = uuid4()
+
+        h.on_chain_start({}, {}, run_id=run_id)
+        h.on_chain_end({}, run_id=run_id)
+
+        metrics = h.get_metrics()
+        assert metrics["agent_call_counts"] == {}
+
 
 class TestRetryTracking:
     """Retry event counting."""
@@ -219,3 +257,69 @@ class TestImportFromSDK:
         from orchid_ai.observability import OrchidMetricsHandler as H
 
         assert H is OrchidMetricsHandler
+
+
+class TestPerfLoggerToggle:
+    """``[PERF]`` lines are off by default and only enabled by the
+    ``ORCHID_ENABLE_PERF_LOGS`` env var (or an explicit call to
+    :func:`configure_perf_logger`).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore(self):
+        # Snapshot the perf logger level so other tests aren't affected
+        # if the env var or a configure call here changes it.
+        logger = logging.getLogger(PERF_LOGGER_NAME)
+        original = logger.level
+        try:
+            yield
+        finally:
+            logger.setLevel(original)
+
+    def test_disabled_by_default(self, monkeypatch):
+        # Clearing the env var and re-running the configurator should
+        # leave the logger silent (WARNING) — info() calls are dropped.
+        monkeypatch.delenv("ORCHID_ENABLE_PERF_LOGS", raising=False)
+        enabled = configure_perf_logger()
+        logger = logging.getLogger(PERF_LOGGER_NAME)
+        assert enabled is False
+        assert logger.level == logging.WARNING
+        assert logger.isEnabledFor(logging.INFO) is False
+
+    @pytest.mark.parametrize("value", ["true", "TRUE", "1", "yes", "on", " True "])
+    def test_enabled_by_env_var(self, monkeypatch, value):
+        monkeypatch.setenv("ORCHID_ENABLE_PERF_LOGS", value)
+        enabled = configure_perf_logger()
+        logger = logging.getLogger(PERF_LOGGER_NAME)
+        assert enabled is True
+        assert logger.level == logging.INFO
+        assert logger.isEnabledFor(logging.INFO) is True
+
+    @pytest.mark.parametrize("value", ["false", "0", "no", "off", "", "anything-else"])
+    def test_disabled_by_env_var_falsy_values(self, monkeypatch, value):
+        monkeypatch.setenv("ORCHID_ENABLE_PERF_LOGS", value)
+        enabled = configure_perf_logger()
+        logger = logging.getLogger(PERF_LOGGER_NAME)
+        assert enabled is False
+        assert logger.level == logging.WARNING
+
+    def test_explicit_true_overrides_env(self, monkeypatch):
+        monkeypatch.delenv("ORCHID_ENABLE_PERF_LOGS", raising=False)
+        configure_perf_logger(enabled=True)
+        logger = logging.getLogger(PERF_LOGGER_NAME)
+        assert logger.level == logging.INFO
+
+    def test_explicit_false_overrides_env(self, monkeypatch):
+        monkeypatch.setenv("ORCHID_ENABLE_PERF_LOGS", "true")
+        configure_perf_logger(enabled=False)
+        logger = logging.getLogger(PERF_LOGGER_NAME)
+        assert logger.level == logging.WARNING
+
+    def test_propagate_stays_true(self, monkeypatch):
+        # Propagate must stay True so application-configured root
+        # handlers receive perf records when the toggle is on.
+        monkeypatch.setenv("ORCHID_ENABLE_PERF_LOGS", "true")
+        configure_perf_logger()
+        assert logging.getLogger(PERF_LOGGER_NAME).propagate is True
+        configure_perf_logger(enabled=False)
+        assert logging.getLogger(PERF_LOGGER_NAME).propagate is True

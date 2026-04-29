@@ -30,7 +30,11 @@ YAML_TO_ENV: dict[tuple[str, str], str] = {
     # ── auth ──────────────────────────────────────────────────
     ("auth", "dev_bypass"): "DEV_AUTH_BYPASS",
     ("auth", "identity_resolver_class"): "IDENTITY_RESOLVER_CLASS",
+    ("auth", "auth_config_provider_class"): "AUTH_CONFIG_PROVIDER_CLASS",
+    ("auth", "auth_exchange_client_class"): "AUTH_EXCHANGE_CLIENT_CLASS",
     ("auth", "domain"): "AUTH_DOMAIN",
+    ("auth", "oauth_client_id_env"): "AUTH_OAUTH_CLIENT_ID_ENV",
+    ("auth", "oauth_scope"): "AUTH_OAUTH_SCOPE",
     # ── startup ──────────────────────────────────────────────
     ("startup", "hook"): "STARTUP_HOOK",
     # ── rag ───────────────────────────────────────────────────
