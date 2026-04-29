@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-04-29)
+
+### Bug Fixes
+
+- Update documentation, tests, agent files and configs.
+  ([`8a2da5d`](https://github.com/gadz82/orchid/commit/8a2da5d12947d961cee635e3cfe6d7ac18792ea7))
+
+### Features
+
+- Add mcp support and auth configuration management for sub-agent mcp servers
+  ([`2773ea3`](https://github.com/gadz82/orchid/commit/2773ea3c253fef79d1ff4c4941cb08976e4bf899))
+
+- Add multi-tenant domain support for upstream OAuth configuration and token exchange methods
+  ([`ee12368`](https://github.com/gadz82/orchid/commit/ee12368f8b1d15cafd4c4e9e1764fa225ae8e763))
+
+- Add performance instrumentation and configuration refinements across agent modules
+  ([`77e301d`](https://github.com/gadz82/orchid/commit/77e301db1cb3fcb7d0b8af20060bfc43ff1d4c95))
+
+- Add upstream IdP token support for gateway OAuth states.
+  ([`731db0e`](https://github.com/gadz82/orchid/commit/731db0e820ebeb24b6e745f5796ef10f66e9ab26))
+
+- Extend LLM provider support, add API key configuration, and implement expired token cleanup
+  ([`9dab385`](https://github.com/gadz82/orchid/commit/9dab385acff2e592a2f04e42894e2386f03b8447))
+
+- Introduce capability cache lifecycle management and proactive session warming.
+  ([`64607ed`](https://github.com/gadz82/orchid/commit/64607ed18b88ce8c9bc01f7eadbe57b8707f2774))
+
+- Mcp discovery add auth config
+  ([`eca1378`](https://github.com/gadz82/orchid/commit/eca13781b26a18ee3f6735e892d33f2706581b33))
+
+- Mcp oauth discovery moved to api
+  ([`2dd5921`](https://github.com/gadz82/orchid/commit/2dd5921c43366dd24f39d106fde5cd66c8414a8a))
+
+- Mcp oauth management in orchid db
+  ([`4b2be21`](https://github.com/gadz82/orchid/commit/4b2be21400bb0cf9650299b5ebea08f9b3682e6b))
+
+
 ## v1.3.6 (2026-04-22)
 
 ### Bug Fixes
