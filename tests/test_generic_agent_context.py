@@ -26,7 +26,7 @@ def _make_agent() -> GenericAgent:
     chat_model.ainvoke = AsyncMock(return_value=MagicMock(content="summary response"))
     return GenericAgent(
         config=config,
-        llm="test-model",
+        model_id="test-model",
         reader=reader,
         mcp_clients=[],
         chat_model=chat_model,

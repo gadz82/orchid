@@ -44,14 +44,12 @@ class OrchidAgent(ABC):
     def __init__(
         self,
         *,
-        model_id: Any = None,
+        model_id: str = "",
         reader: OrchidVectorReader,
         mcp_clients: list[OrchidMCPClient] | None = None,
         chat_model: Any | None = None,
-        **_kwargs: Any,
     ):
-        # Accept both model_id= (preferred) and llm= (legacy) for backward compat
-        self.model_id: str = model_id or _kwargs.pop("llm", "") or ""
+        self.model_id: str = model_id
         self.reader = reader
         self.mcp_clients = mcp_clients or []
         self._chat_model = chat_model  # BaseChatModel (duck-typed to avoid core/ deps)

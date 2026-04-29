@@ -8,7 +8,6 @@ nail down the new contract.
 
 from __future__ import annotations
 
-import warnings
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 
@@ -177,24 +176,3 @@ class TestFailedResourceNegativeCache:
         assert "ui://good" not in client._cache.failed_resource_uris
         assert client._cache.resource_contents.get("good") == "ok-content"
         assert "broken" not in client._cache.resource_contents
-
-
-class TestCacheTTLDeprecation:
-    def test_passing_cache_ttl_emits_deprecation_warning(self):
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            StreamableHttpMCPClient(
-                "http://localhost/mcp",
-                auth_mode="none",
-                cache_ttl=600,
-            )
-        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        assert deprecations, "passing cache_ttl should emit a DeprecationWarning"
-        assert "cache_ttl" in str(deprecations[0].message)
-
-    def test_omitting_cache_ttl_emits_no_warning(self):
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            StreamableHttpMCPClient("http://localhost/mcp", auth_mode="none")
-        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        assert deprecations == []

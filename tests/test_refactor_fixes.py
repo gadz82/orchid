@@ -117,7 +117,7 @@ class TestFetchAllRagConcurrency:
         reader = MagicMock()
         reader.retrieve = mock_retrieve
 
-        agent = _TestAgent(llm="model", reader=reader)
+        agent = _TestAgent(model_id="model", reader=reader)
         scope = OrchidRAGScope(tenant_id="t", user_id="u")
 
         result = await agent.fetch_all_rag_context("query", scope, k=3)
@@ -149,7 +149,7 @@ class TestNoLitellmFallback:
             async def run(self, state):
                 return state
 
-        agent = _TestAgent(llm="model", reader=MagicMock())
+        agent = _TestAgent(model_id="model", reader=MagicMock())
         # No chat_model injected
 
         with pytest.raises(RuntimeError, match="no chat model injected"):
@@ -173,7 +173,7 @@ class TestNoLitellmFallback:
     @pytest.mark.asyncio
     async def test_supervisor_llm_complete_raises_without_service(self):
         """supervisor._llm_complete raises RuntimeError without BaseChatModel."""
-        from orchid_ai.graph.supervisor import _llm_complete
+        from orchid_ai.graph._supervisor_helpers import _llm_complete
 
         with pytest.raises(RuntimeError, match="requires a BaseChatModel"):
             await _llm_complete(None, "model", [{"role": "user", "content": "test"}])
@@ -354,7 +354,7 @@ class TestGenericAgentDecomposition:
 
         agent = GenericAgent(
             config=config,
-            llm="test-model",
+            model_id="test-model",
             reader=reader,
             mcp_clients=[],
             chat_model=chat_model,
