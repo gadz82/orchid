@@ -512,9 +512,36 @@ def _fallback_summary(tool_results: dict[str, Any]) -> str:
 def _wrap_state_update(parent_name: str, slot_key: str, outcome: dict[str, Any]) -> dict[str, Any]:
     """Shape a state update that writes the outcome plus the per-mini
     shadow ``mcp_context`` slot for trace inspection (spec §7).
+
+    Also emits the two ``mini_agent.{started,finished}`` lifecycle
+    events into the ``messages`` channel so the streaming router can
+    surface them as SSE events.  Both events ride the same state
+    delta because the mini node is a single LangGraph node — they
+    arrive together at the message stream but the SSE consumer can
+    still distinguish + time-order them by their ``type`` field.
     """
+    from ..observability import make_event_message
+
     tool_results = outcome.get("tool_results") or {}
+    started_event = make_event_message(
+        "mini_agent.started",
+        {
+            "parent": parent_name,
+            "mini_id": outcome.get("mini_id", ""),
+            "description": outcome.get("sub_task_description", ""),
+        },
+    )
+    finished_payload: dict[str, Any] = {
+        "parent": parent_name,
+        "mini_id": outcome.get("mini_id", ""),
+        "status": outcome.get("status", ""),
+        "duration_ms": outcome.get("duration_ms", 0),
+    }
+    if outcome.get("error"):
+        finished_payload["error"] = outcome["error"]
+    finished_event = make_event_message("mini_agent.finished", finished_payload)
     return {
+        "messages": [started_event, finished_event],
         "mini_agent_outcomes": {slot_key: outcome},
         "mcp_context": {slot_key: {"tool_results": tool_results}},
     }

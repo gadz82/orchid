@@ -410,25 +410,17 @@ class TestInferredMode:
 
 class TestDecomposerModelFallback:
     """T19 — when ``decomposer_model`` is unset, the parent's chat model
-    is used.  We assert this at the GenericAgent level since the
-    factory choice happens there (the Decomposer itself just receives
-    an injected chat model)."""
+    is used.  Asserts the precedence at the ``maybe_decompose`` free
+    function (Phase B / B3 graph-level wrapper hook)."""
 
     @pytest.mark.asyncio
     async def test_unset_decomposer_model_uses_parent_chat_model(self, monkeypatch):
-        from orchid_ai.agents.generic_agent import GenericAgent
+        from orchid_ai.agents.mini_agent_decomposer import maybe_decompose
+        from orchid_ai.core.state import OrchidAuthContext
+        from langchain_core.messages import HumanMessage
 
         decomposition = MiniAgentDecomposition(should_fork=False, reasoning="single")
         parent_chat = _make_chat_model(decomposition)
-
-        agent = GenericAgent.__new__(GenericAgent)
-        agent._config = _make_config(decomposer_model=None, parent_model="gemini/foo")
-        agent._chat_model = parent_chat
-        agent.model_id = "gemini/foo"
-        agent._mcp_dispatcher = MagicMock()
-        agent._mcp_dispatcher.render_capabilities = AsyncMock(
-            return_value=MagicMock(raw_tools=[]),
-        )
 
         # No build_chat_model call should happen — fallback path.
         called = {"build": 0}
@@ -439,10 +431,14 @@ class TestDecomposerModelFallback:
 
         monkeypatch.setattr("orchid_ai.llm_factory.build_chat_model", _fake_build)
 
-        from orchid_ai.core.state import OrchidAuthContext
-
         auth = OrchidAuthContext(access_token="t", tenant_key="x", user_id="u")
-        update = await agent._maybe_decompose(query="x", auth=auth, state={})
+        update = await maybe_decompose(
+            agent_config=_make_config(decomposer_model=None, parent_model="gemini/foo"),
+            chat_model=parent_chat,
+            mcp_clients=[],
+            auth=auth,
+            state={"messages": [HumanMessage(content="x")]},
+        )
         assert update is None  # should_fork=False → no state update
         assert called["build"] == 0
         # Parent chat model was used directly for structured output.
@@ -450,24 +446,13 @@ class TestDecomposerModelFallback:
 
     @pytest.mark.asyncio
     async def test_set_decomposer_model_triggers_factory(self, monkeypatch):
-        from orchid_ai.agents.generic_agent import GenericAgent
+        from orchid_ai.agents.mini_agent_decomposer import maybe_decompose
+        from orchid_ai.core.state import OrchidAuthContext
+        from langchain_core.messages import HumanMessage
 
         decomposition = MiniAgentDecomposition(should_fork=False, reasoning="single")
         custom_chat = _make_chat_model(decomposition)
-
-        agent = GenericAgent.__new__(GenericAgent)
-        agent._config = _make_config(
-            decomposer_model="gemini/lite",
-            parent_model="gemini/big",
-        )
-        # Parent model is a different chat model; we expect it NOT to be used.
         parent_chat = MagicMock()
-        agent._chat_model = parent_chat
-        agent.model_id = "gemini/big"
-        agent._mcp_dispatcher = MagicMock()
-        agent._mcp_dispatcher.render_capabilities = AsyncMock(
-            return_value=MagicMock(raw_tools=[]),
-        )
 
         called = {"build_args": []}
 
@@ -477,10 +462,14 @@ class TestDecomposerModelFallback:
 
         monkeypatch.setattr("orchid_ai.llm_factory.build_chat_model", _fake_build)
 
-        from orchid_ai.core.state import OrchidAuthContext
-
         auth = OrchidAuthContext(access_token="t", tenant_key="x", user_id="u")
-        await agent._maybe_decompose(query="x", auth=auth, state={})
+        await maybe_decompose(
+            agent_config=_make_config(decomposer_model="gemini/lite", parent_model="gemini/big"),
+            chat_model=parent_chat,
+            mcp_clients=[],
+            auth=auth,
+            state={"messages": [HumanMessage(content="x")]},
+        )
         # Custom factory invoked with the configured decomposer model.
         assert len(called["build_args"]) == 1
         assert called["build_args"][0][0] == "gemini/lite"

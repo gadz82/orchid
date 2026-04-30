@@ -20,9 +20,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from langchain_core.messages import AIMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..config.schema import OrchidAgentConfig
+from ..core.mcp import OrchidMCPClient
+from ..core.state import OrchidAgentState, OrchidAuthContext
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,7 @@ __all__ = [
     "MiniAgentDecomposer",
     "MiniAgentDecompositionError",
     "DEFAULT_DECOMPOSER_PROMPT",
+    "maybe_decompose",
 ]
 
 
@@ -305,6 +309,203 @@ class MiniAgentDecomposer:
         if mode == "inferred" and not sub_task.allowed_tools:
             return list(tool_inventory)
         return list(sub_task.allowed_tools)
+
+
+# ── Graph-level decomposer hook ───────────────────────────────
+
+
+async def maybe_decompose(
+    *,
+    agent_config: OrchidAgentConfig,
+    chat_model: Any,
+    mcp_clients: list[OrchidMCPClient],
+    auth: OrchidAuthContext,
+    state: OrchidAgentState,
+) -> dict[str, Any] | None:
+    """Run the decomposer for ``agent_config`` if its mini-agent block is enabled.
+
+    Returns one of:
+
+    - ``None`` — ``mini_agent.enabled`` is False, the decomposer
+      decided not to fork, the agent has no chat model, or the LLM
+      call failed in a recoverable way.  The graph wrapper then
+      proceeds to call ``agent.run(state)`` as normal.
+    - State update with ``mini_agent_decisions[parent_name]`` and a
+      ``mini_agent.decomposed`` event ``SystemMessage`` — the
+      decomposer chose to fork; the graph's conditional edge fans
+      out into mini-agents.
+    - State update with an error ``AIMessage`` named after the
+      parent — the decomposer's output violated the allowlist
+      (``MiniAgentDecompositionError``).  No minis dispatch.
+
+    SOLID note: this function is the SINGLE entry point for invoking
+    the decomposer from a parent_agent_node, regardless of the
+    parent agent's concrete class.  ``GenericAgent`` and custom
+    subclasses both go through it via the graph's wrapper closure
+    — neither needs to inline the decomposer logic into its
+    ``run()`` method.
+    """
+    # Local import to avoid the ``OrchidAgent.run()`` ↔ event-helpers
+    # chain at import time (events only exist for the streaming surface).
+    from ..observability import make_event_message
+
+    if not agent_config.mini_agent.enabled:
+        return None
+    if chat_model is None:
+        return None
+
+    # Build the decomposer's chat model: parent's by default,
+    # overridden when ``mini_agent.decomposer_model`` differs from
+    # the parent's effective ``llm.model``.
+    parent_model = (agent_config.llm.model if agent_config.llm else None) or ""
+    decomposer_model = agent_config.mini_agent.decomposer_model
+    if decomposer_model and decomposer_model != parent_model:
+        from ..llm_factory import build_chat_model
+
+        decomposer_chat = build_chat_model(decomposer_model, temperature=0.0)
+    else:
+        decomposer_chat = chat_model
+
+    # Render the parent's full tool inventory once — names + a
+    # compact description list for the prompt and a ground-truth set
+    # for allowlist enforcement.
+    try:
+        inventory = await _render_tool_inventory(
+            agent_config=agent_config,
+            mcp_clients=mcp_clients,
+            auth=auth,
+        )
+    except Exception as exc:  # noqa: BLE001 — capability rendering is best-effort
+        logger.warning(
+            "[%s] decomposer: tool inventory rendering failed (%s) — running without tools list",
+            agent_config.name,
+            exc,
+        )
+        inventory = []
+
+    # Local import — the agent module imports this one, so go the
+    # other way through ``OrchidAgent`` directly to avoid any cycle.
+    from ..core.agent import OrchidAgent
+
+    history = OrchidAgent.extract_conversation_history(state)
+    user_query = OrchidAgent.extract_user_query(state)
+
+    decomposer = MiniAgentDecomposer(agent_config=agent_config, chat_model=decomposer_chat)
+    try:
+        decomposition = await decomposer.decompose(
+            user_query=user_query,
+            conversation_history=history,
+            tool_inventory=inventory,
+        )
+    except MiniAgentDecompositionError as exc:
+        logger.warning(
+            "[%s] decomposer rejected: %s — short-circuiting with error AIMessage",
+            agent_config.name,
+            exc,
+        )
+        return {
+            "messages": [
+                AIMessage(
+                    content=(
+                        f"[{agent_config.name.title()} Agent] I couldn't break this request "
+                        f"into independent sub-tasks: {exc}"
+                    ),
+                    name=agent_config.name,
+                ),
+            ],
+            "mcp_context": {agent_config.name: {"summary": str(exc)}},
+        }
+    except Exception as exc:  # noqa: BLE001 — decomposer is non-critical
+        logger.warning(
+            "[%s] decomposer LLM call failed (%s) — falling back to normal flow",
+            agent_config.name,
+            exc,
+        )
+        return None
+
+    if not decomposition.should_fork:
+        logger.info(
+            "[%s] decomposer: should_fork=False (%s)",
+            agent_config.name,
+            (decomposition.reasoning or "")[:120] or "(no reason given)",
+        )
+        return None
+
+    # Resolve per-sub-task tool subsets so the fork router can stamp
+    # them on each ``Send`` payload.
+    sub_task_payloads: list[dict[str, Any]] = []
+    for sub_task in decomposition.sub_tasks:
+        tool_subset = decomposer.resolve_tool_subset(
+            sub_task=sub_task,
+            tool_inventory=inventory,
+        )
+        payload = sub_task.model_dump()
+        payload["resolved_tool_subset"] = tool_subset
+        sub_task_payloads.append(payload)
+
+    decision_dump = decomposition.model_dump()
+    decision_dump["sub_tasks"] = sub_task_payloads
+
+    logger.info(
+        "[%s] decomposer: should_fork=True (%d sub-tasks)",
+        agent_config.name,
+        len(decomposition.sub_tasks),
+    )
+
+    # Emit the ``mini_agent.decomposed`` event so the streaming
+    # router can surface decomposition activity to the client.
+    event = make_event_message(
+        "mini_agent.decomposed",
+        {
+            "parent": agent_config.name,
+            "count": len(decomposition.sub_tasks),
+            "sub_tasks": [{"id": s.id, "description": s.description} for s in decomposition.sub_tasks],
+        },
+    )
+
+    return {
+        "mini_agent_decisions": {agent_config.name: decision_dump},
+        "messages": [event],
+    }
+
+
+async def _render_tool_inventory(
+    *,
+    agent_config: OrchidAgentConfig,
+    mcp_clients: list[OrchidMCPClient],
+    auth: OrchidAuthContext,
+) -> list[str]:
+    """Compute the parent's full tool-name inventory (built-ins + MCP)."""
+    from ..config.tool_registry import get_tool
+
+    names: list[str] = []
+    seen: set[str] = set()
+
+    # Built-in tools that survive registry lookup.
+    for tool_name in agent_config.tools:
+        try:
+            get_tool(tool_name)
+        except KeyError:
+            continue
+        if tool_name not in seen:
+            names.append(tool_name)
+            seen.add(tool_name)
+
+    # MCP tools — declared and discovered.  Cache hits are fast; this
+    # also runs again inside the parent's normal ``run()`` flow so
+    # the caches remain warm either way.
+    if agent_config.mcp_servers and mcp_clients:
+        from .mcp_dispatcher import MCPDispatcher
+
+        dispatcher = MCPDispatcher(mcp_clients=mcp_clients, server_configs=agent_config.mcp_servers)
+        caps = await dispatcher.render_capabilities(auth, agent_name=agent_config.name)
+        for raw in caps.raw_tools:
+            tool_name = raw.get("name")
+            if tool_name and tool_name not in seen:
+                names.append(tool_name)
+                seen.add(tool_name)
+
+    return names
 
 
 # ── Helpers ────────────────────────────────────────────────────

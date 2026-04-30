@@ -122,8 +122,20 @@ def aggregator_node_factory(
             synthesis = _fallback_synthesis(outcomes)
 
         merged_tool_results = _merge_successful_tool_results(outcomes)
+        from ..observability import make_event_message
+
+        aggregated_event = make_event_message(
+            "mini_agent.aggregated",
+            {
+                "parent": parent_name,
+                "outcomes": [{"mini_id": o.get("mini_id", ""), "status": o.get("status", "")} for o in outcomes],
+            },
+        )
         return {
-            "messages": [AIMessage(content=synthesis, name=parent_name)],
+            # Emit the lifecycle event BEFORE the user-visible AIMessage so
+            # the streaming router translates ``mini_agent.aggregated`` to
+            # SSE before the synthesised tokens land.
+            "messages": [aggregated_event, AIMessage(content=synthesis, name=parent_name)],
             "mcp_context": {
                 parent_name: {
                     "tool_results": merged_tool_results,
@@ -188,9 +200,18 @@ def _short_circuit_message(
     reason: str,
 ) -> dict[str, Any]:
     """Emit a deterministic error AIMessage with no LLM call."""
+    from ..observability import make_event_message
+
     text = f"Sorry, I couldn't complete this request: {reason}"
+    aggregated_event = make_event_message(
+        "mini_agent.aggregated",
+        {
+            "parent": parent_name,
+            "outcomes": [{"mini_id": o.get("mini_id", ""), "status": o.get("status", "")} for o in outcomes],
+        },
+    )
     return {
-        "messages": [AIMessage(content=text, name=parent_name)],
+        "messages": [aggregated_event, AIMessage(content=text, name=parent_name)],
         "mcp_context": {
             parent_name: {
                 "tool_results": {},
