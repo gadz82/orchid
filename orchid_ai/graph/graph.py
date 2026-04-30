@@ -75,12 +75,23 @@ def _create_agent_node(
     agent: OrchidAgent,
     input_guardrails: OrchidGuardrailChain | None = None,
     output_guardrails: OrchidGuardrailChain | None = None,
+    agent_config: OrchidAgentConfig | None = None,
 ):
     """
     Wrap a OrchidAgent into a LangGraph node function (closure).
 
     When per-agent guardrails are configured, input is checked before
     ``agent.run()`` and output is checked after.
+
+    When ``agent_config.mini_agent.enabled`` is true, the wrapper
+    additionally runs the decomposer hook (Phase B) BEFORE
+    ``agent.run()``.  If the decomposer chooses to fork, the wrapper
+    returns the decision state update (with no AIMessage) and the
+    graph's conditional edge fans out into mini-agents.  This lives
+    at the wrapper level rather than inside ``GenericAgent.run()``
+    so any ``OrchidAgent`` subclass — ``GenericAgent`` or a custom
+    class like the helpdesk ``SupportAgent`` — opts in uniformly via
+    its YAML ``mini_agent.enabled: true`` flag.
     """
 
     async def node(state: GraphState) -> GraphState:
@@ -108,6 +119,32 @@ def _create_agent_node(
                     "messages": [AIMessage(content=f"[{agent.name.title()} Agent] {result.message}")],
                     "active_agents": [],
                 }
+
+        # ── Phase B: mini-agent decomposer hook ──
+        # Runs ONLY when ``agent_config.mini_agent.enabled`` is true.
+        # Returns either a state update (fork → no agent.run; or
+        # short-circuit error) or ``None`` (continue to agent.run).
+        if agent_config is not None and agent_config.mini_agent.enabled and auth is not None:
+            from ..agents.mini_agent_decomposer import maybe_decompose
+
+            decomp_start = time.perf_counter()
+            decomposer_update = await maybe_decompose(
+                agent_config=agent_config,
+                chat_model=getattr(agent, "_chat_model", None),
+                mcp_clients=getattr(agent, "mcp_clients", None) or [],
+                auth=auth,
+                state=state,
+            )
+            decomp_elapsed = (time.perf_counter() - decomp_start) * 1000
+            perf_logger.info(
+                "[PERF][agent=%s] step=decomposer took %.1f ms (forked=%s)",
+                agent.name,
+                decomp_elapsed,
+                bool(decomposer_update and "mini_agent_decisions" in decomposer_update),
+            )
+            if decomposer_update is not None:
+                decomposer_update.setdefault("active_agents", [])
+                return decomposer_update
 
         # ── Run agent ──
         agent_start = time.perf_counter()
@@ -655,22 +692,31 @@ def build_graph(
         ag = agent_guardrails.get(agent.name)
         input_chain = ag[0] if ag else None
         output_chain = ag[1] if ag else None
-        g.add_node(node_name, _create_agent_node(agent, input_chain, output_chain))
+        agent_config = config.agents.get(agent.name)
+        g.add_node(
+            node_name,
+            _create_agent_node(agent, input_chain, output_chain, agent_config=agent_config),
+        )
 
         # Phase B: synthesise the mini + aggregator nodes only when the
         # agent has opted in.  Non-opt-in agents keep today's wiring
         # (a single ``{name}_agent → supervisor`` edge) — zero overhead.
-        agent_config = config.agents.get(agent.name)
+        # Works for ANY ``OrchidAgent`` subclass — ``GenericAgent`` and
+        # custom classes both expose ``_chat_model`` + ``mcp_clients``
+        # via the base class.  The mini node ignores the parent's
+        # ``run()`` and runs its own focused agentic loop, so a custom
+        # class's specialised flow is bypassed inside minis by design.
         mini_enabled = bool(agent_config and agent_config.mini_agent.enabled)
-        if mini_enabled and isinstance(agent, GenericAgent):
+        parent_chat_model = getattr(agent, "_chat_model", None)
+        if mini_enabled and parent_chat_model is not None:
             mini_node = mini_agent_node_factory(
                 parent_config=agent_config,
-                chat_model=agent._chat_model,
-                mcp_clients=agent.mcp_clients,
+                chat_model=parent_chat_model,
+                mcp_clients=getattr(agent, "mcp_clients", None) or [],
             )
             aggregator_node = aggregator_node_factory(
                 parent_config=agent_config,
-                chat_model=agent._chat_model,
+                chat_model=parent_chat_model,
             )
             g.add_node(f"{agent.name}_mini", mini_node)
             g.add_node(f"{agent.name}_aggregator", aggregator_node)
@@ -682,11 +728,18 @@ def build_graph(
             g.add_edge(f"{agent.name}_mini", f"{agent.name}_aggregator")
             g.add_edge(f"{agent.name}_aggregator", "supervisor")
             logger.info(
-                "[Graph] agent '%s' wired with mini-agent topology (max_count=%d)",
+                "[Graph] agent '%s' wired with mini-agent topology (max_count=%d, class=%s)",
                 agent.name,
                 agent_config.mini_agent.max_count,
+                type(agent).__name__,
             )
         else:
+            if mini_enabled and parent_chat_model is None:
+                logger.warning(
+                    "[Graph] agent '%s' has mini_agent.enabled=true but no chat_model "
+                    "is wired — mini-agent topology disabled for this agent",
+                    agent.name,
+                )
             g.add_edge(node_name, "supervisor")
 
     # Add subgraph nodes (agents with children)

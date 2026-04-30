@@ -122,9 +122,19 @@ async def test_partial_failure_includes_full_outcome_list_in_prompt():
     assert "[ok]" in prompt_text
     assert "[failed]" in prompt_text
 
-    # AIMessage emitted with the synthesis text.
-    assert len(result["messages"]) == 1
-    assert result["messages"][0].content == "here is what I found ..."
+    # Lifecycle event + AIMessage emitted.  The first slot is the
+    # ``mini_agent.aggregated`` event so the streaming router can surface
+    # SSE before the synthesised tokens land.
+    from orchid_ai.observability import extract_event
+
+    assert len(result["messages"]) == 2
+    event = extract_event(result["messages"][0])
+    assert event is not None
+    assert event[0] == "mini_agent.aggregated"
+    assert event[1]["parent"] == "support"
+    assert {o["mini_id"] for o in event[1]["outcomes"]} == {"mini_0", "mini_1", "mini_2"}
+    # AIMessage carries the synthesis text.
+    assert result["messages"][1].content == "here is what I found ..."
 
     # mcp_context aggregates successful tool_results only — never the failed leg.
     merged = result["mcp_context"]["support"]["tool_results"]
@@ -168,7 +178,13 @@ async def test_all_failed_short_circuits_no_llm_call():
     result = await node(state)
 
     chat.ainvoke.assert_not_called()
-    msg = result["messages"][0].content
+    # First message is the ``mini_agent.aggregated`` event; second is
+    # the deterministic error AIMessage.
+    from orchid_ai.observability import extract_event
+
+    assert len(result["messages"]) == 2
+    assert extract_event(result["messages"][0]) is not None
+    msg = result["messages"][1].content
     assert "Sorry" in msg
     # Cause-of-death summary surfaces both failure types.
     assert "lookup user" in msg or "lookup orders" in msg
@@ -192,7 +208,8 @@ async def test_no_outcomes_short_circuits():
     state = {"messages": [HumanMessage(content="x")]}
     result = await node(state)
     chat.ainvoke.assert_not_called()
-    assert "Sorry" in result["messages"][0].content
+    # Event + error AIMessage (event first).
+    assert "Sorry" in result["messages"][1].content
 
 
 # ── Synthesis LLM failure: graceful fallback ──────────────────
@@ -217,10 +234,10 @@ async def test_synthesis_llm_failure_uses_fallback():
         },
     }
     result = await node(state)
-    # Did not crash.
-    assert len(result["messages"]) == 1
+    # Did not crash — event + AIMessage (fallback synthesis).
+    assert len(result["messages"]) == 2
     # Fallback contains the successful sub-task's summary.
-    assert "all good" in result["messages"][0].content
+    assert "all good" in result["messages"][1].content
 
 
 # ── Custom prompt template ─────────────────────────────────────
