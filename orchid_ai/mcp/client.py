@@ -130,6 +130,14 @@ class StreamableHttpMCPClient(OrchidMCPClient):
                         "name": t.name,
                         "description": t.description,
                         "schema": t.inputSchema,
+                        # MCP 2025-03-26 ``Tool.annotations`` — advisory hints
+                        # (readOnlyHint / idempotentHint / destructiveHint /
+                        # openWorldHint).  Stored as raw because downstream
+                        # parsing (``MCPToolAnnotations.from_raw``) handles
+                        # both dict and object shapes — this keeps the cache
+                        # transport-agnostic.  ``None`` when the server omits
+                        # the field.
+                        "annotations": getattr(t, "annotations", None),
                     }
                     for t in tools_result.tools
                 ]

@@ -56,10 +56,10 @@ class TestFailedResourceNegativeCache:
     """Failed ``read_resource`` calls are negative-cached for the
     process lifetime so we don't pay the round-trip on every request.
 
-    Regression: the docebo notifications MCP server exposes a resource
-    that returns ``ENOENT: no such file or directory`` on read.  Before
-    this fix, every chat invocation re-attempted the read, costing
-    ~1.9 s of wall clock per request.
+    Regression: a real-world notifications MCP server exposed a
+    resource that returned ``ENOENT: no such file or directory`` on
+    read.  Before this fix, every chat invocation re-attempted the
+    read, costing ~1.9 s of wall clock per request.
     """
 
     def _auth(self) -> OrchidAuthContext:
