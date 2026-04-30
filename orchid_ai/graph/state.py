@@ -72,3 +72,25 @@ class GraphState(TypedDict, total=False):
 
     # ── MCP per-server OAuth status (per-request) ────────────
     mcp_auth_status: Annotated[dict[str, Any], merge_dicts]  # {server_name: authorized_bool}
+
+    # ── Phase B: mini-agents (self-clones) ───────────────────
+    # Per-parent decomposer output, keyed by parent agent name
+    # (e.g. ``"support"``).  Stored as plain dicts (``MiniAgentDecomposition.model_dump()``)
+    # to keep state checkpointer-safe.  The fork router reads this
+    # to decide between ``"supervisor"`` and a ``Send`` fan-out.
+    mini_agent_decisions: Annotated[dict[str, Any], merge_dicts]
+
+    # Per-mini outcome, keyed ``f"{parent_name}#{mini_id}"``
+    # (e.g. ``"support#mini_0"``).  Stored as plain dicts
+    # (``MiniAgentOutcome.model_dump()``).  The aggregator filters
+    # by the parent's prefix and synthesises the parent's final answer.
+    mini_agent_outcomes: Annotated[dict[str, Any], merge_dicts]
+
+    # Per-Send sentinels — set by the fork router on each ``Send``
+    # payload so the mini node can identify its sub-task without
+    # threading kwargs through LangGraph.  Each Send branch sees its
+    # own values; nothing else reads these keys.
+    _active_mini_parent: str
+    _active_mini_id: str
+    _active_mini_subtask: dict[str, Any]
+    _active_mini_tool_subset: list[str]

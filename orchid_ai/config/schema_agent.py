@@ -8,6 +8,7 @@ from .mcp_gateway import OrchidMCPGatewayConfig
 from .schema_guardrails import OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPServerConfig, OrchidToolConfig
+from .schema_mini_agent import OrchidMiniAgentConfig
 from .schema_rag import OrchidRAGConfig, OrchidRAGDefaultsConfig
 from .schema_skills import (
     OrchidAgentSkillConfig,
@@ -82,6 +83,16 @@ class OrchidAgentConfig(BaseModel):
     # — see ``GenericAgent._resolve_parallel_safety`` for the precedence
     # rules.  Defaults to ``False`` to preserve today's serial behaviour.
     parallel_tools: bool = False
+
+    # Phase B — opt-in mini-agent (self-clone) configuration.  When
+    # ``mini_agent.enabled=True``, the graph builder synthesises
+    # ``{name}_mini`` and ``{name}_aggregator`` nodes alongside the
+    # normal ``{name}_agent`` parent node.  Defaults to disabled —
+    # zero overhead for agents that don't opt in.  Nesting is
+    # forbidden: child agents cannot enable mini-agents (no recursion
+    # within a single supervisor turn).  See ``schema_mini_agent.py``
+    # for field semantics.
+    mini_agent: OrchidMiniAgentConfig = Field(default_factory=OrchidMiniAgentConfig)
 
     model_config = {"populate_by_name": True}
 
@@ -216,7 +227,15 @@ def _apply_defaults(
             if tool_cfg and tool_cfg.parallel_safe is True:
                 agent.parallel_safe_builtin_tools.add(tool_name)
 
-    # Recurse into children
+    # Recurse into children — but reject any child that opts into
+    # mini-agents.  Nesting is forbidden by spec §2 to keep the
+    # graph topology bounded.  ``mini_agent.enabled`` may only be
+    # set on top-level agents, never on children of another agent.
     if agent.children:
         for child_name, child in agent.children.items():
+            if child.mini_agent.enabled:
+                raise ValueError(
+                    f"agent '{name}.{child_name}' has mini_agent.enabled=true — "
+                    f"mini-agents may only be enabled on top-level agents (no nesting)."
+                )
             _apply_defaults(child, child_name, defaults, global_tools)
