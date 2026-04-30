@@ -15,6 +15,11 @@ class OrchidToolConfig(BaseModel):
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
     requires_approval: bool = False  # pause and ask user before executing (HITL)
+    # Phase A — parallel tool-call dispatch override.  ``None`` means
+    # "fall back to the MCP ``readOnlyHint`` annotation"; explicit
+    # ``True`` / ``False`` wins over the annotation.  Only consulted
+    # when the agent has ``parallel_tools: true`` set.
+    parallel_safe: bool | None = None
 
 
 class OrchidMCPAuthConfig(BaseModel):

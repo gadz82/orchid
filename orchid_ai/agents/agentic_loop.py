@@ -7,10 +7,13 @@ Manages the multi-round LLM → tool-call → result cycle with:
 - Max-round safety (prevents infinite loops)
 - HITL interrupt for tools requiring approval
 - Per-call error handling
+- Optional parallel dispatch of read-only / idempotent tools within a
+  single round (Phase A) — opt-in via ``parallel_safety`` map.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -22,6 +25,24 @@ perf_logger = logging.getLogger("orchid.perf")
 
 _MAX_TOOL_ROUNDS = 15
 _MAX_CONSECUTIVE_DUPES = 2
+
+
+def _is_parallel_safe(
+    tool_name: str,
+    parallel_safety: dict[str, bool] | None,
+) -> bool:
+    """Resolve whether ``tool_name`` may join the parallel batch.
+
+    Pure lookup against a pre-resolved map.  ``GenericAgent`` builds the
+    map upfront with the full precedence chain (explicit YAML override
+    > MCP ``readOnlyHint`` annotation > ``False``) and forces
+    ``False`` for any tool whose ``requires_approval`` is set.  A
+    ``None`` map means the agent has not opted in to ``parallel_tools``
+    at all — the loop runs strictly sequentially.
+    """
+    if parallel_safety is None:
+        return False
+    return bool(parallel_safety.get(tool_name, False))
 
 
 class AgenticLoop:
@@ -40,12 +61,18 @@ class AgenticLoop:
         tool_map: dict[str, Any],
         all_tool_defs: list[dict[str, Any]],
         temperature: float = 0.2,
+        parallel_safety: dict[str, bool] | None = None,
     ) -> None:
         self._agent_name = agent_name
         self._chat_model = chat_model
         self._tool_map = tool_map
         self._all_tool_defs = all_tool_defs
         self._temperature = temperature
+        # When ``None``, the loop runs strictly sequentially (today's
+        # behaviour).  When provided, every key whose value is ``True``
+        # is eligible to join the parallel batch within a round.  See
+        # ``_dispatch_tool_calls`` for the partition rules.
+        self._parallel_safety = parallel_safety
 
         # Loop state
         self._seen_calls: dict[str, str] = {}
@@ -167,28 +194,206 @@ class AgenticLoop:
         messages: list,
         round_num: int,
     ) -> None:
-        """Execute each tool call with duplicate detection and HITL."""
+        """Execute each tool call with duplicate detection and HITL.
+
+        Two execution modes share the same observable outcome — every
+        ``ToolMessage`` is appended to ``messages`` in the original
+        ``tool_calls`` order:
+
+        - **Sequential** (default, used when ``parallel_safety`` is
+          ``None`` OR when any call in the round requires approval):
+          identical to today's implementation — calls run one at a
+          time, duplicate detection and HITL interrupts fire at their
+          original positions.
+        - **Mixed** (used when at least one call is parallel-safe and
+          no call requires approval): the round is partitioned into a
+          ``parallel_batch`` (gathered via ``asyncio.gather``) and a
+          ``sequential_tail`` (everything else, in original order).
+          The parallel batch runs first, then the sequential tail —
+          the spec contract is "approval serialises, safe ones gather,
+          tail order preserved".
+        """
+        any_requires_approval = any(self._requires_approval(tc) for tc in tool_calls)
+        if self._parallel_safety is None or any_requires_approval:
+            await self._dispatch_sequential(tool_calls, messages, round_num)
+            return
+
+        await self._dispatch_mixed(tool_calls, messages, round_num)
+
+    async def _dispatch_sequential(
+        self,
+        tool_calls: list[dict[str, Any]],
+        messages: list,
+        round_num: int,
+    ) -> None:
+        """Run every tool call serially — preserves today's behaviour."""
         from langchain_core.messages import ToolMessage
 
         for tc in tool_calls:
-            fn_name = tc["name"]
-            fn_args = tc.get("args", {})
-            tc_id = tc.get("id", "")
-
-            logger.info("[%s] Tool call #%d -> %s | args: %s", self._agent_name, round_num + 1, fn_name, fn_args)
-
-            call_key = f"{fn_name}|{json.dumps(fn_args, sort_keys=True)}"
-
-            if call_key in self._seen_calls:
-                result_text = self._handle_duplicate(call_key, fn_name, round_num)
-            elif fn_name in self._tool_map:
-                result_text = await self._dispatch_single(fn_name, fn_args, call_key)
-            else:
-                result_text = f"[Error] Unknown tool '{fn_name}'"
-                logger.error("[%s] Unknown tool '%s' in agentic loop", self._agent_name, fn_name)
-
+            fn_name, fn_args, tc_id, call_key = self._unpack(tc)
+            logger.info(
+                "[%s] Tool call #%d -> %s | args: %s",
+                self._agent_name,
+                round_num + 1,
+                fn_name,
+                fn_args,
+            )
+            result_text = await self._execute_one(fn_name, fn_args, call_key, round_num)
             self._tool_results[fn_name] = result_text
             messages.append(ToolMessage(content=result_text, tool_call_id=tc_id))
+
+    async def _dispatch_mixed(
+        self,
+        tool_calls: list[dict[str, Any]],
+        messages: list,
+        round_num: int,
+    ) -> None:
+        """Run parallel-safe calls in a gather, then the rest sequentially.
+
+        ``ToolMessage``s are appended to ``messages`` in the original
+        ``tool_calls`` order regardless of which bucket each call lands
+        in — callers (and the LLM on the next round) see the round as
+        if it had run serially.
+        """
+        from langchain_core.messages import ToolMessage
+
+        parallel_indices: list[int] = []
+        sequential_indices: list[int] = []
+        unpacked: list[tuple[str, dict[str, Any], str, str]] = []
+        for idx, tc in enumerate(tool_calls):
+            fn_name, fn_args, tc_id, call_key = self._unpack(tc)
+            unpacked.append((fn_name, fn_args, tc_id, call_key))
+            if self._is_eligible_for_parallel(fn_name, call_key):
+                parallel_indices.append(idx)
+            else:
+                sequential_indices.append(idx)
+
+        results: list[str | None] = [None] * len(tool_calls)
+
+        # ── Parallel batch ─────────────────────────────────
+        if parallel_indices:
+            logger.info(
+                "[%s] Round #%d parallel batch (%d tool(s)): %s",
+                self._agent_name,
+                round_num + 1,
+                len(parallel_indices),
+                [unpacked[i][0] for i in parallel_indices],
+            )
+            gather_start = time.perf_counter()
+            coros = [self._execute_parallel_leg(*unpacked[i]) for i in parallel_indices]
+            gathered = await asyncio.gather(*coros, return_exceptions=True)
+            gather_elapsed = (time.perf_counter() - gather_start) * 1000
+            perf_logger.info(
+                "[PERF][agent=%s][loop] round=%d parallel_gather n=%d took %.1f ms",
+                self._agent_name,
+                round_num + 1,
+                len(parallel_indices),
+                gather_elapsed,
+            )
+            for slot, idx in enumerate(parallel_indices):
+                fn_name, _, _, _ = unpacked[idx]
+                outcome = gathered[slot]
+                if isinstance(outcome, BaseException):
+                    text = f"[Tool error] {outcome!r}"
+                    logger.error(
+                        "[%s] Parallel tool '%s' raised %s: %s",
+                        self._agent_name,
+                        fn_name,
+                        type(outcome).__name__,
+                        outcome,
+                    )
+                else:
+                    text = outcome
+                results[idx] = text
+                self._tool_results[fn_name] = text
+
+        # ── Sequential tail ────────────────────────────────
+        for idx in sequential_indices:
+            fn_name, fn_args, _, call_key = unpacked[idx]
+            logger.info(
+                "[%s] Tool call #%d -> %s | args: %s (sequential)",
+                self._agent_name,
+                round_num + 1,
+                fn_name,
+                fn_args,
+            )
+            text = await self._execute_one(fn_name, fn_args, call_key, round_num)
+            results[idx] = text
+            self._tool_results[fn_name] = text
+
+        # ── Append in original order ───────────────────────
+        for idx, tc in enumerate(tool_calls):
+            tc_id = unpacked[idx][2]
+            messages.append(ToolMessage(content=results[idx] or "", tool_call_id=tc_id))
+
+    # ── Dispatch helpers ───────────────────────────────────────
+
+    def _unpack(self, tc: dict[str, Any]) -> tuple[str, dict[str, Any], str, str]:
+        """Decompose one ``tool_call`` payload into its useful pieces."""
+        fn_name = tc["name"]
+        fn_args = tc.get("args", {})
+        tc_id = tc.get("id", "")
+        call_key = f"{fn_name}|{json.dumps(fn_args, sort_keys=True)}"
+        return fn_name, fn_args, tc_id, call_key
+
+    def _requires_approval(self, tc: dict[str, Any]) -> bool:
+        """True when the tool referenced by ``tc`` is HITL-gated."""
+        tool = self._tool_map.get(tc.get("name", ""))
+        return bool(getattr(tool, "requires_approval", False))
+
+    def _is_eligible_for_parallel(self, fn_name: str, call_key: str) -> bool:
+        """True iff this call may join the round's parallel batch.
+
+        Eligibility: the agent opted in (``parallel_safety`` provided),
+        the tool resolves to ``True`` in the safety map, the tool is
+        known, the call is NOT a duplicate (duplicate handling depends
+        on shared mutable state and stays sequential), and the tool is
+        NOT HITL-gated (defence-in-depth — the parent already filters
+        whole rounds containing approvals, but we belt-and-brace here).
+        """
+        if not _is_parallel_safe(fn_name, self._parallel_safety):
+            return False
+        if fn_name not in self._tool_map:
+            return False
+        if call_key in self._seen_calls:
+            return False
+        tool = self._tool_map[fn_name]
+        if getattr(tool, "requires_approval", False):
+            return False
+        return True
+
+    async def _execute_one(
+        self,
+        fn_name: str,
+        fn_args: dict[str, Any],
+        call_key: str,
+        round_num: int,
+    ) -> str:
+        """Single-call dispatch with duplicate detection — sequential path."""
+        if call_key in self._seen_calls:
+            return self._handle_duplicate(call_key, fn_name, round_num)
+        if fn_name in self._tool_map:
+            return await self._dispatch_single(fn_name, fn_args, call_key)
+        logger.error("[%s] Unknown tool '%s' in agentic loop", self._agent_name, fn_name)
+        return f"[Error] Unknown tool '{fn_name}'"
+
+    async def _execute_parallel_leg(
+        self,
+        fn_name: str,
+        fn_args: dict[str, Any],
+        _tc_id: str,
+        call_key: str,
+    ) -> str:
+        """Single-call dispatch for a leg inside ``asyncio.gather``.
+
+        Eligibility (``_is_eligible_for_parallel``) already excluded
+        duplicates, unknowns, and HITL — so this is a straight call to
+        the underlying tool wrapper.  Errors raised by the wrapper
+        propagate; ``asyncio.gather(return_exceptions=True)`` catches
+        them upstream and the caller renders them as ``[Tool error]``
+        ``ToolMessage``s.
+        """
+        return await self._dispatch_single(fn_name, fn_args, call_key)
 
     def _handle_duplicate(self, call_key: str, fn_name: str, round_num: int) -> str:
         self._consecutive_dupes += 1
