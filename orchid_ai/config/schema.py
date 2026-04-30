@@ -29,6 +29,7 @@ from .schema_agent import (
 from .schema_guardrails import OrchidGuardrailRuleConfig, OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPAuthConfig, OrchidMCPServerConfig, OrchidToolConfig
+from .schema_mini_agent import OrchidMiniAgentConfig
 from .schema_rag import OrchidRAGConfig, OrchidRAGDefaultsConfig
 from .schema_skills import (
     BuiltinToolParameter,
@@ -54,6 +55,7 @@ __all__ = [
     "OrchidLLMConfig",
     "OrchidMCPAuthConfig",
     "OrchidMCPServerConfig",
+    "OrchidMiniAgentConfig",
     "OrchidOrchestratorSkillConfig",
     "OrchidOrchestratorSkillStepConfig",
     "OrchidRAGConfig",

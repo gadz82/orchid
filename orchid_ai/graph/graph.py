@@ -44,8 +44,11 @@ from typing import Any
 
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, StateGraph
+from langgraph.types import Send
 
 from ..agents.generic_agent import GenericAgent
+from ..agents.mini_agent_aggregator import aggregator_node_factory
+from ..agents.mini_agent_node import mini_agent_node_factory
 from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidGuardrailsConfig
 from ..config.registry import get_class
 from ..config.tool_registry import load_tools_from_config
@@ -384,6 +387,57 @@ def _create_global_output_guardrail_node(chain: OrchidGuardrailChain):
     return output_guardrails_node
 
 
+def _make_fork_router(parent_name: str):
+    """Build the conditional-edge function for a mini-agent-enabled parent.
+
+    Reads ``state["mini_agent_decisions"][parent_name]`` (written by
+    the parent ``GenericAgent.run()`` when the decomposer chose to
+    fork) and returns either:
+
+    - ``"supervisor"`` — no fork (parent emitted its own AIMessage),
+      or no decision was recorded (defensive fallthrough).
+    - A list of ``Send(f"{parent_name}_mini", payload)`` — one per
+      sub-task.  Each payload carries the per-Send sentinels the
+      mini node reads to identify its sub-task.
+    """
+
+    def fork_router(state: GraphState):
+        decisions = state.get("mini_agent_decisions") or {}
+        decision = decisions.get(parent_name)
+        if not decision or not decision.get("should_fork"):
+            return "supervisor"
+
+        sub_tasks = decision.get("sub_tasks") or []
+        if not sub_tasks:
+            return "supervisor"
+
+        sends: list[Send] = []
+        for sub_task in sub_tasks:
+            mini_id = sub_task.get("id") or f"mini_{len(sends)}"
+            tool_subset = sub_task.get("resolved_tool_subset") or sub_task.get("allowed_tools") or []
+            sends.append(
+                Send(
+                    f"{parent_name}_mini",
+                    {
+                        **state,
+                        "_active_mini_parent": parent_name,
+                        "_active_mini_id": mini_id,
+                        "_active_mini_subtask": sub_task,
+                        "_active_mini_tool_subset": list(tool_subset),
+                    },
+                ),
+            )
+        logger.info(
+            "[Route] %s parent forking into %d mini-agent(s)",
+            parent_name,
+            len(sends),
+        )
+        return sends
+
+    fork_router.__name__ = f"{parent_name}_fork_router"
+    return fork_router
+
+
 def _route_after_input_guardrails(state: GraphState) -> str:
     """Conditional edge: skip supervisor if input guardrails blocked."""
     if state.get("final_response"):
@@ -602,7 +656,38 @@ def build_graph(
         input_chain = ag[0] if ag else None
         output_chain = ag[1] if ag else None
         g.add_node(node_name, _create_agent_node(agent, input_chain, output_chain))
-        g.add_edge(node_name, "supervisor")
+
+        # Phase B: synthesise the mini + aggregator nodes only when the
+        # agent has opted in.  Non-opt-in agents keep today's wiring
+        # (a single ``{name}_agent → supervisor`` edge) — zero overhead.
+        agent_config = config.agents.get(agent.name)
+        mini_enabled = bool(agent_config and agent_config.mini_agent.enabled)
+        if mini_enabled and isinstance(agent, GenericAgent):
+            mini_node = mini_agent_node_factory(
+                parent_config=agent_config,
+                chat_model=agent._chat_model,
+                mcp_clients=agent.mcp_clients,
+            )
+            aggregator_node = aggregator_node_factory(
+                parent_config=agent_config,
+                chat_model=agent._chat_model,
+            )
+            g.add_node(f"{agent.name}_mini", mini_node)
+            g.add_node(f"{agent.name}_aggregator", aggregator_node)
+            g.add_conditional_edges(
+                node_name,
+                _make_fork_router(agent.name),
+                [f"{agent.name}_mini", "supervisor"],
+            )
+            g.add_edge(f"{agent.name}_mini", f"{agent.name}_aggregator")
+            g.add_edge(f"{agent.name}_aggregator", "supervisor")
+            logger.info(
+                "[Graph] agent '%s' wired with mini-agent topology (max_count=%d)",
+                agent.name,
+                agent_config.mini_agent.max_count,
+            )
+        else:
+            g.add_edge(node_name, "supervisor")
 
     # Add subgraph nodes (agents with children)
     for agent_name, subgraph in subgraph_nodes.items():

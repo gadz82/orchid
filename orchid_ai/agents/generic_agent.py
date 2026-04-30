@@ -138,6 +138,23 @@ class GenericAgent(OrchidAgent):
             self._config.rag.namespace,
         )
 
+        # ── Phase B: mini-agent decomposer hook ──
+        # Runs ONLY when the agent has opted in via ``mini_agent.enabled``.
+        # Returns either a state update (fork or short-circuit error) or
+        # ``None`` (continue with the normal flow).
+        if self._config.mini_agent.enabled:
+            decomp_start = time.perf_counter()
+            decomposer_update = await self._maybe_decompose(query, auth, state)
+            decomp_elapsed = (time.perf_counter() - decomp_start) * 1000
+            perf_logger.info(
+                "[PERF][agent=%s] step=decomposer took %.1f ms (forked=%s)",
+                self.name,
+                decomp_elapsed,
+                bool(decomposer_update and "mini_agent_decisions" in decomposer_update),
+            )
+            if decomposer_update is not None:
+                return decomposer_update
+
         cache_start = time.perf_counter()
         cached_tools = await self._step_cache_check(scope)
         cache_elapsed = (time.perf_counter() - cache_start) * 1000
@@ -448,6 +465,165 @@ class GenericAgent(OrchidAgent):
             parallel_safety=parallel_safety,
         )
         return await loop.run(messages)
+
+    # ── Mini-agent decomposer hook (Phase B) ────────────────────
+
+    async def _maybe_decompose(
+        self,
+        query: str,
+        auth: OrchidAuthContext,
+        state: OrchidAgentState,
+    ) -> dict[str, Any] | None:
+        """Run the decomposer when ``mini_agent.enabled`` and act on the result.
+
+        Returns:
+          - ``None`` when ``should_fork`` is ``False`` (or the
+            decomposer crashed in a recoverable way) — caller proceeds
+            with the normal flow.
+          - A state update with ``mini_agent_decisions[name]`` when
+            ``should_fork`` is ``True`` — caller returns immediately
+            so the graph's fork router fans out into mini-agents.
+          - A state update containing an error ``AIMessage`` when the
+            decomposer's output violates the parent's allowlist
+            (``MiniAgentDecompositionError``).  No minis dispatch.
+        """
+        from .mini_agent_decomposer import (
+            MiniAgentDecomposer,
+            MiniAgentDecompositionError,
+        )
+
+        if not self._chat_model:
+            # Can't decompose without an LLM — fall through silently.
+            return None
+
+        # Build the decomposer's chat model.  Default = parent's own
+        # chat model (cheap and avoids re-resolving providers); override
+        # when ``mini_agent.decomposer_model`` is set.
+        decomposer_model = self._config.mini_agent.decomposer_model
+        if decomposer_model and decomposer_model != self._effective_llm_model():
+            from ..llm_factory import build_chat_model
+
+            decomposer_chat = build_chat_model(decomposer_model, temperature=0.0)
+        else:
+            decomposer_chat = self._chat_model
+
+        # Render the parent's tool inventory once — names + descriptions
+        # for the prompt and a ground-truth set for allowlist enforcement.
+        try:
+            inventory = await self._build_tool_inventory(auth)
+        except Exception as exc:  # noqa: BLE001 — capability rendering is best-effort
+            logger.warning(
+                "[%s] decomposer: tool inventory rendering failed (%s) — running without tools list",
+                self.name,
+                exc,
+            )
+            inventory = []
+
+        history = self.extract_conversation_history(state)
+        decomposer = MiniAgentDecomposer(agent_config=self._config, chat_model=decomposer_chat)
+
+        try:
+            decomposition = await decomposer.decompose(
+                user_query=query,
+                conversation_history=history,
+                tool_inventory=inventory,
+            )
+        except MiniAgentDecompositionError as exc:
+            logger.warning(
+                "[%s] decomposer rejected: %s — short-circuiting with error AIMessage",
+                self.name,
+                exc,
+            )
+            return {
+                "messages": [
+                    AIMessage(
+                        content=(
+                            f"[{self.name.title()} Agent] I couldn't break this request "
+                            f"into independent sub-tasks: {exc}"
+                        ),
+                        name=self.name,
+                    ),
+                ],
+                "mcp_context": {self.name: {"summary": str(exc)}},
+            }
+        except Exception as exc:  # noqa: BLE001 — decomposer is non-critical
+            logger.warning(
+                "[%s] decomposer LLM call failed (%s) — falling back to normal flow",
+                self.name,
+                exc,
+            )
+            return None
+
+        if not decomposition.should_fork:
+            logger.info(
+                "[%s] decomposer: should_fork=False (%s)",
+                self.name,
+                decomposition.reasoning[:120] or "(no reason given)",
+            )
+            return None
+
+        # Resolve per-sub-task tool subsets so the fork router can
+        # stamp them on each ``Send`` payload.
+        sub_task_payloads: list[dict[str, Any]] = []
+        for sub_task in decomposition.sub_tasks:
+            tool_subset = decomposer.resolve_tool_subset(
+                sub_task=sub_task,
+                tool_inventory=inventory,
+            )
+            payload = sub_task.model_dump()
+            payload["resolved_tool_subset"] = tool_subset
+            sub_task_payloads.append(payload)
+
+        decision_dump = decomposition.model_dump()
+        decision_dump["sub_tasks"] = sub_task_payloads
+
+        logger.info(
+            "[%s] decomposer: should_fork=True (%d sub-tasks)",
+            self.name,
+            len(decomposition.sub_tasks),
+        )
+        return {
+            "mini_agent_decisions": {self.name: decision_dump},
+        }
+
+    async def _build_tool_inventory(self, auth: OrchidAuthContext) -> list[str]:
+        """Compute the parent's full tool-name inventory.
+
+        Used by the decomposer prompt and the strict-allowlist
+        validator.  Renders MCP capabilities (cached after first call
+        in this process) and adds built-in tool names.
+        """
+        from ..config.tool_registry import get_tool
+
+        names: list[str] = []
+        seen: set[str] = set()
+
+        # Built-in tools (only those actually registered survive).
+        for tool_name in self._config.tools:
+            try:
+                get_tool(tool_name)
+            except KeyError:
+                continue
+            if tool_name not in seen:
+                names.append(tool_name)
+                seen.add(tool_name)
+
+        # MCP tools — declared and discovered.
+        if self._config.mcp_servers:
+            caps = await self._mcp_dispatcher.render_capabilities(auth, agent_name=self.name)
+            for raw in caps.raw_tools:
+                tool_name = raw.get("name")
+                if tool_name and tool_name not in seen:
+                    names.append(tool_name)
+                    seen.add(tool_name)
+
+        return names
+
+    def _effective_llm_model(self) -> str:
+        """Best-effort accessor for the parent's chat-model identifier."""
+        if self._config.llm and self._config.llm.model:
+            return self._config.llm.model
+        return getattr(self, "model_id", "") or ""
 
     # ── Parallel-dispatch safety resolver (Phase A) ─────────────
 

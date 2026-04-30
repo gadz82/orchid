@@ -62,12 +62,34 @@ class AgenticLoop:
         all_tool_defs: list[dict[str, Any]],
         temperature: float = 0.2,
         parallel_safety: dict[str, bool] | None = None,
+        tool_subset: list[str] | None = None,
+        is_mini: bool = False,
     ) -> None:
         self._agent_name = agent_name
         self._chat_model = chat_model
-        self._tool_map = tool_map
-        self._all_tool_defs = all_tool_defs
         self._temperature = temperature
+        # ``is_mini`` is metadata used for log labelling and to mark
+        # this loop as belonging to a forked sub-task.  It does not
+        # gate any behaviour inside the loop — duplicate-detection
+        # state is per-instance so cross-mini contamination is not
+        # possible by construction.
+        self._is_mini = is_mini
+
+        # ``tool_subset`` filters the tools the LLM can see.  Passed
+        # by ``mini_agent_node`` to enforce the decomposer's
+        # ``allowed_tools`` allowlist; the parent agent runs with
+        # ``tool_subset=None`` to expose its full inventory.  The
+        # filter applies BEFORE ``bind_tools`` and updates ``tool_map``
+        # to match — defence-in-depth so the LLM can neither see nor
+        # call tools outside the subset.
+        if tool_subset is not None:
+            allowed = set(tool_subset)
+            self._tool_map = {n: t for n, t in tool_map.items() if n in allowed}
+            self._all_tool_defs = [td for td in all_tool_defs if td.get("function", {}).get("name") in allowed]
+        else:
+            self._tool_map = tool_map
+            self._all_tool_defs = all_tool_defs
+
         # When ``None``, the loop runs strictly sequentially (today's
         # behaviour).  When provided, every key whose value is ``True``
         # is eligible to join the parallel batch within a round.  See
@@ -78,6 +100,11 @@ class AgenticLoop:
         self._seen_calls: dict[str, str] = {}
         self._consecutive_dupes = 0
         self._tool_results: dict[str, Any] = {}
+
+    @property
+    def is_mini(self) -> bool:
+        """True when this loop runs inside a forked mini-agent."""
+        return self._is_mini
 
     @property
     def tool_results(self) -> dict[str, Any]:
