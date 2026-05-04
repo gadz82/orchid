@@ -211,12 +211,38 @@ def _build_null_graph_store(**_settings: Any) -> OrchidGraphStore:
     return NullGraphStore()
 
 
+def _build_in_memory_graph_store(**_settings: Any) -> OrchidGraphStore:
+    from .backends.in_memory_graph import InMemoryGraphStore
+
+    return InMemoryGraphStore()
+
+
+def _build_neo4j_graph_store(
+    *,
+    neo4j_url: str = "bolt://localhost:7687",
+    neo4j_user: str = "",
+    neo4j_password: str = "",
+    neo4j_database: str = "neo4j",
+    **_settings: Any,
+) -> OrchidGraphStore:
+    from .backends.neo4j_graph import Neo4jGraphStore
+
+    return Neo4jGraphStore(
+        url=neo4j_url,
+        user=neo4j_user,
+        password=neo4j_password,
+        database=neo4j_database,
+    )
+
+
 register_vector_backend("null", _build_null_reader)
 register_vector_backend("qdrant", _build_qdrant_reader)
 register_doc_store_backend("null", _build_null_doc_store)
 register_doc_store_backend("in_memory", _build_in_memory_doc_store)
 register_doc_store_backend("qdrant", _build_qdrant_doc_store)
 register_graph_store_backend("null", _build_null_graph_store)
+register_graph_store_backend("in_memory", _build_in_memory_graph_store)
+register_graph_store_backend("neo4j", _build_neo4j_graph_store)
 
 
 __all__ = [

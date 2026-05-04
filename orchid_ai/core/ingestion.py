@@ -90,6 +90,12 @@ class OrchidChunkPostProcessor(ABC):
     processors that need the full original document (e.g. to derive a
     LLM-generated summary header) can refer back to it via the ``text``
     + ``filename`` kwargs without re-reading the file.
+
+    ``graph_store`` / ``scope`` / ``schema`` are forwarded by the
+    pipeline so post-processors that write side-effects (e.g.
+    :class:`EntityExtractionPostProcessor` writing entities to the
+    knowledge graph) can read them at call time.  Most processors
+    ignore them via ``**_kwargs``.
     """
 
     @abstractmethod
@@ -100,11 +106,18 @@ class OrchidChunkPostProcessor(ABC):
         text: str,
         filename: str,
         chat_model: Any | None = None,
+        graph_store: Any | None = None,
+        scope: Any | None = None,
+        schema: dict[str, Any] | None = None,
     ) -> list[OrchidChunk]:
         """Return a (possibly transformed) list of chunks.
 
         Implementations may shorten, lengthen, or reorder the list.
-        ``chat_model`` is duck-typed (``Any``) so this ABC stays free of
-        the LangChain ``BaseChatModel`` import in ``core/``.
+        ``chat_model`` / ``graph_store`` are duck-typed (``Any``) so
+        this ABC stays free of the LangChain ``BaseChatModel`` and
+        ``rag/backends/`` imports in ``core/``.  ``scope`` is the
+        :class:`OrchidRAGScope` for the current ingestion call;
+        ``schema`` is an optional per-namespace constraint dict (e.g.
+        ``{"entity_types": ["supplier", "product"]}``).
         """
         ...

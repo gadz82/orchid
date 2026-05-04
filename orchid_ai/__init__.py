@@ -102,7 +102,12 @@ from .persistence.mcp_token_factory import build_mcp_token_store
 from .persistence.mcp_token_sqlite import OrchidSQLiteMCPTokenStore
 from .persistence.sqlite import OrchidSQLiteChatStorage
 from .plugins import iter_entry_point_plugins
-from .documents.post_processors import ContextualHeaderPostProcessor
+from .documents.post_processors import (
+    ContextualHeaderPostProcessor,
+    EntityExtractionPostProcessor,
+    LLMEntityExtractor,
+    OrchidExtractedGraph,
+)
 from .documents.strategies import (
     HeaderedIngestion,
     HierarchicalIngestion,
@@ -125,6 +130,7 @@ from .rag.factory import (
 )
 from .rag.scopes import OrchidRAGScope
 from .rag.strategies import (
+    GraphRAGRetrieval,
     HybridRetrieval,
     HyDERetrieval,
     MultiQueryRetrieval,
@@ -236,12 +242,16 @@ __all__ = [
     "OrchidMetricsHandler",
     # ── Built-in ingestion strategies + post-processors ─
     "ContextualHeaderPostProcessor",
+    "EntityExtractionPostProcessor",
     "HeaderedIngestion",
     "HierarchicalIngestion",
+    "LLMEntityExtractor",
+    "OrchidExtractedGraph",
     "RecursiveIngestion",
     "SemanticIngestion",
     # ── Built-in retrieval strategies + transformers ──
     "DecomposeTransformer",
+    "GraphRAGRetrieval",
     "HybridRetrieval",
     "HyDERetrieval",
     "HyDETransformer",

@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from ...core.retrieval import OrchidRetrievalStrategy
+from .graph_rag import GraphRAGRetrieval
 from .hybrid import HybridRetrieval
 from .hyde import HyDERetrieval
 from .multi_query import MultiQueryRetrieval
@@ -26,6 +27,7 @@ _BUILTINS: dict[str, type[OrchidRetrievalStrategy]] = {
     "multi_query": MultiQueryRetrieval,
     "hyde": HyDERetrieval,
     "hybrid": HybridRetrieval,
+    "graph_rag": GraphRAGRetrieval,
 }
 
 RETRIEVAL_REGISTRY: dict[str, type[OrchidRetrievalStrategy]] = dict(_BUILTINS)
@@ -82,6 +84,7 @@ def get_retrieval_strategy(
 
 
 __all__ = [
+    "GraphRAGRetrieval",
     "HybridRetrieval",
     "HyDERetrieval",
     "MultiQueryRetrieval",

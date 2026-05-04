@@ -45,7 +45,10 @@ async def ingest_document(
     ingestion: OrchidIngestionStrategy | None = None,
     post_processors: list[OrchidChunkPostProcessor] | None = None,
     doc_store: Any | None = None,
+    graph_store: Any | None = None,
     embeddings: Any | None = None,
+    chat_model: Any | None = None,
+    schema: dict[str, Any] | None = None,
     vision_model: str = "",
     pre_extracted_text: str | None = None,
 ) -> int:
@@ -55,9 +58,17 @@ async def ingest_document(
     The chunking step delegates to ``ingestion`` (defaults to
     :class:`RecursiveIngestion` with default :class:`ChunkConfig` —
     matching today's flat behaviour).  ``post_processors`` run in order
-    after the strategy splits the text.  ``doc_store`` and ``embeddings``
-    are forwarded to the strategy when set so hierarchical / semantic
-    strategies can use them — Stage 2+ feature.
+    after the strategy splits the text.
+
+    Stage 2+ side-channel resources flow through to the strategy and
+    post-processors:
+
+      * ``doc_store`` — :class:`HierarchicalIngestion` writes parents.
+      * ``embeddings`` — :class:`SemanticIngestion` measures similarity.
+      * ``graph_store`` + ``chat_model`` — :class:`EntityExtractionPostProcessor`
+        extracts entities and writes them.  ``schema`` carries an
+        optional per-namespace constraint dict (``entity_types``,
+        ``relations``).
 
     If ``pre_extracted_text`` is provided it is used directly (avoids
     re-parsing the file — important for vision models).  Otherwise the
@@ -93,9 +104,20 @@ async def ingest_document(
     if not chunks:
         return 0
 
-    # 3. Run post-processors in order (Stage 2+ feature; empty by default)
+    # 3. Run post-processors in order (Stage 2+ feature; empty by default).
+    #    Side-channel resources (chat_model, graph_store, scope, schema)
+    #    flow through so processors like EntityExtractionPostProcessor
+    #    can read them without an instance-level closure.
     for proc in post_processors or []:
-        chunks = await proc.process(chunks, text=text, filename=filename, chat_model=None)
+        chunks = await proc.process(
+            chunks,
+            text=text,
+            filename=filename,
+            chat_model=chat_model,
+            graph_store=graph_store,
+            scope=scope,
+            schema=schema,
+        )
 
     logger.info("[Ingest] Strategy %s produced %d chunks for %s", type(strategy).__name__, len(chunks), filename)
 

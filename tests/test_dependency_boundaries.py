@@ -26,7 +26,7 @@ ALLOWED_LOCATIONS: dict[str, list[str]] = {
         "rag/backends/qdrant.py",
         "rag/backends/qdrant_doc_store.py",
     ],
-    "neo4j": [],
+    "neo4j": ["rag/backends/neo4j_graph.py"],
     "opensearchpy": [],
     "weaviate": [],
     "weaviate_client": [],

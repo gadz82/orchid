@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 from .scopes import OrchidRAGScope
 
@@ -67,7 +67,16 @@ class OrchidGraphStore(ABC):
     The four methods cover the lifecycle a GraphRAG strategy needs:
     write entities + edges during ingestion, resolve a query into seed
     entities at retrieve time, and walk N hops out from those seeds.
+
+    ``is_null`` is a class-level marker that lets retrieval strategies
+    detect the no-op fallback (``NullGraphStore``) without crossing
+    the ``rag/strategies/`` → ``rag/backends/`` dependency line.
+    Concrete impls leave it ``False``; ``NullGraphStore`` overrides to
+    ``True`` so :class:`GraphRAGRetrieval` can fall back to
+    :class:`SimpleRetrieval` cleanly.
     """
+
+    is_null: ClassVar[bool] = False
 
     @abstractmethod
     async def upsert_entities(
