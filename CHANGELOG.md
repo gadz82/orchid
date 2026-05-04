@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-05-04)
+
+### Bug Fixes
+
+- Add SSE handling for mini-agent lifecycle events and token stream suppression
+  ([`e703a0c`](https://github.com/gadz82/orchid/commit/e703a0c568723b1075ac19772ceebfda9dbcb081))
+
+### Features
+
+- **agents**: Add mini-agent schema, decomposer, and runtime node with tests
+  ([`39d623a`](https://github.com/gadz82/orchid/commit/39d623a31c7c642445d3c38ab4cded2bac292556))
+
+- **agents**: Parallel tool-call dispatch within one agentic round (Phase A)
+  ([`680910c`](https://github.com/gadz82/orchid/commit/680910c240fb3fe96d9d2e0b639845e7d8fa93c1))
+
+- **agents**: Refactor mini-agent decomposer hook to graph-level for simpler integration
+  ([`b76705f`](https://github.com/gadz82/orchid/commit/b76705fadd3e6919d9ed202a6814320366f405c4))
+
+
 ## v1.4.0 (2026-04-29)
 
 ### Bug Fixes
