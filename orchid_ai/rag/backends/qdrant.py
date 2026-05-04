@@ -10,15 +10,11 @@ Multi-tenancy strategy:
   - Retrieval always filters: ``tenant_id IN [<installation_id>, "__shared__"]``.
 
 Hybrid-search support (ADR-025):
-  - New collections are created with named dense + sparse vectors
+  - Collections are created with named dense + sparse vectors
     (``{"dense": VectorParams(...)}`` + ``sparse_vectors_config={"sparse":
-    SparseVectorParams()}``).
-  - Existing legacy (unnamed-vector) collections are detected on
-    ``_ensure_collection`` and logged with a "recreate required for
-    hybrid" migration message; reads/writes against them keep working
-    in dense-only mode and ``retrieve_sparse`` raises
-    :class:`NotImplementedError` so :class:`HybridRetrieval` falls
-    back gracefully.
+    SparseVectorParams()}``).  Collections without that schema are
+    rejected on first use — the named-vector hybrid schema is the
+    only supported layout.
   - When a sparse encoder is injected, document writes also encode
     sparse vectors and store them under the named ``sparse`` slot.
 """
@@ -28,10 +24,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Any, Literal
+from typing import Any
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
+    DatetimeRange,
     Distance,
     FieldCondition,
     Filter,
@@ -57,11 +54,170 @@ logger = logging.getLogger(__name__)
 
 QDRANT_TIMEOUT = 30.0  # seconds — timeout for Qdrant operations
 
-# Named-vector slots used by the Stage 4 hybrid schema.
+# Backend-namespaced filter prefix (ADR-027 §"Filter dict shape").
+_BACKEND_NS_PREFIX = "_"
+
+# Operator → Range field mapping used by the metadata-filter translator.
+_RANGE_OPERATORS = ("gte", "lte", "gt", "lt")
+
+# Named-vector slots used by the hybrid schema.
 _DENSE_NAME = "dense"
 _SPARSE_NAME = "sparse"
 
-CollectionMode = Literal["hybrid", "legacy"]
+
+def build_metadata_filter_clauses(
+    metadata_filters: dict[str, Any],
+) -> tuple[list[FieldCondition], list[FieldCondition]]:
+    """Translate the ADR-027 mini-language into Qdrant ``FieldCondition`` lists.
+
+    Returns ``(must_clauses, must_not_clauses)`` so the caller can combine
+    them into a single :class:`Filter` alongside any scope clauses.
+
+    Operator handling:
+
+      * ``"key": value`` (scalar) → ``MatchValue`` (exact match).
+      * ``"key": [v1, v2, ...]`` → ``MatchAny`` (match-any).
+      * ``"key": {"gte": ..., "lte": ..., "gt": ..., "lt": ...}`` →
+        ``Range`` with every present bound applied.
+      * ``"key": {"contains": v}`` → ``MatchValue`` against the array
+        element (Qdrant's payload arrays accept this form natively).
+      * ``"key": {"not": v}`` → emitted into ``must_not_clauses``.
+      * Keys starting with ``_`` are backend-namespaced extras
+        (e.g. ``"_qdrant"`` for raw FieldConditions an integrator
+        wants to inject); skipped here since they're not part of the
+        portable mini-language.
+
+    Unknown operator dicts raise :class:`ValueError` so a YAML typo
+    surfaces immediately rather than silently dropping a filter.
+    """
+    must: list[FieldCondition] = []
+    must_not: list[FieldCondition] = []
+
+    for key, value in metadata_filters.items():
+        if key.startswith(_BACKEND_NS_PREFIX):
+            continue
+
+        if isinstance(value, dict):
+            range_kwargs = {op: value[op] for op in _RANGE_OPERATORS if op in value}
+            if range_kwargs:
+                # Datetime ranges use a different Qdrant model so the
+                # client doesn't try to parse ISO-8601 strings as floats.
+                # ``FieldCondition.range`` accepts both ``Range`` (numeric)
+                # and ``DatetimeRange`` (ISO-8601 strings).
+                range_obj: Any = (
+                    DatetimeRange(**range_kwargs) if _is_datetime_range(range_kwargs) else Range(**range_kwargs)
+                )
+                must.append(FieldCondition(key=key, range=range_obj))
+                continue
+            if "contains" in value:
+                must.append(FieldCondition(key=key, match=MatchValue(value=value["contains"])))
+                continue
+            if "not" in value:
+                must_not.append(FieldCondition(key=key, match=MatchValue(value=value["not"])))
+                continue
+            raise ValueError(
+                f"Unknown metadata filter operator(s) for {key!r}: {sorted(value)}. "
+                f"Allowed: gte/lte/gt/lt/contains/not."
+            )
+
+        if isinstance(value, list):
+            must.append(FieldCondition(key=key, match=MatchAny(any=list(value))))
+            continue
+
+        # Scalar exact-match — bool / int / float / str / etc.
+        must.append(FieldCondition(key=key, match=MatchValue(value=value)))
+
+    return must, must_not
+
+
+def infer_payload_index_types(
+    metadata_filters: dict[str, Any],
+) -> dict[str, str]:
+    """Infer Qdrant payload-index types from a metadata-filter dict.
+
+    ADR-027 §"Pre-condition: payload indexing": when a filter targets
+    a field, the field needs a payload index for the query to be fast.
+    Inference rules:
+
+      * ``str`` → ``keyword`` (default for atomic strings — exact-match).
+      * ``int`` → ``integer``.
+      * ``float`` → ``float``.
+      * ``bool`` → ``bool``.
+      * ``list[T]`` → infer from the first non-None element.
+      * ``dict`` (operator dict) → infer from the operand value type;
+        ranges keyed by ISO-8601 datetime strings → ``datetime``.
+
+    Backend-namespaced keys (``_<name>``) are skipped — they don't
+    map to portable payload indexes.
+    """
+    out: dict[str, str] = {}
+
+    for key, value in metadata_filters.items():
+        if key.startswith(_BACKEND_NS_PREFIX):
+            continue
+        operand = _operator_operand(value)
+        type_name = _operand_to_qdrant_type(operand)
+        if type_name is not None:
+            out[key] = type_name
+
+    return out
+
+
+def _operator_operand(value: Any) -> Any:
+    """Return the underlying scalar an operator dict acts on."""
+    if isinstance(value, dict):
+        # Range: pick any bound that's present.
+        for op in _RANGE_OPERATORS:
+            if op in value:
+                return value[op]
+        if "contains" in value:
+            return value["contains"]
+        if "not" in value:
+            return value["not"]
+        return None
+    if isinstance(value, list):
+        return next((v for v in value if v is not None), None)
+    return value
+
+
+_DATETIME_HINT = ("-",)  # ISO-8601 dates always contain hyphens (e.g. 2026-05-04)
+
+
+def _is_iso_datetime_string(operand: Any) -> bool:
+    return (
+        isinstance(operand, str)
+        and any(h in operand for h in _DATETIME_HINT)
+        and len(operand) >= 4
+        and operand[:4].isdigit()
+    )
+
+
+def _is_datetime_range(range_kwargs: dict[str, Any]) -> bool:
+    """Any of the range bounds being a datetime-shaped string flips the
+    range to ``DatetimeRange`` so the Qdrant client doesn't try to
+    parse the strings as floats."""
+    for value in range_kwargs.values():
+        if _is_iso_datetime_string(value):
+            return True
+    return False
+
+
+def _operand_to_qdrant_type(operand: Any) -> str | None:
+    """Map a Python value to the matching Qdrant payload-schema type."""
+    if isinstance(operand, bool):
+        # Check before ``int`` — Python ``bool`` is a subclass of ``int``.
+        return "bool"
+    if isinstance(operand, int):
+        return "integer"
+    if isinstance(operand, float):
+        return "float"
+    if isinstance(operand, str):
+        # Heuristic: looks like an ISO-8601 date / datetime if it
+        # contains hyphens AND parses as digits-and-separators only.
+        if _is_iso_datetime_string(operand):
+            return "datetime"
+        return "keyword"
+    return None
 
 
 def build_qdrant_filter(scope: OrchidRAGScope) -> Filter:
@@ -167,11 +323,14 @@ class QdrantRepository(OrchidVectorStoreRepository):
         self._embedding_dimension = embedding_dimension
         self._default_tenant = default_tenant
         self._sparse_encoder = sparse_encoder
-        # Per-namespace schema cache: ``hybrid`` (named dense + sparse,
-        # written by Stage 4+) vs ``legacy`` (unnamed dense only,
-        # written by Stage 0-3 and pre-redesign).  Populated on first
-        # ``_ensure_collection`` call.
-        self._collection_modes: dict[str, CollectionMode] = {}
+        # Tracks which namespaces have been verified / created so the
+        # ``_ensure_collection`` fast-path skips the round-trip after
+        # the first call.
+        self._verified_collections: set[str] = set()
+        # Payload index cache keyed per ``(namespace, field, schema_type)``.
+        # Once Qdrant has confirmed the index exists we skip the
+        # idempotent re-create call to keep the retrieve hot path lean.
+        self._payload_index_cache: dict[str, set[tuple[str, str]]] = {}
 
     # ── OrchidVectorReader ──────────────────────────────────────────
 
@@ -181,27 +340,26 @@ class QdrantRepository(OrchidVectorStoreRepository):
         namespace: str,
         k: int = 5,
         scope: OrchidRAGScope | None = None,
+        metadata_filters: dict[str, Any] | None = None,
     ) -> list[OrchidSearchResult]:
         """
         Retrieve the *k* most relevant documents for *query* in *namespace*.
 
         Uses the hierarchical ``OrchidRAGScope`` to build a Qdrant filter that
         includes all scope levels visible to the caller (shared → tenant →
-        user → chat_shared → chat_agent).
+        user → chat_shared → chat_agent).  ``metadata_filters`` follows
+        the operator mini-language defined in ADR-027.
         """
         await self._ensure_collection(namespace)
-        mode = self._collection_modes[namespace]
 
         query_vector = await self._embeddings.aembed_query(query)
-        query_filter = self._scope_filter(scope)
+        await self._auto_index_for_filters(namespace, metadata_filters)
+        query_filter = self._compose_filter(scope, metadata_filters)
 
         async with asyncio.timeout(QDRANT_TIMEOUT):
-            # Hybrid collections need the named-vector form; legacy
-            # collections still use the unnamed shape.
-            query_arg: Any = NamedVector(name=_DENSE_NAME, vector=query_vector) if mode == "hybrid" else query_vector
             response = await self._client.query_points(
                 collection_name=namespace,
-                query=query_arg,
+                query=NamedVector(name=_DENSE_NAME, vector=query_vector),
                 query_filter=query_filter,
                 limit=k,
             )
@@ -228,14 +386,9 @@ class QdrantRepository(OrchidVectorStoreRepository):
     ) -> list[OrchidSearchResult]:
         """Sparse-lane retrieval for hybrid search (ADR-025)."""
         await self._ensure_collection(namespace)
-        mode = self._collection_modes[namespace]
-        if mode != "hybrid":
-            raise NotImplementedError(
-                f"Qdrant collection '{namespace}' was created without sparse vectors — "
-                "recreate the collection to enable hybrid search."
-            )
 
-        query_filter = self._scope_filter(scope)
+        await self._auto_index_for_filters(namespace, metadata_filters)
+        query_filter = self._compose_filter(scope, metadata_filters)
         sparse_payload = NamedSparseVector(
             name=_SPARSE_NAME,
             vector=SparseVector(
@@ -273,6 +426,96 @@ class QdrantRepository(OrchidVectorStoreRepository):
                 FieldCondition(key="tenant_id", match=MatchAny(any=[self._default_tenant, "__shared__"])),
             ]
         )
+
+    def _compose_filter(
+        self,
+        scope: OrchidRAGScope | None,
+        metadata_filters: dict[str, Any] | None,
+    ) -> Filter:
+        """Combine the scope filter with metadata-filter clauses.
+
+        The scope filter (``Filter(should=[per-level])``) becomes a
+        sub-filter inside ``must`` so all levels are still considered;
+        the metadata clauses join it as additional ``must`` /
+        ``must_not`` entries.  When ``metadata_filters`` is empty the
+        result is the bare scope filter.
+        """
+        scope_filter = self._scope_filter(scope)
+        if not metadata_filters:
+            return scope_filter
+
+        meta_must, meta_must_not = build_metadata_filter_clauses(metadata_filters)
+        return Filter(
+            must=[scope_filter, *meta_must],
+            must_not=meta_must_not or None,
+        )
+
+    # ── Payload indexes (ADR-027) ─────────────────────────────
+
+    async def ensure_payload_indexes(
+        self,
+        namespace: str,
+        indexes: dict[str, str],
+    ) -> None:
+        """Idempotently create Qdrant payload indexes for the given fields.
+
+        Called automatically from the retrieve hot path when
+        ``metadata_filters`` mention fields without a known index;
+        also exposed publicly so integrators (or the admin endpoint)
+        can pre-create indexes from explicit YAML
+        ``rag.payload_indexes`` declarations at boot time.
+
+        Index creation is per ``(namespace, field, schema_type)``;
+        repeated calls with the same triple are no-ops.  Qdrant itself
+        is also idempotent — duplicate creates return success — so a
+        race between two retrieve calls is harmless.
+        """
+        if not indexes:
+            return
+        await self._ensure_collection(namespace)
+        cache = self._payload_index_cache.setdefault(namespace, set())
+        for field, schema_type in indexes.items():
+            cache_key = (field, schema_type)
+            if cache_key in cache:
+                continue
+            try:
+                await self._client.create_payload_index(
+                    collection_name=namespace,
+                    field_name=field,
+                    field_schema=schema_type,
+                )
+                cache.add(cache_key)
+                logger.debug(
+                    "[Qdrant] payload index created '%s.%s' (%s)",
+                    namespace,
+                    field,
+                    schema_type,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Qdrant] payload index '%s.%s' (%s) failed: %s",
+                    namespace,
+                    field,
+                    schema_type,
+                    exc,
+                )
+
+    async def _auto_index_for_filters(
+        self,
+        namespace: str,
+        metadata_filters: dict[str, Any] | None,
+    ) -> None:
+        """Infer payload-index types from the filter dict and ensure them.
+
+        Runs only when ``metadata_filters`` is non-empty so the no-filter
+        retrieve path stays untouched.
+        """
+        if not metadata_filters:
+            return
+        inferred = infer_payload_index_types(metadata_filters)
+        if not inferred:
+            return
+        await self.ensure_payload_indexes(namespace, inferred)
 
     async def lookup_cached_tool_results(
         self,
@@ -419,10 +662,9 @@ class QdrantRepository(OrchidVectorStoreRepository):
         async with asyncio.timeout(QDRANT_TIMEOUT):
             await self._client.upsert(collection_name=namespace, points=points)
         logger.info(
-            "[Qdrant] indexed %d documents in '%s' (mode=%s)",
+            "[Qdrant] indexed %d documents in '%s'",
             len(documents),
             namespace,
-            self._collection_modes.get(namespace, "?"),
         )
 
     async def upsert(
@@ -467,25 +709,21 @@ class QdrantRepository(OrchidVectorStoreRepository):
             await self._ensure_collection(ns)
 
     async def _ensure_collection(self, namespace: str) -> None:
-        """Create or detect the Qdrant collection's schema mode.
+        """Create the collection if missing; verify the hybrid schema.
 
-        New collections always use the Stage 4 hybrid schema (named
-        dense + sparse vectors).  Existing collections — including
-        pre-Stage-4 deployments with an unnamed dense vector — are
-        detected and registered as ``legacy``; reads/writes still work
-        in dense-only mode but ``retrieve_sparse`` raises
-        :class:`NotImplementedError` for them, prompting the operator
-        to recreate the collection per the migration playbook.
+        Collections always use the named-vector hybrid schema (named
+        dense + sparse vectors).  An existing collection that does
+        not match the schema raises :class:`RuntimeError` so the
+        deployment fails loudly instead of degrading silently.
         """
-        if namespace in self._collection_modes:
+        if namespace in self._verified_collections:
             return
 
-        exists = await self._client.collection_exists(namespace)
-        if exists:
-            self._collection_modes[namespace] = await self._detect_mode(namespace)
+        if await self._client.collection_exists(namespace):
+            await self._assert_hybrid_schema(namespace)
+            self._verified_collections.add(namespace)
             return
 
-        # Create with the named hybrid schema by default.
         await self._client.create_collection(
             collection_name=namespace,
             vectors_config={
@@ -498,35 +736,30 @@ class QdrantRepository(OrchidVectorStoreRepository):
                 _SPARSE_NAME: SparseVectorParams(),
             },
         )
-        self._collection_modes[namespace] = "hybrid"
+        self._verified_collections.add(namespace)
         logger.info(
             "[Qdrant] created hybrid collection '%s' (dense_dim=%d, sparse=enabled)",
             namespace,
             self._embedding_dimension,
         )
 
-    async def _detect_mode(self, namespace: str) -> CollectionMode:
-        """Inspect an existing collection to decide hybrid vs legacy."""
+    async def _assert_hybrid_schema(self, namespace: str) -> None:
+        """Reject an existing collection that lacks named dense + sparse slots."""
         info = await self._client.get_collection(namespace)
         params = info.config.params
         vectors = getattr(params, "vectors", None)
         sparse = getattr(params, "sparse_vectors", None)
 
-        # ``vectors`` is either a dict (named) or a single VectorParams
-        # (unnamed legacy schema).  The hybrid mode requires named
-        # ``dense`` AND a configured sparse named slot.
         named_dense = isinstance(vectors, dict) and _DENSE_NAME in vectors
         named_sparse = isinstance(sparse, dict) and _SPARSE_NAME in sparse
         if named_dense and named_sparse:
-            return "hybrid"
+            return
 
-        logger.warning(
-            "[Qdrant] collection '%s' lacks the Stage 4 named-vector schema — "
-            "hybrid search disabled. Recreate the collection to enable it: "
-            "stop writes, drop the collection, re-index via POST /index.",
-            namespace,
+        raise RuntimeError(
+            f"Qdrant collection '{namespace}' does not match the hybrid schema "
+            f"(named '{_DENSE_NAME}' dense vector + named '{_SPARSE_NAME}' sparse "
+            "vector).  Drop the collection and re-index."
         )
-        return "legacy"
 
     # ── Internal helpers ──────────────────────────────────────
 
@@ -538,13 +771,8 @@ class QdrantRepository(OrchidVectorStoreRepository):
     ) -> list[PointStruct]:
         """Convert Documents to Qdrant PointStructs, embedding texts as needed.
 
-        ``namespace`` selects the schema mode (hybrid vs legacy) and
-        flows into the sparse encoder so per-namespace BM25 stats stay
-        isolated.  When ``namespace`` is ``None`` (e.g. duplicate-with-
-        new-scope path), points are written in legacy unnamed shape —
-        the call sites that rely on this set ``namespace=None`` only
-        when they're already inside a hybrid-aware path that re-routes
-        through ``index()``.
+        ``namespace`` flows into the sparse encoder so per-namespace
+        BM25 stats stay isolated.
         """
         # Check which docs already have pre-computed embeddings (stored in metadata)
         texts_to_embed: list[str] = []
@@ -563,12 +791,9 @@ class QdrantRepository(OrchidVectorStoreRepository):
             for idx, emb in zip(embed_indices, computed):
                 doc_embeddings[idx] = emb
 
-        # Sparse vectors — only computed when the namespace is hybrid
-        # AND a sparse encoder is wired.  Legacy collections write
-        # unnamed dense vectors only.
-        mode: CollectionMode = self._collection_modes.get(namespace, "legacy") if namespace else "legacy"
+        # Sparse vectors — only encoded when a sparse encoder is wired.
         sparse_vectors: list[OrchidSparseVector] | None = None
-        if mode == "hybrid" and self._sparse_encoder is not None:
+        if self._sparse_encoder is not None:
             sparse_vectors = await self._sparse_encoder.encode_documents(
                 [doc.page_content for doc in documents],
                 namespace=namespace,
@@ -587,17 +812,14 @@ class QdrantRepository(OrchidVectorStoreRepository):
                 payload["tenant_id"] = self._default_tenant
 
             dense_vec = doc_embeddings[i] or []
-            if mode == "hybrid":
-                vector_payload: Any = {_DENSE_NAME: dense_vec}
-                if sparse_vectors is not None:
-                    sv = sparse_vectors[i]
-                    if sv.indices:
-                        vector_payload[_SPARSE_NAME] = SparseVector(
-                            indices=list(sv.indices),
-                            values=list(sv.values),
-                        )
-            else:
-                vector_payload = dense_vec
+            vector_payload: Any = {_DENSE_NAME: dense_vec}
+            if sparse_vectors is not None:
+                sv = sparse_vectors[i]
+                if sv.indices:
+                    vector_payload[_SPARSE_NAME] = SparseVector(
+                        indices=list(sv.indices),
+                        values=list(sv.values),
+                    )
 
             points.append(
                 PointStruct(

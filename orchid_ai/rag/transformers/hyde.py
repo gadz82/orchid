@@ -43,10 +43,6 @@ DEFAULT_MULTI_PROMPT = (
     "number the paragraphs."
 )
 
-# Backward-compatible aliases for callers that imported the private names.
-_SINGLE_PROMPT = DEFAULT_SINGLE_PROMPT
-_MULTI_PROMPT = DEFAULT_MULTI_PROMPT
-
 
 class HyDETransformer(OrchidQueryTransformer):
     """Ask an LLM for ``n_hypothetical`` plausible answers to the query.

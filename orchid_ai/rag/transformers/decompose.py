@@ -39,9 +39,6 @@ DEFAULT_DECOMPOSE_PROMPT = (
     "- No numbering, no preamble, no explanation."
 )
 
-# Backward-compatible alias for callers that imported the private name.
-_PROMPT = DEFAULT_DECOMPOSE_PROMPT
-
 
 class DecomposeTransformer(OrchidQueryTransformer):
     """Split a query into ``<= max_sub_queries`` independent sub-queries.

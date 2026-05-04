@@ -49,8 +49,19 @@ class OrchidVectorReader(ABC):
         namespace: str,
         k: int = 5,
         scope: OrchidRAGScope | None = None,
+        metadata_filters: dict[str, object] | None = None,
     ) -> list[OrchidSearchResult]:
-        """Return the k most relevant documents for the query."""
+        """Return the k most relevant documents for the query.
+
+        ``metadata_filters`` follows the operator mini-language defined
+        in ADR-027 (``"key": value`` for exact match, ``"key": [v1, v2]``
+        for match-any, ``"key": {"gte": ..., "lte": ...}`` for range,
+        ``"key": {"contains": v}`` for array contains, ``"key": {"not": v}``
+        for negation, ``"_<backend>": {...}`` for backend-namespaced
+        extras).  Backends that don't support filtering ignore the
+        kwarg silently — the agent's retrieval flow remains correct,
+        just unfiltered.
+        """
         ...
 
     async def retrieve_sparse(

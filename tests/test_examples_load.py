@@ -25,6 +25,14 @@ _EXAMPLES: list[tuple[Path, dict[str, str]]] = [
     (REPO_ROOT / "examples" / "helpdesk" / "config" / "agents.yaml", {}),
     (REPO_ROOT / "examples" / "travel-agency" / "config" / "agents.yaml", {}),
     (REPO_ROOT / "examples" / "prompt-customization" / "agents.yaml", {}),
+    (REPO_ROOT / "examples" / "custom-storage" / "agents.yaml", {}),
+    (REPO_ROOT / "examples" / "rag-strategies" / "agents.yaml", {}),
+    (REPO_ROOT / "examples" / "wiki" / "agents.yaml", {}),
+    (REPO_ROOT / "examples" / "graph_kb" / "agents.yaml", {}),
+    (
+        REPO_ROOT / "examples" / "tool-strategies" / "agents.yaml",
+        {"KB_MCP_URL": "http://localhost:9001/mcp"},
+    ),
     (
         REPO_ROOT / "examples" / "mcp-auth" / "agents.yaml",
         {
@@ -75,6 +83,89 @@ def test_travel_agency_uses_multi_query_strategy() -> None:
     itinerary = config.agents["itinerary"]
     assert itinerary.rag.retrieval.strategy == "multi_query"
     assert itinerary.rag.retrieval.query_transformers == ["reformulate"]
+
+
+def test_custom_storage_example_loads() -> None:
+    """The custom-storage example wires a single agent and no RAG."""
+    path = REPO_ROOT / "examples" / "custom-storage" / "agents.yaml"
+    if not path.exists():
+        pytest.skip(f"Example file not present: {path}")
+    config = load_config(str(path))
+    assert "echo" in config.agents
+    assert config.agents["echo"].rag.enabled is False
+
+
+def test_tool_strategies_example_threads_strategies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each tool-strategies agent picks a different per-server strategy."""
+    path = REPO_ROOT / "examples" / "tool-strategies" / "agents.yaml"
+    if not path.exists():
+        pytest.skip(f"Example file not present: {path}")
+    monkeypatch.setenv("KB_MCP_URL", "http://localhost:9001/mcp")
+    config = load_config(str(path))
+
+    expected = {
+        "fanout_lookup": "all",
+        "pipeline_lookup": "sequential",
+        "smart_lookup": "llm_decides",
+        "cascade_lookup": "priority",
+    }
+    for agent_name, expected_strategy in expected.items():
+        agent = config.agents[agent_name]
+        servers = agent.mcp_servers
+        assert servers, f"{agent_name} expected an MCP server"
+        assert servers[0].tool_call_strategy == expected_strategy
+
+    # parallel_searcher exercises the orthogonal parallel_tools flag.
+    assert config.agents["parallel_searcher"].parallel_tools is True
+
+
+def test_rag_strategies_example_threads_strategies() -> None:
+    """Each rag-strategies agent picks a different retrieval strategy."""
+    path = REPO_ROOT / "examples" / "rag-strategies" / "agents.yaml"
+    if not path.exists():
+        pytest.skip(f"Example file not present: {path}")
+    config = load_config(str(path))
+
+    expected = {
+        "simple_searcher": "simple",
+        "multi_query_searcher": "multi_query",
+        "hyde_searcher": "hyde",
+        "recency_searcher": "recency_simple",
+    }
+    for agent_name, expected_strategy in expected.items():
+        assert config.agents[agent_name].rag.retrieval.strategy == expected_strategy
+
+
+def test_wiki_example_threads_per_tool_override() -> None:
+    """Stage 7 — wiki example resolves per-tool RAG via ``effective_rag``."""
+    path = REPO_ROOT / "examples" / "wiki" / "agents.yaml"
+    if not path.exists():
+        pytest.skip(f"Example file not present: {path}")
+    config = load_config(str(path))
+
+    docs = config.agents["docs"]
+    assert docs.rag.ingestion.strategy == "headered"
+    assert docs.rag.retrieval.strategy == "hybrid"
+
+    # Per-tool override (ADR-024) flips namespace + ingestion + retrieval.
+    eff = docs.effective_rag("lookup_glossary")
+    assert eff.namespace == "glossary_cache"
+    assert eff.ingestion.strategy == "semantic"
+    assert eff.retrieval.strategy == "simple"
+
+
+def test_graph_kb_example_threads_graph_rag() -> None:
+    """Stage 5 — graph_kb example uses ``graph_rag`` retrieval."""
+    path = REPO_ROOT / "examples" / "graph_kb" / "agents.yaml"
+    if not path.exists():
+        pytest.skip(f"Example file not present: {path}")
+    config = load_config(str(path))
+
+    org_chart = config.agents["org_chart"]
+    assert org_chart.rag.retrieval.strategy == "graph_rag"
+    assert org_chart.rag.retrieval.graph.enabled is True
+    assert org_chart.rag.retrieval.graph.max_hops == 2
+    assert "reports_to" in org_chart.rag.retrieval.graph.relation_filter
 
 
 def test_prompt_customization_example_threads_overrides() -> None:

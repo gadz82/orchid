@@ -57,4 +57,10 @@ class SimpleRetrieval(OrchidRetrievalStrategy):
                 "use strategy: multi_query or hyde for fan-out behaviour.",
                 len(non_pre),
             )
-        return await reader.retrieve(query=query, namespace=namespace, k=k, scope=scope)
+        return await reader.retrieve(
+            query=query,
+            namespace=namespace,
+            k=k,
+            scope=scope,
+            metadata_filters=metadata_filters,
+        )

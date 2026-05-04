@@ -34,6 +34,7 @@ class NullVectorReader(OrchidVectorReader):
         namespace: str,
         k: int = 5,
         scope: OrchidRAGScope | None = None,
+        metadata_filters: dict[str, Any] | None = None,
     ) -> list[OrchidSearchResult]:
         return []
 

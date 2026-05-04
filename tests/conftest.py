@@ -39,8 +39,16 @@ class MockVectorReader(OrchidVectorReader):
         self.calls = []
         self._results = results or []
 
-    async def retrieve(self, query, namespace, k=5, scope=None):
-        self.calls.append({"query": query, "namespace": namespace, "k": k, "scope": scope})
+    async def retrieve(self, query, namespace, k=5, scope=None, metadata_filters=None):
+        self.calls.append(
+            {
+                "query": query,
+                "namespace": namespace,
+                "k": k,
+                "scope": scope,
+                "metadata_filters": metadata_filters,
+            }
+        )
         return self._results
 
 

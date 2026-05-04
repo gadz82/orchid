@@ -21,8 +21,9 @@ def utcnow() -> datetime:
     helper, so that migration is a one-file change followed by a schema
     revision.  Tracked separately from the ``datetime.utcnow`` sweep.
 
-    For new code not tied to the legacy schema, prefer
-    ``datetime.now(timezone.utc)`` directly.
+    For new code that doesn't have to round-trip through the
+    timezone-naive columns, prefer ``datetime.now(timezone.utc)``
+    directly.
     """
     return datetime.now(timezone.utc).replace(tzinfo=None)
 

@@ -38,8 +38,30 @@ Example custom agents:
 
 - **Input:** `OrchidAgentState` (TypedDict)
 - **Output:** Partial `OrchidAgentState` — must include `messages` with an `AIMessage`
-- **Constructor:** `__init__(self, *, name, llm, reader, mcp_clients, config)` (injected by the framework)
+- **Constructor:** `__init__(self, *, reader, mcp_clients, config, chat_model=None, graph_store=None, **kwargs)` — the graph builder injects `reader`, MCP clients, the per-agent `BaseChatModel`, and the runtime's `OrchidGraphStore` (`None` or a `NullGraphStore` when no graph backend is wired). `OrchidAgent`'s `**_kwargs` catch-all absorbs framework-injected extras (e.g. `model_id`, `summary_config`).
 - **Resolution:** Dotted import path in YAML `class:` field → `importlib` at startup
+
+### Per-Tool RAG Override (ADR-024)
+
+`OrchidAgentConfig.effective_rag(tool_name) -> OrchidRAGConfig`
+returns the merged RAG config that should govern a specific tool.
+Resolution order:
+
+1. MCP tools — `mcp_servers[*].tools[*]` matching `tool_name`.
+2. Built-in tools — looked up in `agent.builtin_tool_configs`
+   (cached at validation time from `OrchidAgentsConfig.tools`).
+3. Falls back to `agent.rag` when no override is set.
+
+When an override exists, the tool's `model_dump(exclude_unset=True)`
+overlays onto the agent's full RAG dump via a deep merge — so an
+override of just `ingestion: {chunk_size: 400}` keeps every other
+nested field (strategy, overlap, retrieval, namespace, …) intact.
+
+`GenericAgent._step_dynamic_injection` calls `effective_rag` per
+injectable tool and threads the resolved namespace + ingestion
+strategy into `inject_to_rag`. Custom agents that override
+`run()` and write tool results to RAG should follow the same
+pattern (see [`rag/AGENTS.md`](../rag/AGENTS.md#per-tool-rag-override-adr-024)).
 
 ## SOLID Patterns for Agents
 

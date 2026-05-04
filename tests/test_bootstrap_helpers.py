@@ -284,10 +284,10 @@ class TestRunStartupHook:
     @pytest.mark.asyncio
     async def test_no_hook_path_is_noop(self, clean_env):
         # When hook_path is empty, nothing is imported or called.
-        await _run_startup_hook("", reader=object(), extra_kwargs=None)
+        await _run_startup_hook("", reader=object(), runtime=object(), extra_kwargs=None)
 
     @pytest.mark.asyncio
-    async def test_hook_receives_reader_and_extra_kwargs(self, clean_env, tmp_path, monkeypatch):
+    async def test_hook_receives_reader_runtime_and_extra_kwargs(self, clean_env, tmp_path, monkeypatch):
         calls: list[dict] = []
 
         async def my_hook(**kwargs):
@@ -301,13 +301,24 @@ class TestRunStartupHook:
         mod.entry = my_hook
         sys.modules["fake_hook_module"] = mod
 
+        runtime_sentinel = object()
         try:
             await _run_startup_hook(
                 "fake_hook_module.entry",
                 reader="reader-sentinel",
+                runtime=runtime_sentinel,
                 extra_kwargs={"settings": "s", "extra": 1},
             )
         finally:
             del sys.modules["fake_hook_module"]
 
-        assert calls == [{"reader": "reader-sentinel", "settings": "s", "extra": 1}]
+        # ``runtime`` flows alongside ``reader`` so hooks can configure
+        # post-construction collaborators (e.g. graph_store).
+        assert calls == [
+            {
+                "reader": "reader-sentinel",
+                "runtime": runtime_sentinel,
+                "settings": "s",
+                "extra": 1,
+            }
+        ]

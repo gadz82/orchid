@@ -75,4 +75,5 @@ class MultiQueryRetrieval(OrchidRetrievalStrategy):
             k=k,
             reader=reader,
             timeout=self._retrieval_timeout,
+            metadata_filters=metadata_filters,
         )

@@ -69,17 +69,30 @@ async def fan_out_retrieve(
     k: int,
     reader: OrchidVectorReader,
     timeout: float = 30.0,
+    metadata_filters: dict[str, Any] | None = None,
 ) -> list[OrchidSearchResult]:
     """Retrieve in parallel for every query, dedupe by id (highest score wins).
 
     Returns at most ``k`` results, sorted by descending score.  On
     timeout, falls back to a single retrieval with the first query and
     returns whatever it finds (or ``[]`` on a second failure).
+    ``metadata_filters`` (ADR-027) flow through to every parallel
+    ``reader.retrieve`` call so the strategy's filter declaration is
+    consistently applied across the fan-out.
     """
     if not queries:
         return []
 
-    tasks = [reader.retrieve(query=q, namespace=namespace, k=k, scope=scope) for q in queries]
+    tasks = [
+        reader.retrieve(
+            query=q,
+            namespace=namespace,
+            k=k,
+            scope=scope,
+            metadata_filters=metadata_filters,
+        )
+        for q in queries
+    ]
     try:
         async with asyncio.timeout(timeout):
             all_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -90,7 +103,15 @@ async def fan_out_retrieve(
             len(queries),
         )
         try:
-            all_results = [await reader.retrieve(query=queries[0], namespace=namespace, k=k, scope=scope)]
+            all_results = [
+                await reader.retrieve(
+                    query=queries[0],
+                    namespace=namespace,
+                    k=k,
+                    scope=scope,
+                    metadata_filters=metadata_filters,
+                )
+            ]
         except Exception as exc:
             logger.warning("[fan_out_retrieve] Fallback retrieve failed: %s", exc)
             return []

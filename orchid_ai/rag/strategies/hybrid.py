@@ -112,7 +112,13 @@ class HybridRetrieval(OrchidRetrievalStrategy):
             logger.warning("[HybridRetrieval] Sparse encoder failed: %s — dense-only", exc)
 
         lane_k = k * self._lane_multiplier
-        dense_task = reader.retrieve(query=query, namespace=namespace, k=lane_k, scope=scope)
+        dense_task = reader.retrieve(
+            query=query,
+            namespace=namespace,
+            k=lane_k,
+            scope=scope,
+            metadata_filters=metadata_filters,
+        )
         if sparse_query is not None:
             sparse_task = reader.retrieve_sparse(
                 query_sparse=sparse_query,

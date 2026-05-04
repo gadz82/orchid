@@ -31,9 +31,6 @@ DEFAULT_REFORMULATE_PROMPT = (
     "- Return ONLY the reformulated query, nothing else"
 )
 
-# Backward-compatible alias for callers that imported the private name.
-_REFORMULATE_PROMPT = DEFAULT_REFORMULATE_PROMPT
-
 
 class ReformulateTransformer(OrchidQueryTransformer):
     """Rewrite a query into a standalone search query using conversation history.

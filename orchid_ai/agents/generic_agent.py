@@ -27,10 +27,12 @@ from langchain_core.messages import AIMessage
 
 from ..config.schema import OrchidAgentConfig
 from ..core.agent import OrchidAgent
+from ..core.graph_store import OrchidGraphStore
 from ..core.mcp import OrchidMCPClient
 from ..core.repository import OrchidVectorReader
 from ..core.retrieval import apply_pre_strategy
 from ..core.state import OrchidAgentState, OrchidAuthContext
+from ..documents.strategies import build_ingestion_strategy
 from ..rag.dynamic import inject_to_rag
 from ..rag.scopes import OrchidRAGScope
 from ..rag.strategies import get_retrieval_strategy
@@ -66,12 +68,18 @@ class GenericAgent(OrchidAgent):
         agent_peers: dict[str, Any] | None = None,
         chat_model: Any | None = None,
         summary_config: dict[str, Any] | None = None,
+        graph_store: OrchidGraphStore | None = None,
         **kwargs: Any,
     ):
         super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
         self._config = config
         self._agent_peers: dict[str, Any] = agent_peers or {}
         self._summary_config: dict[str, Any] | None = summary_config
+        # ADR-026 — graph store injected by the graph builder so the
+        # ``graph_rag`` retrieval strategy can traverse entities and
+        # relations.  ``None`` (or a NullGraphStore) makes
+        # GraphRAGRetrieval fall back to SimpleRetrieval.
+        self._graph_store: OrchidGraphStore | None = graph_store
 
         # ── Create collaborators ──
         if chat_model:
@@ -300,6 +308,15 @@ class GenericAgent(OrchidAgent):
             if not TRANSFORMER_REGISTRY[name].pre_strategy
         ]
 
+        # When ``retrieval.exclude_dynamic`` is set the agent injects
+        # ``dynamic: {"not": True}`` into the metadata filters so
+        # dynamically-injected tool output stays out of the retrieval
+        # path (cycle mitigation per ADR-024 §"Open questions / risks").
+        configured_filters = dict(self._config.rag.retrieval.metadata_filters or {})
+        if self._config.rag.retrieval.exclude_dynamic:
+            configured_filters.setdefault("dynamic", {"not": True})
+        metadata_filters = configured_filters or None
+
         common_kwargs: dict[str, Any] = {
             "query": query,
             "scope": scope,
@@ -307,7 +324,8 @@ class GenericAgent(OrchidAgent):
             "reader": self.reader,
             "chat_model": self._chat_model,
             "transformers": strategy_transformers,
-            "metadata_filters": self._config.rag.retrieval.metadata_filters or None,
+            "metadata_filters": metadata_filters,
+            "graph_store": self._graph_store,
         }
 
         domain_results, upload_results = await _asyncio.gather(
@@ -344,17 +362,37 @@ class GenericAgent(OrchidAgent):
         mcp_data: dict[str, Any],
         scope: OrchidRAGScope,
     ) -> None:
-        """Dynamic RAG injection for tools with inject_to_rag=True."""
+        """Dynamic RAG injection — per-tool ``effective_rag`` (ADR-024).
+
+        Each injectable tool resolves its own RAG config via
+        :meth:`OrchidAgentConfig.effective_rag` so a tool that points
+        at a different namespace, ingestion strategy, or chunk size
+        is honoured at runtime.  When the tool has no override, the
+        agent's RAG block applies as before.
+        """
         if not (self._config.rag.enabled and self._config.injectable_tools):
             return
-        injectable = {k: v for k, v in mcp_data.items() if k in self._config.injectable_tools}
-        if injectable:
+
+        for tool_name, tool_result in mcp_data.items():
+            # ``injectable_tools`` mixes raw MCP tool names with
+            # ``builtin_<name>`` keys for built-in tools — match either
+            # so both flavours of injection reach this branch.
+            if tool_name not in self._config.injectable_tools and (
+                f"builtin_{tool_name}" not in self._config.injectable_tools
+            ):
+                continue
+
+            effective = self._config.effective_rag(tool_name)
+            target_namespace = effective.namespace or self._config.rag.namespace
+            ingestion = build_ingestion_strategy(effective.ingestion)
+
             await inject_to_rag(
                 self.reader,
-                mcp_data=injectable,
-                namespace=self._config.rag.namespace,
+                tool_name=tool_name,
+                tool_result=tool_result,
+                namespace=target_namespace,
                 scope=scope,
-                source_tool=self.name,
+                ingestion=ingestion,
             )
 
     async def _step_summarise(
@@ -389,7 +427,7 @@ class GenericAgent(OrchidAgent):
         # Thread per-agent summarise prompt overrides through to the
         # helper so the LLM-facing surface respects the same
         # ``prompt_sections`` block that drives the agentic-loop
-        # builder.  Defaults preserve the legacy strings.
+        # builder.
         sections = self._config.prompt_sections
         return await self.summarise(
             query,
@@ -585,9 +623,8 @@ class GenericAgent(OrchidAgent):
 
         Section templates and truncation knobs are sourced from
         ``self._config.prompt_sections`` (an :class:`OrchidAgentPromptConfig`
-        instance).  Defaults preserve the legacy strings so omitting the
-        block from YAML produces output bit-identical to versions before
-        prompt customization existed.
+        instance).  Omitting the block from YAML uses the built-in
+        defaults defined on that class.
         """
         sections = self._config.prompt_sections
         parts = [self._config.prompt]
