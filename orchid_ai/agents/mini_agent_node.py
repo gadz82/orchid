@@ -309,6 +309,7 @@ async def _run_inner_loop(
         instruction=instruction,
         tool_subset=list(tool_map.keys()),
         caps_descriptions=_tool_descriptions(caps, builtin_tool_defs),
+        template=parent_config.mini_agent.system_prompt_template,
     )
 
     # ── Build messages: system + parent's conversation history + user query ──
@@ -443,17 +444,34 @@ def _build_mini_system_prompt(
     instruction: str,
     tool_subset: list[str],
     caps_descriptions: dict[str, str],
+    template: str | None = None,
 ) -> str:
-    """Compose the mini's focused system prompt (spec §10.1)."""
+    """Compose the mini's focused system prompt (spec §10.1).
+
+    When ``template`` is supplied it is resolved via
+    :py:meth:`str.format` with the placeholders ``{parent_prompt}``,
+    ``{instruction}``, and ``{tool_list}`` — the last being a newline-
+    joined ``- name: description`` bullet list, or the empty string
+    when the mini has no tools.  ``None`` (default) preserves the
+    legacy assembly bit-identically.
+    """
+    tool_list = ""
+    if tool_subset:
+        bullets = [f"- {name}: {caps_descriptions.get(name, name)}" for name in tool_subset]
+        tool_list = "\n".join(bullets)
+
+    if template is not None:
+        return template.format(
+            parent_prompt=parent_prompt,
+            instruction=instruction,
+            tool_list=tool_list,
+        )
+
     parts = [parent_prompt]
     if instruction:
         parts.append("\n\n" + instruction)
-    if tool_subset:
-        bullets = []
-        for name in tool_subset:
-            desc = caps_descriptions.get(name, name)
-            bullets.append(f"- {name}: {desc}")
-        parts.append("\n\nTools available to you:\n" + "\n".join(bullets))
+    if tool_list:
+        parts.append("\n\nTools available to you:\n" + tool_list)
     return "".join(parts)
 
 

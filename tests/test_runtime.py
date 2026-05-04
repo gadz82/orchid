@@ -23,7 +23,7 @@ class TestDefaults:
         assert rt.reader is None
 
     def test_get_reader_returns_null_when_none(self):
-        from orchid_ai.rag.null import NullVectorReader
+        from orchid_ai.rag.backends.null import NullVectorReader
 
         rt = OrchidRuntime()
         reader = rt.get_reader()

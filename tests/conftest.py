@@ -9,7 +9,7 @@ from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.core.repository import OrchidVectorReader, OrchidVectorWriter, OrchidVectorStoreAdmin
 from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
 from orchid_ai.rag.scopes import OrchidRAGScope
-from orchid_ai.rag.null import NullVectorReader
+from orchid_ai.rag.backends.null import NullVectorReader
 from orchid_ai.persistence.models import OrchidChatSession, OrchidChatMessage
 
 

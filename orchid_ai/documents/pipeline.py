@@ -1,18 +1,22 @@
 """
-Document ingestion pipeline — parse → chunk → embed → store.
+Document ingestion pipeline — parse → strategy → upsert.
 
-Orchestrates the full flow from raw file bytes to indexed Qdrant points.
+Orchestrates the flow from raw file bytes to indexed documents.  The
+chunking step delegates to a configurable :class:`OrchidIngestionStrategy`
+(ADR-022); :func:`ingest_document` plugs strategy + post-processors into
+the same parse-once flow consumers use today.
 """
 
 from __future__ import annotations
 
-import hashlib
 import logging
+from typing import Any
 
+from ..core.ingestion import OrchidChunk, OrchidChunkPostProcessor, OrchidIngestionStrategy
 from ..core.repository import Document, OrchidVectorWriter
 from ..rag.scopes import OrchidRAGScope
-from .chunker import ChunkConfig, chunk_text, parent_child_chunk_text
 from .parsers import get_parser
+from .strategies import RecursiveIngestion
 
 logger = logging.getLogger(__name__)
 
@@ -38,16 +42,26 @@ async def ingest_document(
     scope: OrchidRAGScope,
     namespace: str = "uploads",
     writer: OrchidVectorWriter,
-    chunk_config: ChunkConfig | None = None,
+    ingestion: OrchidIngestionStrategy | None = None,
+    post_processors: list[OrchidChunkPostProcessor] | None = None,
+    doc_store: Any | None = None,
+    embeddings: Any | None = None,
     vision_model: str = "",
     pre_extracted_text: str | None = None,
 ) -> int:
     """
-    Chunk, embed, and store a document.
+    Parse, chunk, and upsert a document.
 
-    If *pre_extracted_text* is provided it is used directly (avoids
-    re-parsing the file — important for vision models that are slow
-    and non-deterministic). Otherwise the file is parsed on the fly.
+    The chunking step delegates to ``ingestion`` (defaults to
+    :class:`RecursiveIngestion` with default :class:`ChunkConfig` —
+    matching today's flat behaviour).  ``post_processors`` run in order
+    after the strategy splits the text.  ``doc_store`` and ``embeddings``
+    are forwarded to the strategy when set so hierarchical / semantic
+    strategies can use them — Stage 2+ feature.
+
+    If ``pre_extracted_text`` is provided it is used directly (avoids
+    re-parsing the file — important for vision models).  Otherwise the
+    file is parsed on the fly.
 
     Returns the number of chunks indexed.
     """
@@ -67,71 +81,34 @@ async def ingest_document(
 
     logger.info("[Ingest] Using %d chars from %s", len(text), filename)
 
-    # 2. Chunk — use parent/child strategy when parent_chunk_size > 0
-    cfg = chunk_config or ChunkConfig()
-    file_hash = hashlib.sha256(file_bytes).hexdigest()[:12]
-    documents: list[Document] = []
+    # 2. Run the configured ingestion strategy
+    strategy = ingestion or RecursiveIngestion()
+    chunks: list[OrchidChunk] = await strategy.ingest(
+        text=text,
+        filename=filename,
+        scope=scope,
+        doc_store=doc_store,
+        embeddings=embeddings,
+    )
+    if not chunks:
+        return 0
 
-    if cfg.parent_chunk_size > 0:
-        # Parent Document Retriever: child chunks for precise embedding,
-        # parent content stored in metadata for richer LLM context.
-        pc_chunks = parent_child_chunk_text(text, cfg)
-        if not pc_chunks:
-            return 0
+    # 3. Run post-processors in order (Stage 2+ feature; empty by default)
+    for proc in post_processors or []:
+        chunks = await proc.process(chunks, text=text, filename=filename, chat_model=None)
 
-        logger.info(
-            "[Ingest] Split %s into %d child chunks (parent_chunk_size=%d)",
-            filename,
-            len(pc_chunks),
-            cfg.parent_chunk_size,
+    logger.info("[Ingest] Strategy %s produced %d chunks for %s", type(strategy).__name__, len(chunks), filename)
+
+    # 4. Convert to Documents and upsert (embeddings generated lazily by writer)
+    documents = [
+        Document(
+            id=c.metadata.get("chunk_id") or f"{filename}-{i}",
+            page_content=c.text,
+            metadata=c.metadata,
         )
+        for i, c in enumerate(chunks)
+    ]
 
-        for i, pc in enumerate(pc_chunks):
-            doc_id = f"upload-{file_hash}-p{pc.parent_index}c{pc.child_index}"
-            documents.append(
-                Document(
-                    id=doc_id,
-                    page_content=pc.child_text,
-                    metadata={
-                        "tenant_id": scope.tenant_id,
-                        "user_id": scope.user_id,
-                        "chat_id": scope.chat_id,
-                        "scope": "chat_shared",
-                        "source_file": filename,
-                        "chunk_index": i,
-                        "total_chunks": len(pc_chunks),
-                        "parent_content": pc.parent_text,
-                        "parent_index": pc.parent_index,
-                    },
-                )
-            )
-    else:
-        # Standard chunking (existing behavior)
-        chunks = chunk_text(text, cfg)
-        if not chunks:
-            return 0
-
-        logger.info("[Ingest] Split %s into %d chunks", filename, len(chunks))
-
-        for i, chunk in enumerate(chunks):
-            doc_id = f"upload-{file_hash}-{i}"
-            documents.append(
-                Document(
-                    id=doc_id,
-                    page_content=chunk,
-                    metadata={
-                        "tenant_id": scope.tenant_id,
-                        "user_id": scope.user_id,
-                        "chat_id": scope.chat_id,
-                        "scope": "chat_shared",
-                        "source_file": filename,
-                        "chunk_index": i,
-                        "total_chunks": len(chunks),
-                    },
-                )
-            )
-
-    # 4. Index (embeddings generated lazily by the writer)
     await writer.upsert(documents, namespace)
     logger.info(
         "[Ingest] Indexed %d chunks from %s into '%s' (chat=%s)",

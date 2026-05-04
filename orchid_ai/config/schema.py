@@ -30,7 +30,17 @@ from .schema_guardrails import OrchidGuardrailRuleConfig, OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPAuthConfig, OrchidMCPServerConfig, OrchidToolConfig
 from .schema_mini_agent import OrchidMiniAgentConfig
-from .schema_rag import OrchidRAGConfig, OrchidRAGDefaultsConfig
+from .schema_prompts import (
+    OrchidAgentPromptConfig,
+    OrchidHydeTransformerPromptsConfig,
+    OrchidQueryTransformerPromptsConfig,
+)
+from .schema_rag import (
+    OrchidIngestionConfig,
+    OrchidRAGConfig,
+    OrchidRAGDefaultsConfig,
+    OrchidRetrievalConfig,
+)
 from .schema_skills import (
     BuiltinToolParameter,
     OrchidAgentSkillConfig,
@@ -45,6 +55,7 @@ __all__ = [
     "BuiltinToolParameter",
     "ExecutionHints",
     "OrchidAgentConfig",
+    "OrchidAgentPromptConfig",
     "OrchidAgentSkillConfig",
     "OrchidAgentSkillStepConfig",
     "OrchidAgentsConfig",
@@ -52,14 +63,18 @@ __all__ = [
     "OrchidDefaultsConfig",
     "OrchidGuardrailRuleConfig",
     "OrchidGuardrailsConfig",
+    "OrchidHydeTransformerPromptsConfig",
+    "OrchidIngestionConfig",
     "OrchidLLMConfig",
     "OrchidMCPAuthConfig",
     "OrchidMCPServerConfig",
     "OrchidMiniAgentConfig",
     "OrchidOrchestratorSkillConfig",
     "OrchidOrchestratorSkillStepConfig",
+    "OrchidQueryTransformerPromptsConfig",
     "OrchidRAGConfig",
     "OrchidRAGDefaultsConfig",
+    "OrchidRetrievalConfig",
     "OrchidSupervisorConfig",
     "OrchidToolConfig",
     "_apply_defaults",

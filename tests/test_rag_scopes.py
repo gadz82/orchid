@@ -1,4 +1,4 @@
-"""Tests for src.rag.scopes — OrchidRAGScope + build_qdrant_filter."""
+"""Tests for OrchidRAGScope + the Qdrant-backend filter translator."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import dataclasses
 import pytest
 from qdrant_client.models import Filter
 
-from orchid_ai.rag.scopes import SHARED_TENANT, OrchidRAGScope, build_qdrant_filter
+from orchid_ai.rag.backends.qdrant import build_qdrant_filter
+from orchid_ai.rag.scopes import SHARED_TENANT, OrchidRAGScope
 
 
 # ── OrchidRAGScope dataclass ──────────────────────────────────────────

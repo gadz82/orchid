@@ -29,9 +29,16 @@ from ..config.schema import OrchidAgentConfig
 from ..core.agent import OrchidAgent
 from ..core.mcp import OrchidMCPClient
 from ..core.repository import OrchidVectorReader
+from ..core.retrieval import apply_pre_strategy
 from ..core.state import OrchidAgentState, OrchidAuthContext
 from ..rag.dynamic import inject_to_rag
 from ..rag.scopes import OrchidRAGScope
+from ..rag.strategies import get_retrieval_strategy
+from ..rag.transformers import (
+    TRANSFORMER_REGISTRY,
+    get_query_transformer,
+    resolve_transformer_kwargs,
+)
 
 from .mcp_dispatcher import MCPCapabilities, MCPDispatcher
 from .skill_detector import SkillDetector
@@ -115,12 +122,35 @@ class GenericAgent(OrchidAgent):
 
         raw_query = self.extract_user_query(state)
 
-        # Reformulate query using conversation history for better search/tool precision
-        reformulate_start = time.perf_counter()
-        if self._config.rag.reformulate_queries and self._chat_model:
-            query = await self.reformulate_query(raw_query, state)
-            reformulate_elapsed = (time.perf_counter() - reformulate_start) * 1000
-            perf_logger.info("[PERF][agent=%s] step=reformulate_query took %.1f ms", self.name, reformulate_elapsed)
+        # Apply pre_strategy=True query transformers in order so the
+        # rewritten query feeds RAG retrieval, the agentic loop, and
+        # the summarisation step alike (single source of truth — see
+        # ADR-023 §"pre_strategy / strategy-internal split").  Prompt
+        # overrides (when configured) are resolved from
+        # ``rag.retrieval.transformer_prompts`` and threaded through
+        # the registry's kwargs forwarding.
+        transformer_names = self._config.rag.retrieval.query_transformers or []
+        prompts_cfg = self._config.rag.retrieval.transformer_prompts
+        pre_transformers = [
+            get_query_transformer(name, **resolve_transformer_kwargs(name, prompts_cfg))
+            for name in transformer_names
+            if TRANSFORMER_REGISTRY[name].pre_strategy
+        ]
+        if pre_transformers and self._chat_model:
+            transform_start = time.perf_counter()
+            query = await apply_pre_strategy(
+                pre_transformers,
+                raw_query,
+                chat_model=self._chat_model,
+                history=self.extract_conversation_history(state, max_turns=5, max_chars=500),
+            )
+            transform_elapsed = (time.perf_counter() - transform_start) * 1000
+            perf_logger.info(
+                "[PERF][agent=%s] step=pre_strategy_transformers took %.1f ms (n=%d)",
+                self.name,
+                transform_elapsed,
+                len(pre_transformers),
+            )
         else:
             query = raw_query
 
@@ -243,50 +273,65 @@ class GenericAgent(OrchidAgent):
         query: str,
         scope: OrchidRAGScope,
     ) -> list[dict[str, Any]]:
-        """Step 1: RAG retrieval (domain namespace + uploads).
+        """Step 1: RAG retrieval — strategy resolved by name from the registry.
 
-        When ``retriever_type`` is ``multi_query``, the LLM generates
-        query variations for broader recall before merging results.
+        The strategy operates on a single namespace; the agent fans out
+        to ``rag_namespace`` + ``"uploads"`` in parallel and merges by
+        score (preserving the prior ``fetch_all_rag_context`` shape).
         """
         if not self._config.rag.enabled:
             return []
 
-        if self._config.rag.retriever_type == "multi_query" and self._chat_model:
-            return await self._multi_query_rag(query, scope, k=self._config.rag.k)
-
-        return await self.fetch_all_rag_context(query, scope, k=self._config.rag.k)
-
-    async def _multi_query_rag(
-        self,
-        query: str,
-        scope: OrchidRAGScope,
-        *,
-        k: int = 5,
-    ) -> list[dict[str, Any]]:
-        """Multi-query RAG: generate query variations, retrieve in parallel, merge."""
         import asyncio as _asyncio
 
-        from ..rag.retriever import multi_query_retrieve
-
-        domain_results, upload_results = await _asyncio.gather(
-            multi_query_retrieve(query, self.reader, self.rag_namespace, scope, self._chat_model, k=k),
-            multi_query_retrieve(query, self.reader, "uploads", scope, self._chat_model, k=k),
+        strategy = get_retrieval_strategy(
+            self._config.rag.retrieval.strategy or "simple",
+            config=self._config.rag.retrieval,
         )
 
-        combined = []
-        for r in domain_results + upload_results:
+        # Only ``pre_strategy=False`` transformers reach the strategy —
+        # ``pre_strategy=True`` ones already rewrote the query at the
+        # turn entry in ``run()``.  Prompt overrides (if configured)
+        # are forwarded to each transformer's constructor.
+        prompts_cfg = self._config.rag.retrieval.transformer_prompts
+        strategy_transformers = [
+            get_query_transformer(name, **resolve_transformer_kwargs(name, prompts_cfg))
+            for name in (self._config.rag.retrieval.query_transformers or [])
+            if not TRANSFORMER_REGISTRY[name].pre_strategy
+        ]
+
+        common_kwargs: dict[str, Any] = {
+            "query": query,
+            "scope": scope,
+            "k": self._config.rag.k,
+            "reader": self.reader,
+            "chat_model": self._chat_model,
+            "transformers": strategy_transformers,
+            "metadata_filters": self._config.rag.retrieval.metadata_filters or None,
+        }
+
+        domain_results, upload_results = await _asyncio.gather(
+            strategy.retrieve(namespace=self.rag_namespace, **common_kwargs),
+            strategy.retrieve(namespace="uploads", **common_kwargs),
+        )
+
+        combined: list[dict[str, Any]] = []
+        for r in [*domain_results, *upload_results]:
+            content = r.document.metadata.get("parent_content", r.document.page_content)
             combined.append(
                 {
-                    "content": r.document.page_content,
+                    "content": content,
                     "score": round(r.score, 3),
                     "metadata": {
-                        mk: mv for mk, mv in r.document.metadata.items() if mk not in ("content", "embedding")
+                        mk: mv
+                        for mk, mv in r.document.metadata.items()
+                        if mk not in ("content", "embedding", "parent_content")
                     },
                 }
             )
 
         combined.sort(key=lambda d: d.get("score", 0), reverse=True)
-        return combined[:k]
+        return combined[: self._config.rag.k]
 
     async def _step_cache_check(self, scope: OrchidRAGScope) -> dict[str, Any]:
         """Step 1.5: Check RAG for cached tool results within TTL."""
@@ -341,6 +386,11 @@ class GenericAgent(OrchidAgent):
 
         prior_ctx = (state.get("mcp_context") or {}).get(self.name) if state else None
 
+        # Thread per-agent summarise prompt overrides through to the
+        # helper so the LLM-facing surface respects the same
+        # ``prompt_sections`` block that drives the agentic-loop
+        # builder.  Defaults preserve the legacy strings.
+        sections = self._config.prompt_sections
         return await self.summarise(
             query,
             mcp_data,
@@ -349,6 +399,11 @@ class GenericAgent(OrchidAgent):
             temperature=llm_config.temperature if llm_config else 0.2,
             conversation_history=history or None,
             prior_tool_context=prior_ctx,
+            history_reminder=sections.summarise_history_reminder,
+            prior_results_header=sections.summarise_prior_results_header,
+            rag_section_header=sections.summarise_rag_section_header,
+            user_content_template=sections.summarise_user_template,
+            prior_results_max_chars=sections.summarise_prior_results_max_chars,
         )
 
     # ── Agent prefix computation ─────────────────────────────────
@@ -526,40 +581,61 @@ class GenericAgent(OrchidAgent):
         rag_data: list[dict[str, Any]],
         state: OrchidAgentState | None,
     ) -> str:
-        """Build a rich system prompt from config + MCP metadata + RAG context."""
+        """Build a rich system prompt from config + MCP metadata + RAG context.
+
+        Section templates and truncation knobs are sourced from
+        ``self._config.prompt_sections`` (an :class:`OrchidAgentPromptConfig`
+        instance).  Defaults preserve the legacy strings so omitting the
+        block from YAML produces output bit-identical to versions before
+        prompt customization existed.
+        """
+        sections = self._config.prompt_sections
         parts = [self._config.prompt]
 
         # Prior tool results from previous turns
         prior_ctx = (state.get("mcp_context") or {}).get(self.name) if state else None
         if prior_ctx:
-            parts.append("\n--- Previous Tool Results (from prior turns) ---")
-            parts.append(json.dumps(prior_ctx, indent=2, default=str)[:4000])
+            parts.append(sections.prior_results_header)
+            parts.append(json.dumps(prior_ctx, indent=2, default=str)[: sections.prior_results_max_chars])
 
         # Rendered MCP prompts (zero-arg prompts evaluated at discovery time)
         if caps.rendered_prompts:
             for prompt in caps.rendered_prompts:
-                parts.append(f"\n--- MCP Prompt: {prompt['name']} ---\n{prompt['text']}")
+                parts.append(
+                    sections.mcp_prompt_template.format(
+                        name=prompt["name"],
+                        text=prompt["text"],
+                    )
+                )
 
         # Prompts that require arguments — listed so the LLM knows they exist
         if caps.skipped_prompts:
             for sp in caps.skipped_prompts:
                 parts.append(
-                    f"\n[Available prompt: {sp['name']}] {sp['description']} "
-                    f"(requires: {', '.join(sp['required_args'])})"
+                    sections.skipped_prompt_template.format(
+                        name=sp["name"],
+                        description=sp["description"],
+                        required_args=", ".join(sp["required_args"]),
+                    )
                 )
 
         # MCP resource contents
         if caps.resource_contents:
-            parts.append("\n--- Available Resources ---")
+            parts.append(sections.resources_header)
             for name, content in caps.resource_contents.items():
-                parts.append(f"\n[{name}]\n{content[:2000]}")
+                parts.append(
+                    sections.resource_template.format(
+                        name=name,
+                        content=content[: sections.resource_max_chars],
+                    )
+                )
 
         # RAG context — cap configurable per-agent via
         # ``rag.max_context_chars`` (defaults to 3000).  Bump it for
         # catalog-style agents where the RAG IS the source of truth.
         if rag_data:
             cap = self._config.rag.max_context_chars or 3000
-            parts.append("\n--- Background Knowledge (RAG) ---")
+            parts.append(sections.rag_header)
             parts.append(json.dumps(rag_data, indent=2, default=str)[:cap])
 
         return "\n".join(parts)

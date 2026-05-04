@@ -71,5 +71,14 @@ class OrchidMiniAgentConfig(BaseModel):
     decomposer_prompt: str | None = None
     aggregator_prompt: str | None = None
 
+    #: Optional override for the per-mini system prompt assembled by
+    #: :func:`orchid_ai.agents.mini_agent_node._build_mini_system_prompt`.
+    #: Resolved with :py:meth:`str.format` against the placeholders
+    #: ``{parent_prompt}``, ``{instruction}``, ``{tool_list}`` (a
+    #: newline-joined ``- name: description`` bullet list).  ``None``
+    #: keeps the legacy assembly verbatim.  See the
+    #: ``examples/prompt-customization`` example for a worked usage.
+    system_prompt_template: str | None = None
+
     # Reject unknown YAML keys so typos surface immediately.
     model_config = ConfigDict(extra="forbid")

@@ -9,8 +9,18 @@ Multi-tenancy strategy:
     every tenant's queries automatically.
   - Retrieval always filters: ``tenant_id IN [<installation_id>, "__shared__"]``.
 
-This design maps cleanly to production (OpenSearch Serverless) where
-collection-per-domain + metadata filtering is the standard pattern.
+Hybrid-search support (ADR-025):
+  - New collections are created with named dense + sparse vectors
+    (``{"dense": VectorParams(...)}`` + ``sparse_vectors_config={"sparse":
+    SparseVectorParams()}``).
+  - Existing legacy (unnamed-vector) collections are detected on
+    ``_ensure_collection`` and logged with a "recreate required for
+    hybrid" migration message; reads/writes against them keep working
+    in dense-only mode and ``retrieve_sparse`` raises
+    :class:`NotImplementedError` so :class:`HybridRetrieval` falls
+    back gracefully.
+  - When a sparse encoder is injected, document writes also encode
+    sparse vectors and store them under the named ``sparse`` slot.
 """
 
 from __future__ import annotations
@@ -18,7 +28,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
@@ -28,19 +38,104 @@ from qdrant_client.models import (
     FilterSelector,
     MatchAny,
     MatchValue,
+    NamedSparseVector,
+    NamedVector,
     PointStruct,
     Range,
+    SparseVector,
+    SparseVectorParams,
     VectorParams,
 )
 
 from langchain_core.embeddings import Embeddings
 
 from ...core.repository import Document, OrchidSearchResult, OrchidVectorStoreRepository
-from ..scopes import OrchidRAGScope, build_qdrant_filter
+from ...core.scopes import SHARED_TENANT, OrchidRAGScope
+from ...core.sparse import OrchidSparseEncoder, OrchidSparseVector
 
 logger = logging.getLogger(__name__)
 
 QDRANT_TIMEOUT = 30.0  # seconds — timeout for Qdrant operations
+
+# Named-vector slots used by the Stage 4 hybrid schema.
+_DENSE_NAME = "dense"
+_SPARSE_NAME = "sparse"
+
+CollectionMode = Literal["hybrid", "legacy"]
+
+
+def build_qdrant_filter(scope: OrchidRAGScope) -> Filter:
+    """
+    Build a Qdrant ``Filter`` with ``should`` (OR) clauses covering
+    every scope level visible to the caller.
+
+    The result is a single filter that, when passed to ``client.search()``,
+    returns documents from all accessible levels ranked by relevance.
+    Lives next to ``QdrantRepository`` so the Qdrant client import stays
+    inside this module — strategies and ``rag/scopes.py`` depend only on
+    :class:`OrchidRAGScope`.
+    """
+    clauses: list[Filter] = []
+
+    # 1. Root common — tenant_id = "__shared__"
+    clauses.append(
+        Filter(
+            must=[
+                FieldCondition(key="tenant_id", match=MatchValue(value=SHARED_TENANT)),
+            ]
+        )
+    )
+
+    # 2. Tenant-level — tenant_id = T AND scope = "tenant"
+    clauses.append(
+        Filter(
+            must=[
+                FieldCondition(key="tenant_id", match=MatchValue(value=scope.tenant_id)),
+                FieldCondition(key="scope", match=MatchValue(value="tenant")),
+            ]
+        )
+    )
+
+    # 3. User-common — requires user_id
+    if scope.user_id:
+        clauses.append(
+            Filter(
+                must=[
+                    FieldCondition(key="tenant_id", match=MatchValue(value=scope.tenant_id)),
+                    FieldCondition(key="user_id", match=MatchValue(value=scope.user_id)),
+                    FieldCondition(key="scope", match=MatchValue(value="user")),
+                ]
+            )
+        )
+
+    # 4. Chat-shared — requires user_id + chat_id
+    if scope.user_id and scope.chat_id:
+        clauses.append(
+            Filter(
+                must=[
+                    FieldCondition(key="tenant_id", match=MatchValue(value=scope.tenant_id)),
+                    FieldCondition(key="user_id", match=MatchValue(value=scope.user_id)),
+                    FieldCondition(key="chat_id", match=MatchValue(value=scope.chat_id)),
+                    FieldCondition(key="scope", match=MatchValue(value="chat_shared")),
+                ]
+            )
+        )
+
+    # 5. Agent-private — requires user_id + chat_id + agent_id
+    if scope.user_id and scope.chat_id and scope.agent_id:
+        clauses.append(
+            Filter(
+                must=[
+                    FieldCondition(key="tenant_id", match=MatchValue(value=scope.tenant_id)),
+                    FieldCondition(key="user_id", match=MatchValue(value=scope.user_id)),
+                    FieldCondition(key="chat_id", match=MatchValue(value=scope.chat_id)),
+                    FieldCondition(key="agent_id", match=MatchValue(value=scope.agent_id)),
+                    FieldCondition(key="scope", match=MatchValue(value="chat_agent")),
+                ]
+            )
+        )
+
+    return Filter(should=clauses)
 
 
 class QdrantRepository(OrchidVectorStoreRepository):
@@ -61,11 +156,22 @@ class QdrantRepository(OrchidVectorStoreRepository):
         embeddings: Embeddings,
         embedding_dimension: int = 1536,
         default_tenant: str = "default",
+        sparse_encoder: OrchidSparseEncoder | None = None,
+        client: AsyncQdrantClient | None = None,
     ):
-        self._client = AsyncQdrantClient(url=url)
+        # ``client`` injection point keeps unit tests fast (mocked
+        # AsyncQdrantClient) without sacrificing the live URL ctor for
+        # production wiring.
+        self._client = client or AsyncQdrantClient(url=url)
         self._embeddings = embeddings
         self._embedding_dimension = embedding_dimension
         self._default_tenant = default_tenant
+        self._sparse_encoder = sparse_encoder
+        # Per-namespace schema cache: ``hybrid`` (named dense + sparse,
+        # written by Stage 4+) vs ``legacy`` (unnamed dense only,
+        # written by Stage 0-3 and pre-redesign).  Populated on first
+        # ``_ensure_collection`` call.
+        self._collection_modes: dict[str, CollectionMode] = {}
 
     # ── OrchidVectorReader ──────────────────────────────────────────
 
@@ -84,24 +190,18 @@ class QdrantRepository(OrchidVectorStoreRepository):
         user → chat_shared → chat_agent).
         """
         await self._ensure_collection(namespace)
+        mode = self._collection_modes[namespace]
 
         query_vector = await self._embeddings.aembed_query(query)
-
-        # Build hierarchical filter from scope
-        if scope:
-            query_filter = build_qdrant_filter(scope)
-        else:
-            # Fallback: no scope → return only shared data
-            query_filter = Filter(
-                must=[
-                    FieldCondition(key="tenant_id", match=MatchAny(any=[self._default_tenant, "__shared__"])),
-                ]
-            )
+        query_filter = self._scope_filter(scope)
 
         async with asyncio.timeout(QDRANT_TIMEOUT):
+            # Hybrid collections need the named-vector form; legacy
+            # collections still use the unnamed shape.
+            query_arg: Any = NamedVector(name=_DENSE_NAME, vector=query_vector) if mode == "hybrid" else query_vector
             response = await self._client.query_points(
                 collection_name=namespace,
-                query=query_vector,
+                query=query_arg,
                 query_filter=query_filter,
                 limit=k,
             )
@@ -117,6 +217,62 @@ class QdrantRepository(OrchidVectorStoreRepository):
             )
             for hit in response.points
         ]
+
+    async def retrieve_sparse(
+        self,
+        query_sparse: OrchidSparseVector,
+        namespace: str,
+        k: int = 5,
+        scope: OrchidRAGScope | None = None,
+        metadata_filters: dict[str, object] | None = None,
+    ) -> list[OrchidSearchResult]:
+        """Sparse-lane retrieval for hybrid search (ADR-025)."""
+        await self._ensure_collection(namespace)
+        mode = self._collection_modes[namespace]
+        if mode != "hybrid":
+            raise NotImplementedError(
+                f"Qdrant collection '{namespace}' was created without sparse vectors — "
+                "recreate the collection to enable hybrid search."
+            )
+
+        query_filter = self._scope_filter(scope)
+        sparse_payload = NamedSparseVector(
+            name=_SPARSE_NAME,
+            vector=SparseVector(
+                indices=list(query_sparse.indices),
+                values=list(query_sparse.values),
+            ),
+        )
+
+        async with asyncio.timeout(QDRANT_TIMEOUT):
+            response = await self._client.query_points(
+                collection_name=namespace,
+                query=sparse_payload,
+                query_filter=query_filter,
+                limit=k,
+            )
+
+        return [
+            OrchidSearchResult(
+                document=Document(
+                    id=str(hit.id),
+                    page_content=hit.payload.get("content", "") if hit.payload else "",
+                    metadata=hit.payload or {},
+                ),
+                score=hit.score,
+            )
+            for hit in response.points
+        ]
+
+    def _scope_filter(self, scope: OrchidRAGScope | None) -> Filter:
+        if scope is not None:
+            return build_qdrant_filter(scope)
+        # No scope → only shared data.
+        return Filter(
+            must=[
+                FieldCondition(key="tenant_id", match=MatchAny(any=[self._default_tenant, "__shared__"])),
+            ]
+        )
 
     async def lookup_cached_tool_results(
         self,
@@ -223,7 +379,7 @@ class QdrantRepository(OrchidVectorStoreRepository):
                     doc.metadata.pop(key, None)
 
         # Re-index with new UUIDs (embedding already present)
-        points = await self._documents_to_points(docs)
+        points = await self._documents_to_points(docs, namespace=namespace)
         await self._client.upsert(collection_name=namespace, points=points)
 
         logger.info(
@@ -259,13 +415,14 @@ class QdrantRepository(OrchidVectorStoreRepository):
     ) -> None:
         """Index documents — creates the collection if it doesn't exist."""
         await self._ensure_collection(namespace)
-        points = await self._documents_to_points(documents)
+        points = await self._documents_to_points(documents, namespace=namespace)
         async with asyncio.timeout(QDRANT_TIMEOUT):
             await self._client.upsert(collection_name=namespace, points=points)
         logger.info(
-            "[Qdrant] indexed %d documents in '%s'",
+            "[Qdrant] indexed %d documents in '%s' (mode=%s)",
             len(documents),
             namespace,
+            self._collection_modes.get(namespace, "?"),
         )
 
     async def upsert(
@@ -310,28 +467,85 @@ class QdrantRepository(OrchidVectorStoreRepository):
             await self._ensure_collection(ns)
 
     async def _ensure_collection(self, namespace: str) -> None:
-        """Create the Qdrant collection if it doesn't exist yet."""
-        exists = await self._client.collection_exists(namespace)
-        if exists:
+        """Create or detect the Qdrant collection's schema mode.
+
+        New collections always use the Stage 4 hybrid schema (named
+        dense + sparse vectors).  Existing collections — including
+        pre-Stage-4 deployments with an unnamed dense vector — are
+        detected and registered as ``legacy``; reads/writes still work
+        in dense-only mode but ``retrieve_sparse`` raises
+        :class:`NotImplementedError` for them, prompting the operator
+        to recreate the collection per the migration playbook.
+        """
+        if namespace in self._collection_modes:
             return
 
+        exists = await self._client.collection_exists(namespace)
+        if exists:
+            self._collection_modes[namespace] = await self._detect_mode(namespace)
+            return
+
+        # Create with the named hybrid schema by default.
         await self._client.create_collection(
             collection_name=namespace,
-            vectors_config=VectorParams(
-                size=self._embedding_dimension,
-                distance=Distance.COSINE,
-            ),
+            vectors_config={
+                _DENSE_NAME: VectorParams(
+                    size=self._embedding_dimension,
+                    distance=Distance.COSINE,
+                ),
+            },
+            sparse_vectors_config={
+                _SPARSE_NAME: SparseVectorParams(),
+            },
         )
+        self._collection_modes[namespace] = "hybrid"
         logger.info(
-            "[Qdrant] created collection '%s' (dim=%d)",
+            "[Qdrant] created hybrid collection '%s' (dense_dim=%d, sparse=enabled)",
             namespace,
             self._embedding_dimension,
         )
 
+    async def _detect_mode(self, namespace: str) -> CollectionMode:
+        """Inspect an existing collection to decide hybrid vs legacy."""
+        info = await self._client.get_collection(namespace)
+        params = info.config.params
+        vectors = getattr(params, "vectors", None)
+        sparse = getattr(params, "sparse_vectors", None)
+
+        # ``vectors`` is either a dict (named) or a single VectorParams
+        # (unnamed legacy schema).  The hybrid mode requires named
+        # ``dense`` AND a configured sparse named slot.
+        named_dense = isinstance(vectors, dict) and _DENSE_NAME in vectors
+        named_sparse = isinstance(sparse, dict) and _SPARSE_NAME in sparse
+        if named_dense and named_sparse:
+            return "hybrid"
+
+        logger.warning(
+            "[Qdrant] collection '%s' lacks the Stage 4 named-vector schema — "
+            "hybrid search disabled. Recreate the collection to enable it: "
+            "stop writes, drop the collection, re-index via POST /index.",
+            namespace,
+        )
+        return "legacy"
+
     # ── Internal helpers ──────────────────────────────────────
 
-    async def _documents_to_points(self, documents: list[Document]) -> list[PointStruct]:
-        """Convert Documents to Qdrant PointStructs, embedding texts as needed."""
+    async def _documents_to_points(
+        self,
+        documents: list[Document],
+        *,
+        namespace: str | None = None,
+    ) -> list[PointStruct]:
+        """Convert Documents to Qdrant PointStructs, embedding texts as needed.
+
+        ``namespace`` selects the schema mode (hybrid vs legacy) and
+        flows into the sparse encoder so per-namespace BM25 stats stay
+        isolated.  When ``namespace`` is ``None`` (e.g. duplicate-with-
+        new-scope path), points are written in legacy unnamed shape —
+        the call sites that rely on this set ``namespace=None`` only
+        when they're already inside a hybrid-aware path that re-routes
+        through ``index()``.
+        """
         # Check which docs already have pre-computed embeddings (stored in metadata)
         texts_to_embed: list[str] = []
         embed_indices: list[int] = []
@@ -349,6 +563,17 @@ class QdrantRepository(OrchidVectorStoreRepository):
             for idx, emb in zip(embed_indices, computed):
                 doc_embeddings[idx] = emb
 
+        # Sparse vectors — only computed when the namespace is hybrid
+        # AND a sparse encoder is wired.  Legacy collections write
+        # unnamed dense vectors only.
+        mode: CollectionMode = self._collection_modes.get(namespace, "legacy") if namespace else "legacy"
+        sparse_vectors: list[OrchidSparseVector] | None = None
+        if mode == "hybrid" and self._sparse_encoder is not None:
+            sparse_vectors = await self._sparse_encoder.encode_documents(
+                [doc.page_content for doc in documents],
+                namespace=namespace,
+            )
+
         points: list[PointStruct] = []
         for i, doc in enumerate(documents):
             # Build payload: exclude internal _embedding key
@@ -361,10 +586,23 @@ class QdrantRepository(OrchidVectorStoreRepository):
             if "tenant_id" not in payload:
                 payload["tenant_id"] = self._default_tenant
 
+            dense_vec = doc_embeddings[i] or []
+            if mode == "hybrid":
+                vector_payload: Any = {_DENSE_NAME: dense_vec}
+                if sparse_vectors is not None:
+                    sv = sparse_vectors[i]
+                    if sv.indices:
+                        vector_payload[_SPARSE_NAME] = SparseVector(
+                            indices=list(sv.indices),
+                            values=list(sv.values),
+                        )
+            else:
+                vector_payload = dense_vec
+
             points.append(
                 PointStruct(
                     id=str(uuid.uuid4()),
-                    vector=doc_embeddings[i] or [],
+                    vector=vector_payload,
                     payload=payload,
                 )
             )
