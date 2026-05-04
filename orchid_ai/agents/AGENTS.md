@@ -104,6 +104,43 @@ Do NOT import `litellm` directly in consumer agents. Use the injected `_chat_mod
 
 Don't merge these back into `GenericAgent`. If you need to modify skill detection, edit `skill_detector.py`.
 
+### Mini-agents (Phase B — ADR-021)
+
+Three sibling modules implement opt-in self-cloning fan-out, kept
+deliberately separate from `GenericAgent` to honour SRP:
+
+- `mini_agent_decomposer.py` — `MiniAgentSubTask`,
+  `MiniAgentDecomposition`, the `MiniAgentDecomposer` class, and the
+  free function `maybe_decompose()`.  Runs a deterministic
+  structured-output LLM call that decides whether the request
+  decomposes into independent sub-tasks; enforces the parent's
+  `tool_allowlist_mode` against the decomposer's `allowed_tools`.
+- `mini_agent_node.py` — `MiniAgentOutcome` model and
+  `mini_agent_node_factory()`.  Runs ONE focused agentic loop per
+  ``Send`` against the parent's MCP clients with a curated tool
+  subset; wraps the loop in `asyncio.wait_for(timeout)`; converts
+  exceptions to `status="failed"` outcomes; **re-raises
+  `langgraph.errors.GraphBubbleUp`** (HITL `interrupt()`) so
+  LangGraph's runtime can pause the graph for approval.
+- `mini_agent_aggregator.py` — `aggregator_node_factory()`.
+  Synthesises the parent's final `AIMessage` from the per-mini
+  outcomes; short-circuits with a deterministic error message when
+  `0 / N` outcomes succeeded; merges `tool_results` from successful
+  outcomes only into `mcp_context[parent_name]`.
+
+The decomposer hook lives at the **graph-wrapper** level
+(`graph._create_agent_node`), invoked via the `maybe_decompose()`
+free function.  This lets ANY `OrchidAgent` subclass — `GenericAgent`
+or a custom class with its own `run()` — opt in via YAML
+`mini_agent.enabled: true`, without coordinating with its own
+`run()` implementation.  The mini node bypasses the parent's
+`run()` entirely; it builds its own focused system prompt
+(`parent.prompt + sub_task.instruction + tools list`) and runs an
+`AgenticLoop` with `is_mini=True` and the resolved `tool_subset`.
+
+Don't merge these back into `GenericAgent`. The graph-level wrapper
+is the only integration point.
+
 ## Common Mistakes
 
 - **Using relative imports in custom agents.** Files outside `src/` must use absolute imports (`from orchid_ai.core.agent import OrchidAgent`).

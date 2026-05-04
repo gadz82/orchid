@@ -431,6 +431,13 @@ class GenericAgent(OrchidAgent):
             )
         messages.append({"role": "user", "content": query})
 
+        # ── Resolve parallel-dispatch safety map (Phase A) ──
+        parallel_safety = self._resolve_parallel_safety(
+            tool_map=tool_map,
+            builtin_tool_names=builtin_tool_names,
+            caps=caps,
+        )
+
         # ── Run the loop ────────────────────────────────────
         loop = AgenticLoop(
             agent_name=self.name,
@@ -438,8 +445,78 @@ class GenericAgent(OrchidAgent):
             tool_map=tool_map,
             all_tool_defs=all_tool_defs,
             temperature=llm_config.temperature if llm_config else 0.2,
+            parallel_safety=parallel_safety,
         )
         return await loop.run(messages)
+
+    # ── Parallel-dispatch safety resolver (Phase A) ─────────────
+
+    def _resolve_parallel_safety(
+        self,
+        *,
+        tool_map: dict[str, Any],
+        builtin_tool_names: set[str],
+        caps: MCPCapabilities,
+    ) -> dict[str, bool] | None:
+        """Resolve which tools may run in parallel within one round.
+
+        Returns ``None`` when the agent has not opted in to
+        ``parallel_tools`` — the loop then runs strictly sequentially
+        (today's behaviour).  When opted in, returns a per-tool-name
+        bool computed via this precedence:
+
+        1. ``requires_approval=True`` → ``False`` (HITL must serialise).
+        2. Built-in tool → ``True`` iff its name is in the agent's
+           precomputed ``parallel_safe_builtin_tools`` set; else ``False``.
+        3. MCP tool with explicit YAML ``parallel_safe`` (``True``/
+           ``False``) → use it.
+        4. MCP tool without YAML override → ``True`` iff the server
+           advertised ``readOnlyHint=True`` for that tool; else ``False``.
+        """
+        if not self._config.parallel_tools:
+            return None
+
+        approval_set = self._config.approval_tools or set()
+        builtin_safe = self._config.parallel_safe_builtin_tools or set()
+        mcp_overrides = self._mcp_parallel_overrides()
+
+        safety: dict[str, bool] = {}
+        for tool_name in tool_map:
+            if tool_name in approval_set:
+                safety[tool_name] = False
+                continue
+            if tool_name in builtin_tool_names:
+                safety[tool_name] = tool_name in builtin_safe
+                continue
+
+            override = mcp_overrides.get(tool_name)
+            if override is not None:
+                safety[tool_name] = override
+                continue
+
+            annotations = caps.tool_annotations.get(tool_name)
+            safety[tool_name] = bool(annotations and annotations.read_only_hint is True)
+
+        return safety
+
+    def _mcp_parallel_overrides(self) -> dict[str, bool | None]:
+        """Collect explicit per-tool ``parallel_safe`` overrides from YAML.
+
+        Walks the agent's ``mcp_servers[*].tools`` and returns a flat
+        ``{tool_name: True|False|None}`` map.  Wildcarded servers
+        (``tools: "*"``) leave their tools out of this map — those
+        tools fall through to the MCP-annotation branch in
+        :meth:`_resolve_parallel_safety`.
+        """
+        overrides: dict[str, bool | None] = {}
+        for server in self._config.mcp_servers:
+            for tool in server.tools:
+                # ``parallel_safe`` is ``None`` by default, meaning
+                # "no explicit override — defer to the MCP annotation".
+                if tool.parallel_safe is None:
+                    continue
+                overrides[tool.name] = tool.parallel_safe
+        return overrides
 
     # ── System prompt builder for the agentic loop ──────────────
 
