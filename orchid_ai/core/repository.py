@@ -26,6 +26,7 @@ from typing import Any, ClassVar
 from langchain_core.documents import Document
 
 from .scopes import OrchidRAGScope  # noqa: F401 — used in type annotations
+from .sparse import OrchidSparseVector
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,31 @@ class OrchidVectorReader(ABC):
     ) -> list[OrchidSearchResult]:
         """Return the k most relevant documents for the query."""
         ...
+
+    async def retrieve_sparse(
+        self,
+        query_sparse: OrchidSparseVector,
+        namespace: str,
+        k: int = 5,
+        scope: OrchidRAGScope | None = None,
+        metadata_filters: dict[str, object] | None = None,
+    ) -> list[OrchidSearchResult]:
+        """Retrieve via the sparse / lexical lane (ADR-025).
+
+        Default body raises :class:`NotImplementedError` so existing
+        custom readers stay LSP-compliant — :class:`HybridRetrieval`
+        catches the error and degrades to dense-only with a warning.
+
+        Backends that support hybrid (Qdrant from Stage 4 onward,
+        OpenSearch / Weaviate / pgvector via integrator-supplied
+        impls) override this method to translate the sparse vector
+        into the backend's native sparse-search primitive.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support sparse retrieval. "
+            "Hybrid search requires a backend with a sparse lane "
+            "(e.g. Qdrant with named sparse vectors)."
+        )
 
     async def lookup_cached_tool_results(
         self,

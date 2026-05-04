@@ -8,7 +8,7 @@ import pytest
 
 from orchid_ai.core.repository import Document, OrchidVectorReader, OrchidVectorWriter
 from orchid_ai.rag.dynamic import _tool_data_to_documents, inject_to_rag
-from orchid_ai.rag.null import NullVectorReader
+from orchid_ai.rag.backends.null import NullVectorReader
 from orchid_ai.rag.scopes import OrchidRAGScope
 
 

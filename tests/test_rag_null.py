@@ -1,10 +1,10 @@
-"""Tests for src.rag.null — NullVectorReader."""
+"""Tests for the null backends — NullVectorReader / NullDocStore / NullGraphStore."""
 
 from __future__ import annotations
 
 import pytest
 
-from orchid_ai.rag.null import NullVectorReader
+from orchid_ai.rag.backends.null import NullVectorReader
 from orchid_ai.rag.scopes import OrchidRAGScope
 
 

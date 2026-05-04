@@ -140,58 +140,6 @@ async def compress_conversation_history(
     return compressed
 
 
-# ── Query reformulation ────────────────────────────────────────
-
-_REFORMULATE_PROMPT = (
-    "You are a query reformulation assistant. Given the conversation history "
-    "and the user's latest message, rewrite the message as a clear, standalone "
-    "search query that can be used to search a database or menu.\n\n"
-    "RULES:\n"
-    "- Resolve pronouns and references ('it', 'that', 'the first one', 'yes')\n"
-    "- Extract the core intent (what the user actually wants)\n"
-    "- Keep it short and specific (under 20 words)\n"
-    "- If the query is already clear and standalone, return it unchanged\n"
-    "- Return ONLY the reformulated query, nothing else"
-)
-
-
-async def reformulate_query(
-    query: str,
-    state: OrchidAgentState,
-    *,
-    chat_model: Any,
-    agent_name: str = "",
-) -> str:
-    """Rewrite the user's query as a standalone search query using conversation history.
-
-    Returns the original query unchanged on failure or when no history exists.
-    """
-    if not chat_model:
-        return query
-
-    history = extract_conversation_history(state, max_turns=5, max_chars=500)
-    if not history:
-        return query
-
-    try:
-        messages: list[dict[str, str]] = [
-            {"role": "system", "content": _REFORMULATE_PROMPT},
-            *history,
-            {"role": "user", "content": query},
-        ]
-
-        result = await chat_model.ainvoke(messages, temperature=0)
-        reformulated = (result.content or "").strip()
-
-        if reformulated and len(reformulated) < 200:
-            logger.info("[%s] Query reformulated: '%s' -> '%s'", agent_name, query[:80], reformulated[:80])
-            return reformulated
-    except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
-        logger.warning("[%s] Query reformulation failed: %s", agent_name, exc)
-
-    return query
-
-
 # ── RAG retrieval ──────────────────────────────────────────────
 
 
@@ -246,31 +194,59 @@ async def summarise(
     temperature: float = 0.2,
     conversation_history: list[dict[str, str]] | None = None,
     prior_tool_context: dict[str, Any] | None = None,
+    history_reminder: str | None = None,
+    prior_results_header: str | None = None,
+    rag_section_header: str | None = None,
+    user_content_template: str | None = None,
+    prior_results_max_chars: int = 4000,
 ) -> str:
     """Use LLM to produce a human-readable summary of RAG + MCP data.
 
     Standalone version of ``OrchidAgent.summarise()``.
+
+    The four ``*_header`` / ``*_template`` / ``*_reminder`` overrides
+    are forwarded by ``OrchidAgent.summarise()`` from the agent's
+    :class:`OrchidAgentPromptConfig` and default to the legacy
+    strings when ``None`` — supplying nothing therefore produces
+    output bit-identical to versions before this knob existed.
     """
+    # Local import — schema_prompts has zero external deps so this
+    # stays cheap.  Importing at module top would create a circular
+    # path through ``orchid_ai.config`` for callers that build their
+    # own helpers.summarise() bridge.
+    from ..config.schema_prompts import (
+        DEFAULT_SUMMARISE_HISTORY_REMINDER,
+        DEFAULT_SUMMARISE_PRIOR_RESULTS_HEADER,
+        DEFAULT_SUMMARISE_RAG_HEADER,
+        DEFAULT_SUMMARISE_USER_TEMPLATE,
+    )
+
+    history_reminder = history_reminder if history_reminder is not None else DEFAULT_SUMMARISE_HISTORY_REMINDER
+    prior_results_header = (
+        prior_results_header if prior_results_header is not None else DEFAULT_SUMMARISE_PRIOR_RESULTS_HEADER
+    )
+    rag_section_header = rag_section_header if rag_section_header is not None else DEFAULT_SUMMARISE_RAG_HEADER
+    user_content_template = (
+        user_content_template if user_content_template is not None else DEFAULT_SUMMARISE_USER_TEMPLATE
+    )
+
     enriched_system = system_prompt
 
     if conversation_history:
-        enriched_system += (
-            "\n\nIMPORTANT: The conversation history below shows prior exchanges. "
-            "Always focus on the user's LATEST message and its relationship to "
-            "the most recent topic. Do NOT change topic or introduce unrelated "
-            "content unless the user explicitly asks for something new."
-        )
+        enriched_system += history_reminder
 
     if prior_tool_context:
-        prior_json = json.dumps(prior_tool_context, indent=2, default=str)[:4000]
-        enriched_system += f"\n\n--- Previous Tool Results (from prior turns) ---\n{prior_json}"
+        prior_json = json.dumps(prior_tool_context, indent=2, default=str)[:prior_results_max_chars]
+        enriched_system += f"{prior_results_header}{prior_json}"
 
     rag_section = ""
     if rag_data:
-        rag_section = "Background knowledge (from RAG):\n" + json.dumps(rag_data, indent=2, default=str) + "\n\n"
+        rag_section = rag_section_header + json.dumps(rag_data, indent=2, default=str) + "\n\n"
 
-    user_content = (
-        f"User query: {query}\n\n{rag_section}Live data (from API):\n{json.dumps(mcp_data, indent=2, default=str)}"
+    user_content = user_content_template.format(
+        query=query,
+        rag_section=rag_section,
+        mcp_data=json.dumps(mcp_data, indent=2, default=str),
     )
 
     messages: list[dict[str, str]] = [{"role": "system", "content": enriched_system}]

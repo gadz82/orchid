@@ -33,7 +33,15 @@ from .core.auth_config import (
     OrchidUpstreamOAuthConfig,
     OrchidUpstreamTokenResponse,
 )
+from .core.doc_store import OrchidDocStore
+from .core.graph_store import (
+    OrchidEdge,
+    OrchidEntity,
+    OrchidEntityExtractor,
+    OrchidGraphStore,
+)
 from .core.identity import OrchidIdentityError, OrchidIdentityResolver
+from .core.ingestion import OrchidChunk, OrchidChunkPostProcessor, OrchidIngestionStrategy
 from .core.mcp import (
     OrchidMCPAuthRequiredError,
     OrchidMCPClient,
@@ -62,6 +70,8 @@ from .core.repository import (
     OrchidVectorStoreRepository,
     OrchidVectorWriter,
 )
+from .core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
+from .core.sparse import OrchidSparseEncoder, OrchidSparseVector
 from .core.state import OrchidAgentState, OrchidAuthContext
 from .graph.graph import build_graph
 from .graph.supervisor import OrchidRoutingDecision
@@ -92,8 +102,44 @@ from .persistence.mcp_token_factory import build_mcp_token_store
 from .persistence.mcp_token_sqlite import OrchidSQLiteMCPTokenStore
 from .persistence.sqlite import OrchidSQLiteChatStorage
 from .plugins import iter_entry_point_plugins
-from .rag.factory import build_reader
+from .documents.post_processors import ContextualHeaderPostProcessor
+from .documents.strategies import (
+    HeaderedIngestion,
+    HierarchicalIngestion,
+    RecursiveIngestion,
+    SemanticIngestion,
+    get_ingestion_strategy,
+    get_post_processor,
+    register_ingestion_strategy,
+    register_post_processor,
+)
+from .rag.factory import (
+    build_doc_store,
+    build_graph_store,
+    build_reader,
+    build_sparse_encoder,
+    register_doc_store_backend,
+    register_graph_store_backend,
+    register_sparse_encoder_backend,
+    register_vector_backend,
+)
 from .rag.scopes import OrchidRAGScope
+from .rag.strategies import (
+    HybridRetrieval,
+    HyDERetrieval,
+    MultiQueryRetrieval,
+    SimpleRetrieval,
+    get_retrieval_strategy,
+    register_retrieval_strategy,
+)
+from .rag.transformers import (
+    DecomposeTransformer,
+    HyDETransformer,
+    MultiQueryTransformer,
+    ReformulateTransformer,
+    get_query_transformer,
+    register_query_transformer,
+)
 from .runtime import OrchidRuntime
 
 # ``utils.import_class`` is intentionally NOT re-exported on the top-level
@@ -116,8 +162,16 @@ __all__ = [
     "OrchidAuthExchangeClient",
     "OrchidAuthExchangeError",
     "OrchidChatStorage",
+    "OrchidChunk",
+    "OrchidChunkPostProcessor",
+    "OrchidDocStore",
+    "OrchidEdge",
+    "OrchidEntity",
+    "OrchidEntityExtractor",
+    "OrchidGraphStore",
     "OrchidIdentityError",
     "OrchidIdentityResolver",
+    "OrchidIngestionStrategy",
     "OrchidMCPClient",
     "OrchidMCPClientRegistrationStore",
     "OrchidMCPDiscoverable",
@@ -126,6 +180,10 @@ __all__ = [
     "OrchidMCPGatewayTokenStore",
     "OrchidMCPToolCaller",
     "OrchidMCPTokenStore",
+    "OrchidQueryTransformer",
+    "OrchidRetrievalStrategy",
+    "OrchidSparseEncoder",
+    "OrchidSparseVector",
     "OrchidVectorReader",
     "OrchidVectorStoreAdmin",
     "OrchidVectorStoreRepository",
@@ -176,15 +234,45 @@ __all__ = [
     # ── Runtime + observability ───────────────────────
     "OrchidRuntime",
     "OrchidMetricsHandler",
-    # ── Factories ─────────────────────────────────────
+    # ── Built-in ingestion strategies + post-processors ─
+    "ContextualHeaderPostProcessor",
+    "HeaderedIngestion",
+    "HierarchicalIngestion",
+    "RecursiveIngestion",
+    "SemanticIngestion",
+    # ── Built-in retrieval strategies + transformers ──
+    "DecomposeTransformer",
+    "HybridRetrieval",
+    "HyDERetrieval",
+    "HyDETransformer",
+    "MultiQueryRetrieval",
+    "MultiQueryTransformer",
+    "ReformulateTransformer",
+    "SimpleRetrieval",
+    # ── Factories + RAG registries ────────────────────
     "build_chat_model",
     "build_chat_storage",
     "build_checkpointer",
+    "build_doc_store",
     "build_graph",
+    "build_graph_store",
     "build_mcp_client_registration_store",
     "build_mcp_token_store",
     "build_reader",
+    "build_sparse_encoder",
+    "get_ingestion_strategy",
+    "get_post_processor",
+    "get_query_transformer",
+    "get_retrieval_strategy",
     "iter_entry_point_plugins",
     "load_config",
+    "register_doc_store_backend",
+    "register_graph_store_backend",
+    "register_ingestion_strategy",
+    "register_post_processor",
+    "register_query_transformer",
+    "register_retrieval_strategy",
+    "register_sparse_encoder_backend",
+    "register_vector_backend",
     "shutdown_checkpointer",
 ]

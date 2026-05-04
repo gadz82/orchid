@@ -9,6 +9,7 @@ from .schema_guardrails import OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPServerConfig, OrchidToolConfig
 from .schema_mini_agent import OrchidMiniAgentConfig
+from .schema_prompts import OrchidAgentPromptConfig
 from .schema_rag import OrchidRAGConfig, OrchidRAGDefaultsConfig
 from .schema_skills import (
     OrchidAgentSkillConfig,
@@ -93,6 +94,13 @@ class OrchidAgentConfig(BaseModel):
     # within a single supervisor turn).  See ``schema_mini_agent.py``
     # for field semantics.
     mini_agent: OrchidMiniAgentConfig = Field(default_factory=OrchidMiniAgentConfig)
+
+    # Customisable templates for the agentic-loop system prompt — the
+    # six section headers + per-resource bodies + truncation knobs.
+    # Defaults preserve the legacy strings so omitting the block is a
+    # no-op.  See :class:`OrchidAgentPromptConfig` for the full field
+    # list and placeholder contracts.
+    prompt_sections: OrchidAgentPromptConfig = Field(default_factory=OrchidAgentPromptConfig)
 
     model_config = {"populate_by_name": True}
 
@@ -179,12 +187,40 @@ def _apply_defaults(
         agent.rag.enabled = defaults.rag.enabled
     if agent.rag.rag_ttl == 0 and defaults.rag.rag_ttl != 0:
         agent.rag.rag_ttl = defaults.rag.rag_ttl
-    if not defaults.rag.reformulate_queries:
-        agent.rag.reformulate_queries = False
-    if agent.rag.retriever_type is None:
-        agent.rag.retriever_type = defaults.rag.retriever_type
     if agent.rag.max_context_chars is None:
         agent.rag.max_context_chars = defaults.rag.max_context_chars
+
+    # Merge retrieval block — strategy + transformers inherit
+    # independently so an agent can override one without losing the
+    # other.  ``strategy`` falls back to ``"simple"`` when neither
+    # agent nor defaults set it; ``query_transformers`` falls back to
+    # ``[]`` (no transformers) on the same path.
+    if agent.rag.retrieval.strategy is None:
+        agent.rag.retrieval.strategy = defaults.rag.retrieval.strategy or "simple"
+    if agent.rag.retrieval.query_transformers is None:
+        agent.rag.retrieval.query_transformers = list(defaults.rag.retrieval.query_transformers or [])
+    if not agent.rag.retrieval.metadata_filters and defaults.rag.retrieval.metadata_filters:
+        agent.rag.retrieval.metadata_filters = dict(defaults.rag.retrieval.metadata_filters)
+
+    # Merge transformer prompt overrides — each scalar field inherits
+    # independently when the agent leaves it ``None``, so an agent can
+    # override one transformer's prompt without losing the others.
+    _merge_transformer_prompts(agent.rag.retrieval, defaults.rag.retrieval)
+
+    # Merge ingestion block — ``strategy`` falls back to ``"recursive"``
+    # when neither side sets it; chunk knobs inherit independently.
+    if agent.rag.ingestion.strategy is None:
+        agent.rag.ingestion.strategy = defaults.rag.ingestion.strategy or "recursive"
+    if agent.rag.ingestion.chunk_size == 1000 and defaults.rag.ingestion.chunk_size != 1000:
+        agent.rag.ingestion.chunk_size = defaults.rag.ingestion.chunk_size
+    if agent.rag.ingestion.chunk_overlap == 200 and defaults.rag.ingestion.chunk_overlap != 200:
+        agent.rag.ingestion.chunk_overlap = defaults.rag.ingestion.chunk_overlap
+    if agent.rag.ingestion.parent_chunk_size == 0 and defaults.rag.ingestion.parent_chunk_size != 0:
+        agent.rag.ingestion.parent_chunk_size = defaults.rag.ingestion.parent_chunk_size
+    if agent.rag.ingestion.parent_chunk_overlap == 200 and defaults.rag.ingestion.parent_chunk_overlap != 200:
+        agent.rag.ingestion.parent_chunk_overlap = defaults.rag.ingestion.parent_chunk_overlap
+    if not agent.rag.ingestion.post_processors and defaults.rag.ingestion.post_processors:
+        agent.rag.ingestion.post_processors = list(defaults.rag.ingestion.post_processors)
 
     # Collect injectable MCP tool names + TTLs
     agent_ttl = agent.rag.rag_ttl
@@ -239,3 +275,27 @@ def _apply_defaults(
                     f"mini-agents may only be enabled on top-level agents (no nesting)."
                 )
             _apply_defaults(child, child_name, defaults, global_tools)
+
+
+def _merge_transformer_prompts(agent_retrieval: object, defaults_retrieval: object) -> None:
+    """Inherit unset transformer-prompt overrides from the defaults block.
+
+    Each scalar field is treated independently — leaving any field
+    ``None`` on the agent inherits whatever the defaults block sets
+    (which is also ``None`` in the typical case, so the transformer
+    falls back to its module-level default).  Splitting this out keeps
+    :func:`_apply_defaults` readable.
+    """
+    agent_prompts = agent_retrieval.transformer_prompts  # type: ignore[attr-defined]
+    default_prompts = defaults_retrieval.transformer_prompts  # type: ignore[attr-defined]
+
+    if agent_prompts.multi_query is None and default_prompts.multi_query is not None:
+        agent_prompts.multi_query = default_prompts.multi_query
+    if agent_prompts.decompose is None and default_prompts.decompose is not None:
+        agent_prompts.decompose = default_prompts.decompose
+    if agent_prompts.reformulate is None and default_prompts.reformulate is not None:
+        agent_prompts.reformulate = default_prompts.reformulate
+    if agent_prompts.hyde.single is None and default_prompts.hyde.single is not None:
+        agent_prompts.hyde.single = default_prompts.hyde.single
+    if agent_prompts.hyde.multi is None and default_prompts.hyde.multi is not None:
+        agent_prompts.hyde.multi = default_prompts.hyde.multi
