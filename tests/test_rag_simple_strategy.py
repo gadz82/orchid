@@ -27,7 +27,7 @@ async def test_simple_retrieval_passes_through_to_reader():
     results = await SimpleRetrieval().retrieve(query="q", namespace="kb", scope=scope, k=3, reader=reader)
 
     assert results == expected
-    reader.retrieve.assert_called_once_with(query="q", namespace="kb", k=3, scope=scope)
+    reader.retrieve.assert_called_once_with(query="q", namespace="kb", k=3, scope=scope, metadata_filters=None)
 
 
 @pytest.mark.asyncio

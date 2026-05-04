@@ -217,6 +217,7 @@ def _instantiate_agent(
     default_retry: int = 0,
     mcp_client_factory: MCPClientFactory | None = None,
     summary_config: dict[str, Any] | None = None,
+    graph_store: Any | None = None,
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -269,6 +270,10 @@ def _instantiate_agent(
         kwargs["chat_model"] = agent_chat_model
     if summary_config:
         kwargs["summary_config"] = summary_config
+    # ADR-026 — graph store flows through so ``graph_rag`` retrieval
+    # can traverse entities/edges.
+    if graph_store is not None:
+        kwargs["graph_store"] = graph_store
 
     return cls(**kwargs)
 
@@ -282,6 +287,7 @@ def _build_subgraph(
     default_fallback: str | None = None,
     default_retry: int = 0,
     mcp_client_factory: MCPClientFactory | None = None,
+    graph_store: Any | None = None,
 ) -> Any:
     """
     Build a sub-graph for an agent with children.
@@ -300,6 +306,7 @@ def _build_subgraph(
             default_fallback,
             default_retry,
             mcp_client_factory,
+            graph_store=graph_store,
         )
         children_agents.append(child_agent)
 
@@ -525,6 +532,11 @@ def build_graph(
         logger.info("[Graph] LLM response caching enabled (InMemoryCache)")
 
     reader = runtime.get_reader()
+    # ADR-026 — graph store reaches the agent so ``graph_rag``
+    # retrieval can traverse entities/edges.  Returns a NullGraphStore
+    # when the runtime didn't wire one — GraphRAGRetrieval detects
+    # that via ``is_null`` and falls back to SimpleRetrieval.
+    graph_store = runtime.get_graph_store()
     default_model = runtime.default_model
 
     # ── Resolve default LLM config from YAML ──
@@ -591,6 +603,7 @@ def build_graph(
                 default_fallback,
                 default_retry,
                 mcp_factory,
+                graph_store=graph_store,
             )
             subgraph_nodes[agent_name] = subgraph
         else:
@@ -604,6 +617,7 @@ def build_graph(
                 default_retry,
                 mcp_factory,
                 summary_config=summary_cfg,
+                graph_store=graph_store,
             )
             agents.append(agent)
 

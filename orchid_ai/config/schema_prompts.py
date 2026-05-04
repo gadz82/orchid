@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# ── Default templates (mirror the legacy hardcoded strings) ────
+# ── Default templates ──────────────────────────────────────────
 
 #: Header introducing the JSON dump of prior-turn tool results.
 DEFAULT_PRIOR_RESULTS_HEADER = "\n--- Previous Tool Results (from prior turns) ---"
@@ -85,14 +85,11 @@ DEFAULT_SUMMARISE_USER_TEMPLATE = "User query: {query}\n\n{rag_section}Live data
 class OrchidAgentPromptConfig(BaseModel):
     """Per-agent overrides for the agentic-loop system prompt assembly.
 
-    All fields default to the legacy strings — supplying nothing in
-    YAML produces output bit-identical to versions before this config
-    block existed.
-
-    Placeholders are resolved with :py:meth:`str.format`; integrators
-    must keep every placeholder used by the corresponding default
-    template (the framework asserts this at validation time when a
-    custom value is supplied).
+    All fields default to the module-level ``DEFAULT_*`` constants
+    above.  Placeholders are resolved with :py:meth:`str.format`;
+    integrators must keep every placeholder used by the corresponding
+    default template (the framework asserts this at validation time
+    when a custom value is supplied).
     """
 
     model_config = ConfigDict(extra="forbid")

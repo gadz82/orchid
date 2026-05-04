@@ -14,14 +14,19 @@ and parent-in-metadata mode) and no post-processors.  Stage 2 adds
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from ...core.ingestion import OrchidChunkPostProcessor, OrchidIngestionStrategy
+from ..chunker import ChunkConfig
 from ..post_processors.contextual_headers import ContextualHeaderPostProcessor
 from ..post_processors.entity_extraction import EntityExtractionPostProcessor
 from .headered import HeaderedIngestion
 from .hierarchical import HierarchicalIngestion
 from .recursive import RecursiveIngestion
 from .semantic import SemanticIngestion
+
+if TYPE_CHECKING:
+    from ...config.schema_rag import OrchidIngestionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +81,47 @@ def get_ingestion_strategy(name: str) -> OrchidIngestionStrategy:
     return cls()
 
 
+_CHUNK_CONFIG_STRATEGIES: tuple[type[OrchidIngestionStrategy], ...] = (
+    RecursiveIngestion,
+    HierarchicalIngestion,
+    HeaderedIngestion,
+)
+
+
+def build_ingestion_strategy(config: OrchidIngestionConfig) -> OrchidIngestionStrategy:
+    """Construct an ingestion strategy from an :class:`OrchidIngestionConfig`.
+
+    Bridges YAML config → constructed strategy.  For
+    :class:`ChunkConfig`-driven strategies (``recursive``,
+    ``hierarchical``, ``headered``) the chunk knobs from the YAML
+    block flow into ``ChunkConfig``.  Other strategies (e.g.
+    ``semantic``) are constructed zero-arg — their per-strategy
+    knobs are not (yet) plumbed through ``OrchidIngestionConfig``.
+
+    Falls back to a default-configured ``RecursiveIngestion`` when
+    the strategy name is unknown.
+    """
+    name = config.strategy or "recursive"
+    cls = INGESTION_REGISTRY.get(name)
+    if cls is None:
+        logger.warning(
+            "[IngestionStrategies] Unknown strategy '%s' — falling back to 'recursive'",
+            name,
+        )
+        cls = INGESTION_REGISTRY.get("recursive", RecursiveIngestion)
+
+    if issubclass(cls, _CHUNK_CONFIG_STRATEGIES):
+        return cls(
+            ChunkConfig(
+                chunk_size=config.chunk_size,
+                chunk_overlap=config.chunk_overlap,
+                parent_chunk_size=config.parent_chunk_size,
+                parent_chunk_overlap=config.parent_chunk_overlap,
+            )
+        )
+    return cls()
+
+
 # ── Chunk post-processors ─────────────────────────────────────
 
 
@@ -126,6 +172,7 @@ __all__ = [
     "POST_PROCESSOR_REGISTRY",
     "RecursiveIngestion",
     "SemanticIngestion",
+    "build_ingestion_strategy",
     "clear_ingestion_strategies",
     "clear_post_processors",
     "get_ingestion_strategy",

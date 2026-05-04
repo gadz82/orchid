@@ -28,9 +28,6 @@ DEFAULT_MULTI_QUERY_PROMPT = (
     "Output ONLY the queries, one per line.  No numbering, no explanation."
 )
 
-# Backward-compatible alias for callers that imported the private name.
-_MULTI_QUERY_PROMPT = DEFAULT_MULTI_QUERY_PROMPT
-
 
 class MultiQueryTransformer(OrchidQueryTransformer):
     """Ask an LLM for ``num_queries`` alternative phrasings of the query.

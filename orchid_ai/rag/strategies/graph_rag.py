@@ -92,13 +92,27 @@ class GraphRAGRetrieval(OrchidRetrievalStrategy):
     ) -> list[OrchidSearchResult]:
         if graph_store is None or getattr(graph_store, "is_null", False):
             logger.warning("[GraphRAGRetrieval] no graph_store wired — falling back to SimpleRetrieval")
-            return await SimpleRetrieval().retrieve(query=query, namespace=namespace, scope=scope, k=k, reader=reader)
+            return await SimpleRetrieval().retrieve(
+                query=query,
+                namespace=namespace,
+                scope=scope,
+                k=k,
+                reader=reader,
+                metadata_filters=metadata_filters,
+            )
 
         # Step 1 — resolve seed entities mentioned in the query.
         seed_entities = await graph_store.find_entities(query=query, scope=scope, k=self._seed_k)
         if not seed_entities:
             logger.debug("[GraphRAGRetrieval] no seed entities resolved for %r — vector-only", query)
-            return await SimpleRetrieval().retrieve(query=query, namespace=namespace, scope=scope, k=k, reader=reader)
+            return await SimpleRetrieval().retrieve(
+                query=query,
+                namespace=namespace,
+                scope=scope,
+                k=k,
+                reader=reader,
+                metadata_filters=metadata_filters,
+            )
 
         # Step 2 — walk the graph.
         entities, edges = await graph_store.neighbours(
@@ -111,7 +125,13 @@ class GraphRAGRetrieval(OrchidRetrievalStrategy):
         # Step 3 — fetch text chunks via the vector lane.
         chunk_results: list[OrchidSearchResult] = []
         if self._fuse_with_vectors:
-            chunk_results = await reader.retrieve(query=query, namespace=namespace, k=max(k * 2, k + 1), scope=scope)
+            chunk_results = await reader.retrieve(
+                query=query,
+                namespace=namespace,
+                k=max(k * 2, k + 1),
+                scope=scope,
+                metadata_filters=metadata_filters,
+            )
 
         # Step 4 — serialise the sub-graph as a synthetic result.
         graph_text = self._serialiser(entities, edges)

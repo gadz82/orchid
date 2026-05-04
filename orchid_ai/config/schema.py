@@ -1,9 +1,7 @@
-"""Backward-compatible re-exports for the agents.yaml configuration schema.
+"""Umbrella module that re-exports the agents.yaml configuration schema.
 
-Originally a single 612-line module bundling 19 Pydantic classes plus
-the defaults-merging pass; the contracts now live in themed sibling
-files. The single import path ``orchid_ai.config.schema`` is unchanged
-for every consumer.
+The Pydantic classes live in themed sibling files; this module is the
+single import path (``orchid_ai.config.schema``) every consumer uses.
 
 Themed modules:
   - :mod:`schema_llm` — LLM configuration

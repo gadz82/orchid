@@ -206,9 +206,8 @@ async def summarise(
 
     The four ``*_header`` / ``*_template`` / ``*_reminder`` overrides
     are forwarded by ``OrchidAgent.summarise()`` from the agent's
-    :class:`OrchidAgentPromptConfig` and default to the legacy
-    strings when ``None`` — supplying nothing therefore produces
-    output bit-identical to versions before this knob existed.
+    :class:`OrchidAgentPromptConfig`.  ``None`` falls back to the
+    module-level defaults defined in ``schema_prompts``.
     """
     # Local import — schema_prompts has zero external deps so this
     # stays cheap.  Importing at module top would create a circular

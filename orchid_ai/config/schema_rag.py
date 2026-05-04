@@ -147,6 +147,11 @@ class OrchidRetrievalConfig(BaseModel):
     strategy: str | None = None
     query_transformers: list[str] | None = None
     metadata_filters: dict[str, Any] = Field(default_factory=dict)
+    #: Cycle-mitigation knob (ADR-024 §"Open questions / risks").  When
+    #: ``True``, retrieval injects a ``dynamic: {"not": True}`` clause
+    #: into the metadata filters so dynamically-injected tool output
+    #: doesn't get re-retrieved as ground truth.
+    exclude_dynamic: bool = False
     hyde: OrchidHydeConfig = Field(default_factory=OrchidHydeConfig)
     hybrid: OrchidHybridConfig = Field(default_factory=OrchidHybridConfig)
     graph: OrchidGraphRetrievalConfig = Field(default_factory=OrchidGraphRetrievalConfig)
@@ -195,3 +200,11 @@ class OrchidRAGConfig(BaseModel):
     max_context_chars: int | None = None  # None = inherit from defaults.rag.max_context_chars
     ingestion: OrchidIngestionConfig = Field(default_factory=OrchidIngestionConfig)
     retrieval: OrchidRetrievalConfig = Field(default_factory=OrchidRetrievalConfig)
+    #: Explicit Qdrant payload indexes for metadata-filter fields
+    #: (ADR-027 §"Pre-condition: payload indexing").  Map of
+    #: ``field_name -> qdrant_schema_type`` where the schema type is
+    #: one of ``keyword``, ``integer``, ``float``, ``bool``,
+    #: ``datetime``, ``text``, ``geo``.  When omitted, the Qdrant
+    #: backend auto-infers types from the filter values on first
+    #: retrieval — explicit declarations win over inference.
+    payload_indexes: dict[str, str] = Field(default_factory=dict)

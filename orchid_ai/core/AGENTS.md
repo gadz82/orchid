@@ -52,7 +52,7 @@ OrchidVectorWriter(ABC)          # Write-only. Indexers depend on this.
 OrchidVectorStoreRepository(OrchidVectorReader, OrchidVectorWriter)  # Combined. Qdrant implements this.
 ```
 
-The `scope` parameter in `retrieve()` is a `OrchidRAGScope` — NOT a raw dict. If you see `filters: dict` anywhere, it's legacy and should be migrated.
+The `scope` parameter in `retrieve()` is a `OrchidRAGScope` — NOT a raw dict.  Raw `filters: dict` is not supported.
 
 ### `agent.py` — OrchidAgent ABC
 

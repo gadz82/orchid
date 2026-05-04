@@ -452,8 +452,8 @@ def _build_mini_system_prompt(
     :py:meth:`str.format` with the placeholders ``{parent_prompt}``,
     ``{instruction}``, and ``{tool_list}`` — the last being a newline-
     joined ``- name: description`` bullet list, or the empty string
-    when the mini has no tools.  ``None`` (default) preserves the
-    legacy assembly bit-identically.
+    when the mini has no tools.  ``None`` (default) uses the built-in
+    assembly below.
     """
     tool_list = ""
     if tool_subset:

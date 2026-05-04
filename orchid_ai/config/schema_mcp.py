@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .schema_rag import OrchidRAGConfig
+
 
 class OrchidToolConfig(BaseModel):
     """A single MCP tool available to an agent."""
@@ -20,6 +22,12 @@ class OrchidToolConfig(BaseModel):
     # ``True`` / ``False`` wins over the annotation.  Only consulted
     # when the agent has ``parallel_tools: true`` set.
     parallel_safe: bool | None = None
+    #: Per-tool RAG override (ADR-024).  When set, this tool's
+    #: ingestion / retrieval / namespace / payload-index decisions
+    #: use the tool's ``rag`` block instead of the agent's.  ``None``
+    #: (the default) means inherit from the agent.  See
+    #: :meth:`OrchidAgentConfig.effective_rag` for the merge contract.
+    rag: OrchidRAGConfig | None = None
 
 
 class OrchidMCPAuthConfig(BaseModel):
@@ -90,7 +98,14 @@ class OrchidMCPServerConfig(BaseModel):
     tools: list[OrchidToolConfig] = Field(default_factory=list)
     prompts: list[str] = Field(default_factory=list)  # prompt names to load (or "*")
     resources: list[str] = Field(default_factory=list)  # resource URIs/names to load (or "*")
-    tool_call_strategy: Literal["all", "sequential", "llm_decides"] = "all"
+    #: Name of an :class:`OrchidToolCallStrategy` registered via
+    #: :func:`orchid_ai.agents.strategies.register_strategy`.  Built-ins
+    #: are ``all`` / ``sequential`` / ``llm_decides``; integrators
+    #: register custom strategies (e.g. ``priority``) from a startup
+    #: hook before the first request hits.  Unknown names degrade to
+    #: the ``all`` strategy at lookup time per
+    #: :func:`get_strategy`'s safe-fallback contract.
+    tool_call_strategy: str = "all"
     discover_all_tools: bool = False
     discover_all_prompts: bool = False
     discover_all_resources: bool = False

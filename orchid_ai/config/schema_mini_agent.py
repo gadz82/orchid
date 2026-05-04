@@ -76,7 +76,7 @@ class OrchidMiniAgentConfig(BaseModel):
     #: Resolved with :py:meth:`str.format` against the placeholders
     #: ``{parent_prompt}``, ``{instruction}``, ``{tool_list}`` (a
     #: newline-joined ``- name: description`` bullet list).  ``None``
-    #: keeps the legacy assembly verbatim.  See the
+    #: uses the built-in template.  See the
     #: ``examples/prompt-customization`` example for a worked usage.
     system_prompt_template: str | None = None
 
