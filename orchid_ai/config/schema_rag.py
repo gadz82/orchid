@@ -89,6 +89,34 @@ class OrchidHybridConfig(BaseModel):
     rrf_k: int = 60
 
 
+class OrchidGraphRetrievalConfig(BaseModel):
+    """Per-agent ``graph_rag`` retrieval knobs (ADR-026 §YAML).
+
+    ``enabled`` is the ingestion-side feature flag — it lets the
+    ``entity_extraction`` post-processor short-circuit when False so
+    integrators using a non-graph strategy don't pay the LLM cost.
+
+    ``max_hops`` caps the BFS depth from each seed entity.  ``2`` is a
+    sensible default — most useful relations sit one or two hops away
+    and deeper walks dilute the relevance signal.
+
+    ``fuse_with_vectors`` controls whether the strategy returns the
+    serialised sub-graph alongside vector hits (``True``, default) or
+    on its own (``False``, "graph context only" mode for tests / debug).
+
+    ``relation_filter`` narrows traversal to specific edge labels —
+    e.g. ``[reports_to, manages]`` for an org-chart agent.  Empty list
+    means "all relations" per ADR-026.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    max_hops: int = 2
+    fuse_with_vectors: bool = True
+    relation_filter: list[str] = Field(default_factory=list)
+
+
 class OrchidRetrievalConfig(BaseModel):
     """How a query is turned into ranked results (ADR-023 / ADR-027).
 
@@ -121,6 +149,7 @@ class OrchidRetrievalConfig(BaseModel):
     metadata_filters: dict[str, Any] = Field(default_factory=dict)
     hyde: OrchidHydeConfig = Field(default_factory=OrchidHydeConfig)
     hybrid: OrchidHybridConfig = Field(default_factory=OrchidHybridConfig)
+    graph: OrchidGraphRetrievalConfig = Field(default_factory=OrchidGraphRetrievalConfig)
 
     #: Optional prompt overrides for the four built-in query transformers.
     #: ``None`` on any field within means "use the module-level default

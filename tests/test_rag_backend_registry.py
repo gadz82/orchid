@@ -122,6 +122,17 @@ class TestGraphStoreBackendRegistry:
         assert "null" in GRAPH_STORE_BACKEND_REGISTRY
         assert isinstance(build_graph_store(graph_store_backend="null"), NullGraphStore)
 
+    def test_in_memory_built_in(self):
+        from orchid_ai.rag.backends.in_memory_graph import InMemoryGraphStore
+
+        assert "in_memory" in GRAPH_STORE_BACKEND_REGISTRY
+        assert isinstance(build_graph_store(graph_store_backend="in_memory"), InMemoryGraphStore)
+
+    def test_neo4j_registered(self):
+        # Constructing the neo4j backend would need the optional extra
+        # — assert registration only.
+        assert "neo4j" in GRAPH_STORE_BACKEND_REGISTRY
+
     def test_register_custom(self):
         class _MyGraph(OrchidGraphStore):
             async def upsert_entities(self, entities, scope):

@@ -60,7 +60,14 @@ class NullDocStore(OrchidDocStore):
 
 
 class NullGraphStore(OrchidGraphStore):
-    """No-op graph store — accepts writes silently and returns nothing on read."""
+    """No-op graph store — accepts writes silently and returns nothing on read.
+
+    The ``is_null`` marker lets :class:`GraphRAGRetrieval` detect this
+    fallback and degrade to :class:`SimpleRetrieval` without crossing
+    the ``rag/strategies/`` → ``rag/backends/`` dependency line.
+    """
+
+    is_null: ClassVar[bool] = True
 
     async def upsert_entities(
         self,

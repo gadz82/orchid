@@ -15,5 +15,15 @@ integrator-supplied processors for PII redaction, dedup, etc. via
 from __future__ import annotations
 
 from .contextual_headers import ContextualHeaderPostProcessor
+from .entity_extraction import (
+    EntityExtractionPostProcessor,
+    LLMEntityExtractor,
+    OrchidExtractedGraph,
+)
 
-__all__ = ["ContextualHeaderPostProcessor"]
+__all__ = [
+    "ContextualHeaderPostProcessor",
+    "EntityExtractionPostProcessor",
+    "LLMEntityExtractor",
+    "OrchidExtractedGraph",
+]

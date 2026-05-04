@@ -83,6 +83,7 @@ class ContextualHeaderPostProcessor(OrchidChunkPostProcessor):
         text: str,
         filename: str,
         chat_model: Any | None = None,
+        **_kwargs: Any,
     ) -> list[OrchidChunk]:
         if not chunks:
             return []

@@ -93,6 +93,14 @@ class TestPostProcessorRegistry:
         assert "contextual_headers" in POST_PROCESSOR_REGISTRY
         assert isinstance(get_post_processor("contextual_headers"), ContextualHeaderPostProcessor)
 
+    def test_entity_extraction_built_in(self):
+        from orchid_ai.documents.post_processors.entity_extraction import (
+            EntityExtractionPostProcessor,
+        )
+
+        assert "entity_extraction" in POST_PROCESSOR_REGISTRY
+        assert isinstance(get_post_processor("entity_extraction"), EntityExtractionPostProcessor)
+
     def test_register_and_get(self):
         register_post_processor("upper", _UpperHeader)
         assert isinstance(get_post_processor("upper"), _UpperHeader)
@@ -106,3 +114,4 @@ class TestPostProcessorRegistry:
         clear_post_processors()
         assert "upper" not in POST_PROCESSOR_REGISTRY
         assert "contextual_headers" in POST_PROCESSOR_REGISTRY
+        assert "entity_extraction" in POST_PROCESSOR_REGISTRY

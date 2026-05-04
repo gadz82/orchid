@@ -17,6 +17,7 @@ import logging
 
 from ...core.ingestion import OrchidChunkPostProcessor, OrchidIngestionStrategy
 from ..post_processors.contextual_headers import ContextualHeaderPostProcessor
+from ..post_processors.entity_extraction import EntityExtractionPostProcessor
 from .headered import HeaderedIngestion
 from .hierarchical import HierarchicalIngestion
 from .recursive import RecursiveIngestion
@@ -34,6 +35,7 @@ _INGESTION_BUILTINS: dict[str, type[OrchidIngestionStrategy]] = {
 
 _POST_PROCESSOR_BUILTINS: dict[str, type[OrchidChunkPostProcessor]] = {
     "contextual_headers": ContextualHeaderPostProcessor,
+    "entity_extraction": EntityExtractionPostProcessor,
 }
 
 INGESTION_REGISTRY: dict[str, type[OrchidIngestionStrategy]] = dict(_INGESTION_BUILTINS)
@@ -115,6 +117,7 @@ def get_post_processor(name: str) -> OrchidChunkPostProcessor:
 
 __all__ = [
     "ContextualHeaderPostProcessor",
+    "EntityExtractionPostProcessor",
     "HeaderedIngestion",
     "HierarchicalIngestion",
     "INGESTION_REGISTRY",

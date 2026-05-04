@@ -15,6 +15,7 @@ from orchid_ai.config.schema import OrchidRetrievalConfig
 from orchid_ai.config.schema_rag import OrchidHydeConfig
 from orchid_ai.rag.strategies import (
     RETRIEVAL_REGISTRY,
+    GraphRAGRetrieval,
     HybridRetrieval,
     HyDERetrieval,
     MultiQueryRetrieval,
@@ -67,6 +68,10 @@ class TestBuiltins:
         assert "hybrid" in RETRIEVAL_REGISTRY
         assert isinstance(get_retrieval_strategy("hybrid"), HybridRetrieval)
 
+    def test_graph_rag_registered(self):
+        assert "graph_rag" in RETRIEVAL_REGISTRY
+        assert isinstance(get_retrieval_strategy("graph_rag"), GraphRAGRetrieval)
+
 
 class TestFromConfig:
     def test_returns_default_when_no_config(self):
@@ -110,3 +115,4 @@ class TestClear:
         assert "multi_query" in RETRIEVAL_REGISTRY
         assert "hyde" in RETRIEVAL_REGISTRY
         assert "hybrid" in RETRIEVAL_REGISTRY
+        assert "graph_rag" in RETRIEVAL_REGISTRY
