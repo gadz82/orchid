@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from ..config.schema import OrchidAgentsConfig
@@ -32,6 +32,76 @@ logger = logging.getLogger(__name__)
 
 
 OrchidMCPAuthMode = Literal["none", "passthrough", "oauth"]
+
+
+@dataclass(frozen=True)
+class MCPToolAnnotations:
+    """MCP 2025-03-26 tool annotations (per-tool behaviour hints).
+
+    Captures the four boolean hints from the MCP ``Tool.annotations``
+    object as native Python ``bool | None`` fields:
+
+    - ``read_only_hint`` — tool does not mutate any state.
+    - ``idempotent_hint`` — repeated calls with identical arguments
+      produce equivalent results without additional side effects.
+    - ``destructive_hint`` — tool may perform irreversible actions
+      (e.g. deletes).
+    - ``open_world_hint`` — tool's effects extend beyond the local
+      system (e.g. it talks to the public internet).
+
+    All four hints are advisory.  ``None`` means the server did not
+    advertise that hint (for any of the four). The agentic loop's
+    parallel-dispatch heuristic treats ``read_only_hint=True`` as
+    "safe to gather" by default; explicit YAML ``parallel_safe`` on
+    the agent's tool config wins over the annotation.
+    """
+
+    read_only_hint: bool | None = None
+    idempotent_hint: bool | None = None
+    destructive_hint: bool | None = None
+    open_world_hint: bool | None = None
+
+    @classmethod
+    def from_raw(cls, raw: Any) -> MCPToolAnnotations | None:
+        """Parse raw annotations payload into a typed record.
+
+        Accepts:
+
+        - ``None`` / missing → returns ``None`` (no annotations).
+        - A plain ``dict`` (camelCase keys, MCP wire format).
+        - A pydantic / dataclass-style object exposing the four hint
+          attributes (camelCase or snake_case).
+
+        Unrecognised types degrade to ``None`` rather than raising —
+        annotations are advisory and a malformed payload from a server
+        must not crash the agent.
+        """
+        if raw is None:
+            return None
+
+        def _pick(key_camel: str, key_snake: str) -> bool | None:
+            if isinstance(raw, dict):
+                value = raw.get(key_camel)
+                if value is None:
+                    value = raw.get(key_snake)
+            else:
+                value = getattr(raw, key_camel, None)
+                if value is None:
+                    value = getattr(raw, key_snake, None)
+            if value is None:
+                return None
+            return bool(value)
+
+        try:
+            return cls(
+                read_only_hint=_pick("readOnlyHint", "read_only_hint"),
+                idempotent_hint=_pick("idempotentHint", "idempotent_hint"),
+                destructive_hint=_pick("destructiveHint", "destructive_hint"),
+                open_world_hint=_pick("openWorldHint", "open_world_hint"),
+            )
+        except Exception:  # malformed payload — degrade gracefully.
+            logger.debug("[MCPToolAnnotations] Could not parse %r", raw, exc_info=True)
+            return None
 
 
 @dataclass(frozen=True)

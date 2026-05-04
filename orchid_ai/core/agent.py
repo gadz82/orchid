@@ -48,7 +48,16 @@ class OrchidAgent(ABC):
         reader: OrchidVectorReader,
         mcp_clients: list[OrchidMCPClient] | None = None,
         chat_model: Any | None = None,
+        **_kwargs: Any,
     ):
+        # ``**_kwargs`` absorbs framework-injected extras the graph
+        # builder always passes (currently ``config`` and
+        # ``summary_config``).  Subclasses that need those values —
+        # ``GenericAgent`` and any consumer subclass — accept them
+        # explicitly in their own ``__init__``; subclasses that don't
+        # care simply ignore them.  This keeps the base ABC stable
+        # while letting the composition root hand every agent the same
+        # full kwargs set without inspect.signature sniffing.
         self.model_id: str = model_id
         self.reader = reader
         self.mcp_clients = mcp_clients or []

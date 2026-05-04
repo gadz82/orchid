@@ -131,6 +131,8 @@ documents/   → core/  (standalone)
 
 12. **Built-in tool parameters are declared in YAML or auto-extracted.** The `tools:` section in `agents.yaml` supports an optional `parameters:` block per tool. When declared, YAML parameters take precedence. When omitted, parameters are auto-extracted from the Python function signature via `inspect`. Framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. Parameter metadata is used by the CLI skill generator to produce accurate documentation.
 
+13. **Mini-agents (Phase B) are opt-in via `mini_agent.enabled: true`** on a top-level agent (no nesting — see ADR-021). When enabled, a deterministic structured-output decomposer runs at the start of the agent's turn; if it returns `should_fork=True` the graph fans out into N parallel mini-agent nodes (default cap 3, hard cap 8) each running a focused agentic loop with a curated tool subset, then synthesises their outcomes back into one `AIMessage` via the aggregator. The decomposer hook lives at the **graph-wrapper** level (`graph._create_agent_node`), not inside `GenericAgent.run()` — so any `OrchidAgent` subclass can opt in via YAML without coordinating with its own `run()`. Cross-node data uses **shadow-slot keys**: `mini_agent_outcomes[f"{parent}#{mini_id}"]`, `mini_agent_decisions[parent_name]`. Four lifecycle SSE events (`mini_agent.{decomposed,started,finished,aggregated}`) surface activity to the streaming UI without leaking inner token streams. See ADR-021 and the `mini_agent_*` modules under `orchid_ai/agents/`.
+
 ## Key Patterns
 
 ### Adding an Agent

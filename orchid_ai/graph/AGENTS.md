@@ -115,9 +115,65 @@ Helper that removes supervisor routing noise (`[Supervisor] Parallel dispatch:`,
 
 The supervisor's `_advance_sequential()` injects `mcp_context` from previous agent invocations into the history, so downstream agents in a sequential pipeline have access to earlier tool results.
 
+## Mini-agent topology (Phase B — ADR-021)
+
+When an agent has `mini_agent.enabled: true` in its YAML, the graph
+builder synthesises **two extra nodes** alongside the normal
+`{name}_agent`:
+
+```
+supervisor ──Send──> {name}_agent  ──conditional──>  supervisor                  (no fork)
+                                                 └──> [Send×N] {name}_mini ──> {name}_aggregator ──> supervisor
+```
+
+Three additions in `graph.py`:
+
+1. `_create_agent_node(agent, ..., agent_config=...)` runs the
+   decomposer hook (`maybe_decompose()` from
+   `agents/mini_agent_decomposer.py`) **before** `agent.run()`.  If
+   the decomposer chose to fork, the wrapper returns the decision
+   state update with no `AIMessage` and the conditional edge fans
+   out — `agent.run()` is never invoked that turn.
+2. `_make_fork_router(parent_name)` reads
+   `state["mini_agent_decisions"][parent_name]` and returns either
+   `"supervisor"` (no fork) or a list of `Send(f"{parent}_mini",
+   payload)` — one per sub-task.  Each Send carries the per-mini
+   sentinel keys (`_active_mini_parent`, `_active_mini_id`,
+   `_active_mini_subtask`, `_active_mini_tool_subset`) so the mini
+   node can identify its sub-task without threading kwargs through
+   LangGraph.
+3. The mini + aggregator node factories live in
+   `agents/mini_agent_{node,aggregator}.py` — the graph builder
+   imports their factories and wires them in.
+
+**Zero overhead for non-opt-in agents** — the wrapper short-circuits
+the decomposer call when `mini_agent.enabled` is false, and the
+mini/aggregator nodes are not added to the graph.
+
+**Works with any `OrchidAgent` subclass.**  The earlier `isinstance(
+agent, GenericAgent)` guard was dropped: the only requirement is
+that the agent expose `_chat_model` and `mcp_clients` (both
+inherited from the base class).  Custom classes like the helpdesk
+`SupportAgent` opt in via YAML alone.
+
+State channels for the fan-out:
+
+- `mini_agent_decisions: Annotated[dict, merge_dicts]` — per-parent
+  `MiniAgentDecomposition.model_dump()`, keyed by parent name.
+- `mini_agent_outcomes: Annotated[dict, merge_dicts]` — per-mini
+  `MiniAgentOutcome.model_dump()`, keyed by `f"{parent}#{mini_id}"`.
+  This is the **shadow-slot convention** — every parallel writer
+  owns a unique key so the shallow merge is race-free.
+
+Streaming surface — four `mini_agent.*` SSE events flow through a
+piggyback `SystemMessage` (see `orchid_ai/observability/mini_agent_events.py`).
+The `orchid-api` streaming router strips them out of the user-visible
+synthesis stream and re-emits them as SSE frames.
+
 ## Common Mistakes
 
 - **Using `list` annotation instead of `replace_list` for `pending_agents`.** Default list annotation appends, but sequential routing needs full replacement.
 - **Not returning to supervisor.** Every agent node must have an edge back to `supervisor`. The supervisor decides when to end.
 - **Mutating state in-place.** Always return a new dict from nodes. LangGraph handles merging via annotations.
 - **Hardcoding history limits.** Use `OrchidSupervisorConfig.history_max_turns` and `history_max_chars` instead of magic numbers.
+- **Forgetting that mini-agent `bind_tools` is filtered by `tool_subset`.** The mini node passes `tool_subset` to `AgenticLoop`, which filters `all_tool_defs` AND `tool_map` defensively before `bind_tools`.  If you reach into the mini's loop directly, respect the same filter.

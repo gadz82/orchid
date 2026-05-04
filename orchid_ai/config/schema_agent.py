@@ -8,6 +8,7 @@ from .mcp_gateway import OrchidMCPGatewayConfig
 from .schema_guardrails import OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPServerConfig, OrchidToolConfig
+from .schema_mini_agent import OrchidMiniAgentConfig
 from .schema_rag import OrchidRAGConfig, OrchidRAGDefaultsConfig
 from .schema_skills import (
     OrchidAgentSkillConfig,
@@ -62,6 +63,36 @@ class OrchidAgentConfig(BaseModel):
 
     # Computed at validation — tool names that require human approval (HITL)
     approval_tools: set[str] = Field(default_factory=set, exclude=True)
+
+    # Computed at validation — built-in tool names whose
+    # ``OrchidBuiltinToolConfig.parallel_safe`` is explicitly ``True``.
+    # MCP tools resolve their per-tool override at runtime against the
+    # nested ``mcp_servers[i].tools[j].parallel_safe`` field plus the
+    # MCP ``readOnlyHint`` annotation, so they don't need a precomputed
+    # set; built-ins have no annotation fallback so we precompute here
+    # (built-in tool configs live on ``OrchidAgentsConfig.tools`` which
+    # the running agent cannot reach directly).
+    parallel_safe_builtin_tools: set[str] = Field(default_factory=set, exclude=True)
+
+    # Phase A — opt-in parallel tool-call dispatch within a single
+    # agentic round.  When ``True``, the agentic loop partitions the
+    # LLM's tool_calls into a parallel batch (gathered via
+    # ``asyncio.gather``) and a sequential tail.  Per-tool safety is
+    # resolved from ``OrchidToolConfig.parallel_safe`` / the MCP
+    # ``readOnlyHint`` annotation / ``OrchidBuiltinToolConfig.parallel_safe``
+    # — see ``GenericAgent._resolve_parallel_safety`` for the precedence
+    # rules.  Defaults to ``False`` to preserve today's serial behaviour.
+    parallel_tools: bool = False
+
+    # Phase B — opt-in mini-agent (self-clone) configuration.  When
+    # ``mini_agent.enabled=True``, the graph builder synthesises
+    # ``{name}_mini`` and ``{name}_aggregator`` nodes alongside the
+    # normal ``{name}_agent`` parent node.  Defaults to disabled —
+    # zero overhead for agents that don't opt in.  Nesting is
+    # forbidden: child agents cannot enable mini-agents (no recursion
+    # within a single supervisor turn).  See ``schema_mini_agent.py``
+    # for field semantics.
+    mini_agent: OrchidMiniAgentConfig = Field(default_factory=OrchidMiniAgentConfig)
 
     model_config = {"populate_by_name": True}
 
@@ -187,7 +218,24 @@ def _apply_defaults(
             if tool_cfg and tool_cfg.requires_approval:
                 agent.approval_tools.add(tool_name)
 
-    # Recurse into children
+    # Collect built-in tools whose ``parallel_safe`` is explicitly
+    # ``True`` — used by the agentic loop's parallel-dispatch path
+    # when the agent has ``parallel_tools: true``.
+    if global_tools:
+        for tool_name in agent.tools:
+            tool_cfg = global_tools.get(tool_name)
+            if tool_cfg and tool_cfg.parallel_safe is True:
+                agent.parallel_safe_builtin_tools.add(tool_name)
+
+    # Recurse into children — but reject any child that opts into
+    # mini-agents.  Nesting is forbidden by spec §2 to keep the
+    # graph topology bounded.  ``mini_agent.enabled`` may only be
+    # set on top-level agents, never on children of another agent.
     if agent.children:
         for child_name, child in agent.children.items():
+            if child.mini_agent.enabled:
+                raise ValueError(
+                    f"agent '{name}.{child_name}' has mini_agent.enabled=true — "
+                    f"mini-agents may only be enabled on top-level agents (no nesting)."
+                )
             _apply_defaults(child, child_name, defaults, global_tools)

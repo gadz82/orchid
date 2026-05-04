@@ -12,6 +12,7 @@ from typing import Any
 from ..config.schema import OrchidMCPServerConfig, OrchidToolConfig
 from ..core.mcp import OrchidMCPAuthRequiredError, OrchidMCPClient
 from ..core.state import OrchidAuthContext
+from ..mcp.inventory import MCPToolAnnotations
 
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
@@ -29,6 +30,12 @@ class MCPCapabilities:
     raw_tools: list[dict[str, Any]] = field(default_factory=list)
     #: Mapping from tool name → (OrchidMCPClient, OrchidMCPServerConfig) for routing calls.
     tool_client_map: dict[str, tuple[OrchidMCPClient, OrchidMCPServerConfig]] = field(default_factory=dict)
+    #: Per-tool MCP annotations parsed from the server's ``Tool.annotations``
+    #: payload.  Keys are tool names; values are ``MCPToolAnnotations``
+    #: records carrying read-only / idempotent / destructive / open-world
+    #: hints.  Servers that don't advertise annotations are simply absent
+    #: from the map (consumers must treat missing entries as "unknown").
+    tool_annotations: dict[str, MCPToolAnnotations] = field(default_factory=dict)
     #: Zero-arg prompts rendered to text: [{"name": ..., "text": ...}].
     rendered_prompts: list[dict[str, str]] = field(default_factory=list)
     #: Resource contents: {name: content_str}.
@@ -292,6 +299,9 @@ class MCPDispatcher:
                     for t in raw_tools:
                         caps.raw_tools.append(t)
                         caps.tool_client_map[t["name"]] = (client, server_config)
+                        annotations = MCPToolAnnotations.from_raw(t.get("annotations"))
+                        if annotations is not None:
+                            caps.tool_annotations[t["name"]] = annotations
                     logger.info(
                         "[%s] Discovered %d tools from '%s': %s",
                         agent_name,
