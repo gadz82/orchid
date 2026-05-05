@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-05-05)
+
+### Features
+
+- **rag**: Add hybrid retrieval strategy with RRF and linear fusion, custom sparse encoders, and
+  integration tests
+  ([`2a301dc`](https://github.com/gadz82/orchid/commit/2a301dca07537356fbd5b9ee113cf0ddb288ff8e))
+
+- **rag**: Enhance dynamic RAG injection with configurable ingestion strategies and metadata filters
+  ([`e4261fc`](https://github.com/gadz82/orchid/commit/e4261fc4979dc400dd97fdfbe74f163f766b5fd1))
+
+- **rag**: Introduce advanced query context transformers and hierarchical ingestion strategies
+  ([`a71a6e3`](https://github.com/gadz82/orchid/commit/a71a6e3ee16805bd66d658fbf58a6d6b7d8af204))
+
+- **rag**: Introduce GraphRAGRetrieval with entity resolution, multi-hop traversal, and vector
+  fusion
+  ([`a42d3d9`](https://github.com/gadz82/orchid/commit/a42d3d95ae4c316f9c61628fed3ac1f19ecd5012))
+
+
 ## v1.5.0 (2026-05-04)
 
 ### Bug Fixes
