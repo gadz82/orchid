@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Callable
 
 from langchain_core.language_models import BaseChatModel
 
+from .core.doc_store import OrchidDocStore
+from .core.graph_store import OrchidGraphStore
 from .core.mcp import OrchidMCPClient, OrchidMCPClientRegistrationStore, OrchidMCPTokenStore
 from .core.mcp_gateway_state import (
     OrchidMCPGatewayAuthCodeStore,
@@ -36,6 +38,7 @@ from .core.mcp_gateway_state import (
     OrchidMCPGatewayTokenStore,
 )
 from .core.repository import OrchidVectorReader
+from .core.sparse import OrchidSparseEncoder
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -90,6 +93,12 @@ class OrchidRuntime:
     mcp_client_factory: MCPClientFactory | None = None
     mcp_token_store: OrchidMCPTokenStore | None = None
     mcp_client_registration_store: OrchidMCPClientRegistrationStore | None = None
+    #: Optional pluggable RAG backends (ADR-028).  All three default to
+    #: ``None`` and are resolved lazily through ``get_*()`` accessors —
+    #: integrators inject custom backends here once at construction.
+    doc_store: OrchidDocStore | None = None
+    graph_store: OrchidGraphStore | None = None
+    sparse_encoder: OrchidSparseEncoder | None = None
     #: Shared store for the inbound MCP gateway's OAuth state
     #: (RFC 7591 DCR clients, in-flight auth codes, issued tokens).
     #: A single instance implements all three ABCs — the three typed
@@ -108,7 +117,7 @@ class OrchidRuntime:
         """Return the configured reader, falling back to NullVectorReader."""
         if self.reader is not None:
             return self.reader
-        from .rag.null import NullVectorReader
+        from .rag.backends.null import NullVectorReader
 
         return NullVectorReader()
 
@@ -117,6 +126,34 @@ class OrchidRuntime:
         if self.chat_model is not None:
             return self.chat_model
         return _default_chat_model(self.default_model)
+
+    def get_doc_store(self) -> OrchidDocStore:
+        """Return the configured doc store, falling back to NullDocStore."""
+        if self.doc_store is not None:
+            return self.doc_store
+        from .rag.backends.null import NullDocStore
+
+        return NullDocStore()
+
+    def get_graph_store(self) -> OrchidGraphStore:
+        """Return the configured graph store, falling back to NullGraphStore."""
+        if self.graph_store is not None:
+            return self.graph_store
+        from .rag.backends.null import NullGraphStore
+
+        return NullGraphStore()
+
+    def get_sparse_encoder(self) -> OrchidSparseEncoder:
+        """Return the configured sparse encoder, falling back to BM25Encoder.
+
+        The Stage 1 BM25 encoder is a stub that returns empty sparse
+        vectors — Stage 4 wires up the real lazy-IDF implementation.
+        """
+        if self.sparse_encoder is not None:
+            return self.sparse_encoder
+        from .rag.sparse.bm25 import BM25Encoder
+
+        return BM25Encoder()
 
     def get_mcp_client_factory(self) -> MCPClientFactory:
         """Return the configured MCP factory, falling back to the default.

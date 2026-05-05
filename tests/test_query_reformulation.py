@@ -1,85 +1,60 @@
-"""Tests for query reformulation (OrchidAgent.reformulate_query)."""
+"""Tests for ``ReformulateTransformer`` (replaces the legacy
+``OrchidAgent.reformulate_query`` method)."""
 
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
 
-from orchid_ai.core.agent import OrchidAgent
-
-
-class _TestAgent(OrchidAgent):
-    @property
-    def name(self):
-        return "test"
-
-    @property
-    def description(self):
-        return "test agent"
-
-    async def run(self, state):
-        return state
+from orchid_ai.rag.transformers.reformulate import ReformulateTransformer
 
 
-def _make_agent(*, chat_model=None):
-    mock_reader = MagicMock()
-    mock_reader.retrieve = AsyncMock(return_value=[])
-    return _TestAgent(model_id="test-model", reader=mock_reader, chat_model=chat_model)
+def _history(*pairs):
+    """Build a [{role, content}, ...] list from alternating user/assistant pairs."""
+    out = []
+    for i, content in enumerate(pairs):
+        out.append({"role": "user" if i % 2 == 0 else "assistant", "content": content})
+    return out
 
 
-def _make_state(query: str, history: list | None = None):
-    messages = list(history or [])
-    messages.append(HumanMessage(content=query))
-    return {"messages": messages}
+class TestReformulateTransformer:
+    @pytest.mark.asyncio
+    async def test_pre_strategy_flag_is_true(self):
+        """Reformulate is the canonical pre_strategy transformer."""
+        assert ReformulateTransformer.pre_strategy is True
 
-
-class TestReformulateQuery:
     @pytest.mark.asyncio
     async def test_reformulates_with_history(self):
         """Rewrites ambiguous query using conversation context."""
         chat_model = MagicMock()
         chat_model.ainvoke = AsyncMock(return_value=MagicMock(content="list vegan dishes"))
 
-        agent = _make_agent(chat_model=chat_model)
-        state = _make_state(
+        result = await ReformulateTransformer().transform(
             "yes, show them",
-            history=[
-                HumanMessage(content="Do you have vegan options?"),
-                AIMessage(content="Yes, we have several vegan dishes."),
-            ],
+            chat_model=chat_model,
+            history=_history("Do you have vegan options?", "Yes, we have several vegan dishes."),
         )
-
-        result = await agent.reformulate_query("yes, show them", state)
-        assert result == "list vegan dishes"
+        assert result == ["list vegan dishes"]
         chat_model.ainvoke.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_returns_original_without_history(self):
-        """No history → returns query unchanged."""
+        """No history → returns query unchanged in a 1-element list."""
         chat_model = MagicMock()
-        agent = _make_agent(chat_model=chat_model)
-        state = _make_state("list vegan dishes")
-
-        result = await agent.reformulate_query("list vegan dishes", state)
-        assert result == "list vegan dishes"
+        result = await ReformulateTransformer().transform("list vegan dishes", chat_model=chat_model, history=None)
+        assert result == ["list vegan dishes"]
         chat_model.ainvoke.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_returns_original_without_chat_model(self):
         """No chat model → returns query unchanged."""
-        agent = _make_agent(chat_model=None)
-        state = _make_state(
+        result = await ReformulateTransformer().transform(
             "yes",
-            history=[
-                HumanMessage(content="Any specials?"),
-                AIMessage(content="Pan-Seared Duck."),
-            ],
+            chat_model=None,
+            history=_history("Any specials?", "Pan-Seared Duck."),
         )
-
-        result = await agent.reformulate_query("yes", state)
-        assert result == "yes"
+        assert result == ["yes"]
 
     @pytest.mark.asyncio
     async def test_fallback_on_error(self):
@@ -87,17 +62,12 @@ class TestReformulateQuery:
         chat_model = MagicMock()
         chat_model.ainvoke = AsyncMock(side_effect=RuntimeError("API down"))
 
-        agent = _make_agent(chat_model=chat_model)
-        state = _make_state(
+        result = await ReformulateTransformer().transform(
             "tell me more",
-            history=[
-                HumanMessage(content="What's the soup of the day?"),
-                AIMessage(content="Tomato basil."),
-            ],
+            chat_model=chat_model,
+            history=_history("What's the soup of the day?", "Tomato basil."),
         )
-
-        result = await agent.reformulate_query("tell me more", state)
-        assert result == "tell me more"
+        assert result == ["tell me more"]
 
     @pytest.mark.asyncio
     async def test_fallback_on_empty_result(self):
@@ -105,14 +75,19 @@ class TestReformulateQuery:
         chat_model = MagicMock()
         chat_model.ainvoke = AsyncMock(return_value=MagicMock(content=""))
 
-        agent = _make_agent(chat_model=chat_model)
-        state = _make_state(
+        result = await ReformulateTransformer().transform(
             "ok",
-            history=[
-                HumanMessage(content="Suggest something"),
-                AIMessage(content="Try the pasta."),
-            ],
+            chat_model=chat_model,
+            history=_history("Suggest something", "Try the pasta."),
         )
+        assert result == ["ok"]
 
-        result = await agent.reformulate_query("ok", state)
-        assert result == "ok"
+    @pytest.mark.asyncio
+    async def test_always_returns_single_element_list(self):
+        """The pre_strategy contract — ReformulateTransformer never returns ≠ 1."""
+        chat_model = MagicMock()
+        chat_model.ainvoke = AsyncMock(return_value=MagicMock(content="one short rewrite"))
+
+        result = await ReformulateTransformer().transform("raw", chat_model=chat_model, history=_history("Q", "A"))
+        assert isinstance(result, list)
+        assert len(result) == 1

@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from .schema_rag import OrchidRAGConfig
+
 
 class BuiltinToolParameter(BaseModel):
     """A single parameter of a built-in tool.
@@ -46,6 +48,13 @@ class OrchidBuiltinToolConfig(BaseModel):
     # ``True`` for pure read-only / side-effect-free handlers that
     # the agent may safely batch when ``parallel_tools: true``.
     parallel_safe: bool | None = None
+    #: Per-tool RAG override (ADR-024).  When set, this tool's
+    #: ingestion / retrieval / namespace / payload-index decisions
+    #: use the tool's ``rag`` block instead of the agent's.  ``None``
+    #: (the default) means inherit from the agent.  The merge is
+    #: shallow per top-level field — tool's ``ingestion`` block wins
+    #: only when set; same for ``retrieval``, ``namespace``, etc.
+    rag: OrchidRAGConfig | None = None
 
 
 class OrchidAgentSkillStepConfig(BaseModel):

@@ -2,8 +2,9 @@
 
 Split into segregated ABCs so a caller that only needs to invoke tools
 (``OrchidMCPToolCaller``) doesn't depend on capability discovery
-(``OrchidMCPDiscoverable``). The combined ``OrchidMCPClient`` exists for
-back-compat and for the few callers that genuinely need both halves.
+(``OrchidMCPDiscoverable``). The combined ``OrchidMCPClient`` is the
+canonical type for concrete clients that implement both halves
+(e.g. :class:`StreamableHttpMCPClient`).
 """
 
 from __future__ import annotations
