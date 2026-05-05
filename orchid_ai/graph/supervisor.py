@@ -132,7 +132,7 @@ def create_supervisor_node(
     the cheap routing + sequential-advance phases (short structured
     classifications and one-line handoff messages) instead of the
     main ``chat_model`` reserved for synthesis.  Falls back to
-    ``chat_model`` when ``None`` (default — backwards-compatible).
+    ``chat_model`` when ``None``.
     """
     skills = orchestrator_skills or {}
     sup_config = supervisor_config or OrchidSupervisorConfig()

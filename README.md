@@ -6,22 +6,30 @@
 
 A platform-agnostic multi-agent AI framework built on [LangGraph](https://github.com/langchain-ai/langgraph) and [LiteLLM](https://github.com/BerriAI/litellm).
 
-Orchid lets you define AI agents via YAML configuration, orchestrate them with a supervisor, connect external tools via MCP servers, and augment responses with hierarchical RAG — all without writing agent code.
+Orchid (alias for Orchestrator-Index) lets you define AI agents via YAML configuration, orchestrate them with a supervisor, connect external tools via MCP servers, and augment responses with hierarchical RAG — all without writing agent code.
 
 ## BETA - This is a work in progress.
 
 ## Features
 
-- **YAML-driven agents** -- define agents, tools, skills, and prompts in `agents.yaml`
-- **Multi-provider LLM** -- OpenAI, Anthropic, Google Gemini, Groq, Ollama via LiteLLM
-- **Hierarchical RAG** -- 5-level scoping (shared, tenant, user, chat, agent) with Qdrant builtin support
-- **MCP tool integration** -- connect to external services via Streamable HTTP MCP servers
-- **Built-in tools** -- register Python functions as in-process tools
-- **Agent skills** -- multi-step workflows within agents and across agents (orchestrator skills)
-- **Per-tool RAG caching** -- opt-in `inject_to_rag` with configurable TTL per tool
-- **AI Guardrails** -- 3-tier safety layer (global input, per-agent, global output) with built-in prompt injection, PII, content safety, topic restriction, max length, and groundedness checks
-- **Pluggable persistence** -- SQLite (default) and PostgreSQL backends for chat history
-- **Document pipeline** -- PDF, DOCX, XLSX, CSV, image parsing with chunking and ingestion
+- **YAML-driven agents** — define agents, tools, skills, and prompts in `agents.yaml`
+- **Multi-provider LLM** — OpenAI, Anthropic, Google Gemini, Groq, Ollama via LiteLLM
+- **Hierarchical RAG** — 5-level scoping (shared, tenant, user, chat, agent) with Qdrant built-in support
+- **Pluggable retrieval strategies** — `simple`, `multi_query`, `hyde`, `hybrid`, `graph_rag` plus integrator-registered custom strategies
+- **Pluggable query transformers** — `reformulate`, `multi_query`, `hyde`, `decompose`, all with configurable system prompts
+- **MCP tool integration** — connect to external services via Streamable HTTP MCP servers, with `none` / `passthrough` / `oauth` auth modes (OAuth covers RFC 9728 / RFC 8414 / RFC 7591 DCR)
+- **Built-in tools** — register Python functions as in-process tools, with declarative parameter metadata
+- **Agent skills** — multi-step workflows within agents and across agents (orchestrator skills)
+- **Mini-agents (self-clone fork)** — opt-in per-agent decomposer + aggregator that fan a single turn into independent sub-tasks running in parallel
+- **Parallel tool dispatch** — opt-in Phase A intra-round parallel tool calls based on per-tool `parallel_safe` annotations
+- **Per-tool RAG caching** — opt-in `inject_to_rag` with configurable TTL per tool
+- **Internal prompt customisation** — every supervisor / synthesis / agent / RAG-transformer / mini-agent / summarise prompt is YAML- and Python-configurable with backwards-compatible defaults
+- **Sliding-window history summarisation** — opt-in compression of older turns by a cheaper LLM so long conversations stay within budget
+- **AI Guardrails** — 3-tier safety layer (global input, per-agent, global output) with built-in prompt injection, PII, content safety, topic restriction, max length, and groundedness checks
+- **Pluggable persistence** — SQLite (default) and PostgreSQL backends for chat history; integrators can plug any `OrchidChatStorage` subclass
+- **HITL graph interrupts** — `requires_approval: true` tools pause the graph; resume via the API or CLI with the user's decision
+- **MCP capability cache warming** — `OrchidSessionWarmer` keeps tool inventories ready so the first agentic round avoids discovery RPCs
+- **Document pipeline** — PDF, DOCX, XLSX, CSV, image parsing with pluggable ingestion strategies and post-processors
 
 ## Installation
 
@@ -1066,7 +1074,248 @@ guardrails:
         scope="chat_agent"   Agent-private
 ```
 
-Always use `OrchidRAGScope` -- never raw `tenant_id` filters.
+Always use `OrchidRAGScope` — never raw `tenant_id` filters.
+
+## Advanced features
+
+### Mini-agents (parallel sub-task fork)
+
+Opt-in per-agent block that turns a single supervisor turn into N
+independent sub-tasks running in parallel through copies of the
+parent agent.  Best for tool-heavy questions that decompose cleanly
+("compare A and B and look up C") — the LangGraph builder synthesises
+three nodes per opt-in agent (`{name}_agent`, `{name}_mini`,
+`{name}_aggregator`) and the conditional edge fans out via `Send`.
+
+```yaml
+agents:
+  research:
+    description: "Multi-faceted research agent."
+    prompt: "..."
+    mini_agent:
+      enabled: true                      # default: false
+      max_count: 4                       # 2..8
+      timeout_seconds: 60                # per-mini wall clock
+      tool_allowlist_mode: strict        # strict | parent_full | inferred
+      decomposer_model: gemini/gemini-flash-lite   # cheaper LLM for the splitter
+      stream_inner_tokens: false         # surface only mini_agent.* events by default
+      decomposer_prompt: |               # optional — overrides the default
+        ...
+      aggregator_prompt: |
+        ...
+      system_prompt_template: |          # optional — placeholders {parent_prompt}, {instruction}, {tool_list}
+        {parent_prompt}
+
+        === SUB-TASK ===
+        {instruction}
+
+        === TOOLS ===
+        {tool_list}
+```
+
+Streaming consumers see `mini_agent.{decomposed,started,finished,aggregated}`
+events.  Nesting is forbidden: child agents cannot enable
+`mini_agent.enabled` (validation rejects it at config load).
+
+### Parallel tool dispatch (`parallel_tools`)
+
+Phase A intra-round parallel dispatch.  When `parallel_tools: true`,
+the agentic loop partitions one round's tool calls into:
+
+- A **parallel batch** gathered via `asyncio.gather` — tools whose
+  per-name `parallel_safe` is True.
+- A **sequential tail** for everything else (HITL approvals, write
+  effects, unknown safety).
+
+`parallel_safe` resolves with this precedence (highest → lowest):
+
+1. `requires_approval: true` → never parallel.
+2. Built-in tool → `True` iff its top-level `tools.<name>.parallel_safe: true`.
+3. MCP tool with explicit YAML `parallel_safe` → use it.
+4. MCP tool without override → `True` iff the server advertised
+   `readOnlyHint=true`.
+
+Default `False` preserves today's serial behaviour.  See
+[`examples/tool-strategies/`](../examples/tool-strategies/) for a
+working demo.
+
+### Internal prompt customisation
+
+Every LLM-facing internal prompt is YAML-configurable with
+backwards-compatible defaults.  Six surfaces exist; pick the
+ones relevant to your deployment.
+
+```yaml
+# Top-level supervisor prompts.
+supervisor:
+  assistant_name: "Acme Knowledge Desk"
+  routing_system_prompt: |
+    You coordinate the Acme Knowledge Desk's specialist agents...
+  synthesis_system_prompt: |
+    You merge the specialists' outputs into a single answer...
+  sequential_advance_prompt: |
+    Hand off to the next specialist with a one-line summary of the prior step.
+  history_summary_enabled: true       # sliding-window compression
+  history_summary_recent_turns: 10
+
+# Default RAG transformer prompts (inherited by all agents).
+defaults:
+  rag:
+    retrieval:
+      transformer_prompts:
+        reformulate: |
+          You rewrite ambiguous follow-ups into standalone search queries...
+
+# Per-agent overrides — inherit from defaults; override granularly.
+agents:
+  legal_advisor:
+    prompt: "..."
+    prompt_sections:
+      prior_results_header: "\n=== COUNSEL'S NOTES ==="
+      mcp_prompt_template: "\n[authority {name}]\n{text}"
+      rag_header: "\n=== SOURCE CITATIONS ==="
+      resource_max_chars: 4000
+      summarise_history_reminder: "\n\nFOCUS ON THE LATEST QUESTION."
+      summarise_user_template: "Question: {query}\n\n{rag_section}Live data:\n{mcp_data}"
+    rag:
+      retrieval:
+        strategy: hyde
+        transformer_prompts:
+          hyde:
+            single: "Write one paragraph of plausible legal reasoning..."
+            multi: "Write {n} legal-treatise paragraphs..."
+          decompose: "Split into {n} legal sub-issues..."
+```
+
+Programmatic equivalents are exposed at:
+
+- `OrchidAgentPromptConfig` (agentic-loop section templates + summarise overrides)
+- `OrchidQueryTransformerPromptsConfig` (per-transformer prompts)
+- `OrchidMiniAgentConfig.system_prompt_template` (per-mini focused prompt)
+- `OrchidSupervisorConfig.routing_system_prompt` etc.
+
+See [`examples/prompt-customization/`](../examples/prompt-customization/)
+for an end-to-end example listing every override site.
+
+### Custom retrieval strategies
+
+`OrchidRetrievalStrategy` is a stateless ABC with `from_config` /
+`retrieve` methods.  Subclass it, register at startup, then
+reference by name in YAML.
+
+```python
+# my_pkg/strategies/recency.py
+from orchid_ai.core.retrieval import OrchidRetrievalStrategy
+
+class RecencyRetrieval(OrchidRetrievalStrategy):
+    @classmethod
+    def from_config(cls, config):
+        return cls(field=getattr(config, "recency_field", "published_at"))
+
+    def __init__(self, *, field):
+        self._field = field
+
+    async def retrieve(self, *, query, namespace, scope, k, reader, **_):
+        results = await reader.retrieve(query=query, namespace=namespace, k=k * 2, scope=scope)
+        results.sort(key=lambda r: r.document.metadata.get(self._field, 0), reverse=True)
+        return results[:k]
+
+# orchid.yml — register at startup
+# startup:
+#   hook: my_pkg.strategies.startup.register_strategies
+```
+
+Built-in strategies live under
+`orchid_ai/rag/strategies/{simple,multi_query,hyde,hybrid,graph_rag}.py`
+— short, readable templates for your own.
+
+[`examples/rag-strategies/`](../examples/rag-strategies/) shows a full
+custom strategy with a YAML side-by-side comparison.
+
+### Custom tool-call strategies
+
+`OrchidToolCallStrategy` controls how an MCP server's tools are
+dispatched during **skill execution**.  Built-ins: `all`,
+`sequential`, `llm_decides`.  Register custom strategies via
+`register_strategy()` from a startup hook.
+
+```python
+from orchid_ai.agents.strategies import OrchidToolCallStrategy
+
+class PriorityStrategy(OrchidToolCallStrategy):
+    """Try tools in order; stop at the first non-empty result."""
+    async def execute(self, client, tools, query, auth, *, agent_name="", **_):
+        results = {}
+        for tool in tools:
+            r = await client.call_tool(tool.name, {"query": query, **tool.arguments}, auth)
+            results[tool.name] = r.text
+            if r.text.strip():
+                break
+        return results
+```
+
+```yaml
+# Reference by name in agents.yaml
+agents:
+  cascade_lookup:
+    mcp_servers:
+      - name: kb
+        url: ${KB_MCP_URL}
+        tool_call_strategy: priority
+        tools:
+          - { name: cache_lookup }
+          - { name: primary_lookup }
+          - { name: slow_lookup }
+```
+
+Note: `tool_call_strategy` only fires inside skill-execution paths.
+The default agentic loop (LLM picks tools via `tool_calls`) is always
+"LLM decides" — see
+[`examples/tool-strategies/`](../examples/tool-strategies/) for a
+worked demo.
+
+### Custom storage backends
+
+Implement `OrchidChatStorage` and reference its dotted import path
+in `orchid.yml`.  Constructor must accept `dsn=` and
+`extra_migrations_package=` (the framework factory passes both
+unconditionally).
+
+```yaml
+storage:
+  class: my_pkg.storage.redis.OrchidRedisChatStorage
+  dsn: redis://localhost:6379/0
+```
+
+The library ships SQLite (default) and PostgreSQL backends.  See
+[`examples/custom-storage/`](../examples/custom-storage/) for a
+JSON-file backend with the full contract checklist.
+
+### Sliding-window history summarisation
+
+For long-running chats the supervisor's history budget can blow past
+the LLM's context window.  Opt in via
+`supervisor.history_summary_enabled: true` and the framework keeps
+the most recent `history_summary_recent_turns` (default 10) verbatim
+while summarising older exchanges via a cheaper LLM
+(`history_summary_model`, defaults to the supervisor model).
+Compression runs only when the chat actually exceeds the recent-turn
+threshold so short chats pay nothing.
+
+### MCP capability cache warming
+
+The first agentic round normally needs an MCP `tools/list` /
+`prompts/list` / `resources/list` round-trip per server.
+`OrchidSessionWarmer` proactively populates the cache:
+
+- `auth.mode: none` servers warm at process startup
+  (`Orchid.warm_unauthenticated_capabilities()`).
+- `passthrough` and `oauth` servers warm at user-session start —
+  the frontend calls `POST /session/warm` after login, with a
+  fire-and-forget backstop on the first agentic loop.
+
+Manual flush via `OrchidMCPClient.invalidate_cache()` or
+`OrchidSessionWarmer.invalidate_user(auth)`.
 
 ## Embedding Dimensions
 

@@ -72,7 +72,7 @@ async def test_no_injection_when_no_injectable_tools():
 
 @pytest.mark.asyncio
 async def test_injection_only_for_opted_in_mcp_tools():
-    """Only MCP tool results with inject_to_rag=True are passed to inject_to_rag()."""
+    """Only MCP tool results with inject_to_rag=True reach inject_to_rag()."""
     config = OrchidAgentConfig(
         description="d",
         prompt="p",
@@ -105,15 +105,16 @@ async def test_injection_only_for_opted_in_mcp_tools():
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
-        mock_inject.assert_called_once()
-        injected_data = mock_inject.call_args.kwargs["mcp_data"]
-        assert "tool_keep" in injected_data
-        assert "tool_skip" not in injected_data
+        # ADR-024 — one inject_to_rag call per opted-in tool.
+        assert mock_inject.await_count == 1
+        kwargs = mock_inject.call_args.kwargs
+        assert kwargs["tool_name"] == "tool_keep"
+        assert kwargs["tool_result"] == "data1"
 
 
 @pytest.mark.asyncio
 async def test_injection_only_for_opted_in_builtin_tools():
-    """Only built-in tool results with inject_to_rag=True are passed to inject_to_rag()."""
+    """Only built-in tool results with inject_to_rag=True reach inject_to_rag()."""
     config = OrchidAgentConfig(
         description="d",
         prompt="p",
@@ -121,11 +122,13 @@ async def test_injection_only_for_opted_in_builtin_tools():
         llm=OrchidLLMConfig(),
         tools=["format_date", "calc_rate"],
     )
+    # Built-in injectable tools land in ``injectable_tools`` with a
+    # ``builtin_`` prefix; the agentic loop emits the unprefixed name.
     config.injectable_tools = {"builtin_format_date"}
 
     agent = _make_agent(config)
 
-    tool_results = {"builtin_format_date": "2024-01-01", "builtin_calc_rate": "85%"}
+    tool_results = {"format_date": "2024-01-01", "calc_rate": "85%"}
 
     with (
         patch.object(
@@ -137,10 +140,10 @@ async def test_injection_only_for_opted_in_builtin_tools():
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
-        mock_inject.assert_called_once()
-        injected_data = mock_inject.call_args.kwargs["mcp_data"]
-        assert "builtin_format_date" in injected_data
-        assert "builtin_calc_rate" not in injected_data
+        assert mock_inject.await_count == 1
+        kwargs = mock_inject.call_args.kwargs
+        assert kwargs["tool_name"] == "format_date"
+        assert kwargs["tool_result"] == "2024-01-01"
 
 
 @pytest.mark.asyncio

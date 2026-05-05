@@ -30,6 +30,8 @@ from .repository import OrchidVectorReader
 from .scopes import OrchidRAGScope
 from .state import OrchidAgentState
 
+__all__ = ["OrchidAgent"]
+
 logger = logging.getLogger(__name__)
 
 
@@ -114,19 +116,6 @@ class OrchidAgent(ABC):
             if type(msg).__name__ == "HumanMessage":
                 return str(msg.content)
         return ""
-
-    async def reformulate_query(self, query: str, state: OrchidAgentState) -> str:
-        """Rewrite the user's query as a standalone search query.
-
-        Delegates to :func:`core.helpers.reformulate_query`.  See that
-        function for full documentation.
-        """
-        return await _helpers.reformulate_query(
-            query,
-            state,
-            chat_model=self._chat_model,
-            agent_name=self.name,
-        )
 
     @staticmethod
     def extract_conversation_history(
@@ -310,12 +299,21 @@ class OrchidAgent(ABC):
         temperature: float = 0.2,
         conversation_history: list[dict[str, str]] | None = None,
         prior_tool_context: dict[str, Any] | None = None,
+        history_reminder: str | None = None,
+        prior_results_header: str | None = None,
+        rag_section_header: str | None = None,
+        user_content_template: str | None = None,
+        prior_results_max_chars: int = 4000,
         **_kwargs: Any,
     ) -> str:
         """Use LLM to produce a human-readable summary of RAG + MCP data.
 
         Delegates to :func:`core.helpers.summarise`.  See that function
-        for full documentation.
+        for full documentation.  The ``*_header`` / ``*_template`` /
+        ``*_reminder`` overrides forward straight through so callers
+        threading per-agent
+        :class:`~orchid_ai.config.schema.OrchidAgentPromptConfig` values
+        reach the helper without re-implementing the assembly.
 
         Raises ``RuntimeError`` if no ``chat_model`` was injected.
         """
@@ -332,6 +330,11 @@ class OrchidAgent(ABC):
             temperature=temperature,
             conversation_history=conversation_history,
             prior_tool_context=prior_tool_context,
+            history_reminder=history_reminder,
+            prior_results_header=prior_results_header,
+            rag_section_header=rag_section_header,
+            user_content_template=user_content_template,
+            prior_results_max_chars=prior_results_max_chars,
         )
 
     async def fetch_all_rag_context(

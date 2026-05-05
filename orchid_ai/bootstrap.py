@@ -231,10 +231,7 @@ async def _build_runtime(
         mcp_gateway_state_store,
     ) = await _build_persistence(overrides)
 
-    # ── 6. Startup hook (optional) ───────────────────────────
-    await _run_startup_hook(overrides.startup_hook, reader, startup_hook_kwargs)
-
-    # ── 7. Assemble runtime + optional checkpointer ──────────
+    # ── 6. Assemble runtime + optional checkpointer ──────────
     runtime = OrchidRuntime(
         default_model=overrides.model,
         reader=reader,
@@ -246,6 +243,12 @@ async def _build_runtime(
         **overrides.runtime_overrides,
     )
     await _attach_checkpointer(runtime, overrides.checkpointer_type, overrides.checkpointer_dsn)
+
+    # ── 7. Startup hook (optional) ───────────────────────────
+    # Runs AFTER the runtime is assembled so hooks can inject
+    # post-construction collaborators (e.g. seed an
+    # ``InMemoryGraphStore`` and assign ``runtime.graph_store``).
+    await _run_startup_hook(overrides.startup_hook, reader, runtime, startup_hook_kwargs)
 
     logger.info(
         "[Bootstrap] Ready — model=%s, backend=%s, storage=%s, agents=%s",
@@ -422,21 +425,28 @@ async def _build_persistence(
 async def _run_startup_hook(
     hook_path: str,
     reader: OrchidVectorReader,
+    runtime: OrchidRuntime,
     extra_kwargs: dict[str, Any] | None,
 ) -> None:
     """Resolve and invoke the startup hook, validating its signature first.
 
-    Contract: ``async def(reader, settings, **_) -> None``.  ``settings``
-    is ``None`` when the caller is the client / CLI; the API passes its
-    ``Settings`` instance via *extra_kwargs*.  Missing / invalid hooks
-    raise :class:`TypeError` with a clear message (see
-    :func:`_validate_startup_hook`).
+    Contract: ``async def(reader, settings, runtime, **_) -> None``.
+
+    ``settings`` is ``None`` when the caller is the client / CLI; the
+    API passes its ``Settings`` instance via *extra_kwargs*.
+
+    ``runtime`` carries the assembled :class:`OrchidRuntime` so hooks
+    can inject post-construction collaborators (e.g. seed an
+    ``InMemoryGraphStore`` then ``runtime.graph_store = store``).
+
+    Missing / invalid hooks raise :class:`TypeError` with a clear
+    message (see :func:`_validate_startup_hook`).
     """
     if not hook_path:
         return
 
     hook_fn = import_class(hook_path)
-    hook_kwargs: dict[str, Any] = {"reader": reader, "settings": None}
+    hook_kwargs: dict[str, Any] = {"reader": reader, "settings": None, "runtime": runtime}
     hook_kwargs.update(extra_kwargs or {})
     _validate_startup_hook(hook_path, hook_fn, hook_kwargs)
     await hook_fn(**hook_kwargs)

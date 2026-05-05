@@ -9,6 +9,7 @@ from .schema_guardrails import OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPServerConfig, OrchidToolConfig
 from .schema_mini_agent import OrchidMiniAgentConfig
+from .schema_prompts import OrchidAgentPromptConfig
 from .schema_rag import OrchidRAGConfig, OrchidRAGDefaultsConfig
 from .schema_skills import (
     OrchidAgentSkillConfig,
@@ -74,6 +75,14 @@ class OrchidAgentConfig(BaseModel):
     # the running agent cannot reach directly).
     parallel_safe_builtin_tools: set[str] = Field(default_factory=set, exclude=True)
 
+    # Computed at validation — resolved ``OrchidBuiltinToolConfig`` per
+    # tool name referenced by this agent.  Cached here so
+    # :meth:`effective_rag` can look up per-tool RAG overrides at
+    # runtime without needing the global ``OrchidAgentsConfig.tools``
+    # dict (the agent only knows tool names, not the underlying
+    # config objects).
+    builtin_tool_configs: dict[str, OrchidBuiltinToolConfig] = Field(default_factory=dict, exclude=True)
+
     # Phase A — opt-in parallel tool-call dispatch within a single
     # agentic round.  When ``True``, the agentic loop partitions the
     # LLM's tool_calls into a parallel batch (gathered via
@@ -94,7 +103,48 @@ class OrchidAgentConfig(BaseModel):
     # for field semantics.
     mini_agent: OrchidMiniAgentConfig = Field(default_factory=OrchidMiniAgentConfig)
 
+    # Customisable templates for the agentic-loop system prompt — the
+    # six section headers + per-resource bodies + truncation knobs.
+    # See :class:`OrchidAgentPromptConfig` for the full field list and
+    # placeholder contracts.
+    prompt_sections: OrchidAgentPromptConfig = Field(default_factory=OrchidAgentPromptConfig)
+
     model_config = {"populate_by_name": True}
+
+    def effective_rag(self, tool_name: str) -> OrchidRAGConfig:
+        """Return the RAG config that should govern ``tool_name`` (ADR-024).
+
+        Looks up the tool first in this agent's MCP server tools, then
+        in the cached built-in tool configs.  When the tool sets a
+        ``rag:`` block, the agent's full RAG config is used as the
+        base and the tool's *explicitly set* fields overlay onto it
+        via a deep merge — so a tool can override just one nested
+        knob (``retrieval.strategy``, ``ingestion.chunk_size``, …)
+        without restating every other field.  When no override is
+        set, returns ``self.rag`` unchanged.
+        """
+        tool_rag: OrchidRAGConfig | None = None
+
+        for server in self.mcp_servers:
+            for tool in server.tools:
+                if isinstance(tool, OrchidToolConfig) and tool.name == tool_name and tool.rag is not None:
+                    tool_rag = tool.rag
+                    break
+            if tool_rag is not None:
+                break
+
+        if tool_rag is None:
+            builtin_cfg = self.builtin_tool_configs.get(tool_name)
+            if builtin_cfg is not None and builtin_cfg.rag is not None:
+                tool_rag = builtin_cfg.rag
+
+        if tool_rag is None:
+            return self.rag
+
+        base = self.rag.model_dump()
+        overlay = tool_rag.model_dump(exclude_unset=True)
+        merged = _deep_merge(base, overlay)
+        return OrchidRAGConfig.model_validate(merged)
 
 
 class OrchidDefaultsConfig(BaseModel):
@@ -179,12 +229,40 @@ def _apply_defaults(
         agent.rag.enabled = defaults.rag.enabled
     if agent.rag.rag_ttl == 0 and defaults.rag.rag_ttl != 0:
         agent.rag.rag_ttl = defaults.rag.rag_ttl
-    if not defaults.rag.reformulate_queries:
-        agent.rag.reformulate_queries = False
-    if agent.rag.retriever_type is None:
-        agent.rag.retriever_type = defaults.rag.retriever_type
     if agent.rag.max_context_chars is None:
         agent.rag.max_context_chars = defaults.rag.max_context_chars
+
+    # Merge retrieval block — strategy + transformers inherit
+    # independently so an agent can override one without losing the
+    # other.  ``strategy`` falls back to ``"simple"`` when neither
+    # agent nor defaults set it; ``query_transformers`` falls back to
+    # ``[]`` (no transformers) on the same path.
+    if agent.rag.retrieval.strategy is None:
+        agent.rag.retrieval.strategy = defaults.rag.retrieval.strategy or "simple"
+    if agent.rag.retrieval.query_transformers is None:
+        agent.rag.retrieval.query_transformers = list(defaults.rag.retrieval.query_transformers or [])
+    if not agent.rag.retrieval.metadata_filters and defaults.rag.retrieval.metadata_filters:
+        agent.rag.retrieval.metadata_filters = dict(defaults.rag.retrieval.metadata_filters)
+
+    # Merge transformer prompt overrides — each scalar field inherits
+    # independently when the agent leaves it ``None``, so an agent can
+    # override one transformer's prompt without losing the others.
+    _merge_transformer_prompts(agent.rag.retrieval, defaults.rag.retrieval)
+
+    # Merge ingestion block — ``strategy`` falls back to ``"recursive"``
+    # when neither side sets it; chunk knobs inherit independently.
+    if agent.rag.ingestion.strategy is None:
+        agent.rag.ingestion.strategy = defaults.rag.ingestion.strategy or "recursive"
+    if agent.rag.ingestion.chunk_size == 1000 and defaults.rag.ingestion.chunk_size != 1000:
+        agent.rag.ingestion.chunk_size = defaults.rag.ingestion.chunk_size
+    if agent.rag.ingestion.chunk_overlap == 200 and defaults.rag.ingestion.chunk_overlap != 200:
+        agent.rag.ingestion.chunk_overlap = defaults.rag.ingestion.chunk_overlap
+    if agent.rag.ingestion.parent_chunk_size == 0 and defaults.rag.ingestion.parent_chunk_size != 0:
+        agent.rag.ingestion.parent_chunk_size = defaults.rag.ingestion.parent_chunk_size
+    if agent.rag.ingestion.parent_chunk_overlap == 200 and defaults.rag.ingestion.parent_chunk_overlap != 200:
+        agent.rag.ingestion.parent_chunk_overlap = defaults.rag.ingestion.parent_chunk_overlap
+    if not agent.rag.ingestion.post_processors and defaults.rag.ingestion.post_processors:
+        agent.rag.ingestion.post_processors = list(defaults.rag.ingestion.post_processors)
 
     # Collect injectable MCP tool names + TTLs
     agent_ttl = agent.rag.rag_ttl
@@ -227,6 +305,17 @@ def _apply_defaults(
             if tool_cfg and tool_cfg.parallel_safe is True:
                 agent.parallel_safe_builtin_tools.add(tool_name)
 
+    # Cache resolved built-in tool configs (ADR-024) so
+    # ``OrchidAgentConfig.effective_rag(tool_name)`` can look up
+    # per-tool RAG overrides at runtime — the agent only knows tool
+    # names, not the underlying ``OrchidBuiltinToolConfig`` objects on
+    # ``OrchidAgentsConfig.tools``.
+    if global_tools:
+        for tool_name in agent.tools:
+            tool_cfg = global_tools.get(tool_name)
+            if tool_cfg is not None:
+                agent.builtin_tool_configs[tool_name] = tool_cfg
+
     # Recurse into children — but reject any child that opts into
     # mini-agents.  Nesting is forbidden by spec §2 to keep the
     # graph topology bounded.  ``mini_agent.enabled`` may only be
@@ -239,3 +328,45 @@ def _apply_defaults(
                     f"mini-agents may only be enabled on top-level agents (no nesting)."
                 )
             _apply_defaults(child, child_name, defaults, global_tools)
+
+
+def _merge_transformer_prompts(agent_retrieval: object, defaults_retrieval: object) -> None:
+    """Inherit unset transformer-prompt overrides from the defaults block.
+
+    Each scalar field is treated independently — leaving any field
+    ``None`` on the agent inherits whatever the defaults block sets
+    (which is also ``None`` in the typical case, so the transformer
+    falls back to its module-level default).  Splitting this out keeps
+    :func:`_apply_defaults` readable.
+    """
+    agent_prompts = agent_retrieval.transformer_prompts  # type: ignore[attr-defined]
+    default_prompts = defaults_retrieval.transformer_prompts  # type: ignore[attr-defined]
+
+    if agent_prompts.multi_query is None and default_prompts.multi_query is not None:
+        agent_prompts.multi_query = default_prompts.multi_query
+    if agent_prompts.decompose is None and default_prompts.decompose is not None:
+        agent_prompts.decompose = default_prompts.decompose
+    if agent_prompts.reformulate is None and default_prompts.reformulate is not None:
+        agent_prompts.reformulate = default_prompts.reformulate
+    if agent_prompts.hyde.single is None and default_prompts.hyde.single is not None:
+        agent_prompts.hyde.single = default_prompts.hyde.single
+    if agent_prompts.hyde.multi is None and default_prompts.hyde.multi is not None:
+        agent_prompts.hyde.multi = default_prompts.hyde.multi
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively overlay ``overlay`` onto ``base``, preserving nested keys.
+
+    Used by :meth:`OrchidAgentConfig.effective_rag` to merge a tool's
+    explicitly-set ``rag`` fields onto the agent's full RAG dump
+    without losing untouched nested values (e.g. an
+    ``ingestion: {chunk_size: 500}`` overlay must keep the agent's
+    ``ingestion.strategy`` intact).
+    """
+    result = dict(base)
+    for key, value in overlay.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result

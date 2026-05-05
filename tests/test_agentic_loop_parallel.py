@@ -344,7 +344,7 @@ async def test_resolve_parallel_safety_precedence(monkeypatch):
     agent_cfg = config.agents["support"]
 
     # Build a bare-bones GenericAgent (we only call the resolver method).
-    from orchid_ai.rag.null import NullVectorReader
+    from orchid_ai.rag.backends.null import NullVectorReader
 
     agent = GenericAgent.__new__(GenericAgent)
     agent._config = agent_cfg

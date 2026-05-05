@@ -1,10 +1,9 @@
-"""Backward-compatible re-exports for the MCP client surface.
+"""Umbrella module that re-exports the MCP client surface.
 
-The original 326-line module mixed five unrelated concepts: tool-call
-results, error types, segregated abstract interfaces, per-server DCR
-registrations, and per-user OAuth tokens. They now live in themed
-sibling modules; this file keeps the single import path
-``orchid_ai.core.mcp`` intact for every consumer.
+The MCP types live in five themed sibling modules — tool-call results,
+error types, segregated abstract interfaces, per-server DCR
+registrations, and per-user OAuth tokens.  This file is the single
+import path (``orchid_ai.core.mcp``) every consumer uses.
 
 Themed modules:
   - :mod:`mcp_result` — :class:`OrchidMCPToolResult`

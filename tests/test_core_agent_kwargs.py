@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 
 from orchid_ai.core.agent import OrchidAgent
-from orchid_ai.rag.null import NullVectorReader
+from orchid_ai.rag.backends.null import NullVectorReader
 
 
 class _MinimalAgent(OrchidAgent):

@@ -1,9 +1,7 @@
-"""Backward-compatible re-exports for the agents.yaml configuration schema.
+"""Umbrella module that re-exports the agents.yaml configuration schema.
 
-Originally a single 612-line module bundling 19 Pydantic classes plus
-the defaults-merging pass; the contracts now live in themed sibling
-files. The single import path ``orchid_ai.config.schema`` is unchanged
-for every consumer.
+The Pydantic classes live in themed sibling files; this module is the
+single import path (``orchid_ai.config.schema``) every consumer uses.
 
 Themed modules:
   - :mod:`schema_llm` — LLM configuration
@@ -30,7 +28,17 @@ from .schema_guardrails import OrchidGuardrailRuleConfig, OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPAuthConfig, OrchidMCPServerConfig, OrchidToolConfig
 from .schema_mini_agent import OrchidMiniAgentConfig
-from .schema_rag import OrchidRAGConfig, OrchidRAGDefaultsConfig
+from .schema_prompts import (
+    OrchidAgentPromptConfig,
+    OrchidHydeTransformerPromptsConfig,
+    OrchidQueryTransformerPromptsConfig,
+)
+from .schema_rag import (
+    OrchidIngestionConfig,
+    OrchidRAGConfig,
+    OrchidRAGDefaultsConfig,
+    OrchidRetrievalConfig,
+)
 from .schema_skills import (
     BuiltinToolParameter,
     OrchidAgentSkillConfig,
@@ -45,6 +53,7 @@ __all__ = [
     "BuiltinToolParameter",
     "ExecutionHints",
     "OrchidAgentConfig",
+    "OrchidAgentPromptConfig",
     "OrchidAgentSkillConfig",
     "OrchidAgentSkillStepConfig",
     "OrchidAgentsConfig",
@@ -52,14 +61,18 @@ __all__ = [
     "OrchidDefaultsConfig",
     "OrchidGuardrailRuleConfig",
     "OrchidGuardrailsConfig",
+    "OrchidHydeTransformerPromptsConfig",
+    "OrchidIngestionConfig",
     "OrchidLLMConfig",
     "OrchidMCPAuthConfig",
     "OrchidMCPServerConfig",
     "OrchidMiniAgentConfig",
     "OrchidOrchestratorSkillConfig",
     "OrchidOrchestratorSkillStepConfig",
+    "OrchidQueryTransformerPromptsConfig",
     "OrchidRAGConfig",
     "OrchidRAGDefaultsConfig",
+    "OrchidRetrievalConfig",
     "OrchidSupervisorConfig",
     "OrchidToolConfig",
     "_apply_defaults",
