@@ -147,7 +147,7 @@ def test_wiki_example_threads_per_tool_override() -> None:
     assert docs.rag.ingestion.strategy == "headered"
     assert docs.rag.retrieval.strategy == "hybrid"
 
-    # Per-tool override (ADR-024) flips namespace + ingestion + retrieval.
+    # Per-tool override flips namespace + ingestion + retrieval.
     eff = docs.effective_rag("lookup_glossary")
     assert eff.namespace == "glossary_cache"
     assert eff.ingestion.strategy == "semantic"

@@ -1,11 +1,11 @@
 """
-Sparse encoder registry (ADR-025, ADR-028).
+Sparse encoder registry.
 
 Mirrors :mod:`orchid_ai.rag.strategies` and
 :mod:`orchid_ai.rag.transformers`: register, get-by-name with safe
 fallback, clear for tests.
 
-Stage 4 ships the full BM25-Okapi in-process encoder (lazy IDF tables
+Ships the full BM25-Okapi in-process encoder (lazy IDF tables
 per namespace + drift-based avgdl refresh) and the opt-in
 :class:`SpladeEncoder` behind the ``splade`` extra
 (``pip install orchid-ai[splade]``).  The Splade class lives in

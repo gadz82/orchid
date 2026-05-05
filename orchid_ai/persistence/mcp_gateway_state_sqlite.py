@@ -1,4 +1,4 @@
-"""SQLite-backed MCP-gateway-state store (Phase 3).
+"""SQLite-backed MCP-gateway-state store.
 
 Implements all three ABCs in
 :mod:`orchid_ai.core.mcp_gateway_state` against the tables created by

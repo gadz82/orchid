@@ -62,7 +62,7 @@ is carried in YAML — everything else is either handled by the graph
 | Mode | Behaviour |
 |------|-----------|
 | `none` (default) | No auth headers. For local/unauthenticated servers. |
-| `passthrough` | Forwards the graph's `OrchidAuthContext` bearer token on every MCP call — ADR-010, unchanged. |
+| `passthrough` | Forwards the graph's `OrchidAuthContext` bearer token on every MCP call. |
 | `oauth` | **MCP 2025-03-26 flow.** On the first 401 the framework runs RFC 9728 → RFC 8414 → RFC 7591 discovery and dynamically registers a client. Per-user tokens are stored in `OrchidMCPTokenStore`, per-server endpoints + DCR credentials in `OrchidMCPClientRegistrationStore`. |
 
 ```yaml

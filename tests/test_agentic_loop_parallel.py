@@ -1,10 +1,8 @@
-"""Phase A — parallel tool-call dispatch within one agentic round.
+"""Parallel tool-call dispatch within one agentic round.
 
-Implements the six §16 (Phase A) tests from
-``.knowledge/mini-agents-implementation-spec.md``.  All tests drive
-``AgenticLoop._dispatch_tool_calls`` directly so we can observe
-``asyncio.gather`` invocations, ``ToolMessage`` ordering, and
-HITL serialisation without mocking the LLM.
+All tests drive ``AgenticLoop._dispatch_tool_calls`` directly so we
+can observe ``asyncio.gather`` invocations, ``ToolMessage`` ordering,
+and HITL serialisation without mocking the LLM.
 """
 
 from __future__ import annotations
@@ -96,7 +94,7 @@ class TestIsParallelSafeHelper:
         assert _is_parallel_safe("present", {"present": False}) is False
 
 
-# ── §16 Phase A test 1 — both safe → gather ──
+# ── test 1 — both safe → gather ──
 
 
 @pytest.mark.asyncio
@@ -133,7 +131,7 @@ async def test_two_parallel_safe_tools_run_concurrently():
     assert messages[1].tool_call_id == "call_lookup_b"
 
 
-# ── §16 Phase A test 2 — mixed safe + unsafe ──
+# ── test 2 — mixed safe + unsafe ──
 
 
 @pytest.mark.asyncio
@@ -164,7 +162,7 @@ async def test_mixed_safe_and_unsafe_partitions_correctly():
     assert [m.tool_call_id for m in messages] == ["call_safe_a", "call_unsafe", "call_safe_b"]
 
 
-# ── §16 Phase A test 3 — one safe call raises in the gather ──
+# ── test 3 — one safe call raises in the gather ──
 
 
 @pytest.mark.asyncio
@@ -194,7 +192,7 @@ async def test_safe_call_raises_others_complete():
     assert messages[1].content == "fine"
 
 
-# ── §16 Phase A test 4 — approval serialises whole round ──
+# ── test 4 — approval serialises whole round ──
 
 
 @pytest.mark.asyncio
@@ -248,7 +246,7 @@ async def test_requires_approval_round_runs_serially(monkeypatch):
     assert [m.content for m in messages] == ["A", "deleted", "B"]
 
 
-# ── §16 Phase A test 5 — opt-out preserves byte-identical behaviour ──
+# ── test 5 — opt-out preserves byte-identical behaviour ──
 
 
 @pytest.mark.asyncio
@@ -282,7 +280,7 @@ async def test_parallel_tools_disabled_no_gather(monkeypatch):
     assert [m.content for m in messages] == ["A", "B"]
 
 
-# ── §16 Phase A test 6 — annotation precedence covered at agent level ──
+# ── test 6 — annotation precedence covered at agent level ──
 
 
 @pytest.mark.asyncio

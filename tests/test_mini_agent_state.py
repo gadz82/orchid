@@ -1,4 +1,4 @@
-"""Spec §16 case 16 — shadow keys never collide.
+"""Shadow keys never collide.
 
 Three minis with unique ``mini_id`` produce exactly three entries in
 ``mini_agent_outcomes`` keyed ``support#mini_0/1/2``.  The shallow

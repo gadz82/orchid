@@ -16,9 +16,6 @@ graph builder synthesises three nodes for that agent:
 
 Agents that don't opt in keep their current single-node shape; the
 builder must not synthesise the extra nodes for them (zero overhead).
-
-See ``.knowledge/mini-agents-implementation-spec.md`` §5–§12 for the
-full contract.
 """
 
 from __future__ import annotations

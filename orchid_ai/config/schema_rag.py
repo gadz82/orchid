@@ -1,4 +1,4 @@
-"""RAG-related configuration models (ADR-022 / ADR-023 / ADR-027 / ADR-028).
+"""RAG-related configuration models.
 
 The schema is split into three nested blocks:
 
@@ -10,9 +10,9 @@ The schema is split into three nested blocks:
     plus the agent-scoped knobs (``namespace`` / ``k`` / TTL / context
     cap).
 
-Per the ADRs the blocks land in both ``defaults.rag`` and
-``agents.<name>.rag`` — the merger in :func:`schema_agent._apply_defaults`
-inherits any unset fields from the defaults block.
+The blocks land in both ``defaults.rag`` and ``agents.<name>.rag`` —
+the merger in :func:`schema_agent._apply_defaults` inherits any unset
+fields from the defaults block.
 """
 
 from __future__ import annotations
@@ -25,20 +25,20 @@ from .schema_prompts import OrchidQueryTransformerPromptsConfig
 
 
 class OrchidIngestionConfig(BaseModel):
-    """How documents are turned into chunks (ADR-022).
+    """How documents are turned into chunks.
 
     ``strategy`` is a free-form string so integrators can register
     custom strategies via
     :func:`orchid_ai.documents.strategies.register_ingestion_strategy`.
-    Stage 1 ships ``recursive``; Stage 2 adds ``semantic``,
-    ``hierarchical``, ``headered``.
+    Built-ins include ``recursive``, ``semantic``, ``hierarchical``,
+    ``headered``.
 
     ``post_processors`` runs in order after the strategy splits the
-    text — Stage 2 introduces ``contextual_headers`` and Stage 5 adds
+    text — built-ins include ``contextual_headers`` and
     ``entity_extraction`` for GraphRAG.
 
     ``parent_chunk_size > 0`` triggers the parent-in-metadata layout in
-    ``RecursiveIngestion``; Stage 2's ``HierarchicalIngestion`` uses an
+    ``RecursiveIngestion``; ``HierarchicalIngestion`` uses an
     :class:`OrchidDocStore` instead.
 
     ``None`` on ``strategy`` means "inherit from defaults".
@@ -55,7 +55,7 @@ class OrchidIngestionConfig(BaseModel):
 
 
 class OrchidHydeConfig(BaseModel):
-    """Per-agent ``hyde`` retrieval knobs (ADR-023 §YAML).
+    """Per-agent ``hyde`` retrieval knobs.
 
     ``n_hypothetical`` controls how many hypothetical answers
     :class:`HyDERetrieval` (and :class:`HyDETransformer`, when
@@ -69,11 +69,11 @@ class OrchidHydeConfig(BaseModel):
 
 
 class OrchidHybridConfig(BaseModel):
-    """Per-agent ``hybrid`` retrieval knobs (ADR-025 §YAML).
+    """Per-agent ``hybrid`` retrieval knobs.
 
     ``sparse_encoder`` selects the :class:`OrchidSparseEncoder` from
-    :mod:`orchid_ai.rag.sparse`'s registry — Stage 4 ships ``bm25`` as
-    the default; ``splade`` lands behind the optional ``splade`` extra.
+    :mod:`orchid_ai.rag.sparse`'s registry — built-in ``bm25`` is the
+    default; ``splade`` lands behind the optional ``splade`` extra.
 
     ``fusion`` chooses between Reciprocal Rank Fusion (``rrf``,
     parameter-free, robust default) and weighted-linear fusion
@@ -90,7 +90,7 @@ class OrchidHybridConfig(BaseModel):
 
 
 class OrchidGraphRetrievalConfig(BaseModel):
-    """Per-agent ``graph_rag`` retrieval knobs (ADR-026 §YAML).
+    """Per-agent ``graph_rag`` retrieval knobs.
 
     ``enabled`` is the ingestion-side feature flag — it lets the
     ``entity_extraction`` post-processor short-circuit when False so
@@ -106,7 +106,7 @@ class OrchidGraphRetrievalConfig(BaseModel):
 
     ``relation_filter`` narrows traversal to specific edge labels —
     e.g. ``[reports_to, manages]`` for an org-chart agent.  Empty list
-    means "all relations" per ADR-026.
+    means "all relations".
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -118,11 +118,11 @@ class OrchidGraphRetrievalConfig(BaseModel):
 
 
 class OrchidRetrievalConfig(BaseModel):
-    """How a query is turned into ranked results (ADR-023 / ADR-027).
+    """How a query is turned into ranked results.
 
     ``strategy`` selects the :class:`OrchidRetrievalStrategy` from the
-    registry — Stage 1 ships ``simple`` and ``multi_query``; Stage 3
-    adds ``hyde``; later stages add ``hybrid``, ``graph_rag``.
+    registry — built-ins include ``simple``, ``multi_query``, ``hyde``,
+    ``hybrid``, ``graph_rag``.
 
     ``query_transformers`` is an ordered list of transformer names.
     The agent applies ``pre_strategy=True`` transformers (e.g.
@@ -131,8 +131,7 @@ class OrchidRetrievalConfig(BaseModel):
     ``multi_query``, ``hyde``, ``decompose``) are forwarded to the
     strategy and fanned out internally.
 
-    ``metadata_filters`` is the operator mini-language defined in
-    ADR-027 (used from Stage 6 onward).
+    ``metadata_filters`` is the operator mini-language.
 
     Per-strategy blocks (``hyde``, future ``hybrid``, ``graph``) live
     here so a single :class:`OrchidRetrievalConfig` carries every knob
@@ -147,7 +146,7 @@ class OrchidRetrievalConfig(BaseModel):
     strategy: str | None = None
     query_transformers: list[str] | None = None
     metadata_filters: dict[str, Any] = Field(default_factory=dict)
-    #: Cycle-mitigation knob (ADR-024 §"Open questions / risks").  When
+    #: Cycle-mitigation knob.  When
     #: ``True``, retrieval injects a ``dynamic: {"not": True}`` clause
     #: into the metadata filters so dynamically-injected tool output
     #: doesn't get re-retrieved as ground truth.
@@ -200,9 +199,8 @@ class OrchidRAGConfig(BaseModel):
     max_context_chars: int | None = None  # None = inherit from defaults.rag.max_context_chars
     ingestion: OrchidIngestionConfig = Field(default_factory=OrchidIngestionConfig)
     retrieval: OrchidRetrievalConfig = Field(default_factory=OrchidRetrievalConfig)
-    #: Explicit Qdrant payload indexes for metadata-filter fields
-    #: (ADR-027 §"Pre-condition: payload indexing").  Map of
-    #: ``field_name -> qdrant_schema_type`` where the schema type is
+    #: Explicit Qdrant payload indexes for metadata-filter fields.
+    #: Map of ``field_name -> qdrant_schema_type`` where the schema type is
     #: one of ``keyword``, ``integer``, ``float``, ``bool``,
     #: ``datetime``, ``text``, ``geo``.  When omitted, the Qdrant
     #: backend auto-infers types from the filter values on first

@@ -1,4 +1,4 @@
-"""Tests for Qdrant payload-index auto-creation (ADR-027)."""
+"""Tests for Qdrant payload-index auto-creation."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Tests for ``DecomposeTransformer`` (ADR-023)."""
+"""Tests for ``DecomposeTransformer``."""
 
 from __future__ import annotations
 

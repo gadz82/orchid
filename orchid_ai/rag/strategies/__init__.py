@@ -1,5 +1,5 @@
 """
-Retrieval strategy registry (ADR-023).
+Retrieval strategy registry.
 
 Mirrors the proven :mod:`orchid_ai.agents.strategies` template:
 register, get-by-name with a safe fallback, clear for test isolation.

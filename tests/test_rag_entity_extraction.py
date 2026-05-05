@@ -1,4 +1,4 @@
-"""Tests for ``LLMEntityExtractor`` and ``EntityExtractionPostProcessor`` (ADR-026)."""
+"""Tests for ``LLMEntityExtractor`` and ``EntityExtractionPostProcessor``."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Mini-agent aggregator node (Phase B, items B4 + B7).
+"""Mini-agent aggregator node.
 
 Runs once per parent agent per turn after every mini in that turn
 has produced a final outcome.  LangGraph's join semantics ensure all

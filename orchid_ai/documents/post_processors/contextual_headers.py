@@ -1,24 +1,23 @@
 """
 ``ContextualHeaderPostProcessor`` — prepend ``# {title}\\n## {section}\\n``.
 
-ADR-022 §"OrchidChunkPostProcessor" describes the goal: the embedder
-and the LLM should both see the document's title and the chunk's
-section heading, so semantically-similar chunks from different
+The embedder and the LLM should both see the document's title and the
+chunk's section heading, so semantically-similar chunks from different
 sections rank correctly during retrieval.
 
-The Stage 2 implementation derives:
+The implementation derives:
 
 * ``title`` from the filename (stem, ``_``/``-`` → space, title-case).
 * ``section`` by walking the original document for markdown headings
   (``#``, ``##``, ``###``…) and tagging each chunk with the **nearest
   preceding heading**.  Falls back to ``"Document"`` when none.
 
-LLM-generated summaries (``# {title}\\n## {section}\\n{summary}\\n\\n``
-in the original ADR sketch) land in a future stage — the post-processor
-already accepts ``chat_model`` so wiring summaries is purely additive.
+LLM-generated summaries (``# {title}\\n## {section}\\n{summary}\\n\\n``)
+are a future enhancement — the post-processor already accepts
+``chat_model`` so wiring summaries is purely additive.
 
 The ``section`` value also lands in chunk metadata so retrieval
-strategies and metadata filters (ADR-027) can use it directly.
+strategies and metadata filters can use it directly.
 """
 
 from __future__ import annotations

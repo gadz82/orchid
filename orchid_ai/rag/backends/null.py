@@ -1,5 +1,5 @@
 """
-No-op backends — safe placeholders for unconfigured ABCs (ADR-028).
+No-op backends — safe placeholders for unconfigured ABCs.
 
 The framework's runtime accessors (``OrchidRuntime.get_reader`` /
 ``get_doc_store`` / ``get_graph_store``) fall back to these when the
@@ -10,7 +10,7 @@ ingestion against a ``NullDocStore`` degrades to parent-in-metadata,
 ``SimpleRetrieval`` with a warning, and dense retrieval against
 ``NullVectorReader`` simply returns an empty result set.
 
-All three impls live next to each other so the ADR-028 import path
+All three impls live next to each other so the import path
 ``orchid_ai.rag.backends.null.{NullVectorReader, NullDocStore,
 NullGraphStore}`` is canonical.
 """

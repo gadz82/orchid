@@ -1,4 +1,4 @@
-"""Tests for the ingestion strategy + post-processor registries (ADR-022)."""
+"""Tests for the ingestion strategy + post-processor registries."""
 
 from __future__ import annotations
 

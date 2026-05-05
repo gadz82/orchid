@@ -1,6 +1,6 @@
 """Tests for ``mini_agent_node_factory``.
 
-Covers spec §16 cases:
+Covers:
   - T10 — tool subset enforcement: ``bind_tools`` only sees ``allowed_tools``.
   - T13 — timeout: a mini exceeding ``timeout_seconds`` produces
           ``status="timeout"``; cancellation propagates.
@@ -250,7 +250,7 @@ async def test_unhandled_exception_sets_status_failed(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_mini_node_does_not_invoke_decomposer(monkeypatch):
-    """Spec §16 case 17 — defensive guard.
+    """Defensive guard against mini-of-a-mini.
 
     The mini node calls ``AgenticLoop`` directly and never goes
     through ``GenericAgent.run()``, so even if the parent has

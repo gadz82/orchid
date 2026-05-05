@@ -1,6 +1,6 @@
 """
 Dynamic RAG — write tool data back to the vector store via the
-configured ingestion strategy (ADR-024).
+configured ingestion strategy.
 
 When a sub-agent runs an MCP or built-in tool tagged with
 ``inject_to_rag: true``, this module indexes the result so that:
@@ -44,9 +44,9 @@ async def inject_to_rag(
     scope: OrchidRAGScope,
     ingestion: OrchidIngestionStrategy,
 ) -> int:
-    """Index a single tool's result through ``ingestion`` (ADR-024).
+    """Index a single tool's result through ``ingestion``.
 
-    Per ADR-024 the dynamic-injection path delegates chunking to the
+    The dynamic-injection path delegates chunking to the
     ingestion strategy resolved by the agent's
     :meth:`OrchidAgentConfig.effective_rag` — so per-tool knobs
     (``chunk_size``, parent layout, semantic boundaries, …) apply to

@@ -1,5 +1,5 @@
 """
-Splade sparse encoder (ADR-025 §"Sparse vector encoder abstraction").
+Splade sparse encoder.
 
 Wraps Splade-style learned sparse retrieval models (e.g.
 ``naver/splade-cocondenser-ensembledistil``) behind the optional

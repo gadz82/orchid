@@ -1,4 +1,4 @@
-"""Tests for ``BM25Encoder`` (ADR-025)."""
+"""Tests for ``BM25Encoder``."""
 
 from __future__ import annotations
 

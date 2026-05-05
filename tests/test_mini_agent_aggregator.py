@@ -1,6 +1,6 @@
 """Tests for ``aggregator_node_factory``.
 
-Covers spec §16 cases:
+Covers:
   - T11 — partial failure: 2 of 3 succeed → aggregator prompt
           includes the full outcome list (success + failure).
   - T12 — all-failed: 0 of N succeed → no LLM call; deterministic

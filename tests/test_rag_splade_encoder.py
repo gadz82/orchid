@@ -1,4 +1,4 @@
-"""Tests for ``SpladeEncoder`` (ADR-025).
+"""Tests for ``SpladeEncoder``.
 
 The Splade encoder is opt-in via ``pip install orchid-ai[splade]``.
 The default test environment doesn't ship ``torch`` / ``transformers``,

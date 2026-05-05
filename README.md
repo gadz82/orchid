@@ -21,7 +21,7 @@ Orchid (alias for Orchestrator-Index) lets you define AI agents via YAML configu
 - **Built-in tools** — register Python functions as in-process tools, with declarative parameter metadata
 - **Agent skills** — multi-step workflows within agents and across agents (orchestrator skills)
 - **Mini-agents (self-clone fork)** — opt-in per-agent decomposer + aggregator that fan a single turn into independent sub-tasks running in parallel
-- **Parallel tool dispatch** — opt-in Phase A intra-round parallel tool calls based on per-tool `parallel_safe` annotations
+- **Parallel tool dispatch** — opt-in intra-round parallel tool calls based on per-tool `parallel_safe` annotations
 - **Per-tool RAG caching** — opt-in `inject_to_rag` with configurable TTL per tool
 - **Internal prompt customisation** — every supervisor / synthesis / agent / RAG-transformer / mini-agent / summarise prompt is YAML- and Python-configurable with backwards-compatible defaults
 - **Sliding-window history summarisation** — opt-in compression of older turns by a cheaper LLM so long conversations stay within budget
@@ -84,9 +84,9 @@ result = await graph.ainvoke({
 
 This library is consumed by:
 
-- **[orchid-api](../orchid-api)** -- FastAPI HTTP server
-- **[orchid-cli](../orchid-cli)** -- Typer command-line interface
-- **[orchid-frontend](../orchid-frontend)** -- Next.js chat UI
+- **[orchid-api](https://github.com/gadz82/orchid-api)** -- FastAPI HTTP server
+- **[orchid-cli](https://github.com/gadz82/orchid-cli)** -- Typer command-line interface
+- **[orchid-frontend](https://github.com/gadz82/orchid-frontend)** -- Next.js chat UI
 
 ## Architecture
 
@@ -127,25 +127,23 @@ documents/   -> core/
 | ABC | File | Purpose |
 |-----|------|---------|
 | `OrchidAgent` | `core/agent.py` | Agent identity, `run()`, `summarise()`, `fetch_rag_context()`, `extract_conversation_history()` |
-| `OrchidIdentityResolver` | `core/identity.py` | Bearer token → `OrchidAuthContext` (per-request validation **and** the `/auth/resolve-identity` bridge — Phase 4A) |
-| `OrchidAuthConfigProvider` | `core/auth_config.py` | Resolves non-secret upstream-OAuth discovery (Phase 1) |
-| `OrchidAuthExchangeClient` | `core/auth_config.py` | Server-side authorization-code (Phase 2) + refresh-token (Phase 4B) exchange |
+| `OrchidIdentityResolver` | `core/identity.py` | Bearer token → `OrchidAuthContext` (per-request validation **and** the `/auth/resolve-identity` bridge) |
+| `OrchidAuthConfigProvider` | `core/auth_config.py` | Resolves non-secret upstream-OAuth discovery |
+| `OrchidAuthExchangeClient` | `core/auth_config.py` | Server-side authorization-code + refresh-token exchange |
 | `OrchidMCPToolCaller` | `core/mcp.py` | Call MCP tools |
 | `OrchidMCPDiscoverable` | `core/mcp.py` | Discover MCP capabilities |
 | `OrchidMCPTokenStore` | `core/mcp.py` | Per-user outbound OAuth token persistence |
 | `OrchidMCPClientRegistrationStore` | `core/mcp.py` | Per-server discovered endpoints + DCR creds |
-| `OrchidMCPGatewayClientStore` / `…AuthCodeStore` / `…TokenStore` | `core/mcp_gateway_state.py` | Inbound MCP gateway state (Phase 3 — DCR clients, in-flight auth codes, issued tokens) |
+| `OrchidMCPGatewayClientStore` / `…AuthCodeStore` / `…TokenStore` | `core/mcp_gateway_state.py` | Inbound MCP gateway state (DCR clients, in-flight auth codes, issued tokens) |
 | `OrchidVectorReader` | `core/repository.py` | Vector store retrieval |
 | `OrchidVectorWriter` | `core/repository.py` | Vector store indexing |
 | `OrchidVectorStoreAdmin` | `core/repository.py` | Collection management |
 | `OrchidChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
 
-The auth-centralisation ABCs (`OrchidAuthConfigProvider`, `OrchidAuthExchangeClient`,
+The auth ABCs (`OrchidAuthConfigProvider`, `OrchidAuthExchangeClient`,
 `OrchidIdentityResolver`, three `OrchidMCPGateway*Store`s) collectively let
 `orchid-api` host every secret-bearing OAuth call on behalf of downstream
-public PKCE clients (the MCP gateway, Next.js frontends). Full architectural
-walkthrough + per-phase migration matrix in
-[.knowledge/auth-centralisation.md](../.knowledge/auth-centralisation.md).
+public PKCE clients (the MCP gateway, Next.js frontends).
 
 ## OrchidRuntime
 
@@ -456,7 +454,7 @@ YAML carries ONLY the auth mode. Nothing else — no `client_id`, no
 
 - **`mode`** -- How the MCP client authenticates with this server:
   - `"none"` (default) -- No authentication headers. Use for local MCP servers or remote servers without auth.
-  - `"passthrough"` -- Forwards the graph's `OrchidAuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider as the main application (ADR-010).
+  - `"passthrough"` -- Forwards the graph's `OrchidAuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider as the main application.
   - `"oauth"` -- Per-user OAuth 2.0 flow with the MCP server's authorization server. The framework follows the **MCP 2025-03-26 authorization spec**: on the first 401 it consumes the `WWW-Authenticate: Bearer resource_metadata="…"` header (RFC 9728), fetches the authorization server metadata (RFC 8414), dynamically registers a client (RFC 7591), and persists the resulting endpoints + credentials to `OrchidMCPClientRegistrationStore`. Per-user tokens land in `OrchidMCPTokenStore` and are refreshed against the discovered token endpoint automatically.
 
 The authorization server MUST advertise `registration_endpoint` in its
@@ -558,7 +556,7 @@ Runtime configuration consumed by orchid-api and orchid-cli. Each nested YAML ke
 - **`auth.identity_resolver_class`** -- Dotted import path to a custom `OrchidIdentityResolver` subclass (e.g. `"myapp.identity.MyIdentityResolver"`). The resolver receives the Bearer token from the `Authorization` header and returns an `OrchidAuthContext` with tenant/user information. When empty, only `dev_auth_bypass` works -- all other requests get a 503.
 - **`auth.domain`** -- Default platform domain passed to the identity resolver when the `x-auth-domain` header is missing from the request. Used by resolvers that need to know which tenant instance to authenticate against. When empty, the resolver must get the domain from another source.
 
-> **CLI OAuth support:** `orchid-cli` extends the `auth` section with an `auth.cli` subsection for OAuth 2.0 Authorization Code + PKCE login. This is a CLI-only feature -- the API uses its own FastAPI dependency injection for auth. See the [orchid-cli README](../orchid-cli/README.md#authentication) for details.
+> **CLI OAuth support:** `orchid-cli` extends the `auth` section with an `auth.cli` subsection for OAuth 2.0 Authorization Code + PKCE login. This is a CLI-only feature -- the API uses its own FastAPI dependency injection for auth. See the [orchid-cli README](https://github.com/gadz82/orchid-cli#authentication) for details.
 
 #### `startup`
 
@@ -1119,7 +1117,7 @@ events.  Nesting is forbidden: child agents cannot enable
 
 ### Parallel tool dispatch (`parallel_tools`)
 
-Phase A intra-round parallel dispatch.  When `parallel_tools: true`,
+Intra-round parallel dispatch.  When `parallel_tools: true`,
 the agentic loop partitions one round's tool calls into:
 
 - A **parallel batch** gathered via `asyncio.gather` — tools whose

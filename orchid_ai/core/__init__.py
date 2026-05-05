@@ -5,7 +5,7 @@ This package defines the contracts (ABCs, TypedDicts, dataclasses) that every
 other package in agents/ depends on.  It must NEVER import anything outside
 the Python standard library.
 
-Architectural rule (ADR-008):
+Architectural rule:
     Any import of qdrant_client, langchain, litellm, httpx, or any other
     third-party library inside this package is a bug.
 """

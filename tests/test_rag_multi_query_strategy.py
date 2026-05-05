@@ -1,4 +1,4 @@
-"""Tests for ``MultiQueryRetrieval`` (ADR-023)."""
+"""Tests for ``MultiQueryRetrieval``."""
 
 from __future__ import annotations
 

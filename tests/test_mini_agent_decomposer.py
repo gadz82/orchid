@@ -1,6 +1,6 @@
 """Tests for ``MiniAgentDecomposer`` and the structured-output models.
 
-Covers spec §16 cases:
+Covers:
   - T9  — strict allowlist rejects unknown tool names.
   - T15 — ``MiniAgentDecomposition`` validator caps ``len(sub_tasks) <= max_count``.
   - T19 — decomposer model fallback to the parent's ``llm.model``.
@@ -411,7 +411,7 @@ class TestInferredMode:
 class TestDecomposerModelFallback:
     """T19 — when ``decomposer_model`` is unset, the parent's chat model
     is used.  Asserts the precedence at the ``maybe_decompose`` free
-    function (Phase B / B3 graph-level wrapper hook)."""
+    function (graph-level wrapper hook)."""
 
     @pytest.mark.asyncio
     async def test_unset_decomposer_model_uses_parent_chat_model(self, monkeypatch):

@@ -17,12 +17,12 @@ class OrchidToolConfig(BaseModel):
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
     requires_approval: bool = False  # pause and ask user before executing (HITL)
-    # Phase A — parallel tool-call dispatch override.  ``None`` means
+    # Parallel tool-call dispatch override.  ``None`` means
     # "fall back to the MCP ``readOnlyHint`` annotation"; explicit
     # ``True`` / ``False`` wins over the annotation.  Only consulted
     # when the agent has ``parallel_tools: true`` set.
     parallel_safe: bool | None = None
-    #: Per-tool RAG override (ADR-024).  When set, this tool's
+    #: Per-tool RAG override.  When set, this tool's
     #: ingestion / retrieval / namespace / payload-index decisions
     #: use the tool's ``rag`` block instead of the agent's.  ``None``
     #: (the default) means inherit from the agent.  See
@@ -39,7 +39,7 @@ class OrchidMCPAuthConfig(BaseModel):
       for local MCP servers or remote servers that do not require auth.
     - ``passthrough``: forwards the graph's ``OrchidAuthContext`` bearer
       token unchanged — the MCP server shares the same identity provider
-      as the API.  ADR-010 — the single-token-in-the-graph rule.
+      as the API — the single-token-in-the-graph rule.
     - ``oauth``: the MCP server requires its own OAuth 2.0 flow.  The
       framework follows the MCP 2025-03-26 authorization spec and
       discovers everything at runtime from the server's 401 response:

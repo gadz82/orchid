@@ -1,5 +1,5 @@
 """
-Pluggable ingestion primitives (ADR-022).
+Pluggable ingestion primitives.
 
 Splits the parse → chunk → upsert pipeline at the chunking boundary so
 new chunking approaches (semantic, hierarchical, headered, …) plug in
@@ -15,7 +15,7 @@ Two ABCs:
     with any strategy.
 
 Both live in ``core/`` so the documents pipeline + per-tool override
-(ADR-024) can depend on them without risking a cycle.
+can depend on them without risking a cycle.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class OrchidChunk(NamedTuple):
     ``scope``), provenance (``source_file`` / ``chunk_index``),
     parent linkage (``parent_id`` for hierarchical strategies), and any
     integrator-supplied filterable fields (``language`` / ``status`` /
-    …) consumed by metadata-filter retrieval (ADR-027).
+    …) consumed by metadata-filter retrieval.
     """
 
     text: str

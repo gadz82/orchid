@@ -1,8 +1,8 @@
 """Architectural boundary lint — concrete-backend imports stay inside ``rag/backends/``.
 
-ADR-028 says no module under ``orchid_ai/`` may import a concrete vector
-DB / graph DB / sparse-encoder client outside ``rag/backends/<name>.py``.
-This test walks the package's ``ast`` and asserts the rule.
+No module under ``orchid_ai/`` may import a concrete vector DB / graph
+DB / sparse-encoder client outside ``rag/backends/<name>.py``.  This
+test walks the package's ``ast`` and asserts the rule.
 
 The list of forbidden modules grows as we add backends — keep the
 ``ALLOWED_LOCATIONS`` table accurate when introducing a new client.

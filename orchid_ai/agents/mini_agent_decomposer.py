@@ -1,4 +1,4 @@
-"""Mini-agent decomposition step (Phase B, item B2).
+"""Mini-agent decomposition step.
 
 The decomposer is a deterministic structured-output LLM call that
 decides whether the parent agent's current request can be split into
@@ -10,9 +10,6 @@ and an aggregator synthesises their outcomes.
 Single-responsibility: this module owns the decomposition logic
 ONLY.  The actual mini-agent runtime lives in ``mini_agent_node.py``;
 the post-fork synthesis lives in ``mini_agent_aggregator.py``.
-
-See ``.knowledge/mini-agents-implementation-spec.md`` §6, §9 for the
-full contract.
 """
 
 from __future__ import annotations

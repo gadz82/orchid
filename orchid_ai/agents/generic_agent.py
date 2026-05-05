@@ -75,7 +75,7 @@ class GenericAgent(OrchidAgent):
         self._config = config
         self._agent_peers: dict[str, Any] = agent_peers or {}
         self._summary_config: dict[str, Any] | None = summary_config
-        # ADR-026 — graph store injected by the graph builder so the
+        # graph store injected by the graph builder so the
         # ``graph_rag`` retrieval strategy can traverse entities and
         # relations.  ``None`` (or a NullGraphStore) makes
         # GraphRAGRetrieval fall back to SimpleRetrieval.
@@ -133,7 +133,7 @@ class GenericAgent(OrchidAgent):
         # Apply pre_strategy=True query transformers in order so the
         # rewritten query feeds RAG retrieval, the agentic loop, and
         # the summarisation step alike (single source of truth — see
-        # ADR-023 §"pre_strategy / strategy-internal split").  Prompt
+        # the pre_strategy / strategy-internal split).  Prompt
         # overrides (when configured) are resolved from
         # ``rag.retrieval.transformer_prompts`` and threaded through
         # the registry's kwargs forwarding.
@@ -311,7 +311,7 @@ class GenericAgent(OrchidAgent):
         # When ``retrieval.exclude_dynamic`` is set the agent injects
         # ``dynamic: {"not": True}`` into the metadata filters so
         # dynamically-injected tool output stays out of the retrieval
-        # path (cycle mitigation per ADR-024 §"Open questions / risks").
+        # path (cycle mitigation).
         configured_filters = dict(self._config.rag.retrieval.metadata_filters or {})
         if self._config.rag.retrieval.exclude_dynamic:
             configured_filters.setdefault("dynamic", {"not": True})
@@ -362,7 +362,7 @@ class GenericAgent(OrchidAgent):
         mcp_data: dict[str, Any],
         scope: OrchidRAGScope,
     ) -> None:
-        """Dynamic RAG injection — per-tool ``effective_rag`` (ADR-024).
+        """Dynamic RAG injection — per-tool ``effective_rag``.
 
         Each injectable tool resolves its own RAG config via
         :meth:`OrchidAgentConfig.effective_rag` so a tool that points
@@ -524,7 +524,7 @@ class GenericAgent(OrchidAgent):
             )
         messages.append({"role": "user", "content": query})
 
-        # ── Resolve parallel-dispatch safety map (Phase A) ──
+        # ── Resolve parallel-dispatch safety map ──
         parallel_safety = self._resolve_parallel_safety(
             tool_map=tool_map,
             builtin_tool_names=builtin_tool_names,
@@ -542,7 +542,7 @@ class GenericAgent(OrchidAgent):
         )
         return await loop.run(messages)
 
-    # ── Parallel-dispatch safety resolver (Phase A) ─────────────
+    # ── Parallel-dispatch safety resolver ───────────────────────
 
     def _resolve_parallel_safety(
         self,

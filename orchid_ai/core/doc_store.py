@@ -1,5 +1,5 @@
 """
-Parent-document storage primitive (ADR-022, ADR-028).
+Parent-document storage primitive.
 
 Hierarchical RAG retrieves child chunks for precision then hydrates the
 larger parent context for the LLM.  ``OrchidDocStore`` is the put / get

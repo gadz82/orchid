@@ -21,8 +21,7 @@ Two ABCs live here:
   ``client_secret`` and is exposed over orchid-api's
   ``POST /auth/exchange-code`` so downstream clients can migrate
   from confidential-client (secret on the MCP gateway) to public
-  PKCE-only clients (secret held only by orchid-api).  This is the
-  Phase 2 boundary in the auth-centralisation roadmap — it removes
+  PKCE-only clients (secret held only by orchid-api).  It removes
   the last copy of ``client_secret`` from the gateway layer.
 
 This module uses ONLY stdlib types — safe for ``core/``.
@@ -109,7 +108,7 @@ class OrchidUpstreamOAuthConfig:
     #: directly.  Operationally: the ``client_secret`` lives on
     #: orchid-api only; downstream clients become public PKCE
     #: clients and no longer hold secrets.  ``False`` (the default)
-    #: preserves Phase 1 behaviour — the downstream client exchanges
+    #: preserves the older behaviour — the downstream client exchanges
     #: the code itself using its own copy of the secret.
     exchange_via_api: bool = False
     #: When ``True``, orchid-api advertises a server-side
@@ -119,9 +118,7 @@ class OrchidUpstreamOAuthConfig:
     #: (``subject`` / ``bearer`` / ``auth_domain``), instead of
     #: calling the upstream ``userinfo_endpoint`` itself.  Removes
     #: the last piece of upstream-specific config (userinfo URL +
-    #: JSON-path hints for non-OIDC shapes) from the downstream —
-    #: Phase 4 of the auth-centralisation roadmap.  ``False`` (the
-    #: default) preserves pre-Phase-4 behaviour.
+    #: JSON-path hints for non-OIDC shapes) from the downstream.
     resolve_via_api: bool = False
     #: When ``True``, orchid-api advertises a server-side
     #: ``POST /auth/refresh-token`` endpoint — the refresh grant
@@ -305,13 +302,12 @@ class OrchidAuthExchangeClient(ABC):
         both grant types against the same ``token_endpoint``, and
         consumers almost always implement them as a pair.
 
-        Phase 4 of the auth-centralisation roadmap.  Default
-        implementation raises :class:`NotImplementedError` so
-        existing :class:`OrchidAuthExchangeClient` subclasses
-        (written for Phase 2) keep instantiating cleanly; an
-        operator who hasn't implemented it yet sees a useful error
-        if a downstream client actually tries to use it via
-        ``POST /auth/refresh-token``.
+        Default implementation raises :class:`NotImplementedError`
+        so existing :class:`OrchidAuthExchangeClient` subclasses
+        (written for the exchange-only path) keep instantiating
+        cleanly; an operator who hasn't implemented it yet sees a
+        useful error if a downstream client actually tries to use it
+        via ``POST /auth/refresh-token``.
 
         Parameters
         ----------

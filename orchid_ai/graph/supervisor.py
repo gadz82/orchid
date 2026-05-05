@@ -1,5 +1,5 @@
 """
-Supervisor node — intent analysis + routing (ADR-013).
+Supervisor node — intent analysis + routing.
 
 The Supervisor is the ONLY entry point of the graph.
 It does NOT have access to MCP servers or vector stores.
@@ -10,7 +10,7 @@ Its job:
   4. Delegate sequential advancement to :class:`SequentialAdvancer`
   5. Delegate final synthesis to :class:`ResponseSynthesizer`
 
-Execution modes (ADR-013):
+Execution modes:
   - parallel   → all agents run simultaneously via Send() fan-out
   - sequential → agents run one at a time; each round's output is
                  visible to the next agent via mcp_context
@@ -126,7 +126,7 @@ def create_supervisor_node(
     """
     Return a LangGraph node function with *model*, *agent_descriptions*,
     *chat_model*, and *orchestrator_skills* captured via closure — no
-    module-level globals (ADR-008 Composition Root).
+    module-level globals (Composition Root).
 
     When ``routing_chat_model`` is provided, the supervisor uses it for
     the cheap routing + sequential-advance phases (short structured
@@ -200,7 +200,7 @@ def create_supervisor_node(
 
 def route_to_agents(state: GraphState) -> list[Send] | str:
     """
-    LangGraph conditional-edge function (ADR-013, ADR-018).
+    LangGraph conditional-edge function.
 
     Returns:
       - ``"output_guardrails"`` when ``final_response`` is set AND output

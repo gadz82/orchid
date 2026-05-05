@@ -1,4 +1,4 @@
-"""Schema tests for the Phase A YAML surface (`parallel_safe`, `parallel_tools`)."""
+"""Schema tests for the parallel-tool YAML surface (`parallel_safe`, `parallel_tools`)."""
 
 from __future__ import annotations
 

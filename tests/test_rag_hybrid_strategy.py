@@ -1,4 +1,4 @@
-"""Tests for ``HybridRetrieval`` (ADR-025)."""
+"""Tests for ``HybridRetrieval``."""
 
 from __future__ import annotations
 

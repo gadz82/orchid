@@ -43,13 +43,13 @@ class OrchidAgentConfig(BaseModel):
     llm: OrchidLLMConfig | None = None
     execution_hints: ExecutionHints = Field(default_factory=ExecutionHints)
 
-    # Built-in tools available to this agent (ADR-017)
+    # Built-in tools available to this agent
     tools: list[str] = Field(default_factory=list)
 
-    # Agent-level skills — multi-step workflows within this agent (ADR-017)
+    # Agent-level skills — multi-step workflows within this agent
     skills: dict[str, OrchidAgentSkillConfig] = Field(default_factory=dict)
 
-    # Per-agent guardrails (ADR-018)
+    # Per-agent guardrails
     guardrails: OrchidGuardrailsConfig = Field(default_factory=OrchidGuardrailsConfig)
 
     # Recursive nesting — sub-agents under this agent
@@ -83,7 +83,7 @@ class OrchidAgentConfig(BaseModel):
     # config objects).
     builtin_tool_configs: dict[str, OrchidBuiltinToolConfig] = Field(default_factory=dict, exclude=True)
 
-    # Phase A — opt-in parallel tool-call dispatch within a single
+    # Opt-in parallel tool-call dispatch within a single
     # agentic round.  When ``True``, the agentic loop partitions the
     # LLM's tool_calls into a parallel batch (gathered via
     # ``asyncio.gather``) and a sequential tail.  Per-tool safety is
@@ -93,7 +93,7 @@ class OrchidAgentConfig(BaseModel):
     # rules.  Defaults to ``False`` to preserve today's serial behaviour.
     parallel_tools: bool = False
 
-    # Phase B — opt-in mini-agent (self-clone) configuration.  When
+    # Opt-in mini-agent (self-clone) configuration.  When
     # ``mini_agent.enabled=True``, the graph builder synthesises
     # ``{name}_mini`` and ``{name}_aggregator`` nodes alongside the
     # normal ``{name}_agent`` parent node.  Defaults to disabled —
@@ -112,7 +112,7 @@ class OrchidAgentConfig(BaseModel):
     model_config = {"populate_by_name": True}
 
     def effective_rag(self, tool_name: str) -> OrchidRAGConfig:
-        """Return the RAG config that should govern ``tool_name`` (ADR-024).
+        """Return the RAG config that should govern ``tool_name``.
 
         Looks up the tool first in this agent's MCP server tools, then
         in the cached built-in tool configs.  When the tool sets a
@@ -179,16 +179,16 @@ class OrchidAgentsConfig(BaseModel):
     version: str = "1"
     defaults: OrchidDefaultsConfig = Field(default_factory=OrchidDefaultsConfig)
 
-    # Global built-in tool declarations (ADR-017)
+    # Global built-in tool declarations
     tools: dict[str, OrchidBuiltinToolConfig] = Field(default_factory=dict)
 
-    # Orchestrator-level skills — cross-agent workflows (ADR-017)
+    # Orchestrator-level skills — cross-agent workflows
     skills: dict[str, OrchidOrchestratorSkillConfig] = Field(default_factory=dict)
 
     # Supervisor configuration — prompt customization
     supervisor: OrchidSupervisorConfig = Field(default_factory=OrchidSupervisorConfig)
 
-    # Global guardrails — applied to all requests (ADR-018)
+    # Global guardrails — applied to all requests
     guardrails: OrchidGuardrailsConfig = Field(default_factory=OrchidGuardrailsConfig)
 
     # MCP gateway exposure — tool title/description overrides + MCP Prompts.
@@ -305,7 +305,7 @@ def _apply_defaults(
             if tool_cfg and tool_cfg.parallel_safe is True:
                 agent.parallel_safe_builtin_tools.add(tool_name)
 
-    # Cache resolved built-in tool configs (ADR-024) so
+    # Cache resolved built-in tool configs so
     # ``OrchidAgentConfig.effective_rag(tool_name)`` can look up
     # per-tool RAG overrides at runtime — the agent only knows tool
     # names, not the underlying ``OrchidBuiltinToolConfig`` objects on

@@ -1,5 +1,5 @@
 """
-Query transformer registry (ADR-023).
+Query transformer registry.
 
 Mirrors :mod:`orchid_ai.rag.strategies` and the proven
 :mod:`orchid_ai.agents.strategies` template: register, get-by-name with

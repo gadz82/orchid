@@ -1,5 +1,5 @@
 """
-Backend factories — name-keyed registries for every pluggable backend (ADR-028).
+Backend factories — name-keyed registries for every pluggable backend.
 
 Replaces the original ``if/elif vector_backend == "qdrant"`` chain with
 four registries — one per ABC — so integrators register their custom
@@ -11,7 +11,7 @@ Built-ins register on import:
   * vector       — ``null``, ``qdrant``
   * doc_store    — ``null``, ``in_memory``, ``qdrant``
   * graph_store  — ``null``
-  * sparse       — ``bm25`` (Stage 1 stub)
+  * sparse       — ``bm25``
 
 Stage 5+ backends (``in_memory`` and ``neo4j`` graph stores, ``splade``
 sparse encoder) register from their own modules in their landing stages.
@@ -141,8 +141,8 @@ def build_graph_store(*, graph_store_backend: str = "null", **settings: Any) -> 
 # ── Sparse encoder backend ────────────────────────────────────
 #
 # Sparse encoders use the registry in :mod:`orchid_ai.rag.sparse`
-# directly — re-exported here so ADR-028's promise of four matching
-# ``register_*_backend`` helpers in one module holds.
+# directly — re-exported here so the four matching
+# ``register_*_backend`` helpers all live in one module.
 
 
 def register_sparse_encoder_backend(name: str, cls: type[OrchidSparseEncoder]) -> None:

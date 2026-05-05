@@ -1,4 +1,4 @@
-"""Tests for ``Neo4jGraphStore`` (ADR-026).
+"""Tests for ``Neo4jGraphStore``.
 
 The Neo4j extra ships behind ``pip install orchid-ai[neo4j]``.  The
 default test environment doesn't include the driver, so the

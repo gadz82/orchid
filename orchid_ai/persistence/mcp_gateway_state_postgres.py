@@ -1,4 +1,4 @@
-"""PostgreSQL-backed MCP-gateway-state store (Phase 3).
+"""PostgreSQL-backed MCP-gateway-state store.
 
 Implements all three ABCs in :mod:`orchid_ai.core.mcp_gateway_state`
 against the tables created by migration v003, using asyncpg.

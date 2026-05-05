@@ -6,7 +6,7 @@ This module re-defines the state with:
   - ``Annotated[list, add_messages]`` for automatic message merging
   - ``merge_dicts`` reducer for ``mcp_context`` / ``rag_context``
     so parallel sub-agents can each contribute data without overwriting.
-  - ``execution_mode`` + ``pending_agents`` for ADR-013
+  - ``execution_mode`` + ``pending_agents``
     (Supervisor decides parallel vs sequential per request).
 """
 
@@ -47,33 +47,33 @@ class GraphState(TypedDict, total=False):
       mcp_context → ``merge_dicts``   (shallow merge per-agent keys)
       rag_context → ``merge_dicts``   (shallow merge per-agent keys)
 
-    Execution control (ADR-013):
+    Execution control:
       execution_mode  → "parallel" | "sequential" — how the Supervisor dispatches
       pending_agents  → agents still waiting in a sequential pipeline
     """
 
     messages: Annotated[list[BaseMessage], add_messages]
-    auth_context: OrchidAuthContext  # ADR-014: tenant key = auth_context.tenant_key (installation_id)
+    auth_context: OrchidAuthContext  # tenant key = auth_context.tenant_key (installation_id)
     chat_id: str  # chat session identifier for RAG scoping
     active_agents: Annotated[list[str], replace_list]
     mcp_context: Annotated[dict[str, Any], merge_dicts]
     rag_context: Annotated[dict[str, Any], merge_dicts]
     final_response: str | None
 
-    # ── ADR-013: execution control ────────────────────────────
+    # ── execution control ────────────────────────────────────
     execution_mode: Literal["parallel", "sequential"]
     pending_agents: Annotated[list[str], replace_list]
 
-    # ── ADR-017: orchestrator skill instructions ──────────────
+    # ── orchestrator skill instructions ──────────────────────
     skill_instructions: Annotated[dict[str, Any], merge_dicts]
 
-    # ── ADR-018: guardrail routing hint ──────────────────────
+    # ── guardrail routing hint ───────────────────────────────
     _has_output_guardrails: bool  # sentinel for route_to_agents()
 
     # ── MCP per-server OAuth status (per-request) ────────────
     mcp_auth_status: Annotated[dict[str, Any], merge_dicts]  # {server_name: authorized_bool}
 
-    # ── Phase B: mini-agents (self-clones) ───────────────────
+    # ── mini-agents (self-clones) ────────────────────────────
     # Per-parent decomposer output, keyed by parent agent name
     # (e.g. ``"support"``).  Stored as plain dicts (``MiniAgentDecomposition.model_dump()``)
     # to keep state checkpointer-safe.  The fork router reads this

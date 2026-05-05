@@ -1,5 +1,5 @@
 """
-Knowledge-graph primitives for GraphRAG (ADR-026, ADR-028).
+Knowledge-graph primitives for GraphRAG.
 
 Three layered abstractions:
 
@@ -13,7 +13,7 @@ Three layered abstractions:
 All four live in ``core/`` so strategies and backends can import them
 without risking a cycle.  Concrete impls (in-memory, Neo4j, Memgraph, …)
 register themselves in :mod:`orchid_ai.rag.factory` via the
-``GRAPH_STORE_BACKEND_REGISTRY`` per ADR-028.
+``GRAPH_STORE_BACKEND_REGISTRY``.
 """
 
 from __future__ import annotations

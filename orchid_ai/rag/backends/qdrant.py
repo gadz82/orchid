@@ -1,5 +1,5 @@
 """
-Qdrant implementation of OrchidVectorStoreRepository — multi-tenant (ADR-014).
+Qdrant implementation of OrchidVectorStoreRepository — multi-tenant.
 
 Multi-tenancy strategy:
   - **One Qdrant collection per domain** (e.g. ``knowledge-base``, ``uploads``).
@@ -9,7 +9,7 @@ Multi-tenancy strategy:
     every tenant's queries automatically.
   - Retrieval always filters: ``tenant_id IN [<installation_id>, "__shared__"]``.
 
-Hybrid-search support (ADR-025):
+Hybrid-search support:
   - Collections are created with named dense + sparse vectors
     (``{"dense": VectorParams(...)}`` + ``sparse_vectors_config={"sparse":
     SparseVectorParams()}``).  Collections without that schema are
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 QDRANT_TIMEOUT = 30.0  # seconds — timeout for Qdrant operations
 
-# Backend-namespaced filter prefix (ADR-027 §"Filter dict shape").
+# Backend-namespaced filter prefix.
 _BACKEND_NS_PREFIX = "_"
 
 # Operator → Range field mapping used by the metadata-filter translator.
@@ -68,7 +68,7 @@ _SPARSE_NAME = "sparse"
 def build_metadata_filter_clauses(
     metadata_filters: dict[str, Any],
 ) -> tuple[list[FieldCondition], list[FieldCondition]]:
-    """Translate the ADR-027 mini-language into Qdrant ``FieldCondition`` lists.
+    """Translate the metadata-filter mini-language into Qdrant ``FieldCondition`` lists.
 
     Returns ``(must_clauses, must_not_clauses)`` so the caller can combine
     them into a single :class:`Filter` alongside any scope clauses.
@@ -135,8 +135,8 @@ def infer_payload_index_types(
 ) -> dict[str, str]:
     """Infer Qdrant payload-index types from a metadata-filter dict.
 
-    ADR-027 §"Pre-condition: payload indexing": when a filter targets
-    a field, the field needs a payload index for the query to be fast.
+    Pre-condition for payload indexing: when a filter targets a field,
+    the field needs a payload index for the query to be fast.
     Inference rules:
 
       * ``str`` → ``keyword`` (default for atomic strings — exact-match).
@@ -296,7 +296,7 @@ def build_qdrant_filter(scope: OrchidRAGScope) -> Filter:
 
 class QdrantRepository(OrchidVectorStoreRepository):
     """
-    Qdrant-backed vector store with per-tenant isolation (ADR-014).
+    Qdrant-backed vector store with per-tenant isolation.
 
     Each ``namespace`` maps to a Qdrant **collection** (e.g. ``knowledge-base``).
     Tenant isolation is enforced via a ``tenant_id`` payload field on every
@@ -348,7 +348,7 @@ class QdrantRepository(OrchidVectorStoreRepository):
         Uses the hierarchical ``OrchidRAGScope`` to build a Qdrant filter that
         includes all scope levels visible to the caller (shared → tenant →
         user → chat_shared → chat_agent).  ``metadata_filters`` follows
-        the operator mini-language defined in ADR-027.
+        the metadata-filter operator mini-language.
         """
         await self._ensure_collection(namespace)
 
@@ -384,7 +384,7 @@ class QdrantRepository(OrchidVectorStoreRepository):
         scope: OrchidRAGScope | None = None,
         metadata_filters: dict[str, object] | None = None,
     ) -> list[OrchidSearchResult]:
-        """Sparse-lane retrieval for hybrid search (ADR-025)."""
+        """Sparse-lane retrieval for hybrid search."""
         await self._ensure_collection(namespace)
 
         await self._auto_index_for_filters(namespace, metadata_filters)
@@ -450,7 +450,7 @@ class QdrantRepository(OrchidVectorStoreRepository):
             must_not=meta_must_not or None,
         )
 
-    # ── Payload indexes (ADR-027) ─────────────────────────────
+    # ── Payload indexes ─────────────────────────────
 
     async def ensure_payload_indexes(
         self,

@@ -1,5 +1,5 @@
 """
-YAML-driven agent configuration — ADR-016.
+YAML-driven agent configuration.
 
 Public API:
   load_config(path)  → OrchidAgentsConfig (validated Pydantic model)

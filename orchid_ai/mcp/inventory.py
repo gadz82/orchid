@@ -156,8 +156,7 @@ class OrchidMCPServerInventory:
         inside compiled LangGraph subgraphs so their per-agent client
         instances are not directly reachable.  Their first-call
         discovery still works lazily; the warmer accepts that trade-off
-        as the simpler "warm-on-every-top-level-instance" cut documented
-        in ``.knowledge/mcp-startup-discovery-plan.md`` §9.
+        as the simpler "warm-on-every-top-level-instance" cut.
 
         Defensive: an agent might not actually have a client at the
         expected index (mismatched config, custom agent that ignored its

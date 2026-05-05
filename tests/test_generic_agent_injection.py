@@ -105,7 +105,7 @@ async def test_injection_only_for_opted_in_mcp_tools():
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
-        # ADR-024 — one inject_to_rag call per opted-in tool.
+        # One inject_to_rag call per opted-in tool.
         assert mock_inject.await_count == 1
         kwargs = mock_inject.call_args.kwargs
         assert kwargs["tool_name"] == "tool_keep"

@@ -1,4 +1,4 @@
-"""Tests for ``orchid_ai.rag.dynamic.inject_to_rag`` (ADR-024 shape)."""
+"""Tests for ``orchid_ai.rag.dynamic.inject_to_rag``."""
 
 from __future__ import annotations
 
