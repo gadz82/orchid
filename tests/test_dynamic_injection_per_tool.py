@@ -1,4 +1,4 @@
-"""ADR-024 — ``GenericAgent._step_dynamic_injection`` honours per-tool overrides."""
+"""``GenericAgent._step_dynamic_injection`` honours per-tool overrides."""
 
 from __future__ import annotations
 

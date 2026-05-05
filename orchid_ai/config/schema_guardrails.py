@@ -1,4 +1,4 @@
-"""Guardrail configuration models (ADR-018)."""
+"""Guardrail configuration models."""
 
 from __future__ import annotations
 

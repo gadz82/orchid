@@ -1,4 +1,4 @@
-"""Tests for ``InMemoryGraphStore`` (ADR-026)."""
+"""Tests for ``InMemoryGraphStore``."""
 
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ class TestNeighbours:
 
     @pytest.mark.asyncio
     async def test_two_hops_reveals_z(self):
-        """ADR-026 §Tests: query mentions A, walking 2 hops reveals Z."""
+        """Query mentions A, walking 2 hops reveals Z."""
         store = InMemoryGraphStore()
         scope = _scope()
         await store.upsert_entities(

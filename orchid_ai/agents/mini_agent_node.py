@@ -1,4 +1,4 @@
-"""Mini-agent runtime node (Phase B, items B3 + B7).
+"""Mini-agent runtime node.
 
 A single LangGraph node, registered once per opt-in parent under the
 name ``f"{parent_name}_mini"``.  The graph's fork router fans out one
@@ -20,7 +20,7 @@ Each invocation:
 
 The mini node never re-runs the decomposer — it bypasses
 ``GenericAgent.run()`` entirely, which is the structural guarantee
-behind the spec §16 test 17 "mini-of-a-mini" guard.
+behind the "mini-of-a-mini" guard.
 
 Single-responsibility: this module owns ONE node — the mini agent.
 The decomposer lives in ``mini_agent_decomposer.py``; the aggregator
@@ -295,7 +295,7 @@ async def _run_inner_loop(
     )
     tool_map: dict[str, Any] = {t.name: t for t in lc_tools}
 
-    # ── Resolve parallel-safety inheritance from the parent (Phase A composition) ──
+    # ── Resolve parallel-safety inheritance from the parent ──
     parallel_safety = _inherit_parallel_safety(
         parent_config=parent_config,
         tool_map=tool_map,
@@ -303,7 +303,7 @@ async def _run_inner_loop(
         caps=caps,
     )
 
-    # ── Build the focused system prompt (spec §10.1) ──
+    # ── Build the focused system prompt ──
     system_prompt = _build_mini_system_prompt(
         parent_prompt=parent_config.prompt,
         instruction=instruction,
@@ -404,8 +404,8 @@ def _inherit_parallel_safety(
 ) -> dict[str, bool] | None:
     """Resolve per-tool parallel-safety using the parent's settings.
 
-    Spec §10.2: "Honour parent_config.parallel_tools — minis benefit
-    from Phase A automatically."  Mirrors the precedence rules in
+    Honours ``parent_config.parallel_tools`` so minis inherit the parent's
+    parallel-safety configuration.  Mirrors the precedence rules in
     ``GenericAgent._resolve_parallel_safety`` against the (already
     filtered) mini ``tool_map``.
     """
@@ -446,7 +446,7 @@ def _build_mini_system_prompt(
     caps_descriptions: dict[str, str],
     template: str | None = None,
 ) -> str:
-    """Compose the mini's focused system prompt (spec §10.1).
+    """Compose the mini's focused system prompt.
 
     When ``template`` is supplied it is resolved via
     :py:meth:`str.format` with the placeholders ``{parent_prompt}``,
@@ -529,7 +529,7 @@ def _fallback_summary(tool_results: dict[str, Any]) -> str:
 
 def _wrap_state_update(parent_name: str, slot_key: str, outcome: dict[str, Any]) -> dict[str, Any]:
     """Shape a state update that writes the outcome plus the per-mini
-    shadow ``mcp_context`` slot for trace inspection (spec §7).
+    shadow ``mcp_context`` slot for trace inspection.
 
     Also emits the two ``mini_agent.{started,finished}`` lifecycle
     events into the ``messages`` channel so the streaming router can

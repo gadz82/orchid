@@ -1,5 +1,5 @@
 """Tests for OrchidSQLiteMCPGatewayStateStore — in-memory SQLite
-coverage for the three inbound-gateway ABCs (Phase 3).
+coverage for the three inbound-gateway ABCs.
 
 Mirrors the structure of ``test_mcp_token_store_sqlite.py`` but exercises
 the three concerns in turn (clients, auth codes, tokens) because a

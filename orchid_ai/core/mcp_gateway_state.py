@@ -3,13 +3,12 @@ MCP-gateway-state abstractions — persistence for the OAuth
 authorization-server role that an MCP gateway (e.g. ``orchid-mcp``)
 plays for its inbound clients.
 
-Phase 3 of the auth-centralisation roadmap.  In Phase 1 and 2 the
-gateway kept its DCR client registrations, pending auth codes, and
-issued access / refresh tokens in memory or in a local JSON file.
-That's fine for single-replica deployments but breaks the moment an
-operator wants two gateway replicas behind a load balancer: each
-replica has its own private copy of the state, so a token minted on
-replica A is invisible to replica B.
+Earlier the gateway kept its DCR client registrations, pending auth
+codes, and issued access / refresh tokens in memory or in a local
+JSON file.  That's fine for single-replica deployments but breaks
+the moment an operator wants two gateway replicas behind a load
+balancer: each replica has its own private copy of the state, so a
+token minted on replica A is invisible to replica B.
 
 This module defines three ABCs the gateway can implement against a
 shared backend (orchid-api's PostgreSQL / SQLite):
@@ -132,8 +131,7 @@ class OrchidMCPGatewayToken:
     gateway's ``/token?grant_type=refresh_token`` handler can kick
     off an upstream refresh when the user's bearer is about to
     expire, rather than rotating gateway tokens that still wrap a
-    stale upstream credential.  Phase 4 of the auth-centralisation
-    roadmap.
+    stale upstream credential.
     """
 
     access_token: str

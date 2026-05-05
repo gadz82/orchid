@@ -1,5 +1,5 @@
 """
-``InMemoryGraphStore`` — stdlib-only :class:`OrchidGraphStore` (ADR-026).
+``InMemoryGraphStore`` — stdlib-only :class:`OrchidGraphStore`.
 
 Suitable for tests, single-process demos, and integrators who don't
 need cross-process persistence.  Keyed by the full

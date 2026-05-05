@@ -93,7 +93,7 @@ class OrchidRuntime:
     mcp_client_factory: MCPClientFactory | None = None
     mcp_token_store: OrchidMCPTokenStore | None = None
     mcp_client_registration_store: OrchidMCPClientRegistrationStore | None = None
-    #: Optional pluggable RAG backends (ADR-028).  All three default to
+    #: Optional pluggable RAG backends.  All three default to
     #: ``None`` and are resolved lazily through ``get_*()`` accessors —
     #: integrators inject custom backends here once at construction.
     doc_store: OrchidDocStore | None = None
@@ -104,7 +104,7 @@ class OrchidRuntime:
     #: A single instance implements all three ABCs — the three typed
     #: references below point at the same object for type-safety.
     #: ``None`` when the gateway runs against its own local stores
-    #: (Phase 1 memory / Phase 2 file) rather than orchid-api.
+    #: rather than orchid-api.
     mcp_gateway_client_store: OrchidMCPGatewayClientStore | None = None
     mcp_gateway_auth_code_store: OrchidMCPGatewayAuthCodeStore | None = None
     mcp_gateway_token_store: OrchidMCPGatewayTokenStore | None = None

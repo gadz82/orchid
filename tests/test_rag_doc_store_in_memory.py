@@ -1,4 +1,4 @@
-"""Tests for ``InMemoryDocStore`` (ADR-022 / ADR-028)."""
+"""Tests for ``InMemoryDocStore``."""
 
 from __future__ import annotations
 

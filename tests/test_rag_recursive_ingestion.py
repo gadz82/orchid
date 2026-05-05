@@ -1,4 +1,4 @@
-"""Tests for ``RecursiveIngestion`` (ADR-022)."""
+"""Tests for ``RecursiveIngestion``."""
 
 from __future__ import annotations
 

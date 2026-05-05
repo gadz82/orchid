@@ -1,5 +1,5 @@
 """
-Pluggable retrieval primitives (ADR-023).
+Pluggable retrieval primitives.
 
 Two ABCs:
 
@@ -129,8 +129,8 @@ class OrchidRetrievalStrategy(ABC):
         ``transformers`` carries only ``pre_strategy=False`` transformers
         — agent-entry transformers have already rewritten the query by
         the time the strategy is called.  ``metadata_filters`` follows
-        the operator mini-language defined in ADR-027 (used from
-        Stage 6 onward; ignored by strategies that haven't wired it up).
+        the operator mini-language (ignored by strategies that haven't
+        wired it up).
         """
         ...
 

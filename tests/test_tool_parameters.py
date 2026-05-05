@@ -1,4 +1,4 @@
-"""Tests for built-in tool parameter declarations (ADR-017).
+"""Tests for built-in tool parameter declarations.
 
 Covers:
   - BuiltinToolParameter schema validation

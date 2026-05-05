@@ -1,4 +1,4 @@
-"""ADR-024 — ``OrchidAgentConfig.effective_rag(tool_name)`` deep-merge."""
+"""``OrchidAgentConfig.effective_rag(tool_name)`` deep-merge."""
 
 from __future__ import annotations
 

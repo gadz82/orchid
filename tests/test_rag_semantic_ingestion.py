@@ -1,4 +1,4 @@
-"""Tests for ``SemanticIngestion`` (ADR-022)."""
+"""Tests for ``SemanticIngestion``."""
 
 from __future__ import annotations
 

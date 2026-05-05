@@ -1,5 +1,5 @@
 """
-BM25 sparse encoder (ADR-025 §"Sparse vector encoder abstraction").
+BM25 sparse encoder.
 
 In-process implementation of BM25-Okapi with:
 
@@ -43,8 +43,7 @@ _K1 = 1.5
 _B = 0.75
 
 # Drift threshold for avgdl refresh — beyond ``DEFAULT_DRIFT`` growth
-# in n_documents we recompute the running average.  Stage 4 default
-# matches ADR-025's "default ±20%".
+# in n_documents we recompute the running average.  Default ±20%.
 _DEFAULT_DRIFT = 0.2
 
 _DEFAULT_VOCAB_SIZE = 100_000

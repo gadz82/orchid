@@ -2,9 +2,9 @@
 Document ingestion pipeline — parse → strategy → upsert.
 
 Orchestrates the flow from raw file bytes to indexed documents.  The
-chunking step delegates to a configurable :class:`OrchidIngestionStrategy`
-(ADR-022); :func:`ingest_document` plugs strategy + post-processors into
-the same parse-once flow consumers use today.
+chunking step delegates to a configurable :class:`OrchidIngestionStrategy`;
+:func:`ingest_document` plugs strategy + post-processors into the same
+parse-once flow consumers use today.
 """
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """
-``GraphRAGRetrieval`` — knowledge-graph-backed retrieval (ADR-026).
+``GraphRAGRetrieval`` — knowledge-graph-backed retrieval.
 
 The pipeline is four steps:
 

@@ -1,4 +1,4 @@
-"""Tests for the mini-agent lifecycle event surface (Phase B / B8).
+"""Tests for the mini-agent lifecycle event surface.
 
 Covers:
   - The wire-format helpers (``make_event_message`` / ``extract_event``).

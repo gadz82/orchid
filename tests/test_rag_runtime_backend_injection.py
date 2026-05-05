@@ -1,4 +1,4 @@
-"""Tests for ``OrchidRuntime.{doc_store, graph_store, sparse_encoder}`` (ADR-028)."""
+"""Tests for ``OrchidRuntime.{doc_store, graph_store, sparse_encoder}``."""
 
 from __future__ import annotations
 

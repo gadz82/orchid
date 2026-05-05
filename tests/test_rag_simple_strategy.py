@@ -1,4 +1,4 @@
-"""Tests for ``SimpleRetrieval`` (ADR-023)."""
+"""Tests for ``SimpleRetrieval``."""
 
 from __future__ import annotations
 

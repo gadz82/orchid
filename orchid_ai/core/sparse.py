@@ -1,5 +1,5 @@
 """
-Sparse vector primitives — Open/Closed extension point for hybrid search (ADR-025).
+Sparse vector primitives — Open/Closed extension point for hybrid search.
 
 Hybrid retrieval combines dense embeddings with a sparse / lexical lane (BM25,
 Splade, ...). The sparse lane needs:

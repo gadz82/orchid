@@ -1,4 +1,4 @@
-"""Tests for the query transformer registry (ADR-023)."""
+"""Tests for the query transformer registry."""
 
 from __future__ import annotations
 

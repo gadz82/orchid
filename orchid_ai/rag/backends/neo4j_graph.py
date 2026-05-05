@@ -1,5 +1,5 @@
 """
-``Neo4jGraphStore`` — :class:`OrchidGraphStore` backed by Neo4j (ADR-026).
+``Neo4jGraphStore`` — :class:`OrchidGraphStore` backed by Neo4j.
 
 Behind the optional ``neo4j`` extra: ``pip install orchid-ai[neo4j]``.
 The constructor eagerly checks for the ``neo4j`` driver — surfacing

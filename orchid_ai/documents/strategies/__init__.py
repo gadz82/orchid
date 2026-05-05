@@ -1,14 +1,13 @@
 """
-Ingestion strategy + chunk post-processor registries (ADR-022).
+Ingestion strategy + chunk post-processor registries.
 
 Mirrors :mod:`orchid_ai.rag.strategies` and
 :mod:`orchid_ai.agents.strategies`: register, get-by-name with safe
 fallback, clear for tests.
 
-Stage 1 ships the ``recursive`` ingestion strategy (both flat chunking
-and parent-in-metadata mode) and no post-processors.  Stage 2 adds
-``semantic``, ``hierarchical``, ``headered`` strategies plus the
-``contextual_headers`` post-processor.
+Built-in ingestion strategies: ``recursive`` (flat chunking and
+parent-in-metadata mode), ``semantic``, ``hierarchical``, ``headered``.
+Built-in post-processors: ``contextual_headers``, ``entity_extraction``.
 """
 
 from __future__ import annotations

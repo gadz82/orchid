@@ -1,5 +1,5 @@
 """
-``HybridRetrieval`` — dense + sparse hybrid search (ADR-025).
+``HybridRetrieval`` — dense + sparse hybrid search.
 
 The strategy issues two parallel retrievals — one against the dense
 embedding lane (``reader.retrieve``) and one against the sparse /

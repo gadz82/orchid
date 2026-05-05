@@ -7,8 +7,8 @@ Themed modules:
   - :mod:`schema_llm` — LLM configuration
   - :mod:`schema_rag` — RAG settings (defaults + per-agent overrides)
   - :mod:`schema_mcp` — MCP server / tool / auth-mode configs
-  - :mod:`schema_skills` — Built-in tools and skills (ADR-017)
-  - :mod:`schema_guardrails` — Guardrail rule + chain configs (ADR-018)
+  - :mod:`schema_skills` — Built-in tools and skills
+  - :mod:`schema_guardrails` — Guardrail rule + chain configs
   - :mod:`schema_supervisor` — Supervisor + execution-hint configs
   - :mod:`schema_agent` — :class:`OrchidAgentConfig`,
                          :class:`OrchidDefaultsConfig`,

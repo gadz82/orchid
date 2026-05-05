@@ -1,4 +1,4 @@
-"""Tests for the new RAG config shape (ADR-022 / ADR-023 / ADR-027)."""
+"""Tests for the new RAG config shape."""
 
 from __future__ import annotations
 

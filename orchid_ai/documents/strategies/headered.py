@@ -13,8 +13,7 @@ Equivalent to::
       strategy: recursive
       post_processors: [contextual_headers]
 
-The two-pronged shape mirrors the ADR-022 §"Concrete strategies"
-sketch: ``headered`` is "recursive + ContextualHeaderPostProcessor".
+``headered`` is "recursive + ContextualHeaderPostProcessor".
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""ADR-027: ``metadata_filters`` reaches ``reader.retrieve`` through every strategy."""
+"""``metadata_filters`` reaches ``reader.retrieve`` through every strategy."""
 
 from __future__ import annotations
 

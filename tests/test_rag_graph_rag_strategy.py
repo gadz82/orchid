@@ -1,4 +1,4 @@
-"""Tests for ``GraphRAGRetrieval`` (ADR-026)."""
+"""Tests for ``GraphRAGRetrieval``."""
 
 from __future__ import annotations
 
@@ -108,7 +108,7 @@ class TestMissingGraphStore:
 class TestMultiHop:
     @pytest.mark.asyncio
     async def test_two_hops_reveals_z(self):
-        """ADR-026 §Tests: query mentions A; 2-hop walk reveals Z."""
+        """Query mentions A; 2-hop walk reveals Z."""
         scope = _scope()
         store = await _populate_chain(scope, depth=2)
 

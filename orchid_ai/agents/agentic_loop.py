@@ -8,7 +8,7 @@ Manages the multi-round LLM → tool-call → result cycle with:
 - HITL interrupt for tools requiring approval
 - Per-call error handling
 - Optional parallel dispatch of read-only / idempotent tools within a
-  single round (Phase A) — opt-in via ``parallel_safety`` map.
+  single round — opt-in via ``parallel_safety`` map.
 """
 
 from __future__ import annotations

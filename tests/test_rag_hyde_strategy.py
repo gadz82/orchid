@@ -1,4 +1,4 @@
-"""Tests for ``HyDERetrieval`` (ADR-023)."""
+"""Tests for ``HyDERetrieval``."""
 
 from __future__ import annotations
 

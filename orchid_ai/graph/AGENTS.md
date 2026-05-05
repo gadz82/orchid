@@ -115,7 +115,7 @@ Helper that removes supervisor routing noise (`[Supervisor] Parallel dispatch:`,
 
 The supervisor's `_advance_sequential()` injects `mcp_context` from previous agent invocations into the history, so downstream agents in a sequential pipeline have access to earlier tool results.
 
-## Mini-agent topology (Phase B — ADR-021)
+## Mini-agent topology
 
 When an agent has `mini_agent.enabled: true` in its YAML, the graph
 builder synthesises **two extra nodes** alongside the normal

@@ -1,4 +1,4 @@
-"""Tests for the four backend registries (ADR-028)."""
+"""Tests for the four backend registries."""
 
 from __future__ import annotations
 

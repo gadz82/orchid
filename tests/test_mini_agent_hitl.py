@@ -1,4 +1,4 @@
-"""Spec §16 case 14 — HITL through a mini-agent.
+"""HITL through a mini-agent.
 
 The critical contract: when a mini calls ``interrupt()`` (because
 its tool has ``requires_approval=True``), LangGraph raises
@@ -15,11 +15,10 @@ Instead we drive the mini node directly with a stubbed loop that
 raises a ``GraphInterrupt`` and assert it propagates unchanged —
 which is exactly what LangGraph's runtime needs to suspend the run.
 
-The "resume → aggregator runs after both minis complete" half of
-spec §14 is structurally guaranteed by LangGraph's join semantics
-on ``Send`` fan-out (the aggregator only fires once every mini has
-recorded an outcome) and is exercised end-to-end in the streaming
-PR (PR-3) where a full graph integration test lands.
+The "resume → aggregator runs after both minis complete" half is
+structurally guaranteed by LangGraph's join semantics on ``Send``
+fan-out (the aggregator only fires once every mini has recorded an
+outcome) and is exercised end-to-end in the streaming integration test.
 """
 
 from __future__ import annotations

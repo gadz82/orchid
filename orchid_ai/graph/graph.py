@@ -1,5 +1,5 @@
 """
-LangGraph graph definition — Composition Root (ADR-008, ADR-016, ADR-018).
+LangGraph graph definition — Composition Root.
 
 All dependency wiring happens here:
   - Agents are instantiated from YAML config (GenericAgent or custom class)
@@ -8,7 +8,7 @@ All dependency wiring happens here:
   - The Supervisor receives agent descriptions for dynamic routing
   - Guardrails are wired as graph nodes (global) and agent wrappers (per-agent)
 
-Graph topology (ADR-013 — parallel vs sequential, ADR-018 — guardrails):
+Graph topology (parallel vs sequential, guardrails):
 
   ┌──────────────────────┐
   │  input_guardrails     │  ← Global input rails (content safety, PII, injection)
@@ -84,7 +84,7 @@ def _create_agent_node(
     ``agent.run()`` and output is checked after.
 
     When ``agent_config.mini_agent.enabled`` is true, the wrapper
-    additionally runs the decomposer hook (Phase B) BEFORE
+    additionally runs the decomposer hook BEFORE
     ``agent.run()``.  If the decomposer chooses to fork, the wrapper
     returns the decision state update (with no AIMessage) and the
     graph's conditional edge fans out into mini-agents.  This lives
@@ -120,7 +120,7 @@ def _create_agent_node(
                     "active_agents": [],
                 }
 
-        # ── Phase B: mini-agent decomposer hook ──
+        # ── mini-agent decomposer hook ──
         # Runs ONLY when ``agent_config.mini_agent.enabled`` is true.
         # Returns either a state update (fork → no agent.run; or
         # short-circuit error) or ``None`` (continue to agent.run).
@@ -270,7 +270,7 @@ def _instantiate_agent(
         kwargs["chat_model"] = agent_chat_model
     if summary_config:
         kwargs["summary_config"] = summary_config
-    # ADR-026 — graph store flows through so ``graph_rag`` retrieval
+    # graph store flows through so ``graph_rag`` retrieval
     # can traverse entities/edges.
     if graph_store is not None:
         kwargs["graph_store"] = graph_store
@@ -503,7 +503,7 @@ def build_graph(
     agents_out: dict[str, OrchidAgent] | None = None,
 ) -> Any:  # returns CompiledGraph
     """
-    Build and compile the full agent graph from YAML configuration (ADR-016, ADR-018).
+    Build and compile the full agent graph from YAML configuration.
 
     Parameters
     ----------
@@ -532,8 +532,8 @@ def build_graph(
         logger.info("[Graph] LLM response caching enabled (InMemoryCache)")
 
     reader = runtime.get_reader()
-    # ADR-026 — graph store reaches the agent so ``graph_rag``
-    # retrieval can traverse entities/edges.  Returns a NullGraphStore
+    # graph store reaches the agent so ``graph_rag`` retrieval
+    # can traverse entities/edges.  Returns a NullGraphStore
     # when the runtime didn't wire one — GraphRAGRetrieval detects
     # that via ``is_null`` and falls back to SimpleRetrieval.
     graph_store = runtime.get_graph_store()
@@ -564,7 +564,7 @@ def build_graph(
         load_tools_from_config(config.tools)
         logger.info("[Graph] registered %d built-in tools", len(config.tools))
 
-    # ── Build global guardrail chains (ADR-018) ──
+    # ── Build global guardrail chains ──
     global_input_chain, global_output_chain = _build_guardrail_chains(config.guardrails)
     has_global_input_rails = not global_input_chain.empty
     has_global_output_rails = not global_output_chain.empty
@@ -712,7 +712,7 @@ def build_graph(
             _create_agent_node(agent, input_chain, output_chain, agent_config=agent_config),
         )
 
-        # Phase B: synthesise the mini + aggregator nodes only when the
+        # Synthesise the mini + aggregator nodes only when the
         # agent has opted in.  Non-opt-in agents keep today's wiring
         # (a single ``{name}_agent → supervisor`` edge) — zero overhead.
         # Works for ANY ``OrchidAgent`` subclass — ``GenericAgent`` and

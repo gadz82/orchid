@@ -1,4 +1,4 @@
-"""Tests for the customisable internal prompts (Phase 1 prompt customisation).
+"""Tests for the customisable internal prompts.
 
 Covers four extension points:
 

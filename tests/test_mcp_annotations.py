@@ -1,4 +1,4 @@
-"""Phase A — MCP tool-annotation extraction tests.
+"""MCP tool-annotation extraction tests.
 
 Covers two layers:
 

@@ -1,8 +1,7 @@
 """
 Shared state definitions for the LangGraph agent graph.
 
-OrchidAuthContext is the identity envelope propagated to every agent and MCP client
-(ADR-010 — Token Propagation).
+OrchidAuthContext is the identity envelope propagated to every agent and MCP client.
 
 The base OrchidAuthContext defines the **minimal contract** the framework needs:
   - ``access_token`` — for bearer passthrough to MCP servers
@@ -73,7 +72,7 @@ class OrchidAuthContext:
     @property
     def tenant_key(self) -> str:
         """
-        Tenant identifier for RAG data isolation (ADR-014).
+        Tenant identifier for RAG data isolation.
 
         Override in subclasses to derive from platform-specific fields.
         Returns ``"default"`` if not set.
@@ -195,12 +194,12 @@ class OrchidAgentState(TypedDict, total=False):
     """
 
     messages: list[Any]  # populated as Annotated[list, add_messages] in graph/
-    auth_context: OrchidAuthContext  # ADR-010: one token for the whole session
-    # ADR-014: tenant key = auth_context.tenant_key
+    auth_context: OrchidAuthContext  # one token for the whole session
+    # tenant key = auth_context.tenant_key
     chat_id: str  # chat session identifier for RAG scoping
     active_agents: list[str]
     mcp_context: dict[str, Any]  # raw data from MCP tool calls
     rag_context: dict[str, Any]  # chunks retrieved from vector store
     final_response: str | None
-    skill_instructions: dict[str, str]  # ADR-017: agent_name → instruction from orchestrator skill
-    _has_output_guardrails: bool  # ADR-018: sentinel for output guardrail routing
+    skill_instructions: dict[str, str]  # agent_name → instruction from orchestrator skill
+    _has_output_guardrails: bool  # sentinel for output guardrail routing

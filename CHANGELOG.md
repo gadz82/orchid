@@ -33,7 +33,7 @@
 - **agents**: Add mini-agent schema, decomposer, and runtime node with tests
   ([`39d623a`](https://github.com/gadz82/orchid/commit/39d623a31c7c642445d3c38ab4cded2bac292556))
 
-- **agents**: Parallel tool-call dispatch within one agentic round (Phase A)
+- **agents**: Parallel tool-call dispatch within one agentic round
   ([`680910c`](https://github.com/gadz82/orchid/commit/680910c240fb3fe96d9d2e0b639845e7d8fa93c1))
 
 - **agents**: Refactor mini-agent decomposer hook to graph-level for simpler integration

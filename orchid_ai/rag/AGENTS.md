@@ -2,9 +2,8 @@
 
 ## Overview
 
-The RAG subsystem covers four pluggable axes (ADR-022 / ADR-023 /
-ADR-025 / ADR-026), wired together by hierarchical scoping (ADR-018)
-and an additive metadata-filter mini-language (ADR-027):
+The RAG subsystem covers four pluggable axes, wired together by
+hierarchical scoping and an additive metadata-filter mini-language:
 
 | Axis              | ABC                          | Registry                     | Built-ins                                              |
 | ----------------- | ---------------------------- | ---------------------------- | ------------------------------------------------------ |
@@ -17,9 +16,9 @@ Concrete backends live behind their own registries
 (`VECTOR_BACKEND_REGISTRY`, `DOC_STORE_BACKEND_REGISTRY`,
 `GRAPH_STORE_BACKEND_REGISTRY`, `SPARSE_ENCODER_REGISTRY`) so swapping
 Qdrant for OpenSearch — or the in-memory graph store for Neo4j — is a
-config flip, never a code edit (ADR-028).
+config flip, never a code edit.
 
-## Hierarchical Scope Model (ADR-018)
+## Hierarchical Scope Model
 
 Every RAG operation uses `OrchidRAGScope` — never raw filters.
 
@@ -50,7 +49,7 @@ When indexing documents, set scope metadata explicitly:
 - Uploaded files: `scope="chat_shared"` (chat-scoped by default)
 - Shared data (promoted): `scope="user"` (after `POST /chats/{id}/share`)
 
-## Metadata Filtering Mini-Language (ADR-027)
+## Metadata Filtering Mini-Language
 
 `OrchidVectorReader.retrieve(...)` (and `retrieve_sparse(...)`) take an
 optional `metadata_filters: dict[str, Any] | None` parameter that
@@ -72,7 +71,7 @@ The Qdrant backend translates these via
 payload index types (keyword / integer / float / bool / datetime)
 when the agent didn't declare `payload_indexes` explicitly.
 
-## Per-Tool RAG Override (ADR-024)
+## Per-Tool RAG Override
 
 Each MCP tool (`mcp_servers[*].tools[*].rag`) and built-in tool
 (`tools.<name>.rag`) may carry its own `rag:` block. At runtime
@@ -83,10 +82,10 @@ size without restating the full block. `inject_to_rag` consumes the
 result via `build_ingestion_strategy` so the tool's chunks land in
 the configured layout, not a one-size-fits-all 2000-char truncation.
 
-Use the **`exclude_dynamic: true`** retrieval flag (cycle mitigation
-per ADR-024 §"Open questions / risks") to keep dynamically-injected
-tool output out of the retrieval path — the agent injects
-`dynamic: {"not": True}` into the metadata filters automatically.
+Use the **`exclude_dynamic: true`** retrieval flag to keep
+dynamically-injected tool output out of the retrieval path — the
+agent injects `dynamic: {"not": True}` into the metadata filters
+automatically.
 
 ## Files
 
@@ -111,7 +110,7 @@ tool output out of the retrieval path — the agent injects
 
 ## Key Rules
 
-- **No concrete backend imports outside `backends/`** (ADR-028).
+- **No concrete backend imports outside `backends/`.**
   Importing `qdrant_client`, `neo4j`, or any other client elsewhere
   fails the [`tests/test_dependency_boundaries.py`](../../tests/test_dependency_boundaries.py)
   architectural lint.
@@ -130,7 +129,7 @@ tool output out of the retrieval path — the agent injects
   arrive as kwargs so the registry doesn't need to know which
   strategy needs which.
 - **Pre-strategy transformers fire at agent entry, strategy-internal
-  ones fan out inside the strategy** (ADR-023). The
+  ones fan out inside the strategy.** The
   `pre_strategy: ClassVar[bool]` flag on each transformer drives the
   split.
 

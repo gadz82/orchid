@@ -1,5 +1,5 @@
 """
-Shared fan-out helpers for retrieval strategies (ADR-023).
+Shared fan-out helpers for retrieval strategies.
 
 Two utilities used by ``MultiQueryRetrieval``, ``HyDERetrieval``, and
 future strategies that fan out the query into N variations:
@@ -76,7 +76,7 @@ async def fan_out_retrieve(
     Returns at most ``k`` results, sorted by descending score.  On
     timeout, falls back to a single retrieval with the first query and
     returns whatever it finds (or ``[]`` on a second failure).
-    ``metadata_filters`` (ADR-027) flow through to every parallel
+    ``metadata_filters`` flow through to every parallel
     ``reader.retrieve`` call so the strategy's filter declaration is
     consistently applied across the fan-out.
     """

@@ -1,4 +1,4 @@
-"""Mini-agent lifecycle events — emit + parse helpers (Phase B / B8).
+"""Mini-agent lifecycle events — emit + parse helpers.
 
 The four ``mini_agent.*`` lifecycle events surface through a
 piggyback ``SystemMessage`` whose ``additional_kwargs`` carries a

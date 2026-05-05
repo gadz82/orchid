@@ -1,4 +1,4 @@
-"""ADR-024 — ``build_ingestion_strategy(config)`` honours per-strategy knobs."""
+"""``build_ingestion_strategy(config)`` honours per-strategy knobs."""
 
 from __future__ import annotations
 

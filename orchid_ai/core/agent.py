@@ -1,5 +1,5 @@
 """
-Base agent abstraction — Open/Closed Principle (ADR-008).
+Base agent abstraction — Open/Closed Principle.
 
 Adding a new agent = subclass OrchidAgent + register in Composition Root.
 Nothing else needs to change.
@@ -99,8 +99,8 @@ class OrchidAgent(ABC):
         Agent-specific logic.
         Receives the full graph state, returns the updated state.
 
-        The ``auth_context`` in state carries the Bearer token
-        (ADR-010).  Pass it to ``self.mcp_clients`` when calling tools.
+        The ``auth_context`` in state carries the Bearer token.
+        Pass it to ``self.mcp_clients`` when calling tools.
         """
         ...
 
@@ -358,7 +358,7 @@ class OrchidAgent(ABC):
         combined.sort(key=lambda d: d.get("score", 0), reverse=True)
         return combined[:k]
 
-    # ── Built-in tool access (ADR-017) ──────────────────────
+    # ── Built-in tool access ────────────────────────────────
 
     async def call_builtin_tool(self, tool_name: str, **kwargs: Any) -> Any:
         """

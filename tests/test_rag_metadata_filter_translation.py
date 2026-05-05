@@ -1,4 +1,4 @@
-"""Tests for the ADR-027 metadata-filter mini-language → Qdrant translation."""
+"""Tests for the metadata-filter mini-language → Qdrant translation."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Tests for the retrieval strategy registry (ADR-023)."""
+"""Tests for the retrieval strategy registry."""
 
 from __future__ import annotations
 

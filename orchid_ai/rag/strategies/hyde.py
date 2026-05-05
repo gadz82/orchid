@@ -1,5 +1,5 @@
 """
-``HyDERetrieval`` — Hypothetical Document Embeddings retrieval (ADR-023).
+``HyDERetrieval`` — Hypothetical Document Embeddings retrieval.
 
 The strategy generates ``n_hypothetical`` plausible answer paragraphs
 via :class:`HyDETransformer`, then retrieves documents using both the

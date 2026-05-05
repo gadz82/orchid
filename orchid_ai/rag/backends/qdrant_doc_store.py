@@ -5,14 +5,14 @@ The doc-store usage pattern is **key-value, not similarity search** —
 we never query the vector space.  Qdrant still requires a vector for
 every point, so the collection is created with ``size=1`` and every
 point carries ``[0.0]`` as the vector value.  The trade-off is one
-unused float per parent doc; a Stage 5+ optimisation could share the
+unused float per parent doc; a future optimisation could share the
 main RAG collection if integrators want to economise on collections.
 
 Idempotency: ``put(doc_id, ...)`` derives a deterministic UUID5 from
 ``doc_id`` so subsequent writes overwrite the same point.
 
 This module is the **only** place outside ``rag/backends/qdrant.py``
-that imports ``qdrant_client`` — the ADR-028 dependency-boundary lint
+that imports ``qdrant_client`` — the dependency-boundary lint
 in :mod:`orchid_ai.tests.test_dependency_boundaries` enforces it.
 """
 

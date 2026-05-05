@@ -1,5 +1,5 @@
 """
-Entity extraction during ingestion (ADR-026).
+Entity extraction during ingestion.
 
 Two collaborating pieces land here:
 
@@ -12,7 +12,7 @@ Two collaborating pieces land here:
   ingestion, writes the extracted entities + edges to an
   :class:`OrchidGraphStore`, and tags every chunk with a
   ``mentioned_entities`` metadata field so retrieval-time filtering
-  (ADR-027) can target chunks that mention specific entities.
+  can target chunks that mention specific entities.
 
 The post-processor is **opt-in**: when no ``chat_model`` or
 ``graph_store`` is supplied, ``process()`` returns the chunks unchanged
@@ -84,7 +84,7 @@ _DEFAULT_EXTRACTION_PROMPT = (
 
 
 class LLMEntityExtractor(OrchidEntityExtractor):
-    """LLM-driven entity + edge extractor (ADR-026 reference impl).
+    """LLM-driven entity + edge extractor reference implementation.
 
     Falls back to ``([], [])`` on any LLM error so a flaky model
     doesn't sink the entire ingestion run — extraction is best-effort

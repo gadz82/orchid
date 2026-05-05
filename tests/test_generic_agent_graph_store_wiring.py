@@ -1,4 +1,4 @@
-"""ADR-026 — ``graph_store`` flows from runtime → agent → retrieval strategy."""
+"""``graph_store`` flows from runtime → agent → retrieval strategy."""
 
 from __future__ import annotations
 

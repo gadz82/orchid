@@ -89,11 +89,11 @@ def test_config_optional_fields_default_cleanly() -> None:
     # Platform domain defaults to None — downstream consumers fall
     # back to their own heuristics (e.g. email-domain derivation).
     assert cfg.auth_domain is None
-    # Exchange-via-api defaults to False so Phase 1 deployments keep
+    # Exchange-via-api defaults to False so legacy deployments keep
     # doing their own code exchange.
     assert cfg.exchange_via_api is False
-    # Resolve-via-api defaults to False so pre-Phase-4 deployments
-    # keep hitting the upstream userinfo endpoint themselves.
+    # Resolve-via-api defaults to False so legacy deployments keep
+    # hitting the upstream userinfo endpoint themselves.
     assert cfg.resolve_via_api is False
 
 
@@ -239,13 +239,14 @@ async def test_concrete_exchange_client_roundtrip() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_token_defaults_to_not_implemented() -> None:
-    """The base ABC keeps Phase-2 subclasses instantiable; they just
-    can't perform refreshes.  The gate in
+    """The base ABC keeps exchange-only subclasses instantiable;
+    they just can't perform refreshes.  The gate in
     ``/auth-info``'s ``refresh_via_api`` flag relies on this default
-    behaviour — a Phase-2 deployment must not advertise the feature.
+    behaviour — an exchange-only deployment must not advertise the
+    feature.
     """
 
-    class Phase2ExchangeOnly(OrchidAuthExchangeClient):
+    class ExchangeOnly(OrchidAuthExchangeClient):
         async def exchange_code(
             self,
             *,
@@ -257,8 +258,8 @@ async def test_refresh_token_defaults_to_not_implemented() -> None:
             return OrchidUpstreamTokenResponse(access_token="at")
 
     with pytest.raises(NotImplementedError) as exc:
-        await Phase2ExchangeOnly().refresh_token(refresh_token="rt-1")
-    assert "Phase2ExchangeOnly" in str(exc.value)
+        await ExchangeOnly().refresh_token(refresh_token="rt-1")
+    assert "ExchangeOnly" in str(exc.value)
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,5 @@
 """
-``InMemoryDocStore`` — dict-backed :class:`OrchidDocStore` (ADR-022 / ADR-028).
+``InMemoryDocStore`` — dict-backed :class:`OrchidDocStore`.
 
 Suitable for tests, single-process demos, and integrators who don't
 need cross-process persistence.  Idempotent ``put`` (the same

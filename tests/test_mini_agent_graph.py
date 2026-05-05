@@ -1,6 +1,6 @@
 """Tests for the graph-builder wiring and the fork router.
 
-Covers spec §16 cases:
+Covers:
   - T7  — ``should_fork=False`` → no extra ``_mini``/``_aggregator``
           nodes invoked; supervisor sees the parent's normal flow.
   - T8  — ``should_fork=True`` with N sub-tasks → ``_make_fork_router``

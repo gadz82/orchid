@@ -58,7 +58,7 @@ class TestMCPServerConfigAuth:
         assert cfg.auth.mode == "none"
 
     def test_auth_passthrough_untouched(self):
-        """Passthrough mode is unchanged by the spec migration (ADR-010)."""
+        """Passthrough mode is unchanged by the spec migration."""
         cfg = OrchidMCPServerConfig(
             name="internal",
             url="http://localhost:3000/mcp",

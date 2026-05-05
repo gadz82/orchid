@@ -1,4 +1,4 @@
-"""Tests for ``HeaderedIngestion`` and ``ContextualHeaderPostProcessor`` (ADR-022)."""
+"""Tests for ``HeaderedIngestion`` and ``ContextualHeaderPostProcessor``."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class TestHeaderedIngestion:
         )
         assert chunks
         for c in chunks:
-            # Required prefix from ADR-022 §Tests:
+            # Required prefix:
             #   ^# {title}\n## {section}\n
             assert c.text.startswith("# My Document\n## ")
 

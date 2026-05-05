@@ -41,7 +41,7 @@ Example custom agents:
 - **Constructor:** `__init__(self, *, reader, mcp_clients, config, chat_model=None, graph_store=None, **kwargs)` — the graph builder injects `reader`, MCP clients, the per-agent `BaseChatModel`, and the runtime's `OrchidGraphStore` (`None` or a `NullGraphStore` when no graph backend is wired). `OrchidAgent`'s `**_kwargs` catch-all absorbs framework-injected extras (e.g. `model_id`, `summary_config`).
 - **Resolution:** Dotted import path in YAML `class:` field → `importlib` at startup
 
-### Per-Tool RAG Override (ADR-024)
+### Per-Tool RAG Override
 
 `OrchidAgentConfig.effective_rag(tool_name) -> OrchidRAGConfig`
 returns the merged RAG config that should govern a specific tool.
@@ -61,7 +61,7 @@ nested field (strategy, overlap, retrieval, namespace, …) intact.
 injectable tool and threads the resolved namespace + ingestion
 strategy into `inject_to_rag`. Custom agents that override
 `run()` and write tool results to RAG should follow the same
-pattern (see [`rag/AGENTS.md`](../rag/AGENTS.md#per-tool-rag-override-adr-024)).
+pattern (see [`rag/AGENTS.md`](../rag/AGENTS.md#per-tool-rag-override)).
 
 ## SOLID Patterns for Agents
 
@@ -126,7 +126,7 @@ Do NOT import `litellm` directly in consumer agents. Use the injected `_chat_mod
 
 Don't merge these back into `GenericAgent`. If you need to modify skill detection, edit `skill_detector.py`.
 
-### Mini-agents (Phase B — ADR-021)
+### Mini-agents
 
 Three sibling modules implement opt-in self-cloning fan-out, kept
 deliberately separate from `GenericAgent` to honour SRP:

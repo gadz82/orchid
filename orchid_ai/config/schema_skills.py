@@ -1,4 +1,4 @@
-"""Built-in tool + skill configuration models (ADR-017)."""
+"""Built-in tool + skill configuration models."""
 
 from __future__ import annotations
 
@@ -42,13 +42,13 @@ class OrchidBuiltinToolConfig(BaseModel):
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
     rag_ttl: int | None = None  # per-tool TTL override; None = use agent default
     requires_approval: bool = False  # pause and ask user before executing (HITL)
-    # Phase A — parallel tool-call dispatch override for built-in
-    # tools.  Built-ins have no MCP annotation to fall back to, so a
+    # Parallel tool-call dispatch override for built-in tools.
+    # Built-ins have no MCP annotation to fall back to, so a
     # ``None`` value resolves to ``False`` (sequential).  Set to
     # ``True`` for pure read-only / side-effect-free handlers that
     # the agent may safely batch when ``parallel_tools: true``.
     parallel_safe: bool | None = None
-    #: Per-tool RAG override (ADR-024).  When set, this tool's
+    #: Per-tool RAG override.  When set, this tool's
     #: ingestion / retrieval / namespace / payload-index decisions
     #: use the tool's ``rag`` block instead of the agent's.  ``None``
     #: (the default) means inherit from the agent.  The merge is

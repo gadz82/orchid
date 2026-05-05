@@ -1,5 +1,5 @@
 """
-Built-in tool registry — maps YAML ``tools`` declarations to Python callables (ADR-017).
+Built-in tool registry — maps YAML ``tools`` declarations to Python callables.
 
 Resolution:
   1. Short name in registry → pre-registered callable
