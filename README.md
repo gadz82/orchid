@@ -29,6 +29,7 @@ Orchid (alias for Orchestrator-Index) lets you define AI agents via YAML configu
 - **Pluggable persistence** — SQLite (default) and PostgreSQL backends for chat history; integrators can plug any `OrchidChatStorage` subclass
 - **HITL graph interrupts** — `requires_approval: true` tools pause the graph; resume via the API or CLI with the user's decision
 - **MCP capability cache warming** — `OrchidSessionWarmer` keeps tool inventories ready so the first agentic round avoids discovery RPCs
+- **Pollen + Bloom (event-driven activation)** — opt-in async substrate that turns external webhooks, cron schedules, and in-graph `emit_signal` calls into background LangGraph runs. Triggers match signals to agent invocations under a synthesised `OrchidAuthContext`; run results can be appended back into a real user chat.
 - **Document pipeline** — PDF, DOCX, XLSX, CSV, image parsing with pluggable ingestion strategies and post-processors
 
 ## Installation
@@ -106,6 +107,10 @@ orchid/
   documents/        PDF/DOCX/XLSX/CSV/Image parsers + chunking pipeline
   persistence/      OrchidChatStorage ABC + SQLite (default) + PostgreSQL backends + migrations
   mcp/              StreamableHttpMCPClient
+  events/           Pollen + Bloom — concrete impls of core/events ABCs:
+                      backends/, queues/, processors/, runners/, producers/,
+                      schedulers/, auth/, registry, dispatcher, streaming
+  identity/         OAuthMintingMixin (helper for resolvers used by act_as_user triggers)
   llm_service.py    LiteLLMProvider (concrete LLMProvider)
   utils.py          Shared utilities
 ```
@@ -139,6 +144,12 @@ documents/   -> core/
 | `OrchidVectorWriter` | `core/repository.py` | Vector store indexing |
 | `OrchidVectorStoreAdmin` | `core/repository.py` | Collection management |
 | `OrchidChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
+| `OrchidSignalDispatcher` | `core/events/dispatcher.py` | Persist + enqueue a `SignalEnvelope` (Pollen ingest) |
+| `OrchidSignalQueue` | `core/events/queue.py` | Durable signal buffer (in-memory / SQLite / Postgres / relay) |
+| `OrchidSignalProducer` | `core/events/producer.py` | Surface external events as signals (HTTP / scheduler / internal) |
+| `OrchidSignalProcessor` | `core/events/processor.py` | Drain the queue, match triggers, execute Blooms |
+| `OrchidJobRunner` | `core/events/runner.py` | Invoke the LangGraph supervisor under a synthesised auth context |
+| `OrchidSignalStore` / `OrchidJobStore` / `OrchidScheduleStore` / `OrchidTriggerStore` | `core/events/store.py` | Per-table stores backing the events tables |
 
 The auth ABCs (`OrchidAuthConfigProvider`, `OrchidAuthExchangeClient`,
 `OrchidIdentityResolver`, three `OrchidMCPGateway*Store`s) collectively let
@@ -511,6 +522,163 @@ Each step:
 - **`arguments`** -- Extra arguments passed to the tool for this specific step. Merged with the tool's default arguments from the server config. Useful for step-specific overrides (e.g. `max_results: 5` in a comparison step).
 - **`agent`** -- Name of another agent to invoke directly (bypasses the supervisor). The invoked agent runs its full pipeline (RAG + tools + LLM) and its result chains forward to the next step. Mutually exclusive with `tool`.
 - **`instruction`** -- Query or instruction sent to the invoked agent. Overrides the user's original message for this step. Use it to provide step-specific context: "Based on the player's stats and situation, assess their motivation and suggest mental strategies."
+
+#### `events` (Pollen + Bloom — optional, opt-in)
+
+Top-level block that wires the event-driven activation layer. **Omit it (or set `events.enabled: false`) and nothing in `orchid_ai/events/` runs** — no producers / processors are started, no DB rows are written, zero overhead.
+
+| Field | Type | Default |
+|-------|------|---------|
+| `enabled` | bool | `false` |
+| `store` | component ref (`{class, ...}`) | `null` (required when `enabled: true`) |
+| `queue` | component ref + queue knobs | `null` (required when `enabled: true`) |
+| `scheduler` | component ref | `null` |
+| `producers` | list[component ref] | `[]` |
+| `processors` | list[component ref + processor knobs] | `[]` (≥1 required when `enabled: true`) |
+| `middleware` | list[component ref] | `[]` |
+| `ingestion` | object — webhook source registry | `{sources: []}` |
+| `schedules` | list — cron / interval entries | `[]` |
+| `triggers` | list — signal → agent rules | `[]` |
+
+- **`enabled`** -- Master switch. The full block is still parsed when `false` so typos in your YAML still fail loudly, but no runtime objects are constructed. Default `false` is the zero-overhead opt-out.
+- **`store`** -- Backend for the seven events tables (`signals`, `signal_queue`, `signal_queue_dead_letter`, `triggers`, `schedules`, `job_runs`, `signal_sources`). Built-in choices: `orchid_ai.events.backends.sqlite.SQLiteEventStorage`, `orchid_ai.events.backends.postgres.PostgresEventStorage`. The migrations live alongside chat/MCP migrations in `persistence/migrations/v001_initial_schema.py` — one root migration covers all three concerns.
+- **`queue`** -- Durable signal buffer. Built-ins: `orchid_ai.events.queues.inmemory.InMemorySignalQueue` (tests/demos), `orchid_ai.events.queues.sqlite.SQLiteSignalQueue` (single-process durable), `orchid_ai.events.queues.postgres.PostgresSignalQueue` (FOR UPDATE SKIP LOCKED, optional `pg_notify` on commit), `orchid_ai.events.queues.relay.RelayingSignalQueue` (publish-then-mark adapter for external buses). Tunable knobs: `notify_enabled` (default `true`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `dead_letter_table` (default `signal_queue_dead_letter`).
+- **`scheduler`** -- Cron / interval driver. Built-in: `orchid_ai.events.schedulers.apscheduler.APSchedulerBackend` (wraps `apscheduler.AsyncIOScheduler`, no SQLAlchemy — durability lives in the `schedules` table; APScheduler's in-memory jobstore is re-populated on every boot).
+- **`producers`** -- Sources of signals. Built-ins: `orchid_ai.events.producers.http.HTTPIngestionProducer` (lazy-imports FastAPI; mounts at `mount: /signals`), `orchid_ai.events.producers.scheduler.SchedulerProducer` (drives the configured `scheduler`), `orchid_ai.events.producers.internal.InternalEmissionProducer` (wires `OrchidAgent.emit_signal` and `DispatcherSignalEmitter`), `orchid_ai.events.producers.relay_recovery.RelayRecoveryProducer` (periodic re-publish sweep when using `RelayingSignalQueue`).
+- **`processors`** -- Drain the queue and run the matched Blooms. Built-in: `orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor`. Tunable knobs: `concurrency` (default `4`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `drain_timeout_seconds` (default `10.0`).
+- **`middleware`** -- Optional `SignalIngestMiddleware` chain that runs on every `dispatcher.ingest` call before persistence (e.g. enrichment, tagging). Each entry is a component ref.
+- **`ingestion.sources`** -- Webhook source registry consumed by `HTTPIngestionProducer`. Each source has `id`, `validator: {class, secret_ref, extra_args}`, `allowed_types` (allow-list of signal types this source can emit). Built-in validators: `orchid_ai.events.auth.HMACValidator` (constant-time SHA-256 against the raw body so payloads can be parsed safely AFTER the signature check), `orchid_ai.events.auth.BearerValidator`. `secret_ref` accepts `env:VAR_NAME` to read from the environment.
+- **`schedules[]`** -- Cron / interval rows persisted in the `schedules` table. Each: `id`, exactly one of `cron: "0 7 * * 1-5"` or `interval_seconds: 3600`, `trigger_id` (must point at a trigger with `on.signal == "cron"`), `identity` (discriminated union — see below), `enabled` (default `true`). The `SchedulerProducer` fires synthetic `cron` signals through `dispatcher.ingest` with `dedupe_key = "<schedule_id>:<fire_iso>"`.
+- **`triggers[]`** -- Signal → agent rules. Each: `id`, `on: {signal, cron?, when?}`, `emits: {agent, prompt_template, identity, respect_chat_binding?, visibility?}`, `retry: {max, backoff, jitter, initial_delay_seconds, max_delay_seconds}`, `parallelism: per_user | per_tenant | unbounded` (default `per_user`).
+
+##### `events.triggers[].on`
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `signal` | str | e.g. `"support.ticket.created"`, `"cron"`. Used for first-pass match. |
+| `cron` | str \| null | Required when `signal == "cron"`, rejected otherwise. |
+| `when` | str \| null | Optional **JMESPath** boolean expression evaluated against the `SignalEnvelope`. The expression is compiled at registration time — invalid JMESPath fails boot, not run-time. |
+
+##### `events.triggers[].emits`
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `agent` | str | Agent name to invoke. Must exist in `agents:` — validated at registration. |
+| `prompt_template` | str | Mustache-style `{{var}}` template rendered against the signal envelope (`{{tenant_key}}`, `{{payload.foo}}`, etc.). |
+| `identity` | object (discriminated by `mode`) | See below — produces the `OrchidAuthContext` the Bloom runs under. |
+| `respect_chat_binding` | bool (default `false`) | When `true` AND the signal carries a `ChatBinding` AND the resolved auth has write permission on the target chat, the run's final `AIMessage` lands in that chat with `metadata.origin="bloom"`. Rejected at validation when combined with `identity.mode: service_account` (no user-of-record). |
+| `visibility` | `actor` \| `addressed` \| `tenant` \| `admin` \| `null` | Run / signal visibility level for the §26 visibility filter. `null` = inferred from identity (`act_as_user → actor`, `addressed_to_user → addressed`, `service_account → admin`). The (identity, visibility) compatibility matrix is enforced at config-load AND registration-time. |
+
+##### `events.{schedules,triggers}.identity` — discriminated union
+
+| `mode` | Extra fields | Behaviour |
+|--------|-------------|-----------|
+| `service_account` | `name: str` | The processor calls `OrchidIdentityResolver.resolve_service_account(name)`. The platform acts under a named service identity (e.g. a `digest-bot`). No user-of-record — incompatible with `respect_chat_binding: true`. |
+| `addressed_to_user` | `service_account: str`, `user_id_from: str` (JMESPath) | Same service identity, but the resulting auth context is *tagged* with a `user_id` extracted from the signal payload. Used for user-scoped RAG / chat binding without impersonation. |
+| `act_as_user` | `user_id_from: str` (JMESPath) | Full user impersonation. The processor calls `OrchidIdentityResolver.mint_for_user(tenant_key, user_id)`. The resolver is **probed at boot** — a resolver that can't mint at all (raises `MintingProbeUnsupportedError`) gets a deterministic boot-time failure naming both the trigger and the resolver class. |
+
+##### `events.triggers[].retry`
+
+| Field | Type | Default |
+|-------|------|---------|
+| `max` | int | `0` |
+| `backoff` | `fixed` \| `linear` \| `exponential` | `exponential` |
+| `jitter` | bool | `true` |
+| `initial_delay_seconds` | float | `1.0` |
+| `max_delay_seconds` | float | `300.0` |
+
+Per-trigger retry of the supervisor invocation (distinct from queue retry which is governed by `events.queue.max_attempts`). Retries become **new `JobRun` rows** with `attempt_number + 1` — never in-place updates. The `(trigger_id, signal_id, attempt_number)` UNIQUE constraint is what gives Bloom its replay safety.
+
+##### `events.triggers[].parallelism`
+
+`per_user` (default), `per_tenant`, or `unbounded`. The asyncio worker pool serialises Blooms by this key to avoid races on shared per-user state (notably the MCP capability cache).
+
+##### Cross-field validation
+
+When `events.enabled: true`:
+
+- `events.store` and `events.queue` are required.
+- `events.processors` must have at least one entry.
+- Every `schedule.trigger_id` must reference a trigger declared in this same file (forward references aren't supported).
+- Every schedule's matching trigger must declare `on.signal: cron`.
+- Every Pydantic model under `schema_events` uses `extra: forbid` — typos in keys surface as clear errors instead of silent drift.
+
+##### Worked example
+
+```yaml
+events:
+  enabled: true
+
+  store:
+    class: orchid_ai.events.backends.postgres.PostgresEventStorage
+  queue:
+    class: orchid_ai.events.queues.postgres.PostgresSignalQueue
+    notify_enabled: true
+    lease_seconds: 60
+  scheduler:
+    class: orchid_ai.events.schedulers.apscheduler.APSchedulerBackend
+
+  producers:
+    - class: orchid_ai.events.producers.http.HTTPIngestionProducer
+      extra_args:
+        mount: /signals
+    - class: orchid_ai.events.producers.scheduler.SchedulerProducer
+    - class: orchid_ai.events.producers.internal.InternalEmissionProducer
+
+  processors:
+    - class: orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor
+      concurrency: 8
+      lease_seconds: 60
+
+  ingestion:
+    sources:
+      - id: support-system
+        validator:
+          class: orchid_ai.events.auth.HMACValidator
+          secret_ref: env:SUPPORT_HMAC_SECRET
+        allowed_types: [support.ticket.created, support.ticket.updated]
+
+  schedules:
+    - id: morning-digest-cron
+      cron: "0 7 * * 1-5"
+      trigger_id: morning-digest
+      identity:
+        mode: service_account
+        name: digest-bot
+
+  triggers:
+    # Cron-driven Bloom — a digest assembled by a service identity
+    - id: morning-digest
+      on:
+        signal: cron
+        cron: "0 7 * * 1-5"
+      emits:
+        agent: notifications
+        prompt_template: "Build the morning digest for {{tenant_key}}"
+        identity:
+          mode: service_account
+          name: digest-bot
+      retry: { max: 3, backoff: exponential, jitter: true }
+      parallelism: unbounded
+
+    # Webhook-driven Bloom that posts back into the originating user's chat
+    - id: support-ticket-triage
+      on:
+        signal: support.ticket.created
+        when: "payload.priority == 'high'"
+      emits:
+        agent: support
+        prompt_template: |
+          A new high-priority ticket arrived: {{payload.subject}}.
+          Draft an initial reply.
+        identity:
+          mode: addressed_to_user
+          service_account: support-bot
+          user_id_from: payload.requester.id
+        respect_chat_binding: true
+      retry: { max: 5, backoff: exponential }
+      parallelism: per_user
+```
 
 ---
 
@@ -1299,6 +1467,55 @@ while summarising older exchanges via a cheaper LLM
 (`history_summary_model`, defaults to the supervisor model).
 Compression runs only when the chat actually exceeds the recent-turn
 threshold so short chats pay nothing.
+
+### Pollen + Bloom (event-driven activation)
+
+The `events:` YAML block (see [agents.yaml Reference → `events`](#events-pollen--bloom--optional-opt-in)) wires an opt-in async substrate that turns webhooks, cron schedules, and in-graph `emit_signal` calls into background LangGraph runs.
+
+**Naming.** *Pollen* is the signal substrate (ingest → persist → enqueue). *Bloom* is the execution layer (dequeue → match trigger → run agent under a synthesised auth context). A `JobRun` is the unit of execution.
+
+**The flow.**
+
+```
+   ┌──────────────┐  ingest  ┌────────────────────────┐    enqueue    ┌──────────────┐
+   │ Producer     │ ───────▶ │ OrchidSignalDispatcher │ ────────────▶ │ Signal Queue │
+   │ (HTTP/cron/  │          │ (persist + enqueue,    │   (atomic     │ (durable     │
+   │  internal)   │          │  one transaction)      │    outbox)    │  buffer)     │
+   └──────────────┘          └────────────────────────┘               └──────┬───────┘
+                                                                              │
+                                                                  drain      ▼
+   ┌────────────────────────────────────────────────────────────────────────────┐
+   │ AsyncioWorkerPoolProcessor                                                 │
+   │   1. lease a Signal                                                         │
+   │   2. resolve identity claim → OrchidAuthContext (via OrchidIdentityResolver)│
+   │   3. find matching triggers (JMESPath ``when:`` evaluated here)             │
+   │   4. insert a JobRun row, lock by parallelism_key, run GraphJobRunner       │
+   │   5. on success / failure → emit BloomEvent stream events                   │
+   └────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Three identity flavours** for *who* the Bloom runs as (see `events.triggers[].emits.identity` in the YAML reference):
+
+- `service_account` — named platform identity (e.g. `digest-bot`), no user-of-record.
+- `addressed_to_user` — service identity tagged with a user id extracted from the signal (user-scoped RAG without impersonation).
+- `act_as_user` — full user impersonation via `OrchidIdentityResolver.mint_for_user(tenant_key, user_id)`. Probed at boot.
+
+**Chat binding (opt-in).** A signal MAY carry a `ChatBinding {chat_id, mode, on_failure, source_message_id?}`. When the matched trigger has `respect_chat_binding: true` AND the resolved auth has write permission on the target chat, the run's final `AIMessage` is appended to that chat with `metadata.origin="bloom"`. Cross-user smuggling is rejected at run time regardless of what the signal carried — the runner re-validates ownership through the resolved auth. `OrchidAgent.emit_signal(chat_id="self", ...)` auto-fills `source_message_id` so the frontend can anchor an in-chat live-progress card under the user message that produced the binding.
+
+**`OrchidAgent.emit_signal`** is the in-graph hook for fan-out: an agent emits a signal that a separate trigger picks up to run a different agent. Internal emissions go through `dispatcher.ingest` — there is **no** in-process fast path that bypasses persistence, so internal Blooms get the same idempotency, retries, and visibility filtering as webhook-driven ones.
+
+**Idempotency by construction.** `UNIQUE (source, dedupe_key)` on signals; `UNIQUE (trigger_id, signal_id, attempt_number)` on `job_runs`. Retries become new `JobRun` rows — never in-place updates.
+
+**Streaming.** `BloomEventStream` is an in-process channel-keyed pub/sub (used by the orchid-api SSE endpoints):
+
+- `run:{run_id}` channel — operator-grade trace: `bloom.run.queued`, `bloom.run.started`, `bloom.run.finished`, plus tool / agent ticks.
+- `chat:{chat_id}` channel — chat-bound runs publish a redacted `ChatBloomEvent` stream: `chat.bloom.attached`, `chat.bloom.tick`, `chat.bloom.finished` (no raw tool result bodies, no run `result` payload — the final `AIMessage` flows through chat reload).
+
+**Visibility.** `events.triggers[].emits.visibility` (and the resolved value carried on `JobSpec` / `JobRun`) drives a §26 visibility filter applied to every `SELECT FROM job_runs` / `signals` query in the API. Cross-tenant access is always rejected, even for admins. The reserved role string `OrchidAuthContext.roles = frozenset({"admin"})` unlocks the `admin` visibility level.
+
+**External buses.** `RelayingSignalQueue` is a publish-then-mark adapter: the dispatcher persists with `relay_status=pending_publish`, the queue tries to publish to your `BusPublisher`, and `RelayRecoveryProducer` periodically sweeps pending rows so a transient publisher outage doesn't lose signals.
+
+This whole layer is fully opt-in: omit `events:` (or set `events.enabled: false`) and zero new objects are constructed. See [`orchid_ai/events/AGENTS.md`](orchid_ai/events/AGENTS.md) for the package-level architecture rules and the boundary contract between `core/events/` (zero deps) and the concrete implementations.
 
 ### MCP capability cache warming
 
