@@ -224,6 +224,18 @@ mcp_gateway:
     orchid_ask:
       title: "Ask the Acme Knowledge Base"
       description: "Route a question to the Acme support agents."
+    # The Pollen + Bloom tools ship via the same surface — any
+    # tool name registered by the gateway can be re-titled and
+    # re-described here without a gateway code change.
+    orchid_signal_emit:
+      title: "Trigger a background workflow"
+      description: "Emit a Pollen signal to start an event-driven Bloom run."
+    orchid_bloom_status:
+      title: "Check background work status"
+      description: "Look up the status of a Bloom run."
+    orchid_bloom_list:
+      title: "List recent background runs"
+      description: "Browse Bloom runs with optional status / trigger filters."
   prompts:
     - name: compliance_report
       description: "Generate a compliance-completion report."
@@ -232,6 +244,13 @@ mcp_gateway:
       template: |
         Produce a compliance report for {{department}}.
 ```
+
+Tool keys are arbitrary — the schema accepts any tool name the
+configured gateway exposes (built-in `orchid_*` tools, plus any
+custom tools an integrator wires up). Add an entry and the next
+MCP session sees the override on its first `tools/list`. The
+default titles/descriptions live in the gateway's source
+(`orchid-mcp/src/tools/`); a missing override keeps those defaults.
 
 Classes live in `orchid_ai/config/mcp_gateway.py`. Env-var overrides +
 external prompts-file loading happen upstream in `orchid-api`'s

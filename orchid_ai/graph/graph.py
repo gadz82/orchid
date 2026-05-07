@@ -42,7 +42,7 @@ import logging
 import time
 from typing import Any
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
@@ -69,6 +69,26 @@ from .supervisor import create_supervisor_node, route_to_agents
 
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
+
+
+def _latest_human_message_id(state: GraphState) -> str | None:
+    """Find the id of the most recent ``HumanMessage`` in graph state.
+
+    Returns ``None`` when the messages list is empty, when no
+    ``HumanMessage`` is present, or when the message has no
+    ``.id`` attribute (LangChain typically assigns one but the
+    field is optional in the base class).  Used by
+    :func:`_create_agent_node` to anchor in-chat live progress
+    cards under the message that triggered the turn (§LS5).
+    """
+    messages = state.get("messages") or []
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            mid = getattr(msg, "id", None)
+            if isinstance(mid, str) and mid:
+                return mid
+            return None
+    return None
 
 
 def _create_agent_node(
@@ -147,6 +167,17 @@ def _create_agent_node(
                 return decomposer_update
 
         # ── Run agent ──
+        # Pin the current chat id + latest user message id onto the
+        # agent so ``emit_signal(chat_id="self")`` can auto-populate
+        # ``ChatBinding.source_message_id`` (§LS5).  Restore the
+        # prior values in a ``finally`` so a graph that re-uses the
+        # same agent instance across turns or across chats doesn't
+        # leak state across invocations.
+        prev_chat_id = agent._current_chat_id
+        prev_message_id = agent._current_message_id
+        agent._current_chat_id = state.get("chat_id") or None
+        agent._current_message_id = _latest_human_message_id(state)
+
         agent_start = time.perf_counter()
         perf_logger.info("[PERF][agent=%s] >>> START", agent.name)
         try:
@@ -168,6 +199,11 @@ def _create_agent_node(
                     )
                 ],
             }
+        finally:
+            # Restore the agent's per-call state so concurrent / later
+            # invocations don't observe leaked context (§LS5).
+            agent._current_chat_id = prev_chat_id
+            agent._current_message_id = prev_message_id
         agent_elapsed = (time.perf_counter() - agent_start) * 1000
         perf_logger.info("[PERF][agent=%s] <<< DONE total=%.1f ms", agent.name, agent_elapsed)
 

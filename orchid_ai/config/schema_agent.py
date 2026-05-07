@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, model_validator
 
 from .mcp_gateway import OrchidMCPGatewayConfig
+from .schema_events import OrchidEventsConfig
 from .schema_guardrails import OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPServerConfig, OrchidToolConfig
@@ -199,6 +200,12 @@ class OrchidAgentsConfig(BaseModel):
     mcp_gateway: OrchidMCPGatewayConfig = Field(default_factory=OrchidMCPGatewayConfig)
 
     agents: dict[str, OrchidAgentConfig] = Field(default_factory=dict)
+
+    # Pollen + Bloom — event-driven activation layer.  ``None`` (the
+    # default) keeps the framework's existing zero-overhead behaviour:
+    # no producers, no processors, no events tables touched.  An
+    # explicit ``events:`` block opts in.
+    events: OrchidEventsConfig | None = None
 
     @model_validator(mode="after")
     def _apply_defaults_and_names(self) -> OrchidAgentsConfig:
