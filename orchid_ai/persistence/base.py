@@ -8,8 +8,12 @@ the `OrchidChatStorage` ABC. The API layer depends only on this interface.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from .models import OrchidChatMessage, OrchidChatSession
+
+if TYPE_CHECKING:
+    from ..core.state import OrchidAuthContext
 
 
 class OrchidChatStorage(ABC):
@@ -81,3 +85,47 @@ class OrchidChatStorage(ABC):
         offset: int = 0,
     ) -> list[OrchidChatMessage]:
         """Get messages for a chat, oldest first."""
+
+    # ── Events / chat-binding helpers (§25) ──────────────────
+    #
+    # Concrete defaults so existing backends keep working without
+    # modification.  The chat-binding runtime (``GraphJobRunner
+    # ._resolve_chat_binding``) calls these to enforce per-call
+    # authorization.
+
+    async def get_chat_metadata(self, chat_id: str) -> "OrchidChatSession | None":
+        """Return the chat-session metadata or ``None`` when missing.
+
+        Default: alias for :meth:`get_chat`.  Backends with separate
+        cheap-metadata storage (e.g. a session cache without messages)
+        may override for performance, but the default is correct.
+        """
+        return await self.get_chat(chat_id)
+
+    async def can_write(
+        self,
+        chat: OrchidChatSession,
+        auth: "OrchidAuthContext",
+    ) -> bool:
+        """Authorize ``auth`` to append messages to ``chat``.
+
+        Default rule: same tenant AND same user.  Concrete backends
+        may override for richer semantics (e.g. team-shared chats,
+        admin override) but the default is the safe baseline that
+        rejects cross-user writes — exactly what the §25 chat-binding
+        contract requires.
+
+        Returns ``True`` iff:
+
+        - ``chat.tenant_id == auth.tenant_key`` AND
+        - ``chat.user_id == auth.user_id``  OR
+        - ``"admin"`` is in ``auth.roles`` (admins write any chat in
+          their tenant).
+        """
+        if chat.tenant_id != auth.tenant_key:
+            return False
+        if chat.user_id == auth.user_id:
+            return True
+        if "admin" in getattr(auth, "roles", frozenset()):
+            return True
+        return False

@@ -1340,6 +1340,12 @@ mcp_gateway:
     orchid_ask:
       title: "Ask the Acme Knowledge Base"
       description: "Route questions to the Acme support agents."
+    # The Pollen + Bloom event tools (orchid_signal_emit /
+    # orchid_bloom_status / orchid_bloom_list) override identically
+    # — add an entry per tool the gateway exposes.
+    orchid_signal_emit:
+      title: "Trigger a background workflow"
+      description: "Emit a Pollen signal to start an event-driven Bloom run."
   prompts:
     - name: compliance_report
       description: "Generate a compliance-completion report."

@@ -60,12 +60,21 @@ class OrchidAuthContext:
         user_id: str = "",
         expires_at: float = 0.0,
         extra: dict[str, Any] | None = None,
+        roles: "frozenset[str] | set[str] | tuple[str, ...] | list[str] | None" = None,
     ) -> None:
         self.access_token = access_token
         self._tenant_key = tenant_key
         self._user_id = user_id
         self.expires_at = expires_at
         self.extra = extra or {}
+        # Role claims used by the events run-visibility filter (§26).
+        # The framework reserves the role name ``"admin"`` — admins can
+        # read every run in their tenant.  Consumers populate this set
+        # from their IdP claims inside their concrete
+        # ``OrchidIdentityResolver.resolve``.  An empty set (the
+        # default) means no roles, which is the safe default: no
+        # admin access until the consumer explicitly wires it.
+        self.roles: frozenset[str] = frozenset() if roles is None else frozenset(roles)
 
     # ── Framework contract (override in subclasses) ──────────
 
@@ -135,6 +144,7 @@ class OrchidAuthContext:
             "tenant_key": self._tenant_key,
             "user_id": self._user_id,
             "extra": dict(self.extra),
+            "roles": sorted(self.roles),
         }
 
     @classmethod
@@ -156,6 +166,7 @@ class OrchidAuthContext:
             user_id=state.get("user_id", ""),
             expires_at=expires_at,
             extra=dict(state.get("extra") or {}),
+            roles=state.get("roles") or None,
         )
 
     def __repr__(self) -> str:
