@@ -8,12 +8,12 @@ comparison).  Integrators add their own (mTLS, JWT-from-IdP, …) by
 subclassing the ABC and pointing
 :class:`OrchidValidatorConfig.class_path` at the dotted import path.
 
-The validator is invoked from
-:class:`orchid_ai.events.producers.http.HTTPIngestionProducer` after
-it has resolved the ``X-Orchid-Source`` header to a registered
-``signal_sources`` row.  Validation runs BEFORE
-:meth:`OrchidSignalDispatcher.ingest`, so a failed signature short-
-circuits with a 401 before any persistence happens.
+The validator is invoked from the HTTP ingestion producer (in
+``orchid-api``) after it has resolved the ``X-Orchid-Source`` header
+to a registered ``signal_sources`` row.  Validation runs BEFORE
+:meth:`~orchid_ai.core.events.dispatcher.OrchidSignalDispatcher.ingest`,
+so a failed signature short-circuits with a 401 before any persistence
+happens.
 """
 
 from __future__ import annotations
