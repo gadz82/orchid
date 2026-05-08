@@ -1,11 +1,12 @@
-"""Phase-3 chat-binding tests (§25).
+"""Phase-3 chat-binding tests (§25) + proactive_chat.
 
 Coverage:
 
 - ``ChatBinding`` Pydantic round-trip including ``extra="forbid"``.
 - ``OrchidTriggerEmit`` Pydantic-level rejection of
   ``respect_chat_binding=true`` + ``service_account``.
-- Registry-level rejection of the same combination at boot.
+- Pydantic-level rejection of ``proactive_chat=true`` + ``service_account``.
+- Registry-level rejection of both combinations at boot.
 - ``_resolve_chat_binding`` returns ``None`` when no binding present.
 - ``_resolve_chat_binding`` raises
   :class:`ChatBindingTargetNotFoundError` when chat does not exist.
@@ -15,6 +16,9 @@ Coverage:
   :class:`OrchidChatStorage` with ``metadata.origin="bloom"``.
 - Failure with ``on_failure="post_error"`` appends an error message;
   ``silent`` does not.
+- proactive_chat: runner creates a new chat and posts the result there.
+- proactive_chat: explicit chat_binding takes precedence when both present.
+- proactive_chat: graceful no-op when chat_storage is absent.
 """
 
 from __future__ import annotations
@@ -84,6 +88,27 @@ def test_emit_config_allows_chat_binding_with_act_as_user() -> None:
     assert cfg.respect_chat_binding is True
 
 
+def test_emit_config_rejects_proactive_chat_with_service_account() -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        OrchidTriggerEmitConfig(
+            agent="notifications",
+            prompt_template="hi",
+            identity=ServiceAccountIdentity(name="bot"),
+            proactive_chat=True,
+        )
+    assert "proactive_chat" in str(exc_info.value)
+
+
+def test_emit_config_allows_proactive_chat_with_act_as_user() -> None:
+    cfg = OrchidTriggerEmitConfig(
+        agent="support",
+        prompt_template="hi",
+        identity=ActAsUserIdentity(user_id_from="signal.user_id"),
+        proactive_chat=True,
+    )
+    assert cfg.proactive_chat is True
+
+
 # ── Registry-level (defence in depth) ───────────────────────
 
 
@@ -95,6 +120,7 @@ def test_registry_rejects_chat_binding_with_service_account() -> None:
         prompt_template="hi",
         identity=ServiceAccountIdentity(name="bot"),
         respect_chat_binding=True,
+        proactive_chat=False,
         visibility=None,
     )
     bad_trigger = OrchidTriggerConfig.model_construct(
@@ -108,6 +134,26 @@ def test_registry_rejects_chat_binding_with_service_account() -> None:
     assert "bad-trigger" in str(exc_info.value)
 
 
+def test_registry_rejects_proactive_chat_with_service_account() -> None:
+    bad_emit = OrchidTriggerEmitConfig.model_construct(
+        agent="notifications",
+        prompt_template="hi",
+        identity=ServiceAccountIdentity(name="bot"),
+        respect_chat_binding=False,
+        proactive_chat=True,
+        visibility=None,
+    )
+    bad_trigger = OrchidTriggerConfig.model_construct(
+        id="bad-trigger-proactive",
+        on=OrchidTriggerMatchConfig(signal="demo.event"),
+        emits=bad_emit,
+    )
+    with pytest.raises(TriggerRegistrationError) as exc_info:
+        build_registry_from_config([bad_trigger], known_agents={"notifications"})
+    assert "proactive_chat" in str(exc_info.value)
+    assert "bad-trigger-proactive" in str(exc_info.value)
+
+
 # ── Runtime authorisation gate (_resolve_chat_binding) ──────
 
 
@@ -118,6 +164,26 @@ class _FakeChatStorage:
         self.chats: dict[str, OrchidChatSession] = {}
         self.messages: list[dict] = []
         self.fail_append: bool = False
+        self._next_id: int = 1
+
+    async def create_chat(
+        self,
+        tenant_id: str,
+        user_id: str,
+        title: str = "",
+    ) -> OrchidChatSession:
+        chat_id = f"proactive-{self._next_id}"
+        self._next_id += 1
+        session = OrchidChatSession(
+            id=chat_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            title=title,
+            created_at=_dt.datetime.now(tz=_dt.UTC),
+            updated_at=_dt.datetime.now(tz=_dt.UTC),
+        )
+        self.chats[chat_id] = session
+        return session
 
     async def get_chat_metadata(self, chat_id: str) -> OrchidChatSession | None:
         return self.chats.get(chat_id)
@@ -150,7 +216,7 @@ class _FakeChatStorage:
         return record
 
 
-def _make_run(*, chat_binding: dict | None) -> JobRun:
+def _make_run(*, chat_binding: dict | None, proactive_chat: bool = False) -> JobRun:
     spec = JobSpec(
         trigger_id="t1",
         signal_id=_uuid.uuid4(),
@@ -162,6 +228,7 @@ def _make_run(*, chat_binding: dict | None) -> JobRun:
         visibility="actor",
         visibility_user_id="u-7",
         chat_binding=chat_binding,
+        proactive_chat=proactive_chat,
     )
     return JobRun(
         run_id=_uuid.uuid4(),
@@ -363,6 +430,72 @@ async def test_chat_storage_failure_does_not_fail_the_run() -> None:
         "final_response": "All done — here's the summary.",
         "items": [],
     }
+
+
+# ── proactive_chat ──────────────────────────────────────────
+
+
+async def test_proactive_chat_creates_chat_and_posts_result() -> None:
+    """When ``proactive_chat=true`` and no binding on the signal, the
+    runner creates a new chat and persists the result into it."""
+    storage = _FakeChatStorage()
+    runner = GraphJobRunner(invoker=_ok_invoker, chat_storage=storage)
+
+    run = _make_run(chat_binding=None, proactive_chat=True)
+    auth = OrchidAuthContext(access_token="t", tenant_key="t-1", user_id="u-7")
+    await runner.run(run, auth=auth)
+
+    assert run.status == JobStatus.SUCCEEDED
+    # A new chat was created for the user.
+    assert len(storage.chats) == 1
+    [session] = storage.chats.values()
+    assert session.tenant_id == "t-1"
+    assert session.user_id == "u-7"
+    # The first non-empty line of the prompt becomes the title.
+    assert "deep-research" in session.title.lower()
+    # The result was posted to that chat.
+    [msg] = storage.messages
+    assert msg["chat_id"] == session.id
+    assert msg["role"] == "assistant"
+    assert "All done" in msg["content"]
+    assert msg["metadata"]["origin"] == "bloom"
+
+
+async def test_proactive_chat_explicit_binding_takes_precedence() -> None:
+    """When the signal carries an explicit ``chat_binding`` AND the
+    trigger has ``proactive_chat=true``, the existing chat wins."""
+    storage = _FakeChatStorage()
+    storage.chats["C-existing"] = OrchidChatSession(
+        id="C-existing",
+        tenant_id="t-1",
+        user_id="u-7",
+        title="Existing chat",
+        created_at=_dt.datetime.now(tz=_dt.UTC),
+        updated_at=_dt.datetime.now(tz=_dt.UTC),
+    )
+    runner = GraphJobRunner(invoker=_ok_invoker, chat_storage=storage)
+
+    # proactive_chat=True BUT an explicit binding is also present.
+    run = _make_run(chat_binding={"chat_id": "C-existing"}, proactive_chat=True)
+    auth = OrchidAuthContext(access_token="t", tenant_key="t-1", user_id="u-7")
+    await runner.run(run, auth=auth)
+
+    assert run.status == JobStatus.SUCCEEDED
+    # No new chat was created — only the pre-existing one.
+    assert list(storage.chats.keys()) == ["C-existing"]
+    [msg] = storage.messages
+    assert msg["chat_id"] == "C-existing"
+
+
+async def test_proactive_chat_no_storage_is_noop() -> None:
+    """Missing chat_storage logs a warning but the run still succeeds."""
+    runner = GraphJobRunner(invoker=_ok_invoker, chat_storage=None)
+
+    run = _make_run(chat_binding=None, proactive_chat=True)
+    auth = OrchidAuthContext(access_token="t", tenant_key="t-1", user_id="u-7")
+    await runner.run(run, auth=auth)
+
+    assert run.status == JobStatus.SUCCEEDED  # run succeeds despite no storage
 
 
 async def test_emit_signal_self_outside_chat_run_raises() -> None:

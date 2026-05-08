@@ -85,6 +85,11 @@ class JobSpec:
     # crafts the binding cannot smuggle messages into chats the
     # resolved auth doesn't own.
     chat_binding: dict[str, Any] | None = None
+    # When True, the runner creates a new chat for the resolved user
+    # and posts the Bloom result there instead of running silently.
+    # Mutually exclusive with service-account identity (enforced at
+    # schema + registry time).
+    proactive_chat: bool = False
 
 
 @dataclass(slots=True)

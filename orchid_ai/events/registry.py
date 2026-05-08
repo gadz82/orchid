@@ -163,6 +163,7 @@ class _OrchidYamlTrigger(OrchidTrigger):
             visibility=visibility,
             visibility_user_id=visibility_user_id,
             chat_binding=chat_binding,
+            proactive_chat=self._config.emits.proactive_chat,
         )
 
 
@@ -265,6 +266,12 @@ def build_registry_from_config(
                 f"trigger {cfg.id!r} declares respect_chat_binding=true with "
                 f"identity.mode='service_account' — service accounts have no "
                 f"user-of-record, so chat binding is forbidden (see spec §25.3)"
+            )
+        if cfg.emits.proactive_chat and isinstance(cfg.emits.identity, ServiceAccountIdentity):
+            raise TriggerRegistrationError(
+                f"trigger {cfg.id!r} declares proactive_chat=true with "
+                f"identity.mode='service_account' — service accounts have no "
+                f"user-of-record, so chat ownership is undefined"
             )
 
         # §26.3 — defence-in-depth on top of the Pydantic visibility
