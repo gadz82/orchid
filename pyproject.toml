@@ -21,7 +21,6 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
-    "Framework :: FastAPI",
     "Typing :: Typed",
 ]
 keywords = [
@@ -82,7 +81,6 @@ dev = [
     "gitlint>=0.19.0",
     "pre-commit>=4.0",
     "asyncpg>=0.30.0",
-    "fastapi>=0.115.0",
 ]
 
 [build-system]

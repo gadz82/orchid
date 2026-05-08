@@ -14,18 +14,19 @@ What this module owns:
 - Building the trigger registry from
   :attr:`OrchidEventsConfig.triggers`, with the §13 / §25 / §26
   registration-time validations.
-- Compiling :attr:`OrchidEventsConfig.ingestion.sources` into
-  :class:`SignalSource` rows for the
-  :class:`HTTPIngestionProducer`.
+- Compiling :attr:`OrchidEventsConfig.ingestion.sources` into a
+  :class:`SignalSourceRegistry` via :func:`build_signal_source_registry`
+  (called by ``orchid-api`` when wiring the HTTP ingestion adapter).
 - Resolving secret refs (``env:VAR``) for HMAC / bearer validators.
 - Building the :class:`OrchidSignalDispatcher`,
   :class:`AsyncioWorkerPoolProcessor`, and the producer list per
   ``events.processors`` / ``events.producers``.
 - Starting and stopping everything in the right order.
 
-What it does NOT own: route registration (that's
-:func:`orchid_api.main`) and the §26 boot warning when no
-admin-role mapping exists (that's :func:`orchid_api.lifecycle`).
+What it does NOT own: route registration, :class:`HTTPIngestionProducer`
+construction (both are ``orchid-api`` concerns), and the §26 boot
+warning when no admin-role mapping exists (that's
+:func:`orchid_api.lifecycle`).
 """
 
 from __future__ import annotations
@@ -49,12 +50,8 @@ from orchid_ai.core.events.store import (
     OrchidSignalStore,
 )
 from orchid_ai.events.auth.base import SignalAuthValidator
+from orchid_ai.events.ingestion import SignalSource, SignalSourceRegistry
 from orchid_ai.events.processors.asyncio_pool import AsyncioWorkerPoolProcessor
-from orchid_ai.events.producers.http import (
-    HTTPIngestionProducer,
-    SignalSource,
-    SignalSourceRegistry,
-)
 from orchid_ai.events.producers.internal import DispatcherSignalEmitter
 from orchid_ai.events.registry import (
     InMemoryTriggerRegistry,
@@ -88,7 +85,7 @@ class EventsRuntime:
     storage: Any | None = None  # SQLiteEventStorage | PostgresEventStorage
     processor: AsyncioWorkerPoolProcessor | None = None
     producers: list[OrchidSignalProducer] = field(default_factory=list)
-    http_producer: HTTPIngestionProducer | None = None
+    http_producer: Any = None  # set by orchid-api after building HTTPIngestionProducer
     event_stream: BloomEventStream | None = None
     signal_emitter: DispatcherSignalEmitter | None = None
 
@@ -206,8 +203,11 @@ async def start_events(
             event_stream=runtime.event_stream,
         )
 
-    # ── Producers (HTTP, scheduler, internal) ────────────
-    runtime.producers, runtime.http_producer = await _build_producers(events_config, runtime)
+    # ── Producers (scheduler, internal, custom) ──────────
+    # HTTPIngestionProducer is a FastAPI adapter owned by orchid-api;
+    # it is built and appended to runtime.producers there, then stored
+    # on runtime.http_producer so main.py can mount its router.
+    runtime.producers = await _build_producers(events_config, runtime)
 
     return runtime
 
@@ -326,30 +326,23 @@ def _build_runner(*, chat_storage: Any) -> Any:
     return GraphJobRunner(invoker=_invoker, chat_storage=chat_storage)
 
 
-async def _build_producers(
-    cfg: OrchidEventsConfig, runtime: EventsRuntime
-) -> tuple[list[OrchidSignalProducer], HTTPIngestionProducer | None]:
+async def _build_producers(cfg: OrchidEventsConfig, runtime: EventsRuntime) -> list[OrchidSignalProducer]:
     """Build every producer referenced in ``events.producers``.
 
-    Returns ``(producers, http_producer)`` so the caller can
-    register the HTTP producer's router with FastAPI.
+    ``HTTPIngestionProducer`` is a FastAPI adapter that belongs in
+    ``orchid-api``; it is NOT handled here.  Any entry in
+    ``events.producers`` whose class resolves to a name ending in
+    ``HTTPIngestionProducer`` is silently skipped — orchid-api's
+    lifecycle constructs it from the ``events.ingestion`` block and
+    appends it to ``runtime.producers`` itself.
     """
     assert runtime.dispatcher is not None  # set just before this is called
     producers: list[OrchidSignalProducer] = []
-    http_producer: HTTPIngestionProducer | None = None
 
     for ref in cfg.producers:
         cls_path = ref.class_path
-        # The HTTP producer is special-cased — it needs the
-        # signal_sources registry, which we compile from
-        # ``events.ingestion.sources``.
         if cls_path.endswith("HTTPIngestionProducer"):
-            registry = SignalSourceRegistry(_compile_sources(cfg.ingestion.sources))
-            mount = ref.extra_args.get("mount", "/signals")
-            max_body = ref.extra_args.get("max_body_bytes", 1_000_000)
-            http_producer = HTTPIngestionProducer(registry=registry, mount=mount, max_body_bytes=max_body)
-            await http_producer.start(runtime.dispatcher)
-            producers.append(http_producer)
+            # FastAPI adapter — owned by orchid-api, not the library.
             continue
 
         # Generic producer — the constructor takes its kwargs from
@@ -372,14 +365,26 @@ async def _build_producers(
         await instance.start(runtime.dispatcher)
         producers.append(instance)
 
-    return producers, http_producer
+    return producers
+
+
+def build_signal_source_registry(
+    configs: list[OrchidIngestionSourceConfig],
+) -> SignalSourceRegistry:
+    """Compile :class:`OrchidIngestionSourceConfig` rows into a live
+    :class:`SignalSourceRegistry`.
+
+    Called by ``orchid-api``'s lifecycle after ``start_events()`` to
+    construct the registry that :class:`HTTPIngestionProducer` uses to
+    validate inbound requests.  Returns an empty registry when
+    ``configs`` is empty.
+    """
+    return SignalSourceRegistry(_compile_sources(configs))
 
 
 def _compile_sources(
     configs: list[OrchidIngestionSourceConfig],
 ) -> list[SignalSource]:
-    """Resolve every dotted-path validator + secret_ref into a live
-    :class:`SignalSource`."""
     out: list[SignalSource] = []
     for src in configs:
         validator = _build_validator(src.validator)

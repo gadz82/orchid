@@ -544,7 +544,7 @@ Top-level block that wires the event-driven activation layer. **Omit it (or set 
 - **`store`** -- Backend for the seven events tables (`signals`, `signal_queue`, `signal_queue_dead_letter`, `triggers`, `schedules`, `job_runs`, `signal_sources`). Built-in choices: `orchid_ai.events.backends.sqlite.SQLiteEventStorage`, `orchid_ai.events.backends.postgres.PostgresEventStorage`. The migrations live alongside chat/MCP migrations in `persistence/migrations/v001_initial_schema.py` — one root migration covers all three concerns.
 - **`queue`** -- Durable signal buffer. Built-ins: `orchid_ai.events.queues.inmemory.InMemorySignalQueue` (tests/demos), `orchid_ai.events.queues.sqlite.SQLiteSignalQueue` (single-process durable), `orchid_ai.events.queues.postgres.PostgresSignalQueue` (FOR UPDATE SKIP LOCKED, optional `pg_notify` on commit), `orchid_ai.events.queues.relay.RelayingSignalQueue` (publish-then-mark adapter for external buses). Tunable knobs: `notify_enabled` (default `true`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `dead_letter_table` (default `signal_queue_dead_letter`).
 - **`scheduler`** -- Cron / interval driver. Built-in: `orchid_ai.events.schedulers.apscheduler.APSchedulerBackend` (wraps `apscheduler.AsyncIOScheduler`, no SQLAlchemy — durability lives in the `schedules` table; APScheduler's in-memory jobstore is re-populated on every boot).
-- **`producers`** -- Sources of signals. Built-ins: `orchid_ai.events.producers.http.HTTPIngestionProducer` (lazy-imports FastAPI; mounts at `mount: /signals`), `orchid_ai.events.producers.scheduler.SchedulerProducer` (drives the configured `scheduler`), `orchid_ai.events.producers.internal.InternalEmissionProducer` (wires `OrchidAgent.emit_signal` and `DispatcherSignalEmitter`), `orchid_ai.events.producers.relay_recovery.RelayRecoveryProducer` (periodic re-publish sweep when using `RelayingSignalQueue`).
+- **`producers`** -- Sources of signals. Built-ins: `orchid_ai.events.producers.scheduler.SchedulerProducer` (drives the configured `scheduler`), `orchid_ai.events.producers.internal.InternalEmissionProducer` (wires `OrchidAgent.emit_signal` and `DispatcherSignalEmitter`), `orchid_ai.events.producers.relay_recovery.RelayRecoveryProducer` (periodic re-publish sweep when using `RelayingSignalQueue`). When using **orchid-api**, `HTTPIngestionProducer` (from `orchid_api.events.producers.http`) is mounted automatically whenever `events.ingestion.sources` is non-empty — no explicit entry needed here.
 - **`processors`** -- Drain the queue and run the matched Blooms. Built-in: `orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor`. Tunable knobs: `concurrency` (default `4`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `drain_timeout_seconds` (default `10.0`).
 - **`middleware`** -- Optional `SignalIngestMiddleware` chain that runs on every `dispatcher.ingest` call before persistence (e.g. enrichment, tagging). Each entry is a component ref.
 - **`ingestion.sources`** -- Webhook source registry consumed by `HTTPIngestionProducer`. Each source has `id`, `validator: {class, secret_ref, extra_args}`, `allowed_types` (allow-list of signal types this source can emit). Built-in validators: `orchid_ai.events.auth.HMACValidator` (constant-time SHA-256 against the raw body so payloads can be parsed safely AFTER the signature check), `orchid_ai.events.auth.BearerValidator`. `secret_ref` accepts `env:VAR_NAME` to read from the environment.
@@ -618,10 +618,9 @@ events:
   scheduler:
     class: orchid_ai.events.schedulers.apscheduler.APSchedulerBackend
 
+  # HTTPIngestionProducer is mounted automatically by orchid-api when
+  # events.ingestion.sources is non-empty — no entry needed here.
   producers:
-    - class: orchid_ai.events.producers.http.HTTPIngestionProducer
-      extra_args:
-        mount: /signals
     - class: orchid_ai.events.producers.scheduler.SchedulerProducer
     - class: orchid_ai.events.producers.internal.InternalEmissionProducer
 

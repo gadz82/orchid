@@ -83,7 +83,7 @@ orchid_ai/events/
     __init__.py
     internal.py                 DispatcherSignalEmitter
     scheduler.py                SchedulerProducer (cron / interval → cron signals)
-    http.py                     HTTPIngestionProducer (lazy FastAPI router)
+    http.py                     tombstone — HTTPIngestionProducer moved to orchid-api
     relay_recovery.py           RelayRecoveryProducer (publish-then-mark sweep)
   auth/
     __init__.py
@@ -208,11 +208,10 @@ What this package ships:
   ``BearerValidator``; constant-time comparisons; HMAC validates
   against the raw body so payloads can be parsed safely AFTER the
   signature check.
-- ``HTTPIngestionProducer`` — lazy-imports FastAPI so the library
-  stays platform-agnostic, mounts at the configured ``mount`` path,
-  returns 202 + ``{signal_id, deduplicated}`` on success.  Honours
-  ``X-Orchid-Source`` / ``X-Orchid-Signature`` / ``Idempotency-Key``
-  headers and a JSON body that maps onto ``SignalEnvelope``.
+- ``HTTPIngestionProducer`` — lives in ``orchid-api`` (FastAPI dep).
+  Domain types (:class:`SignalSource`, :class:`SignalSourceRegistry`)
+  and the :func:`build_signal_source_registry` factory are in
+  :mod:`orchid_ai.events.ingestion` and :mod:`orchid_ai.events.bootstrap`.
 - ``RelayRecoveryProducer`` — periodic sweep over
   ``signals WHERE relay_status='pending_publish'``; flips
   ``published`` after a successful re-publish; leaves rows pending
@@ -295,9 +294,9 @@ events:
   queue: { class: orchid_ai.events.queues.postgres.PostgresSignalQueue }
   scheduler: { class: orchid_ai.events.schedulers.apscheduler.APSchedulerBackend }
 
+  # HTTPIngestionProducer (orchid-api adapter) is mounted automatically
+  # when events.ingestion.sources is non-empty — no entry needed here.
   producers:
-    - class: orchid_ai.events.producers.http.HTTPIngestionProducer
-      mount: /signals
     - class: orchid_ai.events.producers.scheduler.SchedulerProducer
     - class: orchid_ai.events.producers.internal.InternalEmissionProducer
 
