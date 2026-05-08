@@ -100,6 +100,7 @@ async def start_events(
     identity_resolver: Any,
     session_warmer: Any | None,
     known_agents: set[str],
+    graph_invoker: Any | None = None,
 ) -> EventsRuntime:
     """Bring the events block online.
 
@@ -198,7 +199,7 @@ async def start_events(
             triggers=runtime.trigger_registry,
             identity_resolver=identity_resolver,
             job_store=runtime.job_store,
-            job_runner=_build_runner(chat_storage=chat_storage),
+            job_runner=_build_runner(chat_storage=chat_storage, graph_invoker=graph_invoker),
             session_warmer=session_warmer,
             event_stream=runtime.event_stream,
         )
@@ -301,29 +302,29 @@ async def _build_queue(cfg: OrchidEventsConfig, *, storage: Any) -> OrchidSignal
     return instance
 
 
-def _build_runner(*, chat_storage: Any) -> Any:
+def _build_runner(*, chat_storage: Any, graph_invoker: Any | None = None) -> Any:
     """Construct the GraphJobRunner.
 
-    Phase-4 ships an injectable invoker that returns a non-empty
-    result.  The full LangGraph wiring (closure over the supervisor)
-    lands when the v1 examples (Phase 6) need it; until then the
-    runner is wired to a synthetic invoker that surfaces the
-    JobSpec fields back so the ``bloom.run.finished`` payload
-    carries something visible.  Integrators wanting the real graph
-    today set ``orchid.config.events.processors[0].extra_args
-    .runner_class`` to a custom dotted path that overrides the
-    default — slipped to a future spec update.
+    When ``graph_invoker`` is supplied (the production path — a closure over
+    the compiled LangGraph built by the API/CLI lifespan), it is passed
+    straight through.  When ``None`` (tests, or deployments that haven't
+    wired up the full graph yet), a no-op stub that returns the run
+    parameters as a string is used so the processor can still mark runs
+    SUCCEEDED and the ``bloom.run.finished`` event carries something visible.
     """
     from orchid_ai.events.runners.graph_runner import GraphJobRunner
 
-    async def _invoker(run, auth) -> dict:
+    if graph_invoker is not None:
+        return GraphJobRunner(invoker=graph_invoker, chat_storage=chat_storage)
+
+    async def _stub_invoker(run, auth) -> dict:
         return {
             "final_response": (
                 f"[bloom-default-invoker] run={run.run_id} agent={run.spec.agent_name} prompt={run.spec.prompt!r}"
             )
         }
 
-    return GraphJobRunner(invoker=_invoker, chat_storage=chat_storage)
+    return GraphJobRunner(invoker=_stub_invoker, chat_storage=chat_storage)
 
 
 async def _build_producers(cfg: OrchidEventsConfig, runtime: EventsRuntime) -> list[OrchidSignalProducer]:
