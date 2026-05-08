@@ -154,6 +154,13 @@ class OrchidTriggerEmitConfig(BaseModel):
     # service account has no user-of-record, so writing to "the user's
     # chat" is undefined.
     respect_chat_binding: bool = False
+    # When True, the runner creates a new chat for the resolved user and
+    # posts the Bloom result there — no ``chat_binding`` in the signal
+    # is required.  Acts as a fallback: if the signal also carries a
+    # ``chat_binding`` AND ``respect_chat_binding=true``, the explicit
+    # binding takes precedence.  Service-account identity is forbidden
+    # (no user-of-record → no chat owner).
+    proactive_chat: bool = False
     # §26 — explicit visibility override.  ``None`` means the registry
     # computes the default from ``identity.mode`` at boot:
     #   act_as_user        → actor
@@ -171,6 +178,12 @@ class OrchidTriggerEmitConfig(BaseModel):
             raise ValueError(
                 "respect_chat_binding=true requires identity.mode of "
                 "'act_as_user' or 'addressed_to_user' (see spec §25.3)"
+            )
+        if self.proactive_chat and isinstance(self.identity, ServiceAccountIdentity):
+            raise ValueError(
+                "proactive_chat=true requires identity.mode of "
+                "'act_as_user' or 'addressed_to_user' — service accounts "
+                "have no user-of-record, so chat ownership is undefined"
             )
         return self
 

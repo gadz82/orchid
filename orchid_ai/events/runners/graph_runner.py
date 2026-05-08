@@ -135,6 +135,10 @@ class GraphJobRunner(OrchidJobRunner):
         (c) the chat target exists AND
         (d) the resolved auth has write permission on it.
 
+        When ``proactive_chat=true`` and no explicit binding is present,
+        creates a new chat for the resolved user and returns a synthetic
+        binding pointing at it.
+
         Raises :class:`ChatBindingTargetNotFoundError` / forbidden
         for (c)/(d) failures.  Returns ``None`` for the no-binding
         path (which is the default — chat invisibility is the spec's
@@ -142,6 +146,8 @@ class GraphJobRunner(OrchidJobRunner):
         """
         binding = run.spec.chat_binding
         if binding is None:
+            if run.spec.proactive_chat:
+                return await self._create_proactive_chat(run, auth)
             return None
         if self._chat_storage is None:
             # Trigger asked for binding but framework wasn't given a
@@ -168,6 +174,42 @@ class GraphJobRunner(OrchidJobRunner):
         if not allowed:
             raise ChatBindingForbiddenError(chat_id, getattr(auth, "user_id", ""))
         return binding
+
+    async def _create_proactive_chat(self, run: JobRun, auth: Any) -> dict[str, Any] | None:
+        """Create a new chat owned by the resolved user and return a
+        synthetic binding pointing at it.
+
+        Uses the first non-empty line of the rendered prompt as the chat
+        title (truncated to 120 chars) — readable in the chat list without
+        any extra config.  Returns ``None`` and logs a warning when
+        ``chat_storage`` is not wired (mis-configured demo / test).
+        """
+        if self._chat_storage is None:
+            _logger.warning(
+                "trigger %s has proactive_chat=true but no chat_storage is wired into the runner — skipping",
+                run.spec.trigger_id,
+            )
+            return None
+
+        tenant_id = getattr(auth, "tenant_key", "default")
+        user_id = getattr(auth, "user_id", "")
+        title = next(
+            (line.strip() for line in run.spec.prompt.splitlines() if line.strip()),
+            run.spec.trigger_id,
+        )[:120]
+
+        session = await self._chat_storage.create_chat(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            title=title,
+        )
+        _logger.info(
+            "[GraphJobRunner] proactive_chat: created chat %s for user %s (trigger=%s)",
+            session.id,
+            user_id,
+            run.spec.trigger_id,
+        )
+        return {"chat_id": session.id}
 
     async def _persist_final_message(
         self,
