@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v1.7.0 (2026-05-10)
+
+### Documentation
+
+- Add Pollen and Bloom operator panel, in-chat progress, and CLI tools
+  ([`43f675e`](https://github.com/gadz82/orchid/commit/43f675eb5e8bc557209664a0e70b41c34a43a1d1))
+
+### Features
+
+- Implement bloom event that can create a new chat for a specific user. DevBypassIdentityResolver
+  and LangGraph invoker setup.
+  ([`daa4900`](https://github.com/gadz82/orchid/commit/daa4900679d5c7ee67d34517f79fb1c5ebf08f62))
+
+- **events**: Add proactive_chat support with fallback behavior and new chat creation logic
+  ([`34b0cd2`](https://github.com/gadz82/orchid/commit/34b0cd21358150d006486e3e505d64aa4cd37cd5))
+
+- **events**: Introduce BloomEventStream with generic channel API and chat-channel support
+  ([`62257a0`](https://github.com/gadz82/orchid/commit/62257a0cbb449d2c8ac932be412e6300bf883fa4))
+
+### Refactoring
+
+- **docs**: Remove phased rollout references for streamlined documentation
+  ([`cb08867`](https://github.com/gadz82/orchid/commit/cb088672764599c3b644cd0f5357836934f40523))
+
+- **events**: Remove `HTTPIngestionProducer` from library and relocate to `orchid-api`
+  ([`5cd9ccd`](https://github.com/gadz82/orchid/commit/5cd9ccd385810ee2107fc179d542ca7f7eea6253))
+
+
 ## v1.6.0 (2026-05-05)
 
 ### Features
