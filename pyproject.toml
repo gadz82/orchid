@@ -21,7 +21,6 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
-    "Framework :: FastAPI",
     "Typing :: Typed",
 ]
 keywords = [
@@ -54,6 +53,8 @@ dependencies = [
     "openpyxl>=3.1.0",
     "Pillow>=10.0.0",
     "aiosqlite>=0.20.0",
+    "jmespath>=1.0.0",
+    "apscheduler>=3.10,<4",
 ]
 
 [project.urls]
