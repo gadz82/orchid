@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.7.1 (2026-05-10)
+
+### Bug Fixes
+
+- Test imports error
+  ([`ff32ad6`](https://github.com/gadz82/orchid/commit/ff32ad65aa4222c93c0c84ac64f0620581a84467))
+
+### Refactoring
+
+- **events**: Lazy-load PostgresSignalQueue and SQLiteSignalQueue to reduce import overhead
+  ([`c63a0b3`](https://github.com/gadz82/orchid/commit/c63a0b322f459c469918d5d4f6f4ea0562c2ad06))
+
+- **events**: Lazy-load PostgresSignalQueue and SQLiteSignalQueue to reduce import overhead
+  ([`430849e`](https://github.com/gadz82/orchid/commit/430849ee9f7aa76d8377ac9960439ea65bb5930e))
+
+
 ## v1.7.0 (2026-05-10)
 
 ### Documentation
