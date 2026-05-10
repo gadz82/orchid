@@ -17,9 +17,7 @@ from .inmemory import (
     InMemorySignalStore,
     InMemoryTriggerStore,
 )
-from .postgres import PostgresSignalQueue
 from .relay import BusPublisher, InMemoryBusPublisher, RelayingSignalQueue
-from .sqlite import SQLiteSignalQueue
 
 __all__ = [
     "BusPublisher",
@@ -33,3 +31,15 @@ __all__ = [
     "RelayingSignalQueue",
     "SQLiteSignalQueue",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name == "PostgresSignalQueue":
+        from .postgres import PostgresSignalQueue
+
+        return PostgresSignalQueue
+    if name == "SQLiteSignalQueue":
+        from .sqlite import SQLiteSignalQueue
+
+        return SQLiteSignalQueue
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
