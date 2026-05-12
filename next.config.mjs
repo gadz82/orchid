@@ -15,6 +15,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // BASE_PATH is injected by actions/configure-pages when deploying to GitHub Pages
+  // at a sub-path (e.g. https://org.github.io/repo-name/). Empty string for root domains.
+  basePath: process.env.BASE_PATH ?? '',
+  assetPrefix: process.env.BASE_PATH ?? '',
 };
 
 export default withMDX(nextConfig);
