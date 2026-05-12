@@ -190,3 +190,4 @@ The `docs/` directory is not gitignored; the PNG is committed as reference art.
 - **Missing `generateStaticParams`.** The `[...slug]` route has `dynamicParams = false`; if a path is not in `generateStaticParams`, it will 404 at build time.
 - **Tailwind v3 syntax.** This project uses Tailwind v4 — no `tailwind.config.js`, use `@theme inline` in CSS.
 - **Importing `lucide-react` icons not present in the installed version.** Pin icon names to those in the `lucide-react` version listed in `package.json`.
+
