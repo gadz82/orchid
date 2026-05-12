@@ -45,6 +45,14 @@ jobs:
           # Tells configure-pages this is a Next.js static export; it computes
           # the right base_path for project pages (e.g. /orchid).
           static_site_generator: next
+          # enablement: true makes the action POST to /repos/{owner}/{repo}/pages
+          # with build_type=workflow. This both enables Pages on the repo (if it
+          # is not already) and switches Source to "GitHub Actions" — eliminating
+          # the manual UI step and the cryptic
+          #   "TypeError: error must be an instance of Error"
+          # that surfaces from this action when Pages is off or set to branch
+          # source. Requires `pages: write` permission, already declared above.
+          enablement: true
 
       - name: Install dependencies
         run: npm ci
