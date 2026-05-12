@@ -1,0 +1,135 @@
+---
+title: "orchid-cli"
+description: "Command-line interface for interacting with Orchid without running the API."
+package: "orchid-cli"
+section: "packages"
+order: 22
+tags: []
+sources:
+  - "orchid-cli/README.md"
+  - "orchid-cli/AGENTS.md"
+  - "orchid-cli/orchid_cli/main.py"
+  - "orchid-cli/orchid_cli/bootstrap.py"
+  - "orchid-cli/orchid_cli/commands/"
+related: ["/packages/orchid", "/packages/orchid-api"]
+example: ""
+external: []
+---
+
+`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. The default storage is SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via environment variables when you need it.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-cli
+```
+
+After installation the `orchid` command is available in your shell.
+
+## Quick start
+
+```bash
+# Validate a config before deploying
+orchid config validate examples/basketball/orchid.yml
+
+# Start an interactive chat session
+orchid chat interactive --config examples/basketball/orchid.yml
+
+# Send a single message and get the response
+orchid chat send <chat_id> "Who scored the most points last season?" \
+  --config examples/basketball/orchid.yml
+```
+
+## Command tree
+
+### `orchid auth` — OAuth 2.0 authentication
+
+| Command | Purpose |
+|---------|---------|
+| `orchid auth login --config <path>` | Opens the browser for OAuth 2.0 + PKCE login; exchanges the code and stores tokens at `~/.orchid/tokens.json` |
+| `orchid auth status --config <path>` | Shows current token state, expiry, tenant, and user |
+| `orchid auth logout --config <path>` | Clears stored tokens |
+
+Authentication is required when MCP servers or tools need a real Bearer token. When `auth.dev_bypass: true` is set in the config a dev fallback token is used automatically.
+
+### `orchid chat` — Full CRUD and messaging
+
+| Command | Purpose |
+|---------|---------|
+| `orchid chat create --config <path>` | Create a new chat session |
+| `orchid chat list --config <path>` | List all chat sessions |
+| `orchid chat history <id> --config <path>` | Show message history |
+| `orchid chat send <id> "msg" --config <path>` | Send a single message and stream the response |
+| `orchid chat interactive --config <path>` | Interactive REPL with slash commands (`/switch`, `/new`, `/share`) |
+| `orchid chat rename <id> "title" --config <path>` | Rename a chat |
+| `orchid chat share <id> --config <path>` | Promote chat RAG data to user scope |
+| `orchid chat delete <id> --config <path>` | Delete a chat session |
+
+### `orchid config` — Validation
+
+| Command | Purpose |
+|---------|---------|
+| `orchid config validate <agents.yaml>` | Validates the agent config against the Pydantic schema; exits non-zero on any error |
+
+Use this in CI pipelines to catch schema errors before deployment.
+
+### `orchid index` — RAG ingestion
+
+| Command | Purpose |
+|---------|---------|
+| `orchid index file <path> -n <ns> --config <path>` | Index a single file |
+| `orchid index dir <path> -n <ns> --config <path>` | Index all files in a directory |
+| `orchid index text "..." -n <ns> --config <path>` | Index inline text |
+| `orchid index json-file <path> -n <ns> --config <path>` | Bulk-index from a JSON entries file |
+
+### `orchid skill` — Claude Code skill export
+
+| Command | Purpose |
+|---------|---------|
+| `orchid skill generate <agents.yaml>` | Generate Claude Code skill folders from an agents.yaml |
+| `orchid skill generate <agents.yaml> -o ./out` | Write to a custom output directory |
+| `orchid skill generate <agents.yaml> --include agent1,agent2` | Filter by agent name |
+| `orchid skill generate <agents.yaml> --zip` | Create a zip archive |
+
+### `orchid mcp` — MCP server OAuth
+
+| Command | Purpose |
+|---------|---------|
+| `orchid mcp status --config <path>` | Show OAuth auth status for all configured MCP servers |
+| `orchid mcp revoke <server> --config <path>` | Revoke the stored token for a specific server |
+
+## Example session
+
+```text
+$ orchid chat interactive --config examples/basketball/orchid.yml
+
+Orchid — interactive mode
+Type /help for available commands, /exit to quit.
+
+You: Who has the most career points in NBA history?
+[basketball] LeBron James surpassed Kareem Abdul-Jabbar in February 2023...
+
+You: How does that compare to the top three?
+[basketball] Here is a comparison of the top three all-time scorers:
+  1. LeBron James  —  40,000+ points (active)
+  2. Kareem Abdul-Jabbar  —  38,387
+  3. Karl Malone  —  36,928
+
+You: /exit
+Goodbye.
+```
+
+## How the CLI mirrors the API lifespan
+
+`orchid-cli/orchid_cli/bootstrap.py` performs the same startup sequence as `orchid-api/orchid_api/main.py`:
+
+1. Load `OrchidAgentsConfig` from the config path.
+2. Call `build_graph()` to wire the LangGraph supervisor and agent nodes.
+3. Initialise `OrchidChatStorage` (SQLite by default).
+4. Warm MCP capability caches for all `auth.mode: none` servers.
+
+Every `chat`, `index`, and `mcp` command goes through `commands/_session.py:resolve_session()`, which bootstraps the framework, resolves auth, and warms `passthrough`/`oauth` MCP caches once per `(tenant_key, user_id)`. The result is an `Orchid` facade and an `OrchidAuthContext` — the same objects the API hands to its routers.
+
+The CLI is an independent OAuth 2.0 client: it runs a full Authorization Code + PKCE flow against the upstream IdP, stores tokens in `~/.orchid/tokens.json` (permissions `0o600`), and refreshes them automatically when they expire. It never delegates auth to `orchid-api`.
+
+<Sources files={["orchid-cli/README.md", "orchid-cli/AGENTS.md", "orchid-cli/orchid_cli/main.py", "orchid-cli/orchid_cli/bootstrap.py", "orchid-cli/orchid_cli/commands/"]} />

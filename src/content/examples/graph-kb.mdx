@@ -1,0 +1,120 @@
+---
+title: "Graph Knowledge Base"
+description: "GraphRAG retrieval strategy: graph traversal fused with dense vector search for multi-hop relationship queries."
+package: "cross-cutting"
+section: "examples"
+order: 100
+tags: ["rag"]
+sources:
+  - examples/graph_kb/orchid.yml
+  - examples/graph_kb/agents.yaml
+related:
+  - /concepts/rag
+  - /concepts/embeddings
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The `graph-kb` example (source folder: `graph_kb`) shows the `graph_rag` retrieval strategy. A startup hook seeds an in-memory graph store with an org-chart corpus — entities (people, projects) and typed edges (`reports_to`, `works_on`, `manages`). The `org_chart` agent traverses the graph up to two hops from each seed entity and fuses the resulting sub-graph with dense vector hits. This lets the agent answer multi-hop questions like "Who does Bob's manager report to?" that a pure vector search would miss.
+
+Note: the source directory uses an underscore (`graph_kb`) but the route is `/examples/graph-kb` (hyphen).
+
+## Run it
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+orchid chat send "Who does Bob report to?" \
+  --agent org_chart \
+  --config examples/graph_kb/orchid.yml
+```
+
+Or start the full API:
+
+```bash
+ORCHID_CONFIG=examples/graph_kb/orchid.yml \
+  uvicorn orchid_api.main:app --port 8000
+```
+
+## Configuration walkthrough
+
+`orchid.yml` adds a startup hook that seeds the graph and registers the in-memory store:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/graph_kb/agents.yaml
+
+llm:
+  model: gemini/gemini-flash-latest
+
+auth:
+  dev_bypass: true
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001   # 3072-d
+
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/graph_kb_chats.db
+
+startup:
+  hook: examples.graph_kb.hooks.startup.bootstrap_graph_kb
+  # seeds InMemoryGraphStore with org-chart entities + edges
+  # and a few text chunks for vector fan-out
+```
+
+`agents.yaml` configures the `graph_rag` strategy with hop limits and relation filters:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+defaults:
+  llm:
+    model: "gemini/gemini-flash-latest"
+    temperature: 0.2
+  rag:
+    enabled: true
+    k: 5
+
+agents:
+  org_chart:
+    description: "Answers org-chart and project questions using GraphRAG."
+    prompt: |
+      Answer org-chart and project questions strictly from retrieved context.
+      Quote exact relation labels (e.g. reports_to, works_on) in your answer.
+      If the question cannot be answered from the data, say so plainly.
+    rag:
+      namespace: graph_kb
+      k: 5
+      retrieval:
+        strategy: graph_rag
+        graph:
+          enabled: true
+          max_hops: 2
+          fuse_with_vectors: true
+          relation_filter: [reports_to, works_on, manages]
+```
+
+## What to look for
+
+- `strategy: graph_rag` → activates graph traversal; the retriever identifies seed entities from the query, traverses the stored graph up to `max_hops`, and collects the sub-graph as structured context.
+- `max_hops: 2` → controls traversal depth; `max_hops: 1` returns direct neighbours only; increasing this widens context but adds latency.
+- `fuse_with_vectors: true` → the graph sub-graph is merged with dense vector hits from the same namespace; questions that mix relational and semantic content benefit from both signals.
+- `relation_filter: [reports_to, works_on, manages]` → restricts traversal to named edge types; prevents unrelated relations in the graph from polluting context.
+- `startup.hook: bootstrap_graph_kb` → seeds `InMemoryGraphStore`; swap to a persistent graph backend (Neo4j, etc.) by implementing the graph store ABC and pointing the hook at it.
+
+## Related concepts
+
+- [Hierarchical RAG](/concepts/rag)
+- [Embeddings](/concepts/embeddings)
+
+## Sources
+
+- examples/graph_kb/orchid.yml
+- examples/graph_kb/agents.yaml
+- examples/graph_kb/hooks/startup.py

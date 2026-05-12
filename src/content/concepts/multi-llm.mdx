@@ -1,0 +1,95 @@
+---
+title: "Multi-LLM Support"
+description: "Provider agnosticism via LiteLLM: configure any model per agent, swap at runtime."
+package: "orchid"
+section: "concepts"
+order: 16
+tags: []
+sources:
+  - "orchid/orchid_ai/core/agent.py"
+  - "orchid/orchid_ai/config/schema_llm.py"
+  - "orchid/AGENTS.md"
+related: ["/concepts/agents", "/concepts/embeddings"]
+example: ""
+external:
+  - label: "LiteLLM documentation"
+    url: "https://docs.litellm.ai"
+  - label: "LangGraph: language model integration"
+    url: "PLACEHOLDER"
+  - label: "Anthropic"
+    url: "https://anthropic.com"
+  - label: "OpenAI"
+    url: "https://platform.openai.com"
+  - label: "Google AI"
+    url: "https://ai.google.dev"
+  - label: "Ollama"
+    url: "https://ollama.ai"
+---
+
+<MultiLLMBadge />
+
+Orchid is provider-agnostic. Agents, the supervisor, and the embedding pipeline each accept a LiteLLM-style model string — switch between Anthropic, OpenAI, Google, Ollama, Groq, or any other LiteLLM provider by editing a single line in `agents.yaml`.
+
+## Setting the model per agent
+
+Model strings follow LiteLLM's `provider/model-name` convention:
+
+```yaml
+defaults:
+  llm:
+    model: "gemini/gemini-2.5-flash"
+    temperature: 0.2
+    fallback_model: "ollama/llama3.2"
+
+agents:
+  stats:
+    llm:
+      model: "openai/gpt-4o"
+      temperature: 0.1
+  analysis:
+    # inherits defaults.llm
+```
+
+Each agent can use a different provider. The optional `fallback_model` is tried automatically on 503, rate-limit, or timeout errors.
+
+## Simple completions vs agentic tool-calling
+
+Two LLM usage patterns appear inside the framework — each with a distinct interface:
+
+**Simple completions** (summarisation, routing, history compression): use `self.summarise()` inherited from `OrchidAgent`. This delegates to the injected `BaseChatModel` via `chat_model.ainvoke(messages)`. Custom agents should always use this path for synthesising responses.
+
+```python
+summary = await self.summarise(
+    query, mcp_data, rag_data,
+    system_prompt=MY_PROMPT,
+    conversation_history=history,
+)
+```
+
+**Agentic tool-calling loops** (where you need `tool_calls` on the response object): use `litellm` directly with a lazy import inside the method. The full response object is required to inspect which tools the LLM chose to call. This is acceptable because tool-calling inherently depends on the OpenAI function-calling protocol.
+
+```python
+async def _my_tool_loop(self, messages, tools):
+    import litellm  # lazy — needed for tool_calls response shape
+    response = await litellm.acompletion(
+        model=self.model_id,
+        messages=messages,
+        tools=tools,
+    )
+    if response.choices[0].message.tool_calls:
+        # handle tool calls...
+```
+
+Never import `litellm` at module level in consumer agents. Use `self.summarise()` or `self._chat_model.ainvoke()` for everything that doesn't require the raw `tool_calls` field.
+
+## build_chat_model factory
+
+The graph builder creates LangChain `BaseChatModel` instances via `build_chat_model(model_string)` from `orchid_ai/llm_factory.py`. This returns a provider-specific integration class (e.g. `ChatGoogleGenerativeAI`, `ChatOpenAI`) when the provider package is installed, falling back to `ChatLiteLLM` as a universal adapter.
+
+## External reading
+
+- <ExternalLink href="https://docs.litellm.ai">LiteLLM documentation — unified interface for 100+ LLM providers</ExternalLink>
+- <ExternalLink href="PLACEHOLDER">LangGraph: language model integration</ExternalLink>
+- <ExternalLink href="https://anthropic.com">Anthropic</ExternalLink> · <ExternalLink href="https://platform.openai.com">OpenAI</ExternalLink> · <ExternalLink href="https://ai.google.dev">Google AI</ExternalLink> · <ExternalLink href="https://ollama.ai">Ollama</ExternalLink>
+
+<Sources files={["orchid/orchid_ai/core/agent.py", "orchid/orchid_ai/config/schema_llm.py", "orchid/AGENTS.md"]} />

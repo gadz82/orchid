@@ -1,0 +1,166 @@
+---
+title: "Tool Call Strategies"
+description: "all, sequential, llm_decides, and a custom priority strategy in one example."
+package: "cross-cutting"
+section: "examples"
+order: 80
+tags: ["tool-strategies", "agents"]
+sources:
+  - examples/tool-strategies/orchid.yml
+  - examples/tool-strategies/agents.yaml
+related:
+  - /concepts/tool-strategies
+  - /concepts/agents
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+Five agents hit the same knowledge-base MCP server but with different `tool_call_strategy` settings. `fanout_lookup` calls all tools concurrently (`all`). `pipeline_lookup` runs them in order, passing each result to the next (`sequential`). `smart_lookup` lets the LLM choose which tools to call (`llm_decides`). `cascade_lookup` uses a custom `priority` strategy — registered by a startup hook — that short-circuits as soon as one tool returns a non-empty result. A fifth agent, `parallel_searcher`, demonstrates the orthogonal `parallel_tools` flag for the agentic loop. This is the reference example for understanding how skill-execution strategies compose with MCP servers.
+
+## Run it
+
+Start a mock MCP server exposing `cache_lookup`, `primary_lookup`, and `slow_lookup`, then:
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+KB_MCP_URL=http://localhost:9001/mcp \
+  ORCHID_CONFIG=examples/tool-strategies/orchid.yml \
+  uvicorn orchid_api.main:app --port 8000
+```
+
+Or via the CLI:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+KB_MCP_URL=http://localhost:9001/mcp \
+  orchid chat interactive --config examples/tool-strategies/orchid.yml
+```
+
+## Configuration walkthrough
+
+`orchid.yml` registers the custom `priority` strategy via the startup hook:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/tool-strategies/agents.yaml
+
+llm:
+  model: gemini/gemini-flash-latest
+
+auth:
+  dev_bypass: true
+
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/tool_strategies_chats.db
+
+startup:
+  hook: examples.tool-strategies.hooks.startup.bootstrap_strategies
+  # registers the custom "priority" strategy
+```
+
+`agents.yaml` shows all four strategy modes plus `parallel_tools`:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+defaults:
+  llm:
+    model: "gemini/gemini-flash-latest"
+    temperature: 0.2
+  rag:
+    enabled: false
+
+tools:
+  metric_a:
+    handler: "examples.tool-strategies.tools.metrics.metric_a"
+    parallel_safe: true
+  metric_b:
+    handler: "examples.tool-strategies.tools.metrics.metric_b"
+    parallel_safe: true
+  metric_c:
+    handler: "examples.tool-strategies.tools.metrics.metric_c"
+    parallel_safe: true
+
+agents:
+  fanout_lookup:
+    description: "All tools run concurrently; results merged."
+    mcp_servers:
+      - name: knowledge_base
+        url: ${KB_MCP_URL}
+        tool_call_strategy: all
+        tools:
+          - { name: cache_lookup }
+          - { name: primary_lookup }
+          - { name: slow_lookup }
+    skills:
+      lookup_everywhere:
+        steps:
+          - { tool: cache_lookup, source: mcp, server: knowledge_base }
+          - { tool: primary_lookup, source: mcp, server: knowledge_base }
+          - { tool: slow_lookup, source: mcp, server: knowledge_base }
+
+  pipeline_lookup:
+    description: "Tools run in order; each receives previous results."
+    mcp_servers:
+      - name: knowledge_base
+        url: ${KB_MCP_URL}
+        tool_call_strategy: sequential
+        tools:
+          - { name: cache_lookup }
+          - { name: primary_lookup }
+          - { name: slow_lookup }
+
+  smart_lookup:
+    description: "LLM picks which tools to call."
+    mcp_servers:
+      - name: knowledge_base
+        url: ${KB_MCP_URL}
+        tool_call_strategy: llm_decides
+        tools:
+          - { name: cache_lookup }
+          - { name: primary_lookup }
+          - { name: slow_lookup }
+
+  cascade_lookup:
+    description: "Custom priority strategy: stop at first non-empty result."
+    mcp_servers:
+      - name: knowledge_base
+        url: ${KB_MCP_URL}
+        tool_call_strategy: priority   # registered by startup hook
+        tools:
+          - { name: cache_lookup }       # tried first
+          - { name: primary_lookup }     # used only if cache misses
+          - { name: slow_lookup }        # final fallback
+
+  parallel_searcher:
+    description: "Agentic-loop parallel dispatch via parallel_tools flag."
+    parallel_tools: true              # parallel_safe tools run concurrently
+    tools: [metric_a, metric_b, metric_c]
+
+# ...truncated
+```
+
+## What to look for
+
+- `tool_call_strategy: all` → every listed tool runs concurrently in a single skill step; use when tools are independent and you want maximum recall.
+- `tool_call_strategy: sequential` → tools run in declared order; each invocation receives a `previous_results` argument with accumulated results; use for chained, context-dependent lookups.
+- `tool_call_strategy: llm_decides` → the LLM reads the user's query and picks which subset of tools to call; use when irrelevant backend costs outweigh occasional misses.
+- `tool_call_strategy: priority` (custom) → registered via `startup.hook`; short-circuits after the first non-empty result; implements "cache → DB → upstream" fallback chains without extra code in agents.
+- `parallel_tools: true` on `parallel_searcher` → orthogonal to `tool_call_strategy`; controls Phase A agentic-loop dispatch, not skill execution; tools marked `parallel_safe: true` are gathered via `asyncio.gather` within a single LLM round.
+
+## Related concepts
+
+- [Tool Call Strategies](/concepts/tool-strategies)
+- [Agents](/concepts/agents)
+
+## Sources
+
+- examples/tool-strategies/orchid.yml
+- examples/tool-strategies/agents.yaml
+- examples/tool-strategies/hooks/startup.py
+- examples/tool-strategies/tools/metrics.py

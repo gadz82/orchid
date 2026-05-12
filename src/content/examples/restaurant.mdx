@@ -1,0 +1,160 @@
+---
+title: "Restaurant Demo"
+description: "RAG with dynamic injection, multi-agent sequential routing, custom agent class, and event-driven deep research."
+package: "cross-cutting"
+section: "examples"
+order: 30
+tags: ["rag", "tool-strategies", "supervisor", "events"]
+sources:
+  - examples/restaurant/config/orchid.yml
+  - examples/restaurant/config/agents.yaml
+related:
+  - /concepts/rag
+  - /concepts/tool-strategies
+  - /concepts/supervisor
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The restaurant example is the canonical demonstration of RAG in Orchid. A `menu` agent uses `multi_query` retrieval with `reformulate` query transformations to answer dietary and recommendation questions from a vector knowledge base. A custom `ReviewsAgent` performs sentiment analysis. An `orders` agent handles order placement and billing using built-in tools. A cross-agent `full_dining_experience` skill chains all three agents in sequence. The example also shows how an agent can emit a signal mid-run to trigger a background Bloom (event-driven deep research that replies back into the originating chat).
+
+## Run it
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/restaurant/config/orchid.yml uvicorn orchid_api.main:app --port 8000
+```
+
+Or via the CLI:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/restaurant/config/orchid.yml
+```
+
+## Configuration walkthrough
+
+`orchid.yml` connects the LLM, Qdrant, and the custom SQLite storage backend:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/restaurant/config/agents.yaml
+
+llm:
+  model: gemini/gemini-flash-latest
+
+auth:
+  dev_bypass: true
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001   # 3072-d
+
+storage:
+  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/restaurant_chats.db
+
+# ...truncated
+```
+
+`agents.yaml` shows the three agents, their skills, and the event trigger:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+supervisor:
+  assistant_name: "Restaurant AI"
+
+defaults:
+  llm:
+    model: "gemini/gemini-flash-latest"
+    temperature: 0.3
+  rag:
+    retrieval:
+      strategy: multi_query
+      query_transformers: [reformulate]
+
+skills:
+  full_dining_experience:
+    description: "Browse menu → place order → collect review"
+    steps:
+      - agent: menu
+        instruction: "Search menu for items matching the customer's preferences"
+      - agent: orders
+        instruction: "Place an order for the recommended items"
+      - agent: reviews
+        instruction: "Analyze the customer's review"
+
+agents:
+  menu:
+    description: "Restaurant menu expert with dietary filtering."
+    tools: [search_menu, get_daily_specials]
+    rag:
+      namespace: menu
+      k: 10
+      retrieval:
+        strategy: multi_query
+        query_transformers: [reformulate]
+    guardrails:
+      output:
+        - type: groundedness
+          fail_action: warn
+          config:
+            min_overlap: 0.25
+
+  orders:
+    description: "Order placement and billing."
+    tools: [place_order, get_order_status, calculate_bill]
+    rag:
+      enabled: false
+    execution_hints:
+      depends_on: [menu]    # runs after menu in sequential routing
+
+  reviews:
+    class: examples.restaurant.agents.reviews.ReviewsAgent
+    description: "Customer review analyst with sentiment analysis."
+    tools: [analyze_sentiment]
+    rag:
+      namespace: reviews
+      k: 10
+
+# Event-driven: a chat-time signal triggers a background research Bloom
+events:
+  enabled: true
+  triggers:
+    - id: deep-research
+      "on": { signal: research.requested }
+      emits:
+        agent: reviews
+        identity: { mode: act_as_user, user_id_from: signal.user_id }
+        respect_chat_binding: true   # Bloom reply lands in the originating chat
+
+# ...truncated
+```
+
+## What to look for
+
+- `rag.retrieval.strategy: multi_query` on `menu` → the LLM generates multiple phrasings of the user's query and merges results; useful when customers say "something light" instead of "salad".
+- `query_transformers: [reformulate]` → before multi-query fan-out, the user's raw message is rewritten into a standalone search query (resolves pronouns, removes conversational filler).
+- `guardrails.output.type: groundedness` on `menu` → warns when the agent's response mentions items not retrieved from the knowledge base.
+- `reviews.class: examples.restaurant.agents.reviews.ReviewsAgent` → a custom agent class overrides specific behaviour while inheriting `summarise()` and `fetch_rag_context()` from `OrchidAgent`.
+- `execution_hints.depends_on: [menu]` on `orders` → sequential routing hint; the supervisor will call `menu` before `orders` when both are selected.
+- `respect_chat_binding: true` on the event trigger → the Bloom's response is posted back into the chat that emitted the signal.
+
+## Related concepts
+
+- [Hierarchical RAG](/concepts/rag)
+- [Tool Call Strategies](/concepts/tool-strategies)
+- [Supervisor](/concepts/supervisor)
+
+## Sources
+
+- examples/restaurant/config/orchid.yml
+- examples/restaurant/config/agents.yaml
+- examples/restaurant/agents/reviews.py
+- examples/restaurant/tools/menu.py

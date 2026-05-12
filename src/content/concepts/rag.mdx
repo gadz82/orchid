@@ -1,0 +1,94 @@
+---
+title: "Hierarchical RAG"
+description: "OrchidRAGScope, the 5-level hierarchy, vector store interfaces, and the parse-once pattern."
+package: "orchid"
+section: "concepts"
+order: 12
+tags: []
+sources:
+  - "orchid/orchid_ai/rag/scopes.py"
+  - "orchid/orchid_ai/core/scopes.py"
+  - "orchid/orchid_ai/rag/AGENTS.md"
+  - "orchid/AGENTS.md"
+related: ["/concepts/embeddings", "/concepts/document-parsing", "/concepts/agents"]
+example: "/examples/restaurant"
+external:
+  - label: "LlamaIndex: hierarchical retrieval"
+    url: "PLACEHOLDER"
+  - label: "Pinecone: what is RAG?"
+    url: "PLACEHOLDER"
+  - label: "Anthropic: when to use RAG vs long context"
+    url: "PLACEHOLDER"
+---
+
+<MultiLLMBadge />
+
+Orchid's RAG subsystem is built around a five-level scope hierarchy. Every vector read and write carries an `OrchidRAGScope` — a frozen dataclass that encodes exactly which slice of the Qdrant collection a given operation is allowed to see or write to.
+
+## The scope hierarchy
+
+```
+__shared__                    ← visible to ALL tenants (root common data)
+└── tenant_id
+    └── user_id
+        ├── scope="user"      ← visible across all of this user's chats
+        └── chat_id
+            ├── scope="chat_shared"   ← all agents in this chat
+            └── scope="chat_agent"    ← private to one agent
+                + agent_id
+```
+
+A retrieval query for a given scope sees every level **above** it: shared data, tenant data, user data, and chat data. This makes tenant-wide knowledge bases, user-uploaded files, and dynamically injected tool results all accessible through a single retrieval call — no manual filter logic required.
+
+## OrchidRAGScope
+
+```python
+from orchid_ai.rag.scopes import OrchidRAGScope
+
+scope = OrchidRAGScope(
+    tenant_id=auth.tenant_key,   # required
+    user_id=auth.user_id,        # optional — omit for tenant-wide queries
+    chat_id=state.get("chat_id", ""),
+    agent_id=self.name,
+)
+
+docs = await self.fetch_rag_context(query, scope, namespace="learning", k=5)
+```
+
+`OrchidRAGScope` is a frozen dataclass living in `orchid_ai/core/scopes.py`. Because it has zero external dependencies, it can be constructed anywhere — agents, indexers, tests — without importing backend-specific code.
+
+## Vector store interfaces
+
+The framework exposes three purpose-segregated ABCs:
+
+| ABC | Who depends on it | Methods |
+|---|---|---|
+| `OrchidVectorReader` | Agents (read-only) | `retrieve(query, namespace, k, scope)` |
+| `OrchidVectorWriter` | Indexers (write-only) | `upsert(documents, namespace)`, `delete(ids, namespace)` |
+| `OrchidVectorStoreAdmin` | Admin operations | Collection management, scope promotion |
+
+`QdrantRepository` in `rag/backends/qdrant.py` implements all three. Never import `qdrant_client` outside of `rag/backends/` — all access goes through these ABCs.
+
+## Namespace conventions
+
+Namespaces are Qdrant collection prefixes that separate different kinds of knowledge:
+
+| Namespace | Contents |
+|---|---|
+| `learning` | Tenant knowledge base (courses, documents, wikis) |
+| `notifications` | Agent-generated structured data |
+| `uploads` | User-uploaded files (scoped to the uploading user's chat) |
+
+Set an agent's namespace via `rag.namespace` in `agents.yaml`. Leave it empty to skip RAG retrieval.
+
+## Dynamic injection
+
+After each tool call, `GenericAgent` optionally injects the result into Qdrant. On the next turn the agent retrieves its own prior tool output alongside static knowledge — providing a short-term memory that survives across conversation turns within the same chat.
+
+## External reading
+
+- <ExternalLink href="PLACEHOLDER">LlamaIndex: hierarchical retrieval</ExternalLink>
+- <ExternalLink href="PLACEHOLDER">Pinecone: what is RAG?</ExternalLink>
+- <ExternalLink href="PLACEHOLDER">Anthropic: when to use RAG vs long context</ExternalLink>
+
+<Sources files={["orchid/orchid_ai/rag/scopes.py", "orchid/orchid_ai/core/scopes.py", "orchid/orchid_ai/rag/AGENTS.md", "orchid/AGENTS.md"]} />

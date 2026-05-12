@@ -1,0 +1,114 @@
+---
+title: "Mini-Agents"
+description: "Per-agent opt-in fan-out: decompose a multi-part request into parallel sub-agents, each running its own focused agentic loop."
+package: "orchid"
+section: "concepts"
+order: 20
+tags: ["parallelism", "fan-out", "yaml"]
+sources:
+  - "orchid/.knowledge/adr/ADR-021-mini-agents.md"
+  - "orchid/orchid_ai/agents/generic_agent.py"
+  - "orchid/orchid_ai/graph/supervisor.py"
+  - "examples/helpdesk/config/agents.yaml"
+related: ["/concepts/agents", "/concepts/supervisor", "/concepts/tool-strategies"]
+example: "/examples/helpdesk"
+external: []
+---
+
+Mini-agents are an opt-in per-agent fan-out mechanism. When a user sends a message that contains several independent sub-questions — "what's the ticket status of TK-1001 AND how do I reset MFA?" — a single agentic loop processes them sequentially, doubling the round count. Mini-agents let an opt-in parent decompose the request into N focused sub-agents that run in parallel, then synthesise their outcomes into one coherent answer.
+
+## How it works
+
+Enabling mini-agents on a parent agent adds three nodes to the LangGraph graph for that agent:
+
+```
+supervisor ──Send──> {name}_agent (parent + decomposer hook)
+                           │
+               ┌───────────┴────────────┐
+               │                       │
+         should_fork=false       should_fork=true
+               │                       │ (Send fan-out)
+               ▼                       ▼
+      AIMessage → supervisor    {name}_mini × N (parallel)
+                                        │
+                                        ▼
+                                {name}_aggregator
+                                        │
+                                        ▼
+                                    supervisor
+```
+
+At the start of every turn, a **decomposer** runs as a cheap structured-output call. If the query is simple (`should_fork=false`) the parent agent runs normally — no overhead. If the decomposer identifies N independent sub-tasks, the graph fans out via `Send`, each mini runs its own full agentic loop in parallel, and the aggregator synthesises the results.
+
+## Enabling via YAML
+
+```yaml
+agents:
+  helpdesk:
+    description: "Handles support tickets and knowledge-base lookups."
+    prompt: "You are a support specialist..."
+    mini_agent:
+      enabled: true
+      max_minis: 3          # default 3, hard cap 8
+      timeout_seconds: 30   # per-mini timeout
+      tool_allowlist_mode: strict   # strict | parent_full | inferred
+```
+
+That single `mini_agent.enabled: true` flag is the only change required. Custom agent subclasses opt in the same way — the decomposer runs at the graph-wrapper level before `run()` is called, so no code changes are needed inside the agent.
+
+## Tool allowlist
+
+Each mini receives a curated subset of the parent's tools, declared by the decomposer at decomposition time. Three enforcement modes control what happens when the LLM names a tool:
+
+| Mode | Behaviour |
+|---|---|
+| `strict` (default) | Every tool name in `allowed_tools` must exist in the parent's inventory. Empty list is rejected. Violations raise `MiniAgentDecompositionError` and short-circuit to an error — no minis dispatch. |
+| `parent_full` | Ignores `allowed_tools`; minis receive the full parent inventory. Debug / escape hatch. |
+| `inferred` | Empty `allowed_tools` falls back to the full inventory (with a warning). Non-empty behaves like `strict`. |
+
+## Failure semantics
+
+Mini-agents fail gracefully. The aggregator handles partial failures:
+
+| Condition | Mini outcome | Aggregator action |
+|---|---|---|
+| Loop completes successfully | `status="ok"`, `summary=<text>` | Use as-is |
+| MCP transport error (after retry) | `status="failed"`, `error=<msg>` | LLM mentions failure |
+| Unhandled exception | `status="failed"`, `error=<repr>` | LLM mentions failure |
+| Timeout exceeded | `status="timeout"`, `error="timed out"` | LLM mentions delay |
+| All minis failed | n/a | Deterministic error AIMessage — no synthesis LLM call |
+
+Only the parent's synthesised `AIMessage` is persisted in chat history. Mini outcomes are invisible to the conversation record.
+
+## Streaming events
+
+Four SSE events surface mini-agent activity to the frontend without exposing per-mini token streams:
+
+| Event | When | Payload |
+|---|---|---|
+| `mini_agent.decomposed` | Decomposer chose to fork | `{parent, count, sub_tasks: [{id, description}]}` |
+| `mini_agent.started` | Mini node entry | `{parent, mini_id, description}` |
+| `mini_agent.finished` | Mini node exit | `{parent, mini_id, status, duration_ms, error?}` |
+| `mini_agent.aggregated` | Aggregator exit | `{parent, outcomes: [{mini_id, status}]}` |
+
+## Hard rules
+
+- **No nesting.** `mini_agent.enabled: true` is rejected on child agents. A mini cannot itself fork.
+- **No graph-builder overhead for non-opt-in agents.** Agents without `mini_agent.enabled` have zero extra nodes.
+- **Mini outcomes never reach chat history.** Only the synthesised parent response is persisted via `OrchidChatStorage`.
+- **Phase A and B compose.** Mini-agents inherit `parent_config.parallel_tools` — each mini benefits from parallel tool calls within its own loop.
+
+<Sources
+  files={[
+    ".knowledge/adr/ADR-021-mini-agents.md",
+    "orchid/orchid_ai/agents/generic_agent.py",
+    "orchid/orchid_ai/graph/supervisor.py",
+    "examples/helpdesk/config/agents.yaml"
+  ]}
+  pages={[
+    "/concepts/agents",
+    "/concepts/supervisor",
+    "/concepts/tool-strategies",
+    "/examples/helpdesk"
+  ]}
+/>

@@ -1,0 +1,103 @@
+---
+title: "orchid-frontend"
+description: "Next.js 15 multi-chat UI with SSE streaming and file upload support."
+package: "orchid-frontend"
+section: "packages"
+order: 24
+tags: []
+sources:
+  - "orchid-frontend/README.md"
+  - "orchid-frontend/AGENTS.md"
+  - "orchid-frontend/src/app/"
+related: ["/packages/orchid-api", "/concepts/supervisor", "/concepts/mcp"]
+example: ""
+external: []
+---
+
+`orchid-frontend` is a **fork-and-deploy boilerplate**, not a published npm package. It is a Next.js 15 multi-chat UI that talks to `orchid-api` over HTTP via Server Actions. Clone it, customise the theme tokens and branding, point it at your API, and you have a production-ready chat interface — no framework knowledge required.
+
+The frontend has no direct dependency on the `orchid` Python library. It is a pure TypeScript/React project whose only runtime dependency is the `orchid-api` HTTP endpoint.
+
+## What ships in the boilerplate
+
+```
+src/
+├── app/
+│   ├── actions/           Server Actions: chats CRUD, streaming, MCP auth, Bloom ops
+│   ├── chat/page.tsx      Protected chat page
+│   ├── bloom/             Operator panel: runs, signals, triggers, schedules
+│   ├── login/page.tsx     OAuth login
+│   └── api/               SSE proxies for streaming and Bloom events
+├── components/chat/
+│   ├── chat-container.tsx Main layout: sidebar + chat + drag-drop + MCP auth panel
+│   ├── chat-sidebar.tsx   Session list with create/rename/share/delete
+│   ├── chat-input.tsx     Message input with file attachment
+│   ├── message-bubble.tsx User/assistant bubbles with Markdown rendering
+│   ├── message-list.tsx   Scrollable thread with inline Bloom progress cards
+│   ├── hitl-approval-card.tsx  Approve / deny HITL tool-call pauses
+│   └── mini-agent-trace.tsx    Per-mini-agent lifecycle markers
+├── components/bloom/      Bloom operator panel primitives
+├── hooks/
+│   ├── use-chat-stream.ts Per-message SSE subscription
+│   ├── use-chat-events.ts Per-chat-session Bloom progress subscription
+│   └── use-bloom.ts       Polling hooks for runs, signals, triggers, schedules
+└── lib/auth/              NextAuth v5 configuration + generic OAuth2/OIDC provider
+```
+
+## UI ↔ framework config mapping
+
+Every visible UI behaviour is driven by a YAML key in `agents.yaml` or an `orchid-api` setting — no code changes needed to customise the assistant's personality, available agents, or conversation behaviour.
+
+| UI affordance | Driven by |
+|---|---|
+| Assistant name in the header | `supervisor.assistant_name` in `agents.yaml` |
+| Available agents list (if exposed) | `agents:` section in `agents.yaml` |
+| Streaming token-by-token output | SSE endpoint `POST /chats/{id}/messages/stream` in `orchid-api` |
+| Auth bearer used for all API calls | Obtained via NextAuth server-side; passed downstream into `OrchidAuthContext` |
+| Multi-turn history depth | `supervisor.history_max_turns` in `agents.yaml` (default 20) |
+| Summarisation indicator | `supervisor.history_summary_enabled` in `agents.yaml` |
+| Tool-call animation and sequencing | `OrchidToolCallStrategy` selected per agent (`all`, `sequential`, `llm_decides`) |
+| HITL approval card visibility | `requires_approval: true` on a tool definition in `agents.yaml` |
+| Mini-agent trace pane | `mini_agent.enabled: true` on an agent in `agents.yaml` |
+| MCP OAuth server panel | Presence of `auth.mode: oauth` servers in `agents.yaml` |
+| Bloom operator panel | `events.enabled: true` in `agents.yaml` |
+
+## Adding an agent without touching code
+
+Add an entry to `agents.yaml`, redeploy `orchid-api`. The UI picks it up automatically on the next page load — no frontend code changes, no rebuild of the frontend.
+
+```yaml
+# agents.yaml diff
+agents:
+  search:
+    description: "Searches the knowledge base and summarises findings."
+    prompt: "You are a search specialist. Use your tools to find relevant information."
+    llm:
+      model: "openai/gpt-4o-mini"
+    tools:
+      - search_knowledge_base
+```
+
+The supervisor reads the new `agents:` section at startup and includes the agent in its routing decisions. If the frontend renders an agent-picker it re-fetches the list from `orchid-api`; if it routes automatically the supervisor handles it transparently.
+
+## Authentication and bearer propagation
+
+The OAuth access token is stored **only** in the server-side NextAuth JWT. It never reaches the browser. The data flow is:
+
+1. User logs in via the generic OAuth2/OIDC provider (`lib/auth/oauth-provider.ts`). The `OAUTH_ISSUER` env var enables OIDC auto-discovery; explicit endpoints are also supported.
+2. NextAuth stores the access token in a server-side session (httpOnly cookie — never exposed as JavaScript).
+3. Every API call goes through a Server Action that reads the session server-side and attaches the Bearer to `orchid-api` requests.
+4. `orchid-api` passes the Bearer to `get_auth_context`, which calls the operator's `OrchidIdentityResolver` to produce an `OrchidAuthContext`. From that point the framework owns identity.
+
+This proxy pattern means the frontend never needs to know anything about the upstream IdP structure — it just holds a NextAuth session and lets Server Actions handle the rest.
+
+## Fork and deploy checklist
+
+1. **Set `NEXT_PUBLIC_API_URL`** to your `orchid-api` base URL (e.g. `http://localhost:8000`).
+2. **Configure OAuth**: set `OAUTH_ISSUER` (for OIDC auto-discovery) and `OAUTH_CLIENT_ID` + `OAUTH_CLIENT_SECRET`. Or use explicit `OAUTH_AUTHORIZATION_URL`, `OAUTH_TOKEN_URL`, `OAUTH_USERINFO_URL`.
+3. **Set `NEXTAUTH_SECRET`** to a random string (at least 32 characters).
+4. **Override theme tokens**: edit only `src/app/globals.css`. The `@theme inline` block contains all colour tokens (`--orchid-bg`, `--orchid-accent`, etc.) — re-skin without touching a component.
+5. **Swap branding files**: replace `src/app/icon.svg` and any logo assets.
+6. **Build and verify**: `npm run build && npm run lint && npm test` must all pass.
+
+<Sources files={["orchid-frontend/README.md", "orchid-frontend/AGENTS.md", "orchid-frontend/src/app/actions/chats.ts", "orchid-frontend/src/lib/auth/auth.ts", "orchid-frontend/src/lib/auth/oauth-provider.ts"]} />

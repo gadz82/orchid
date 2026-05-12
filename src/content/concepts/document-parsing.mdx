@@ -1,0 +1,74 @@
+---
+title: "Document Parsing"
+description: "PDF and image parsing with the parse-once pattern and the pluggable parser registry."
+package: "orchid"
+section: "concepts"
+order: 19
+tags: []
+sources:
+  - "orchid/orchid_ai/documents/parsers.py"
+  - "orchid/orchid_ai/documents/pipeline.py"
+  - "orchid/orchid_ai/documents/AGENTS.md"
+  - "orchid/AGENTS.md"
+related: ["/concepts/rag", "/concepts/embeddings"]
+example: "/examples/wiki"
+external: []
+---
+
+When a user attaches a file to a chat, Orchid extracts its text exactly once. That extracted text feeds both the LLM's immediate context and the RAG index — no second parse, no drift between the two.
+
+## The parse-once pattern
+
+```python
+from orchid_ai.documents.pipeline import extract_text, ingest_document
+
+# Step 1: extract text exactly once
+text = await extract_text(file_bytes=raw, filename="report.pdf", vision_model="ollama/minicpm-v")
+
+# Step 2a: prepend to the user query so the LLM sees the content immediately
+augmented_query = f"Document content:\n{text}\n\nUser query: {user_query}"
+
+# Step 2b: ingest into RAG — reuse the extracted text, no second parse
+await ingest_document(
+    file_bytes=raw,
+    filename="report.pdf",
+    scope=scope,
+    writer=writer,
+    pre_extracted_text=text,   # ← critical: avoids parsing twice
+)
+```
+
+The `pre_extracted_text` parameter short-circuits the parse step inside `ingest_document`. This is especially important for images: the vision model call is slow and non-deterministic — a second call would produce different text, causing a mismatch between what the LLM saw and what was indexed.
+
+## The parser registry
+
+Parsers are registered by file extension in `PARSER_REGISTRY`. Each parser implements `async parse(file_bytes, filename) -> str`.
+
+| Extension | Parser | Notes |
+|---|---|---|
+| `.pdf` | `PDFParser` | PyMuPDF (`fitz`) — per-page text extraction |
+| `.docx` | `DOCXParser` | `python-docx` — paragraph extraction |
+| `.xlsx` | `XLSXParser` | `openpyxl` — pipe-delimited rows per sheet |
+| `.csv` | `CSVParser` | stdlib `csv` |
+| `.md`, `.txt` | `TextParser` | Passthrough |
+| `.png`, `.jpg`, `.jpeg` | `ImageParser` | LiteLLM vision model |
+
+## Adding a new format
+
+```python
+from orchid_ai.documents.parsers import DocumentParser, PARSER_REGISTRY
+
+class MarkdownParser(DocumentParser):
+    async def parse(self, file_bytes: bytes, filename: str) -> str:
+        return file_bytes.decode("utf-8")
+
+PARSER_REGISTRY[".md"] = MarkdownParser
+```
+
+For consumer projects, call `register_parser(ext, cls)` at startup rather than mutating `PARSER_REGISTRY` directly — this follows the Open/Closed Principle and keeps the framework's built-in defaults intact.
+
+## Chunking
+
+After extraction, `ingest_document` splits text into overlapping chunks via `RecursiveCharacterTextSplitter` (defaults: `chunk_size=1000`, `chunk_overlap=200`, split on `\n\n` first). Each chunk is embedded and stored in Qdrant with scope metadata — `tenant_id`, `user_id`, `chat_id`, and `scope="chat_shared"` — so it is visible to all agents in the same chat.
+
+<Sources files={["orchid/orchid_ai/documents/parsers.py", "orchid/orchid_ai/documents/pipeline.py", "orchid/orchid_ai/documents/AGENTS.md", "orchid/AGENTS.md"]} />

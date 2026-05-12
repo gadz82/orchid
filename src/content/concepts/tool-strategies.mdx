@@ -1,0 +1,92 @@
+---
+title: "Tool Call Strategies"
+description: "The all, sequential, and llm_decides strategies and how to register custom ones."
+package: "orchid"
+section: "concepts"
+order: 18
+tags: []
+sources:
+  - "orchid/orchid_ai/agents/strategies.py"
+  - "orchid/AGENTS.md"
+related: ["/concepts/agents", "/examples/tool-strategies"]
+example: "/examples/tool-strategies"
+external: []
+---
+
+Tool call strategies control how `GenericAgent` invokes tools on a given MCP server during **skill execution**. For regular (non-skill) queries the agent uses its own agentic loop with native `tool_calls` semantics — the strategy field is not consulted in that path.
+
+## The three built-in strategies
+
+| Name | Behaviour |
+|---|---|
+| `all` | Calls every configured tool concurrently via `asyncio.gather`. Errors on individual tools are caught and reported without stopping the others. |
+| `sequential` | Calls tools in order, passing previous results as `previous_results` context to each subsequent tool. Use when one tool's output informs the next. |
+| `llm_decides` | Asks the LLM which tools to call and with what arguments. Falls back to `all` if the LLM call fails or returns invalid JSON. |
+
+## Configuring a strategy per MCP server
+
+```yaml
+agents:
+  catalog:
+    mcp_servers:
+      - name: product-db
+        url: https://db.example.com/mcp
+        tool_call_strategy: sequential
+        tools:
+          - name: search_catalog
+          - name: filter_results
+          - name: rank_by_score
+```
+
+The strategy applies to that server's tools within skill steps. Each server in an agent's `mcp_servers` list can use a different strategy.
+
+## The OrchidToolCallStrategy ABC
+
+```python
+class OrchidToolCallStrategy(ABC):
+    @abstractmethod
+    async def execute(
+        self,
+        client: OrchidMCPToolCaller,
+        tools: list[OrchidToolConfig],
+        query: str,
+        auth: OrchidAuthContext,
+        *,
+        agent_name: str = "",
+        server_config: OrchidMCPServerConfig | None = None,
+        chat_model: Any | None = None,
+    ) -> dict[str, Any]:
+        ...
+```
+
+## Adding a custom strategy
+
+1. Subclass `OrchidToolCallStrategy` and implement `execute()`
+2. Register it by name via `register_strategy()`
+3. Reference the name in `agents.yaml`
+
+```python
+from orchid_ai.agents.strategies import register_strategy, OrchidToolCallStrategy
+
+class PriorityStrategy(OrchidToolCallStrategy):
+    async def execute(self, client, tools, query, auth, **kwargs):
+        # call the highest-priority tool first, then the rest in parallel
+        ...
+
+register_strategy("priority", PriorityStrategy)
+```
+
+```yaml
+agents:
+  triage:
+    mcp_servers:
+      - name: kb
+        tool_call_strategy: priority
+        tools:
+          - name: search_kb
+          - name: get_article
+```
+
+Strategies are looked up by name at execution time from `STRATEGY_REGISTRY`. An unknown name falls back to `all` with a warning log.
+
+<Sources files={["orchid/orchid_ai/agents/strategies.py", "orchid/AGENTS.md"]} />

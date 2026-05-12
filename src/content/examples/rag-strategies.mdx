@@ -1,0 +1,147 @@
+---
+title: "RAG Retrieval Strategies"
+description: "Side-by-side comparison of simple, multi_query, hyde, and a custom recency-weighted retrieval strategy."
+package: "cross-cutting"
+section: "examples"
+order: 70
+tags: ["rag"]
+sources:
+  - examples/rag-strategies/orchid.yml
+  - examples/rag-strategies/agents.yaml
+related:
+  - /concepts/rag
+  - /concepts/embeddings
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+Four agents share the same `release_notes` knowledge base but each uses a different retrieval strategy. Ask the same question to all four and compare recall quality and latency. A startup hook seeds the corpus and also registers `recency_simple` — a custom strategy that re-ranks dense candidates by a `published_at` metadata field. This is the reference example for understanding how strategies compose with query transformers and how to register custom ones.
+
+## Run it
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/rag-strategies/orchid.yml \
+  uvicorn orchid_api.main:app --port 8000
+```
+
+Ask the same question through each agent:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat send "what changed in release 5.4?" \
+  --agent simple_searcher \
+  --config examples/rag-strategies/orchid.yml
+```
+
+Replace `simple_searcher` with `multi_query_searcher`, `hyde_searcher`, or `recency_searcher` to compare.
+
+## Configuration walkthrough
+
+`orchid.yml` sets Qdrant and Gemini embeddings (3072-d), plus the startup hook:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/rag-strategies/agents.yaml
+
+llm:
+  model: gemini/gemini-flash-latest
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001   # 3072-d
+
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/rag_strategies_chats.db
+
+startup:
+  hook: examples.rag-strategies.hooks.startup.bootstrap_rag_strategies
+  # seeds the release_notes corpus + registers recency_simple
+```
+
+`agents.yaml` defines four agents with identical prompts but different `rag.retrieval.strategy`:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+defaults:
+  llm:
+    model: "gemini/gemini-flash-latest"
+    temperature: 0.2
+  rag:
+    enabled: true
+    k: 5
+    retrieval:
+      strategy: simple
+
+agents:
+  simple_searcher:
+    description: "Single dense query — fastest baseline."
+    prompt: &shared_prompt |
+      Answer release-history questions from retrieved documents.
+      Quote release IDs. If nothing is retrieved, say so.
+    rag:
+      namespace: release_notes
+      k: 5
+      retrieval:
+        strategy: simple
+        query_transformers: [reformulate]
+
+  multi_query_searcher:
+    description: "Fan-out with N paraphrases — broader recall."
+    prompt: *shared_prompt
+    rag:
+      namespace: release_notes
+      k: 5
+      retrieval:
+        strategy: multi_query
+        query_transformers: [reformulate]
+
+  hyde_searcher:
+    description: "Hypothetical-document embeddings — robust to off-vocabulary queries."
+    prompt: *shared_prompt
+    rag:
+      namespace: release_notes
+      k: 5
+      retrieval:
+        strategy: hyde
+        query_transformers: [reformulate]
+        hyde:
+          n_hypothetical: 2
+
+  recency_searcher:
+    description: "Custom strategy: dense retrieval re-ranked by published_at."
+    prompt: *shared_prompt
+    rag:
+      namespace: release_notes
+      k: 5
+      retrieval:
+        strategy: recency_simple   # registered by startup hook
+
+# ...truncated
+```
+
+## What to look for
+
+- `strategy: simple` → single dense nearest-neighbour lookup; fastest, best for well-formed queries where the corpus contains a near-verbatim match.
+- `strategy: multi_query` → the LLM generates N paraphrases, retrieves against each independently, then merges by score; improves recall for ambiguous or informal questions.
+- `strategy: hyde` + `n_hypothetical: 2` → generates N hypothetical answer paragraphs and retrieves documents similar to those; effective when user vocabulary differs from corpus vocabulary.
+- `strategy: recency_simple` → registered via `startup.hook`; shows how to add custom strategies with `register_strategy()` without modifying the framework.
+- `prompt: &shared_prompt` / `prompt: *shared_prompt` → YAML anchors keep the prompt identical across agents so the only variable is the retrieval strategy.
+
+## Related concepts
+
+- [Hierarchical RAG](/concepts/rag)
+- [Embeddings](/concepts/embeddings)
+
+## Sources
+
+- examples/rag-strategies/orchid.yml
+- examples/rag-strategies/agents.yaml
+- examples/rag-strategies/hooks/startup.py

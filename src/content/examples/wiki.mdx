@@ -1,0 +1,146 @@
+---
+title: "Wiki Document Ingestion"
+description: "Two-tier corpus ingestion (headered + recursive), hybrid retrieval, and per-tool RAG overrides with the parse-once pattern."
+package: "cross-cutting"
+section: "examples"
+order: 110
+tags: ["document-parsing", "rag"]
+sources:
+  - examples/wiki/orchid.yml
+  - examples/wiki/agents.yaml
+related:
+  - /concepts/document-parsing
+  - /concepts/rag
+  - /concepts/embeddings
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The `wiki` example demonstrates the full ingestion-to-retrieval pipeline. Two agents share the same Orchid instance but use different namespaces and ingestion strategies. The `docs` agent ingests long-form documentation with the `headered` strategy (each chunk is prepended with its nearest markdown heading) and retrieves via `hybrid` (dense + BM25 fusion). The `faq` agent ingests short snippets with the default `recursive` chunker. A `lookup_glossary` built-in tool uses `inject_to_rag` to cache glossary entries into a separate namespace with a `semantic` ingestion strategy — a per-tool RAG override demonstrating that individual tools can write to their own chunk layouts.
+
+## Run it
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/wiki/orchid.yml \
+  uvicorn orchid_api.main:app --port 8000
+```
+
+Ask through the `docs` agent:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat send "How do I configure hybrid RAG?" \
+  --agent docs \
+  --config examples/wiki/orchid.yml
+```
+
+## Configuration walkthrough
+
+`orchid.yml` adds a startup hook that seeds both corpora:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/wiki/agents.yaml
+
+llm:
+  model: gemini/gemini-flash-latest
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001   # 3072-d
+
+upload:
+  namespace: uploads
+  chunk_size: 800
+  chunk_overlap: 150
+
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/wiki_chats.db
+
+startup:
+  hook: examples.wiki.hooks.startup.bootstrap_wiki
+  # seeds wiki_docs (headered) + wiki_faq (recursive) corpora
+```
+
+`agents.yaml` shows the two-tier corpus and the per-tool RAG override:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+defaults:
+  rag:
+    ingestion:
+      strategy: recursive
+      chunk_size: 600
+      chunk_overlap: 100
+    retrieval:
+      strategy: simple
+      query_transformers: [reformulate]
+
+tools:
+  lookup_glossary:
+    handler: examples.wiki.hooks.tools.lookup_glossary
+    description: "Fetch a term's definition from the glossary store."
+    inject_to_rag: true          # tool result is cached into RAG
+    rag_ttl: 3600
+    rag:                         # per-tool RAG override
+      namespace: glossary_cache
+      ingestion:
+        strategy: semantic       # chunk at topic shifts, not character counts
+      retrieval:
+        strategy: simple
+
+agents:
+  docs:
+    description: "Long-form documentation with section-aware chunking and hybrid retrieval."
+    rag:
+      namespace: wiki_docs
+      k: 5
+      ingestion:
+        strategy: headered        # prepends nearest markdown heading to each chunk
+        chunk_size: 800
+        chunk_overlap: 150
+      retrieval:
+        strategy: hybrid          # dense + BM25 fusion
+        query_transformers: [reformulate]
+        hybrid:
+          sparse_encoder: bm25
+          fusion: rrf
+          rrf_k: 60
+    tools: [lookup_glossary]
+
+  faq:
+    description: "Short FAQ snippets with simple retrieval."
+    rag:
+      namespace: wiki_faq
+      k: 3
+      # inherits defaults: recursive ingestion, simple retrieval
+```
+
+## What to look for
+
+- `ingestion.strategy: headered` on `docs` → wraps recursive splitting with a contextual-header post-processor; each chunk is prepended with `{source_file} > {nearest_heading}`, so retrieval includes section context even for chunks deep in a page.
+- `retrieval.strategy: hybrid` → fans out to both dense embeddings and BM25; `fusion: rrf` merges the ranked lists with Reciprocal Rank Fusion; effective for jargon-heavy queries (error codes, exact feature names).
+- `inject_to_rag: true` on `lookup_glossary` → when the tool returns a glossary entry it is automatically chunked and indexed into `glossary_cache`; subsequent hybrid searches can surface definitions alongside doc-page hits.
+- `rag` block on the `lookup_glossary` tool → a per-tool override; the tool's results use a different namespace and ingestion strategy than the agent's main corpus.
+- `strategy: recursive` (default) + `strategy: simple` retrieval on `faq` → short, self-contained snippets don't need header context or sparse fusion; keeping the defaults avoids unnecessary latency.
+
+## Related concepts
+
+- [Document Parsing](/concepts/document-parsing)
+- [Hierarchical RAG](/concepts/rag)
+- [Embeddings](/concepts/embeddings)
+
+## Sources
+
+- examples/wiki/orchid.yml
+- examples/wiki/agents.yaml
+- examples/wiki/hooks/startup.py
+- examples/wiki/hooks/tools.py

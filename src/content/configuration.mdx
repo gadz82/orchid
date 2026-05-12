@@ -1,0 +1,83 @@
+---
+title: "Configuration Reference"
+description: "Complete reference for orchid.yml and agents.yaml: all sections, keys, defaults, and best practices."
+package: "cross-cutting"
+section: "configuration"
+order: 30
+tags: ["configuration", "yaml", "reference"]
+sources:
+  - "orchid/orchid_ai/config/schema.py"
+  - "orchid/orchid_ai/config/schema_agent.py"
+  - "orchid/orchid_ai/config/schema_supervisor.py"
+  - "orchid/orchid_ai/config/schema_llm.py"
+  - "orchid/orchid_ai/config/schema_mcp.py"
+  - "orchid/orchid_ai/config/schema_rag.py"
+  - "orchid/orchid_ai/config/schema_skills.py"
+  - "orchid/orchid_ai/config/schema_mini_agent.py"
+  - "orchid/orchid_ai/config/schema_guardrails.py"
+  - "orchid/orchid_ai/config/yaml_env.py"
+  - "orchid-api/orchid_api/settings.py"
+related: ["/concepts/agents", "/concepts/rag", "/concepts/mcp", "/concepts/supervisor"]
+example: ""
+external: []
+---
+
+Orchid splits its configuration across two YAML files with distinct responsibilities. Understanding the boundary between them is the fastest way to understand how the framework is assembled at runtime.
+
+**`orchid.yml`** is the infrastructure and runtime configuration file. It tells the API server which LLM provider to use, where Qdrant is running, which database backs chat persistence, and how authentication is wired. Everything in `orchid.yml` maps directly to an environment variable — the file is a convenience layer on top of env vars, and real environment variables always win. Think of it as the deployment manifest.
+
+**`agents.yaml`** is the agent behavior configuration file. It defines which agents exist, what models and tools they use, how the supervisor orchestrates them, and how RAG retrieval is tuned. This file is loaded and validated against a Pydantic schema at startup. Adding a new agent, adjusting conversation history limits, or enabling sliding-window summarization all happen here — no code changes needed.
+
+Both tables below are generated directly from the Pydantic schema in `orchid_ai.config.schema` and the YAML-to-env mapping in `orchid_ai.config.yaml_env`. Use the filter input to locate a specific key; every row has a stable anchor link you can share.
+
+---
+
+## orchid.yml
+
+Runtime and infrastructure keys. Every key maps to a flat environment variable via `ORCHID_CONFIG` → `YAML_TO_ENV`. When the same variable is set in both `orchid.yml` and the environment, the environment wins.
+
+<Callout variant="best-practice" title="Use orchid.yml for deployment, env vars for secrets">
+  Check `orchid.yml` into version control for structure and non-secret defaults (model names, URLs, feature flags). Inject secrets (`*_API_KEY`, database DSNs with passwords) exclusively via environment variables or a secrets manager — never store them in YAML.
+</Callout>
+
+<Callout variant="warning" title="auth.dev_bypass is for local development only">
+  Setting `auth.dev_bypass: true` removes all authentication and authorization. Any caller can impersonate any user. Never deploy with this enabled.
+</Callout>
+
+<ConfigTable file="orchid.yml" />
+
+---
+
+## agents.yaml
+
+Agent behavior and orchestration configuration. Validated against `OrchidAgentsConfig` at startup — unknown keys raise an error, so typos surface immediately. Defaults cascade: values set under `defaults:` apply to every agent unless overridden per-agent.
+
+<Callout variant="best-practice" title="supervisor.history_summary_enabled">
+  Enable sliding-window summarization for long-running chat sessions with token-priced LLMs. When enabled, the supervisor compresses older turns via a cheap LLM call and keeps only the most recent `history_summary_recent_turns` exchanges verbatim. Disable for short-form workflows or real-time pipelines where the summarization call adds latency with no benefit.
+</Callout>
+
+<Callout variant="best-practice" title="agents[].mcp_servers[].auth.mode">
+  Default to `none` for local MCP servers that share the process or a private network — no credentials needed. Use `passthrough` when the MCP server trusts your bearer token (same identity provider). Use `oauth` when each user must independently authorize the MCP server; Orchid discovers everything from the server's `401` response via RFC 9728 and RFC 7591 — no `client_id` or `client_secret` lives in YAML.
+</Callout>
+
+<Callout variant="best-practice" title="defaults.llm.fallback_model">
+  Always configure a fallback model in production environments. Pairing a cloud-hosted primary (e.g. `gemini/gemini-2.5-flash`) with a local Ollama model as a fallback ensures the service degrades gracefully during provider outages or rate-limit events rather than returning errors to users.
+</Callout>
+
+<ConfigTable file="agents.yaml" />
+
+---
+
+<Sources files={[
+  "orchid/orchid_ai/config/schema.py",
+  "orchid/orchid_ai/config/schema_agent.py",
+  "orchid/orchid_ai/config/schema_supervisor.py",
+  "orchid/orchid_ai/config/schema_llm.py",
+  "orchid/orchid_ai/config/schema_mcp.py",
+  "orchid/orchid_ai/config/schema_rag.py",
+  "orchid/orchid_ai/config/schema_skills.py",
+  "orchid/orchid_ai/config/schema_mini_agent.py",
+  "orchid/orchid_ai/config/schema_guardrails.py",
+  "orchid/orchid_ai/config/yaml_env.py",
+  "orchid-api/orchid_api/settings.py"
+]} />

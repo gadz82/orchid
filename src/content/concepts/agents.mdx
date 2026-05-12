@@ -1,0 +1,110 @@
+---
+title: "Agents"
+description: "How OrchidAgent works: YAML configuration, skills, MCP tools, and the run lifecycle."
+package: "orchid"
+section: "concepts"
+order: 10
+tags: []
+sources:
+  - "orchid/orchid_ai/core/agent.py"
+  - "orchid/orchid_ai/agents/generic_agent.py"
+  - "orchid/AGENTS.md"
+  - "examples/basketball/agents.yaml"
+related: ["/concepts/supervisor", "/concepts/mcp", "/concepts/tool-strategies"]
+example: "/examples/basketball"
+external: []
+---
+
+<MultiLLMBadge />
+
+Every agent in Orchid is a Python class that satisfies the `OrchidAgent` abstract base class. The framework discovers and wires agents at startup from `agents.yaml` — no manual graph editing required.
+
+## The OrchidAgent ABC
+
+`OrchidAgent` lives in `orchid_ai/core/agent.py` and defines the minimal contract the supervisor needs to route requests:
+
+| Member | Purpose |
+|--------|---------|
+| `name` (abstract property) | Unique identifier, e.g. `"basketball"` — used in LangGraph node names |
+| `description` (abstract property) | Human-readable intent description; the supervisor LLM reads this to decide routing |
+| `rag_namespace` (property) | Qdrant collection name. Override if the agent uses RAG; default is `""` (no RAG) |
+| `run(state)` (abstract) | Main agent logic — receives the full `OrchidAgentState`, returns a partial update |
+
+The base class also provides shared helpers every subclass can use without reimplementing:
+
+- `extract_user_query(state)` — walks messages to find the last human message
+- `fetch_rag_context(query, scope)` — retrieves relevant chunks via `OrchidVectorReader`
+- `summarise(query, mcp_data, rag_data, *, system_prompt, ...)` — calls the injected `BaseChatModel` to synthesise a response
+- `extract_conversation_history(state, *, max_turns, max_chars, ...)` — extracts clean `[{role, content}]` pairs, filtering out supervisor routing noise
+
+## GenericAgent: no Python required
+
+For most use cases, `GenericAgent` is the right choice. It is a concrete subclass whose behaviour is entirely driven by an `OrchidAgentConfig` parsed from YAML. Its `run()` executes a fixed six-step pipeline:
+
+1. RAG retrieval (tenant-scoped via `OrchidRAGScope`)
+2. Skill check — if the query matches a configured skill, run it and skip to step 6
+3. Agentic tool-calling loop — MCP + built-in tools via native `tool_calls`
+4. Dynamic RAG injection — write tool results back to Qdrant for future retrieval
+5. LLM summarisation — synthesise the final response
+
+## Defining an agent in YAML
+
+```yaml
+agents:
+  basketball:
+    description: >
+      NBA basketball expert. Knows player stats, team rosters,
+      and can compare players head-to-head.
+
+    prompt: |
+      You are a Basketball Expert AI assistant.
+      Use your tools to provide data-driven analysis.
+
+    llm:
+      model: "ollama/llama3.2"
+      temperature: 0.2
+
+    tools:
+      - get_player_stats
+      - compare_players
+      - get_team_roster
+
+    skills:
+      scouting_report:
+        description: "Get a player's stats then compare with a rival"
+        steps:
+          - tool: get_player_stats
+            source: builtin
+          - tool: compare_players
+            source: builtin
+```
+
+## Collaborators (Single Responsibility Principle)
+
+`GenericAgent` delegates each concern to a dedicated class rather than handling everything itself:
+
+| Collaborator | Responsibility |
+|---|---|
+| `SkillDetector` | Matches user queries to configured agent skills via LLM |
+| `MCPDispatcher` | Discovers MCP server capabilities and routes tool calls |
+| `SkillExecutor` | Runs multi-step skill pipelines and cross-agent delegation |
+
+## Custom agents via dotted imports
+
+When YAML isn't enough, subclass `OrchidAgent` in your own project and reference it by dotted path:
+
+```yaml
+agents:
+  support:
+    class: myproject.agents.support.SupportAgent
+    description: "Handles support tickets and knowledge-base lookups."
+    prompt: "You are a support specialist..."
+```
+
+The framework resolves the class at startup via `importlib`. Custom agents receive the same injected dependencies (`reader`, `mcp_clients`, `chat_model`) as `GenericAgent` — override only what you need, inherit the rest.
+
+## Mini-agents (opt-in fan-out)
+
+Any agent — including custom `OrchidAgent` subclasses — can opt into **mini-agent fan-out** with a single YAML flag. When enabled, a decomposer runs before `run()` each turn; if the query contains independent sub-tasks, it fans out into N parallel mini-agents and synthesises their outcomes into one final response. See [Mini-Agents](/concepts/mini-agents) for the full decision tree and YAML reference.
+
+<Sources files={["orchid/orchid_ai/core/agent.py", "orchid/orchid_ai/agents/generic_agent.py", "orchid/AGENTS.md", "examples/basketball/agents.yaml"]} />

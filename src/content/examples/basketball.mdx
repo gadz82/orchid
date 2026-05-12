@@ -1,0 +1,138 @@
+---
+title: "Basketball Demo"
+description: "Minimal end-to-end Orchid example: two GenericAgents, built-in tools, SQLite storage, and cross-agent skills."
+package: "cross-cutting"
+section: "examples"
+order: 10
+tags: ["agents", "persistence", "supervisor", "built-in-tools"]
+sources:
+  - examples/basketball/orchid.yml
+  - examples/basketball/agents.yaml
+related:
+  - /concepts/agents
+  - /concepts/supervisor
+  - /concepts/persistence
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The basketball demo is Orchid's "hello world". It wires two `GenericAgent` instances — an NBA stats expert and a sports psychologist — using only built-in tools defined in YAML and a file-based SQLite storage backend. No MCP servers, no external APIs, and no custom Python agent classes are required. Everything the demo needs is declared in `orchid.yml` and `agents.yaml`.
+
+## Run it
+
+Start with Docker (includes Qdrant, Ollama, and the API):
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Or run the API directly (Ollama must be running on the host with `llama3.2` and `nomic-embed-text`):
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/basketball/orchid.yml uvicorn orchid_api.main:app --port 8000
+```
+
+Or use the CLI for a quick one-off chat:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/basketball/orchid.yml
+```
+
+## Configuration walkthrough
+
+`orchid.yml` sets the runtime environment — LLM, storage backend, and pointer to `agents.yaml`:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/basketball/agents.yaml
+
+llm:
+  model: ollama/llama3.2
+  ollama_api_base: http://host.docker.internal:11434
+
+auth:
+  dev_bypass: true          # skip identity check for local dev
+
+storage:
+  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/chats.db       # custom SQLite backend plugged in via dotted import
+
+# ...truncated
+```
+
+`agents.yaml` defines the agents, their tools, and two cross-agent skills:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+  rag:
+    enabled: false
+
+tools:
+  get_player_stats:
+    handler: "examples.basketball.tools.basketball.get_player_stats"
+    description: "Get stats for an NBA player"
+  compare_players:
+    handler: "examples.basketball.tools.basketball.compare_players"
+    description: "Side-by-side comparison of two NBA players"
+  assess_motivation:
+    handler: "examples.basketball.tools.psychology.assess_motivation"
+    description: "Assess a player's motivation level"
+  # ...truncated
+
+skills:
+  player_performance_review:
+    description: "Get a player's stats then assess their motivation"
+    steps:
+      - agent: basketball
+        instruction: "Look up the player's current stats"
+      - agent: psychologist
+        instruction: "Assess their motivation and suggest mental strategies"
+
+agents:
+  basketball:
+    description: "NBA basketball expert with player stats and roster tools."
+    prompt: |
+      You are a Basketball Expert AI assistant. Provide insightful
+      basketball analysis using the stats from your tools.
+    tools: [get_player_stats, compare_players, get_team_roster]
+
+  psychologist:
+    description: "Sports psychologist for motivation and team dynamics."
+    prompt: |
+      You are a Sports Psychologist specialized in basketball performance.
+    tools: [assess_motivation, suggest_mental_strategy, analyze_team_dynamics]
+
+# ...truncated
+```
+
+## What to look for
+
+- `storage.class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage` → any importable `OrchidChatStorage` subclass can be plugged in here; the framework resolves it via dotted import at startup.
+- `tools.<name>.handler` → built-in tools are plain Python functions referenced by dotted path; no MCP server needed.
+- `skills.player_performance_review.steps` → a cross-agent skill chains two agents in sequence; the supervisor executes each step in order and passes context forward.
+- `defaults.rag.enabled: false` → RAG is disabled globally; individual agents can override this per-field.
+- `auth.dev_bypass: true` → skips identity resolution for local development; remove this in production.
+
+## Related concepts
+
+- [Agents](/concepts/agents)
+- [Supervisor](/concepts/supervisor)
+- [Chat Persistence](/concepts/persistence)
+
+## Sources
+
+- examples/basketball/orchid.yml
+- examples/basketball/agents.yaml
+- examples/basketball/storage/sqlite.py
+- examples/basketball/tools/basketball.py

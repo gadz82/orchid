@@ -1,0 +1,140 @@
+---
+title: "orchid-mcp"
+description: "Node.js MCP gateway that exposes Orchid to any MCP-capable host LLM."
+package: "orchid-mcp"
+section: "packages"
+order: 23
+tags: []
+sources:
+  - "orchid-mcp/README.md"
+  - "orchid-mcp/AGENTS.md"
+  - "orchid-mcp/src/tools/registry.ts"
+  - "orchid-mcp/src/auth/base.ts"
+  - "orchid-mcp/src/sessions/base.ts"
+  - "orchid-mcp/src/http/orchidClient.ts"
+related: ["/concepts/mcp", "/concepts/oauth", "/packages/orchid-api"]
+example: "/examples/mcp-auth"
+external: []
+---
+
+`orchid-mcp` is a **fork-and-deploy boilerplate**, not a published npm package. It is a TypeScript/Node.js MCP gateway that exposes your Orchid deployment to any MCP-capable host LLM — Claude Desktop, Claude Code, Cursor, or anything that speaks the MCP 2025-03-26 Streamable HTTP transport. Clone the source, configure a handful of environment variables, and any host LLM can call `orchid_ask(...)` as naturally as a built-in tool.
+
+The gateway is intentionally thin: it owns MCP transport, identity resolution, session mapping, and HTTP translation. It never duplicates framework logic. All agent routing, RAG retrieval, tool execution, and HITL approvals happen upstream in `orchid-api`.
+
+## Architecture
+
+```
+MCP client         orchid-mcp            orchid-api
+(Claude, Cursor) ──/mcp──▶ gateway  ──HTTP──▶ FastAPI
+                           │
+                    ┌──────┴──────────────────────┐
+                    │  AuthStrategy (per session)  │
+                    │  SessionMap (LRU / Redis)     │
+                    │  OrchidAPIClient (undici)     │
+                    │  opossum circuit breaker      │
+                    │  Pino + OTEL + rate limiter   │
+                    └─────────────────────────────-┘
+```
+
+### Key internal modules
+
+**`OrchidAPIClient`** — zod-validated HTTP client backed by undici. Every response shape is parsed at the boundary; a schema mismatch raises a clear error rather than silently passing garbage to tool handlers.
+
+**`SessionMap`** — maps an MCP session ID to its bound Orchid chat ID and resolved identity. The default implementation is an in-process LRU cache. For multi-replica deployments swap in the Redis-backed implementation via `ORCHID_MCP_SESSION_BACKEND=redis`.
+
+**`AuthStrategy` ABC** — pluggable authentication. Two implementations ship: `service_account` (one static Bearer token shared across all MCP users) and `oauth` / `discover` (MCP 2025-03-26 OAuth 2.0 authorization-server role with Dynamic Client Registration). The gateway holds no upstream secrets; code exchange, identity resolution, and token refresh all delegate to `orchid-api`.
+
+**Observability** — structured JSON logging via Pino with `AsyncLocalStorage`-backed correlation IDs, OpenTelemetry tracing (opt-in via `ORCHID_MCP_TRACING_ENABLED`), and a token-bucket rate limiter keyed on MCP session ID.
+
+## Tools
+
+The gateway registers nine MCP tools on every session. All tool handlers go through the `runWithTooling` helper in `_shared.ts`, which applies correlation ID, Pino child logger, rate-limit check, and OTEL span uniformly.
+
+### Chat tools (six)
+
+| Tool | Purpose | Key params |
+|------|---------|------------|
+| `orchid_ask` | Ask Orchid's supervisor a question. Auto-creates a chat on first call. | `query: string`, optional `files: [{name, base64}]` |
+| `orchid_new_chat` | Start a fresh chat and bind the MCP session to it. | optional `title: string` |
+| `orchid_list_chats` | List the user's existing chats. | — |
+| `orchid_switch_chat` | Bind the current MCP session to a prior chat. | `chat_id: string` |
+| `orchid_upload_file` | Upload a file into the current chat's RAG scope. | `name: string`, `content_b64: string` |
+| `orchid_resume_chat` | Resume a HITL-paused chat with an approve/deny decision. | `chat_id: string`, `decision: "approve" \| "deny"` |
+
+### Event tools (three)
+
+These three tools forward to the upstream Pollen + Bloom event surface. They register on every session; if `events.enabled: false` upstream the tools surface the API's 503 verbatim.
+
+| Tool | Purpose |
+|------|---------|
+| `orchid_signal_emit` | Emit a signal that may trigger one or more background Bloom runs upstream. Returns immediately with `signal_id`. |
+| `orchid_bloom_status` | Look up a Bloom run's status. Pass `signal_id` or `run_id`. |
+| `orchid_bloom_list` | List recent Bloom runs visible to the caller, filtered by status or trigger. |
+
+## Two distinct auth layers
+
+Readers sometimes conflate two separate auth concerns in this package — they are independent:
+
+**Inbound auth (host LLM → gateway):** The gateway authenticates host LLM connections via `AuthStrategy`. In `service_account` mode it accepts a shared Bearer token. In `oauth` / `discover` mode it acts as an OAuth 2.0 Authorization Server, issuing per-user tokens to MCP clients.
+
+**Outbound auth (gateway → orchid-api):** After resolving the host LLM's identity, the gateway attaches the corresponding upstream Bearer to every `orchid-api` call. If `orchid-api` is configured with `auth.mode: passthrough` MCP servers, those downstream servers receive the same token forwarded through the framework's `OrchidAuthContext`. These are two separate hops — the gateway sits between them.
+
+## Connecting a host LLM
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS:
+
+```json
+{
+  "mcpServers": {
+    "orchid": {
+      "type": "http",
+      "url": "http://localhost:9000/mcp"
+    }
+  }
+}
+```
+
+Restart Claude Desktop. The nine `orchid_*` tools appear under the attach-tool menu.
+
+### Claude Code
+
+Add to `.mcp.json` at your project root (or `~/.claude.json` for a user-wide install):
+
+```json
+{
+  "mcpServers": {
+    "orchid": {
+      "type": "http",
+      "url": "http://localhost:9000/mcp"
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "orchid": {
+      "url": "http://localhost:9000/mcp"
+    }
+  }
+}
+```
+
+## Fork and deploy checklist
+
+1. **Set `ORCHID_MCP_UPSTREAM_URL`** to the base URL of your `orchid-api` instance (e.g. `http://orchid-api:8000`).
+2. **Choose an auth mode** via `ORCHID_MCP_AUTH_MODE`: `service_account` for single-user personal installs; `discover` for multi-user deployments (pulls auth metadata from `orchid-api`'s `/auth-info`).
+3. **Set `ORCHID_MCP_SERVICE_ACCOUNT_TOKEN`** if using `service_account` mode.
+4. **Configure session backend**: `ORCHID_MCP_SESSION_BACKEND=redis` + `ORCHID_MCP_REDIS_URL` for multi-replica; leave at default (`memory`) for single-instance.
+5. **Wire observability**: set `ORCHID_MCP_TRACING_ENABLED=true` and `ORCHID_MCP_OTLP_ENDPOINT` for your OTEL collector; `ORCHID_MCP_LOG_LEVEL` defaults to `info`.
+6. **Review hardening defaults**: rate limiter (`ORCHID_MCP_RATE_LIMIT_RPM`, `ORCHID_MCP_RATE_LIMIT_BURST`) and circuit breaker (`ORCHID_MCP_CIRCUIT_BREAKER_THRESHOLD`) ship with sensible defaults — tune for your traffic profile.
+7. **Run checks**: `npm run typecheck && npm run lint && npm test` must all be green before deploying.
+
+<Sources files={["orchid-mcp/README.md", "orchid-mcp/AGENTS.md", "orchid-mcp/src/tools/registry.ts", "orchid-mcp/src/auth/base.ts", "orchid-mcp/src/sessions/base.ts", "orchid-mcp/src/http/orchidClient.ts"]} />

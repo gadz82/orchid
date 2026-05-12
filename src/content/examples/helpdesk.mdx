@@ -1,0 +1,149 @@
+---
+title: "Helpdesk Demo"
+description: "Custom agent class, cross-agent skills, sequential routing, and event-driven ticket triage."
+package: "cross-cutting"
+section: "examples"
+order: 20
+tags: ["agents", "tool-strategies", "supervisor", "events"]
+sources:
+  - examples/helpdesk/config/orchid.yml
+  - examples/helpdesk/config/agents.yaml
+related:
+  - /concepts/agents
+  - /concepts/tool-strategies
+  - /concepts/supervisor
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The helpdesk example shows how to go beyond `GenericAgent`. A custom `SupportAgent` class handles the investigation phase with an agentic tool-calling loop and optional mini-agent decomposition for multi-part requests. Two `GenericAgent` instances — `triage` and `escalation` — flank it in a sequential pipeline. A cross-agent skill (`auto_resolve`) chains all three agents end-to-end. An event-driven trigger fires automatically when a high-priority ticket arrives via webhook.
+
+## Run it
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/helpdesk/config/orchid.yml uvicorn orchid_api.main:app --port 8000
+```
+
+Or via the CLI:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/helpdesk/config/orchid.yml
+```
+
+## Configuration walkthrough
+
+`orchid.yml` points to the agents config and configures the LLM and storage:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/helpdesk/config/agents.yaml
+
+llm:
+  model: gemini/gemini-flash-latest
+
+auth:
+  dev_bypass: true
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
+
+# ...truncated
+```
+
+`agents.yaml` defines a three-agent pipeline with a cross-agent skill and event-driven triage:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+supervisor:
+  assistant_name: "Helpdesk AI"
+  routing_system_prompt: |
+    Route new issues to triage first, then support.
+    Route escalation requests to the escalation agent.
+
+skills:
+  auto_resolve:
+    description: "Full ticket resolution: triage → support → escalation"
+    steps:
+      - agent: triage
+        instruction: "Classify this issue by priority and category"
+      - agent: support
+        instruction: "Search the KB and provide a detailed resolution"
+      - agent: escalation
+        instruction: "Confirm closure or create an escalation plan"
+
+agents:
+  triage:
+    description: "Ticket triage and classification agent."
+    prompt: |
+      Classify each incoming issue by priority and category.
+      Use the classify_ticket tool.
+    tools: [classify_ticket]
+    rag:
+      enabled: false
+    execution_hints:
+      parallel_safe: false   # runs before support
+
+  support:
+    class: examples.helpdesk.agents.support.SupportAgent   # custom class
+    description: "Technical support agent with KB search and ticket status."
+    tools: [classify_ticket, search_kb, get_ticket_status]
+    mini_agent:
+      enabled: true
+      max_count: 3
+    parallel_tools: true
+    rag:
+      namespace: knowledge_base
+      k: 5
+
+  escalation:
+    description: "Escalation management for critical or unresolved issues."
+    tools: [get_ticket_status, classify_ticket]
+    rag:
+      enabled: false
+
+# Event-driven: fires on high-priority tickets from an external webhook
+events:
+  enabled: true
+  triggers:
+    - id: high-priority-ticket
+      "on":
+        signal: support.ticket.created
+        when: "payload.priority == 'high'"
+      emits:
+        agent: support
+        identity: { mode: act_as_user, user_id_from: signal.user_id }
+        proactive_chat: true
+
+# ...truncated
+```
+
+## What to look for
+
+- `support.class: examples.helpdesk.agents.support.SupportAgent` → drop a custom `OrchidAgent` subclass in by dotted import path; no framework modification needed.
+- `skills.auto_resolve.steps` → three-agent sequential chain; each step receives the previous agent's output as conversation context.
+- `mini_agent.enabled: true` on `support` → multi-part requests ("triage TK-1001 and explain MFA reset") are split into independent sub-tasks, each run by a focused mini-agent.
+- `parallel_tools: true` on `support` → read-only tools within a single agentic round are dispatched concurrently.
+- `events.triggers[].when: "payload.priority == 'high'"` → JMESPath filter keeps the trigger quiet for low-priority tickets.
+- `identity.mode: act_as_user` → the Bloom runs as the ticket reporter's user identity, not a generic service account.
+
+## Related concepts
+
+- [Agents](/concepts/agents)
+- [Tool Call Strategies](/concepts/tool-strategies)
+- [Supervisor](/concepts/supervisor)
+
+## Sources
+
+- examples/helpdesk/config/orchid.yml
+- examples/helpdesk/config/agents.yaml
+- examples/helpdesk/agents/support.py
+- examples/helpdesk/tools/tickets.py

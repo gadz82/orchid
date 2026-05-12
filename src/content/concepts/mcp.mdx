@@ -1,0 +1,91 @@
+---
+title: "MCP Integration"
+description: "Connecting MCP servers to Orchid agents: none, passthrough, and OAuth auth modes."
+package: "orchid"
+section: "concepts"
+order: 13
+tags: []
+sources:
+  - "orchid/orchid_ai/mcp/client.py"
+  - "orchid/orchid_ai/mcp/AGENTS.md"
+  - "orchid/orchid_ai/config/schema_mcp.py"
+  - "orchid/AGENTS.md"
+  - "orchid-mcp/AGENTS.md"
+related: ["/concepts/oauth", "/examples/mcp-auth"]
+example: "/examples/mcp-auth"
+external:
+  - label: "Model Context Protocol specification"
+    url: "https://modelcontextprotocol.io"
+  - label: "MCP 2025-03-26 authorization spec"
+    url: "PLACEHOLDER"
+  - label: "RFC 9728: OAuth 2.0 Protected Resource Metadata"
+    url: "https://datatracker.ietf.org/doc/html/rfc9728"
+  - label: "RFC 8414: OAuth 2.0 Authorization Server Metadata"
+    url: "https://datatracker.ietf.org/doc/html/rfc8414"
+  - label: "RFC 7591: OAuth 2.0 Dynamic Client Registration"
+    url: "https://datatracker.ietf.org/doc/html/rfc7591"
+---
+
+Orchid agents can call any MCP server over Streamable HTTP or SSE transport. The connection is configured per-server in `agents.yaml`; the framework handles capability discovery, caching, and per-user authentication transparently.
+
+## The MCP client interface
+
+`OrchidMCPClient` in `orchid_ai/core/mcp.py` combines two narrower ABCs:
+
+- **`OrchidMCPToolCaller`** — code that only invokes tools depends on this
+- **`OrchidMCPDiscoverable`** — code that discovers capabilities depends on this
+
+`StreamableHttpMCPClient` in `orchid_ai/mcp/client.py` is the concrete implementation. It keeps an in-memory capability cache that is populated once (proactively at startup or session-start) and flushed only via explicit `invalidate_cache()` calls.
+
+## Three auth modes
+
+Each MCP server declaration carries exactly one field under `auth:` — the `mode`. No credentials, no endpoints, no client IDs live in YAML.
+
+```yaml
+mcp_servers:
+  - name: public-weather
+    url: https://weather.example.com/mcp
+    # auth defaults to: mode: none
+
+  - name: tenant-catalog
+    url: https://catalog.example.com/mcp
+    auth:
+      mode: passthrough
+
+  - name: external-crm
+    url: https://crm.example.com/mcp
+    auth:
+      mode: oauth
+```
+
+| Mode | Behaviour |
+|------|-----------|
+| `none` (default) | No auth headers. For local or public servers. |
+| `passthrough` | Forwards the graph's `OrchidAuthContext` bearer token on every call. The MCP server and Orchid share the same identity provider. |
+| `oauth` | Full MCP 2025-03-26 flow. On the first `401` the framework discovers everything — protected resource metadata, authorization server metadata, and dynamic client registration — and stores per-user tokens in `OrchidMCPTokenStore`. See [OAuth & Authentication](/concepts/oauth). |
+
+<Callout variant="info" title="cache_ttl is rejected">
+`OrchidMCPServerConfig` is declared with `extra="forbid"`. Adding `cache_ttl:` to a server block raises a Pydantic validation error at startup. Capability caches have no TTL; they live for the process lifetime and are flushed via `invalidate_cache()` or `OrchidSessionWarmer.invalidate_user()`.
+</Callout>
+
+## Proactive capability warming
+
+The framework warms MCP capability caches at well-defined boundaries so the per-request hot path never pays discovery cost:
+
+| Boundary | What gets warmed |
+|----------|-----------------|
+| Process startup | Every `auth.mode: none` server |
+| User session start (`POST /session/warm`) | Every `passthrough` and `oauth` server |
+| Post-OAuth callback | The freshly-authorised server |
+
+`OrchidSessionWarmer` drives all three boundaries. It is idempotent per `(tenant_key, user_id)` pair.
+
+## External reading
+
+- <ExternalLink href="https://modelcontextprotocol.io">Model Context Protocol specification</ExternalLink>
+- <ExternalLink href="PLACEHOLDER">MCP 2025-03-26 authorization spec</ExternalLink>
+- <ExternalLink href="https://datatracker.ietf.org/doc/html/rfc9728">RFC 9728: OAuth 2.0 Protected Resource Metadata</ExternalLink>
+- <ExternalLink href="https://datatracker.ietf.org/doc/html/rfc8414">RFC 8414: OAuth 2.0 Authorization Server Metadata</ExternalLink>
+- <ExternalLink href="https://datatracker.ietf.org/doc/html/rfc7591">RFC 7591: OAuth 2.0 Dynamic Client Registration</ExternalLink>
+
+<Sources files={["orchid/orchid_ai/mcp/client.py", "orchid/orchid_ai/mcp/AGENTS.md", "orchid/orchid_ai/config/schema_mcp.py", "orchid/AGENTS.md", "orchid-mcp/AGENTS.md"]} />

@@ -1,0 +1,145 @@
+---
+title: "Prompt Customization"
+description: "Every supervisor and agent prompt extension point — assistant_name, routing/synthesis prompts, prompt_sections, and transformer prompts."
+package: "cross-cutting"
+section: "examples"
+order: 90
+tags: ["supervisor", "agents", "rag"]
+sources:
+  - examples/prompt-customization/orchid.yml
+  - examples/prompt-customization/agents.yaml
+related:
+  - /concepts/supervisor
+  - /concepts/agents
+  - /concepts/rag
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+This example exercises every prompt customization extension point Orchid exposes through YAML configuration. All overrides are applied to a single `legal_advisor` agent so the differences from built-in defaults remain focused. The example shows: supervisor `assistant_name`, `routing_system_prompt`, and `synthesis_system_prompt`; per-agent `prompt_sections` (section headers, truncation limits, and summarise templates); and per-agent RAG `transformer_prompts` for `reformulate`, `multi_query`, `hyde`, and `decompose`.
+
+## Run it
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/prompt-customization/orchid.yml \
+  uvicorn orchid_api.main:app --port 8000
+```
+
+Or validate the YAML without spinning up the API:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid config validate examples/prompt-customization/agents.yaml
+```
+
+## Configuration walkthrough
+
+`orchid.yml` is identical to other demos — only `agents.config_path` matters here:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/prompt-customization/agents.yaml
+
+llm:
+  model: ollama/llama3.2
+
+auth:
+  dev_bypass: true
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: ollama/nomic-embed-text
+```
+
+`agents.yaml` shows all customization layers, trimmed to the key fields:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+defaults:
+  rag:
+    retrieval:
+      strategy: multi_query
+      query_transformers: [reformulate]
+      transformer_prompts:
+        reformulate: |
+          Rewrite the user's latest message into a standalone legal
+          search query. Resolve pronouns, expand acronyms.
+          Return ONLY the rewritten query.
+
+supervisor:
+  assistant_name: "Legal Reference Desk"
+  routing_system_prompt: |
+    You coordinate the {assistant_name}'s specialist agents.
+    Available agents: {agent_descriptions}
+    Choose ONE agent for legal questions; otherwise answer directly.
+  synthesis_system_prompt: |
+    You are the {assistant_name}'s lead counsel. Synthesise findings
+    into a legal brief with section headings. Append a Disclaimer.
+
+agents:
+  legal_advisor:
+    prompt: |
+      You are an expert legal research assistant. Cite each claim
+      to a specific source paragraph. Flag uncertain jurisdictions.
+      Frame everything as general information, not legal advice.
+
+    # Per-section template overrides for the agentic loop
+    prompt_sections:
+      prior_results_header: "\n=== MEMOIRE FROM PRIOR TURNS ===\n"
+      rag_header: "\n=== SOURCE CITATIONS ===\n"
+      prior_results_max_chars: 8000
+      resource_max_chars: 4000
+
+    rag:
+      namespace: legal
+      k: 8
+      retrieval:
+        strategy: hyde
+        transformer_prompts:
+          hyde:
+            single: |
+              Write a paragraph that reads like a legal treatise
+              answering the user's question. Use formal English.
+            multi: |
+              Write {n} distinct legal-treatise paragraphs with
+              different jurisdictional lenses.
+          decompose: |
+            Split the user's question into at most {n} independent
+            legal sub-issues, each answerable on its own.
+          # reformulate inherits from defaults
+
+    mini_agent:
+      enabled: false   # toggle true to exercise decomposer/aggregator prompts
+      decomposer_prompt: |
+        Split the user's request into 2-{max_count} sub-issues.
+      aggregator_prompt: |
+        Combine per-sub-issue outcomes into a single legal brief.
+
+# ...truncated
+```
+
+## What to look for
+
+- `supervisor.assistant_name` → replaces the `{assistant_name}` placeholder in all supervisor prompts; changes the displayed name without touching agent code.
+- `supervisor.routing_system_prompt` / `synthesis_system_prompt` → fully replace the built-in supervisor prompts; `{agent_descriptions}` and `{skill_descriptions}` are injected at runtime.
+- `prompt_sections.*` → granular overrides for each labelled block in the agentic loop (headers, separator strings, char limits, summarise templates); only specify the fields you want to change.
+- `rag.retrieval.transformer_prompts.*` → per-agent overrides for `reformulate`, `multi_query`, `hyde`, and `decompose`; unset fields inherit from `defaults.rag.retrieval.transformer_prompts`.
+- `mini_agent.decomposer_prompt` / `aggregator_prompt` → the decomposition and aggregation steps use these instead of the built-in prompts; `{agent_name}`, `{tool_inventory}`, `{max_count}`, `{history}` are available placeholders.
+
+## Related concepts
+
+- [Supervisor](/concepts/supervisor)
+- [Agents](/concepts/agents)
+- [Hierarchical RAG](/concepts/rag)
+
+## Sources
+
+- examples/prompt-customization/orchid.yml
+- examples/prompt-customization/agents.yaml

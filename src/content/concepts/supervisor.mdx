@@ -1,0 +1,80 @@
+---
+title: "Supervisor"
+description: "The LangGraph supervisor: routing, history limits, and sliding-window summarisation."
+package: "orchid"
+section: "concepts"
+order: 11
+tags: []
+sources:
+  - "orchid/orchid_ai/graph/supervisor.py"
+  - "orchid/orchid_ai/config/schema_supervisor.py"
+  - "orchid/AGENTS.md"
+related: ["/concepts/agents", "/concepts/persistence"]
+example: "/examples/prompt-customization"
+external:
+  - label: "LangGraph documentation"
+    url: "PLACEHOLDER"
+---
+
+<MultiLLMBadge />
+
+The supervisor is the **single entry point** of the Orchid LangGraph graph. Every user message flows through it first. The supervisor never calls MCP servers or reads from the vector store — its only job is intent analysis, mode selection, and routing.
+
+## What the supervisor does
+
+On each turn the supervisor:
+
+1. Analyses the user's intent via a structured-output LLM call
+2. Chooses an execution mode: `parallel`, `sequential`, or `skill`
+3. Routes to one or more specialist agents (or responds directly for trivial queries)
+4. After all agents have replied, synthesises a final coherent response
+
+In `parallel` mode the supervisor fans out to multiple agents simultaneously using LangGraph's `Send()` primitive. In `sequential` mode agents run one at a time, with each agent's output visible to the next via `mcp_context`.
+
+## Configuring the supervisor
+
+All supervisor options live under the `supervisor:` key in `agents.yaml`:
+
+```yaml
+supervisor:
+  assistant_name: "Sports AI"
+  history_max_turns: 20
+  history_max_chars: 1000
+  history_summary_enabled: true
+  history_summary_model: "ollama/llama3.2"
+  history_summary_recent_turns: 10
+  routing_model: "ollama/llama3.2"
+```
+
+| Field | Default | Purpose |
+|---|---|---|
+| `assistant_name` | `"AI assistant"` | Name used in the routing system prompt |
+| `history_max_turns` | `20` | Maximum user/assistant pairs passed to the LLM |
+| `history_max_chars` | `1000` | Per-message character cap before truncation (appends `…`) |
+| `history_summary_enabled` | `true` | Activate sliding-window summarisation |
+| `history_summary_model` | supervisor model | Cheap model for compression calls |
+| `history_summary_recent_turns` | `10` | Verbatim turns kept at the tail of the window |
+| `routing_model` | supervisor model | Separate fast model for routing and sequential-advance phases |
+
+## Multi-turn context extraction
+
+The supervisor calls `OrchidAgent.extract_conversation_history()` before every routing, synthesis, and sequential-advance step. This static method:
+
+- Filters out internal supervisor routing messages (any message starting with `[Supervisor`)
+- Strips agent-name prefixes from AI messages (e.g. `[Basketball Agent]\n…` → `…`)
+- Excludes the current user query (added separately as the trigger)
+- Caps the result to `history_max_turns * 2` messages
+
+## Sliding-window summarisation
+
+When `history_summary_enabled: true`, turns older than the `history_summary_recent_turns` window are compressed into a single summary paragraph via an LLM call. The most recent exchanges are kept verbatim. On LLM failure the system falls back to returning only the recent turns — no crash, no data loss.
+
+<Callout variant="best-practice" title="Enable summarisation for cost-conscious LLMs">
+Set `history_summary_enabled: true` and point `history_summary_model` at a fast, cheap model (e.g. `gemini/gemini-2.5-flash-lite` or `ollama/llama3.2`). For a 40-turn conversation this typically reduces the token count passed to the routing and synthesis calls by 60–80 % while preserving the full conversational thread.
+</Callout>
+
+## External reading
+
+- <ExternalLink href="PLACEHOLDER">LangGraph — building stateful multi-actor applications</ExternalLink>
+
+<Sources files={["orchid/orchid_ai/graph/supervisor.py", "orchid/orchid_ai/config/schema_supervisor.py", "orchid/AGENTS.md"]} />

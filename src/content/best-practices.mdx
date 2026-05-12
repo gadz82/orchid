@@ -1,0 +1,189 @@
+---
+title: "Best Practices"
+description: "Recommended patterns for production-grade Orchid deployments."
+package: "cross-cutting"
+section: "meta"
+order: 60
+tags: ["production", "deployment", "patterns"]
+sources:
+  - "orchid/orchid_ai/rag/scopes.py"
+  - "orchid/orchid_ai/agents/strategies.py"
+  - "orchid/orchid_ai/persistence/base.py"
+  - "orchid/AGENTS.md"
+  - "orchid-mcp/AGENTS.md"
+  - "orchid-api/AGENTS.md"
+related: ["/configuration", "/concepts/agents", "/concepts/rag", "/concepts/mcp", "/concepts/persistence", "/concepts/tool-strategies", "/concepts/embeddings"]
+example: ""
+external:
+  - label: "LangSmith tracing docs"
+    url: "https://docs.smith.langchain.com"
+  - label: "OpenTelemetry for Node.js"
+    url: "https://opentelemetry.io/docs/languages/js/"
+---
+
+This page distils the most important decisions you will face when deploying Orchid in production. Each section is anchored to a concept or package page for deeper reading.
+
+## Choosing Scopes
+
+Orchid's RAG system uses a five-level hierarchy: **root → tenant → user → chat → agent**. Choosing the right scope for each collection determines both retrieval precision and operational cost.
+
+Use **tenant scope** for shared knowledge that every user in an organisation should access — product documentation, company policies, public FAQs. Indexing once at tenant level avoids duplicating vectors per user.
+
+Use **user scope** for personal context that must not leak across accounts — uploaded CVs, private notes, user-specific preferences. The `OrchidRAGScope.user(tenant_key, user_id)` factory enforces this boundary automatically.
+
+Use **chat scope** sparingly — only when a document is relevant only to a single conversation thread. Chat-scoped collections accumulate quickly and should be pruned on chat deletion.
+
+Use **agent scope** when a specialised agent (e.g. a legal-review agent) needs its own curated knowledge base that other agents in the same graph must not access.
+
+Never pass raw `tenant_id` strings as Qdrant filters. Always construct scopes via `OrchidRAGScope` — this is the only way to guarantee the hierarchy is respected and future scope changes are backward-compatible.
+
+See [Hierarchical RAG](/concepts/rag) for the full scope API.
+
+## Sliding-Window Summarization
+
+The supervisor keeps a rolling conversation window in graph state. By default it retains the last 20 turns verbatim (`supervisor.history_max_turns`). For long-running sessions this inflates token usage on every LLM call.
+
+**Enable** sliding-window summarization (`supervisor.history_summary_enabled: true`) when:
+- Sessions routinely exceed 15 turns.
+- You are using a paid API provider and cost is a concern.
+- The conversation topic shifts over time (summaries compress stale context well).
+
+**Disable** it when:
+- Sessions are short-form (customer support, single-question Q&A).
+- Exact verbatim recall of earlier turns is required (legal, compliance).
+- You are running a local Ollama model where token cost is irrelevant.
+
+Tune `supervisor.history_summary_recent_turns` (default 10) to control how many recent exchanges are kept verbatim before the older portion is compressed. A value of 5–8 is a good starting point for cost-sensitive deployments.
+
+See [Supervisor](/concepts/supervisor) for the full configuration reference.
+
+## Embedding Model Selection
+
+Orchid supports any embedding model exposed via LiteLLM. The three most common choices differ significantly in dimension and cost:
+
+| Model | Dimensions | Notes |
+|---|---|---|
+| `nomic-embed-text` (Ollama) | 768 | Free, local, good for dev/demo |
+| `text-embedding-3-small` (OpenAI) | 1536 | Low cost, strong multilingual |
+| `gemini-embedding-001` (Google) | 3072 | Highest quality, highest cost |
+
+**Switching embedding models requires a full re-index.** Qdrant collections are created with a fixed vector dimension. If you change `embeddings.model` in `orchid.yml` after data has been indexed, you must drop and recreate every collection. There is no automatic migration.
+
+Establish your embedding model choice before ingesting production data. If you anticipate switching, keep a record of which model was used for each collection in your operational runbook.
+
+See [Embeddings](/concepts/embeddings) for dimension details and provider configuration.
+
+## MCP Auth Decision Tree
+
+Every MCP server entry in `agents.yaml` carries an `auth.mode` field. Choose the right mode using this table:
+
+| Scenario | Mode | Notes |
+|---|---|---|
+| Local dev server, no user identity needed | `none` | Default. No auth headers sent. Server warms at process startup. |
+| Server trusts the same IdP as your API | `passthrough` | Forwards the user's bearer token unchanged. Warm once per user session. |
+| Server has its own OAuth AS | `oauth` | Framework runs RFC 9728 → RFC 8414 → RFC 7591 discovery automatically. |
+| Internal service, mTLS or network-level auth | `none` + network policy | Use `none` and rely on infrastructure-level controls. |
+
+Never put `client_id`, `client_secret`, or issuer URLs in `agents.yaml`. The `oauth` mode discovers and registers dynamically — YAML carries only `mode: oauth`.
+
+See [MCP Integration](/concepts/mcp) and [OAuth & Auth](/concepts/oauth) for the full auth flow.
+
+## Tool Strategies
+
+The `tools.strategy` field on each agent controls how `GenericAgent` invokes tools during skill execution.
+
+| Strategy | When to use |
+|---|---|
+| `all` | Tools are independent and cheap; run them in parallel for lowest latency. |
+| `sequential` | Tools have side effects or depend on each other's output. |
+| `llm_decides` | The set of relevant tools varies per query; let the LLM pick. Adds one extra LLM call. |
+
+`llm_decides` is the most flexible but also the most expensive. Prefer `all` for read-only, idempotent tools (stats lookups, search). Use `sequential` when tool B consumes tool A's output (e.g. fetch → summarise).
+
+Register custom strategies via `register_strategy(name, cls)` — never modify `STRATEGY_REGISTRY` directly.
+
+See [Tool Strategies](/concepts/tool-strategies) for implementation details.
+
+## Persistence
+
+Orchid ships a built-in PostgreSQL backend (`orchid_ai.persistence.postgres`). It is production-ready for most deployments.
+
+**Write a custom `OrchidChatStorage`** when:
+- You need a different database engine (SQLite for local demos, DynamoDB for serverless).
+- Your platform has an existing chat/session store you must integrate with.
+- You need custom retention policies or encryption at rest beyond what PostgreSQL provides.
+
+**Use the built-in PostgreSQL backend** when:
+- You already run PostgreSQL (or can add it).
+- You want zero-maintenance schema migrations (the library ships `v001_initial_schema.py` and future migrations).
+- Multi-tenant isolation via `tenant_key` is sufficient.
+
+The `OrchidChatStorage` ABC defines the full contract. Implement all methods — partial implementations will fail at runtime when the supervisor calls an unimplemented method.
+
+See [Persistence](/concepts/persistence) for the ABC reference and migration guide.
+
+## Observability
+
+**LangSmith tracing** is enabled by setting `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` in your environment. The `orchid-api` lifespan calls `setup_tracing()` automatically when these variables are present. Every graph run is traced end-to-end with agent names, tool calls, and token counts.
+
+**Structured logging** in `orchid-api` uses Python's standard `logging` module with JSON formatting in production. Set `LOG_LEVEL=DEBUG` to see per-request detail including auth context resolution and MCP capability cache hits/misses.
+
+**Correlation IDs** in `orchid-mcp` flow via `AsyncLocalStorage` — every log line emitted during an MCP tool call carries the same `correlationId` as the originating HTTP request. This makes cross-service tracing possible without a full distributed tracing stack.
+
+For production deployments, wire `orchid-mcp`'s OpenTelemetry exporter to your preferred backend (Jaeger, Honeycomb, Datadog). The OTEL instrumentation is opt-in via environment variables.
+
+## Anti-Patterns
+
+These patterns appear frequently in early Orchid integrations and cause subtle bugs in production.
+
+**Persisting augmented prompts.** When a user uploads a file, the framework prepends the file content to the prompt before sending it to the LLM. Save the *original* user message to chat history — not the augmented version. Storing augmented prompts bloats the history, leaks file content into future turns, and makes conversation summaries incoherent.
+
+**Hardcoding vendor names in framework code.** The supervisor's `assistant_name` and all user-facing strings must come from `agents.yaml` (`supervisor.assistant_name`). Never hardcode a platform or company name in `orchid/`, `orchid-api/`, `orchid-cli/`, `orchid-mcp/`, or `orchid-frontend/`. Use the `supervisor:` YAML section.
+
+**Bypassing `register_parser` / `register_strategy`.** Do not modify `PARSER_REGISTRY` or `STRATEGY_REGISTRY` directly from consumer code. Use the public registration functions. Direct mutation breaks the Open/Closed principle and will conflict with future framework versions that may replace the registry implementation.
+
+**Importing `litellm` at module level in consumer agents.** Use `self.summarise()` or `self._llm_service` for simple completions. Reserve direct `litellm` imports (inside methods, with a comment) for agentic tool-calling loops where you need the raw `tool_calls` response object.
+
+**Calling `extract_text()` more than once per document.** PDF and image parsing is expensive. Call `extract_text()` once, pass the result to both the prompt builder and `ingest_document(pre_extracted_text=...)`. Parsing twice doubles latency and cost for no benefit.
+
+See [Configuration](/configuration) for the full YAML reference and [Quickstart](/quickstart) for a working example that avoids all of the above.
+
+## Multi-LLM Provider Comparison
+
+Orchid routes all LLM calls through LiteLLM, so switching providers is a single YAML change. The table below summarises the practical trade-offs. **All numbers are approximate and sourced from provider documentation — verify current pricing before committing to a provider.**
+
+| Provider | Latency band | Cost ballpark (input/output per 1M tokens) | Tool-calling reliability | Context window |
+|---|---|---|---|---|
+| OpenAI GPT-4o | Low–medium | ~$2.50 / $10.00 ¹ | Excellent — native function calling | 128k tokens |
+| Anthropic Claude 3.5 Sonnet | Low–medium | ~$3.00 / $15.00 ² | Excellent — tool use API | 200k tokens |
+| Google Gemini 1.5 Pro | Medium | ~$1.25 / $5.00 ³ | Good — function calling | 1M tokens |
+| Ollama (local, llama3.2) | High (hardware-dependent) | Free | Good for 8B+; weaker on complex schemas | 128k tokens |
+| Groq (llama3-70b) | Very low | ~$0.59 / $0.79 ⁴ | Good | 8k tokens |
+
+¹ [OpenAI pricing](https://openai.com/api/pricing/) — verify current rates.  
+² [Anthropic pricing](https://www.anthropic.com/pricing) — verify current rates.  
+³ [Google AI pricing](https://ai.google.dev/pricing) — verify current rates.  
+⁴ [Groq pricing](https://groq.com/pricing/) — verify current rates.
+
+For production workloads, start with OpenAI or Anthropic for reliability, then benchmark Groq for latency-sensitive paths. Use Ollama for local development to avoid API costs during iteration.
+
+<Sources
+  files={[
+    "orchid/orchid_ai/rag/scopes.py",
+    "orchid/orchid_ai/agents/strategies.py",
+    "orchid/orchid_ai/persistence/base.py",
+    "orchid/AGENTS.md",
+    "orchid-mcp/AGENTS.md",
+    "orchid-api/AGENTS.md"
+  ]}
+  pages={[
+    "/concepts/rag",
+    "/concepts/mcp",
+    "/concepts/oauth",
+    "/concepts/tool-strategies",
+    "/concepts/embeddings",
+    "/concepts/persistence",
+    "/concepts/supervisor",
+    "/configuration"
+  ]}
+/>

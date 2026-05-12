@@ -1,0 +1,63 @@
+---
+title: "Embeddings"
+description: "Supported embedding models, dimension differences, and re-indexing requirements."
+package: "orchid"
+section: "concepts"
+order: 15
+tags: []
+sources:
+  - "orchid/orchid_ai/rag/embeddings.py"
+  - "orchid/AGENTS.md"
+  - "CLAUDE.md"
+related: ["/concepts/rag", "/concepts/multi-llm"]
+example: ""
+external:
+  - label: "HuggingFace MTEB leaderboard"
+    url: "https://huggingface.co/spaces/mteb/leaderboard"
+  - label: "OpenAI: text embeddings"
+    url: "https://platform.openai.com/docs/guides/embeddings"
+  - label: "Google: Gemini embeddings"
+    url: "PLACEHOLDER"
+---
+
+Orchid uses pluggable embedding models to convert documents and queries into dense vectors stored in Qdrant. The embedding model is configured once at the deployment level — all agents in a deployment share the same model and collection dimensions.
+
+## Supported models and dimensions
+
+| Model | Dimensions | Notes |
+|---|---|---|
+| `ollama/nomic-embed-text` | 768 | Local Ollama — default for the demo |
+| `text-embedding-3-small` | 1536 | OpenAI |
+| `gemini/gemini-embedding-001` | 3072 | Google |
+
+Set the embedding model in `orchid.yml`:
+
+```yaml
+defaults:
+  rag:
+    embedding_model: "ollama/nomic-embed-text"
+```
+
+Any LiteLLM-compatible embedding model string is accepted. The `LiteLLMEmbedder` in `orchid_ai/rag/embeddings.py` delegates the actual call to LiteLLM.
+
+<Callout variant="warning" title="Switching models requires re-indexing">
+Qdrant collections are created with a fixed vector dimension. If you change `embedding_model` after ingesting documents, the dimensions of new vectors will not match the existing collection and inserts will fail. Drop and recreate the collection, then re-index all documents from scratch.
+</Callout>
+
+## How embeddings are generated
+
+Embedding happens lazily inside `QdrantRepository.upsert()`. Documents passed to `ingest_document()` are chunked first, then embedded on the fly — you never need to call the embedder directly.
+
+On the retrieval side, the query string is embedded once per retrieval call and used to search all configured namespaces in parallel (domain namespace + `uploads`). Results are merged by score and the top-k are returned.
+
+## Hybrid search
+
+When `rag.retrieval.strategy: hybrid` is set, Orchid runs a dense vector search alongside a sparse (BM25 or SPLADE) pass and fuses the results with Reciprocal Rank Fusion. The sparse encoder is independent of the dense embedding model — you can pair any dense model with the built-in BM25 encoder without re-indexing the sparse index.
+
+## External reading
+
+- <ExternalLink href="https://huggingface.co/spaces/mteb/leaderboard">HuggingFace MTEB leaderboard — benchmark embedding models</ExternalLink>
+- <ExternalLink href="https://platform.openai.com/docs/guides/embeddings">OpenAI: text embeddings guide</ExternalLink>
+- <ExternalLink href="PLACEHOLDER">Google: Gemini embeddings API</ExternalLink>
+
+<Sources files={["orchid/orchid_ai/rag/embeddings.py", "orchid/AGENTS.md", "CLAUDE.md"]} />

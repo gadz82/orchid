@@ -1,0 +1,122 @@
+---
+title: "orchid-api"
+description: "FastAPI server exposing the Orchid framework over HTTP with SSE streaming."
+package: "orchid-api"
+section: "packages"
+order: 21
+tags: []
+sources:
+  - "orchid-api/README.md"
+  - "orchid-api/AGENTS.md"
+  - "orchid-api/orchid_api/main.py"
+  - "orchid-api/orchid_api/context.py"
+  - "orchid-api/orchid_api/auth.py"
+  - "orchid-api/orchid_api/settings.py"
+  - "orchid-api/orchid_api/tracing.py"
+related: ["/packages/orchid", "/packages/orchid-frontend", "/packages/orchid-mcp", "/configuration"]
+example: ""
+external: []
+---
+
+`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, and identity bridging. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface.
+
+## Installation and startup
+
+```bash
+pip install orchid-ai orchid-api
+ORCHID_CONFIG=orchid.yml uvicorn orchid_api.main:app --port 8000
+```
+
+For local development with hot-reload:
+
+```bash
+ORCHID_CONFIG=examples/basketball/orchid.yml uvicorn orchid_api.main:app --port 8000 --reload
+```
+
+## Router map
+
+Endpoints are split across domain-scoped routers. New endpoints always go into the appropriate router, never into `main.py`.
+
+### `chats` — Session CRUD
+
+`POST /chats` creates a new chat session. `GET /chats` lists sessions for the authenticated user. `DELETE /chats/{id}` removes a session and its messages. These are the lightweight bookkeeping operations; message content lives in the messages and streaming routers.
+
+### `messages` — Send and upload
+
+`POST /chats/{id}/messages` sends a message and returns the full assistant response (non-streaming, `multipart/form-data`). `POST /chats/{id}/upload` accepts a file upload and indexes it into the chat's RAG scope. `GET /chats/{id}/messages` returns the message history for a session.
+
+### `streaming` — SSE-streamed send
+
+`POST /chats/{id}/messages/stream` opens a Server-Sent Events stream and emits a rich event vocabulary: `assistant.delta` (token-by-token), `supervisor.routing_decision`, `mini_agent.{decomposed,started,finished,aggregated}`, `tool_call.requires_approval`, and `assistant.complete`. The frontend and `orchid-mcp` gateway both consume this endpoint.
+
+### `resume` — HITL approval
+
+`POST /chats/{id}/resume` resumes a graph that paused on a `requires_approval: true` tool call. The caller passes an approve or deny decision; the supervisor continues from the interrupt point.
+
+### `sharing` — Promote RAG scope
+
+`POST /chats/{id}/share` promotes chat-scoped RAG data to user scope, making it available across all chats for that user.
+
+### `session` — MCP cache warm-up
+
+`POST /session/warm` triggers proactive MCP capability warming for `passthrough` and `oauth` servers for the authenticated user. The frontend calls this once after login. See [MCP](/concepts/mcp).
+
+### `mcp_auth` — Outbound MCP OAuth
+
+`GET /mcp/auth/servers` lists OAuth-capable MCP servers and their per-user auth status. `GET /mcp/auth/servers/{name}/authorize` generates an authorization URL. `GET /mcp/auth/callback` handles the IdP redirect. `DELETE /mcp/auth/servers/{name}/token` revokes a stored token.
+
+### `auth_info`, `auth_exchange`, `auth_identity` — Identity bridging
+
+`GET /auth-info` advertises the deployment's auth posture. `POST /auth/exchange-code` and `POST /auth/refresh-token` perform server-side token exchange so `orchid-mcp` and frontends never hold `client_secret`. `POST /auth/resolve-identity` proxies upstream token resolution via the pluggable `OrchidIdentityResolver`.
+
+### `admin` — RAG indexing
+
+`POST /index` triggers document indexing for a given namespace. Used by admin scripts and the CLI when targeting a running API rather than running the library in-process.
+
+### `diagnostics` — Health check
+
+`GET /health` returns the API's readiness status. Used by container orchestrators and the `orchid-mcp` startup probe.
+
+## AppContext, lifespan, and identity resolution
+
+At startup the FastAPI lifespan function calls `lifecycle.setup_orchid()`, which:
+
+1. Loads `OrchidAgentsConfig` from `ORCHID_CONFIG`.
+2. Calls `build_graph()` to wire the LangGraph supervisor and agent nodes.
+3. Initialises the configured `OrchidChatStorage` backend.
+4. Warms MCP capability caches for all `auth.mode: none` servers.
+
+The result is stored in `AppContext` (`orchid_api/context.py`) as `app_ctx.orchid` — a single `Orchid` facade instance. All routers access it via `from ..context import app_ctx`. There are no module-level globals.
+
+Identity resolution is handled once per request by the `get_auth_context` FastAPI dependency in `auth.py`. It resolves the incoming Bearer token into an `OrchidAuthContext` using the operator-supplied `OrchidIdentityResolver` subclass (configured via `IDENTITY_RESOLVER_CLASS`). The resolved context flows through the entire request; no other code re-resolves or re-exchanges tokens.
+
+## Key environment variables
+
+See [Configuration](/configuration) for the full reference. The most commonly set variables:
+
+```bash
+# Core
+ORCHID_CONFIG=orchid.yml           # Path to agents.yaml / orchid.yml
+LITELLM_MODEL=openai/gpt-4o-mini   # Default LLM for all agents
+QDRANT_URL=http://qdrant:6333      # Vector store
+CHAT_DB_DSN=postgresql+asyncpg://user:pass@db:5432/orchid
+
+# Auth
+IDENTITY_RESOLVER_CLASS=myproject.identity.MyIdentityResolver
+DEV_AUTH_BYPASS=true               # Skip auth in local dev
+
+# LangSmith tracing (optional)
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=lsv2_…
+LANGCHAIN_PROJECT=orchid-dev
+```
+
+## LangSmith tracing
+
+Set `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` to enable LangSmith. All LangGraph traces — supervisor routing decisions, agent invocations, tool calls — will appear in your LangSmith project. The `tracing.py` module initialises this at startup with no code changes required.
+
+<Callout variant="best-practice" title="OrchidAuthContext is obtained once">
+The `get_auth_context` dependency in `auth.py` resolves the Bearer token exactly once per request. Routers receive a fully populated `OrchidAuthContext` and pass it downstream — they never call the identity resolver themselves, never initiate OAuth flows, and never re-read the Authorization header. This single-resolution pattern keeps auth logic in one place and avoids subtle double-resolution bugs.
+</Callout>
+
+<Sources files={["orchid-api/README.md", "orchid-api/AGENTS.md", "orchid-api/orchid_api/main.py", "orchid-api/orchid_api/context.py", "orchid-api/orchid_api/auth.py", "orchid-api/orchid_api/settings.py", "orchid-api/orchid_api/tracing.py"]} />

@@ -1,0 +1,38 @@
+---
+title: "Ecosystem Overview"
+description: "Five packages, one coherent framework: library, API, CLI, MCP gateway, and frontend."
+package: "cross-cutting"
+section: "ecosystem"
+order: 1
+tags: []
+sources: ["CLAUDE.md", "orchid/AGENTS.md", "orchid-api/AGENTS.md", "orchid-cli/AGENTS.md"]
+related: ["/quickstart", "/packages/orchid"]
+example: ""
+external: []
+---
+
+Orchid is delivered as five separable packages with a clear, one-direction dependency graph. Each package can be replaced or forked independently — the only coupling is the HTTP API contract between the server-side packages and their consumers.
+
+<EcosystemSplice variant="full" />
+
+## Package summary
+
+| Package | Kind | Depends on | Purpose |
+|---------|------|-----------|---------|
+| [orchid](/packages/orchid) | pip package | — | Core framework: ABCs, GenericAgent, LangGraph graph, RAG pipeline, document parsing, MCP client, chat persistence |
+| [orchid-api](/packages/orchid-api) | pip package | orchid (Python) | FastAPI server — REST and SSE streaming, auth, admin, diagnostics |
+| [orchid-cli](/packages/orchid-cli) | pip package | orchid (Python) | CLI tool — interactive chat, config validation, RAG indexing |
+| [orchid-frontend](/packages/orchid-frontend) | boilerplate | orchid-api (HTTP) | Next.js 15 multi-chat UI — forkable starting point |
+| [orchid-mcp](/packages/orchid-mcp) | boilerplate | orchid-api (HTTP) | MCP gateway — exposes Orchid agents to any MCP-capable host LLM |
+
+## Why this split?
+
+The library (`orchid`) contains only ABCs, the `GenericAgent` implementation, and framework infrastructure with no vendor or product coupling. It is installable as a standalone pip package so teams can build their own server, CLI, or integration on top of it without pulling in FastAPI, a specific auth system, or a frontend framework.
+
+`orchid-api` and `orchid-cli` are thin consumers. They import `orchid` as a Python dependency, add the runtime surface (HTTP routes, CLI commands, Docker entrypoints), and delegate all agent execution back to the framework library. Because the split is at the Python package boundary, the framework can be upgraded independently of the serving layer.
+
+`orchid-frontend` and `orchid-mcp` talk to `orchid-api` over HTTP only — they have no Python import dependency on the framework. This makes them portable boilerplate: fork either one, point it at any `orchid-api` deployment, and it works. The MCP gateway, in particular, is designed to be forked by integrators who want to expose Orchid agents inside their own MCP host infrastructure without touching the Python layer.
+
+---
+
+*Sources: root `CLAUDE.md`, `orchid/AGENTS.md`, `orchid-api/AGENTS.md`, `orchid-cli/AGENTS.md`*

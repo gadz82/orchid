@@ -1,0 +1,141 @@
+---
+title: "MCP Authentication Modes"
+description: "All three MCP auth modes in one example: none, passthrough, and OAuth 2.0 with dynamic client registration."
+package: "cross-cutting"
+section: "examples"
+order: 50
+tags: ["mcp", "oauth"]
+sources:
+  - examples/mcp-auth/orchid.yml
+  - examples/mcp-auth/agents.yaml
+related:
+  - /concepts/mcp
+  - /concepts/oauth
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The `mcp-auth` example deploys four agents, each connecting to MCP servers with a different authentication mode. `local-tools` uses no auth (suitable for local or trusted-network servers). `internal-api` forwards the graph's bearer token unchanged (`passthrough`). `crm-integration` triggers a full OAuth 2.0 flow with dynamic client registration (`oauth`). A fourth agent, `hybrid-agent`, connects to all three server types simultaneously. This example shows how Orchid handles credential discovery, token storage, and graceful degradation — all configured via a single `auth.mode` field per MCP server.
+
+## Run it
+
+Provide the three MCP server URLs as environment variables, then start the API:
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+LOCAL_MCP_URL=http://localhost:9001/mcp \
+  INTERNAL_MCP_URL=http://localhost:9002/mcp \
+  CRM_MCP_URL=https://crm.example.com/mcp \
+  ORCHID_CONFIG=examples/mcp-auth/orchid.yml \
+  uvicorn orchid_api.main:app --port 8000
+```
+
+Or via the CLI:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/mcp-auth/orchid.yml
+```
+
+## Configuration walkthrough
+
+`orchid.yml` configures the MCP OAuth token store and API base URL for callback construction:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/mcp-auth/agents.yaml
+
+llm:
+  model: ollama/llama3.2
+
+auth:
+  dev_bypass: true
+
+# MCP OAuth token storage (per-user, same DB as chat history)
+mcp_auth:
+  token_store_class: orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore
+  token_store_dsn: ~/.orchid/chats.db
+
+# Base URL used to build the OAuth redirect URI
+api:
+  base_url: http://localhost:8000
+```
+
+`agents.yaml` shows all three auth modes:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+supervisor:
+  assistant_name: "Multi-Auth Demo"
+
+agents:
+  local-tools:
+    description: "Agent using a local MCP server with no authentication."
+    mcp_servers:
+      - name: local-server
+        url: "${LOCAL_MCP_URL}"
+        tools: "*"
+        # auth omitted → defaults to mode: "none"
+
+  internal-api:
+    description: "Agent forwarding the platform bearer token to an internal MCP server."
+    mcp_servers:
+      - name: internal-platform
+        url: "${INTERNAL_MCP_URL}"
+        tools: "*"
+        auth:
+          mode: passthrough
+
+  crm-integration:
+    description: "Agent using OAuth with dynamic client registration for an external CRM."
+    mcp_servers:
+      - name: external-crm
+        url: "${CRM_MCP_URL}"
+        tools: "*"
+        auth:
+          mode: oauth
+          # No client_id, client_secret, or endpoints — the framework
+          # discovers them via RFC 9728 → 8414 → 7591 on first 401.
+
+  hybrid-agent:
+    description: "Agent connecting to all three server types simultaneously."
+    mcp_servers:
+      - name: local-utils
+        url: "${LOCAL_MCP_URL}"
+        tools: "*"
+      - name: platform-api
+        url: "${INTERNAL_MCP_URL}"
+        tools: "*"
+        auth:
+          mode: passthrough
+      - name: crm-tools
+        url: "${CRM_MCP_URL}"
+        tools: "*"
+        auth:
+          mode: oauth    # degraded gracefully if user hasn't authorized yet
+
+# ...truncated
+```
+
+## What to look for
+
+- `auth.mode: oauth` → no static `client_id` or endpoints in YAML; the framework follows `WWW-Authenticate: Bearer resource_metadata="…"` (RFC 9728), fetches AS metadata (RFC 8414), and dynamically registers a client (RFC 7591) on the first 401 from the MCP server.
+- `mcp_auth.token_store_class` → per-user OAuth tokens are stored in the same database as chat history; swap to a PostgreSQL store for production.
+- `api.base_url` → the OAuth redirect URI is `{base_url}/mcp/auth/callback`; must be reachable from the user's browser.
+- `auth` omitted on `local-server` → defaults to `mode: "none"`; no `Authorization` header is sent.
+- `hybrid-agent` with mixed auth modes → tools from all servers merge into a single tool list; if the user hasn't authorized the CRM, those tools are simply absent.
+
+## Related concepts
+
+- [MCP Integration](/concepts/mcp)
+- [OAuth & Dynamic Client Registration](/concepts/oauth)
+
+## Sources
+
+- examples/mcp-auth/orchid.yml
+- examples/mcp-auth/agents.yaml

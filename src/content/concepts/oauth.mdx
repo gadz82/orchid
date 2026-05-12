@@ -1,0 +1,89 @@
+---
+title: "OAuth & Dynamic Client Registration"
+description: "How auth.mode: oauth triggers RFC 9728 → 8414 → 7591 discovery and manages per-user tokens."
+package: "orchid"
+section: "concepts"
+order: 14
+tags: []
+sources:
+  - "orchid/orchid_ai/mcp/client.py"
+  - "orchid/orchid_ai/mcp/AGENTS.md"
+  - "orchid/orchid_ai/config/schema_mcp.py"
+  - "orchid/orchid_ai/core/mcp.py"
+  - "orchid-mcp/AGENTS.md"
+related: ["/concepts/mcp", "/packages/orchid-mcp"]
+example: "/examples/mcp-auth"
+external:
+  - label: "OAuth 2.1 draft"
+    url: "PLACEHOLDER"
+  - label: "RFC 6749: OAuth 2.0 Authorization Framework"
+    url: "https://datatracker.ietf.org/doc/html/rfc6749"
+  - label: "Auth0: OAuth 2.0 overview"
+    url: "PLACEHOLDER"
+---
+
+When an MCP server requires its own OAuth flow — separate from the identity that authenticated with Orchid — set `auth.mode: oauth` in `agents.yaml`. The framework handles the entire discovery and token lifecycle automatically.
+
+## The passthrough vs oauth distinction
+
+Both modes attach auth credentials to MCP calls, but they draw those credentials from different sources:
+
+| Mode | Where the token comes from |
+|------|---------------------------|
+| `passthrough` | The graph's `OrchidAuthContext` bearer token — obtained **once** at the API entry point via `OrchidIdentityResolver` and threaded through the graph state |
+| `oauth` | A per-user, per-MCP-server token stored in `OrchidMCPTokenStore` — resolved independently of the graph auth |
+
+Use `passthrough` when the MCP server shares your identity provider. Use `oauth` when the MCP server has its own independent OAuth server.
+
+## Discovery on first 401
+
+When `auth.mode: oauth` is configured and a tool call hits the server for the first time, the sequence is:
+
+```
+agent calls tool
+  → MCP server returns 401 + WWW-Authenticate: Bearer resource_metadata="…"
+  → RFC 9728: fetch Protected Resource Metadata → names the auth server
+  → RFC 8414: fetch Authorization Server Metadata → endpoints + grant types
+  → RFC 7591: POST Dynamic Client Registration → receive client_id (+ optional client_secret)
+  → persist OrchidMCPClientRegistration (endpoints + DCR credentials, one row per MCP server)
+  → raise OrchidMCPAuthRequiredError to the agent boundary
+  → orchid-api /mcp/auth/* routes drive the browser OAuth dance
+  → per-user access + refresh tokens stored in OrchidMCPTokenStore
+```
+
+Subsequent calls resolve the token from `OrchidMCPTokenStore` and auto-refresh using the stored credentials — no re-discovery required.
+
+## Token and registration stores
+
+| Store | Contents | Scope |
+|---|---|---|
+| `OrchidMCPTokenStore` | Per-user access + refresh tokens | One row per `(user_id, server_name)` |
+| `OrchidMCPClientRegistrationStore` | Discovered endpoints + DCR credentials | One row per MCP server (shared across all users) |
+
+Both ABCs live in `orchid_ai/core/mcp.py`. SQLite and PostgreSQL implementations ship in `orchid_ai/persistence/`.
+
+## No credentials in YAML
+
+The MCP 2025-03-26 authorization model is zero-config by design. The only field in `agents.yaml` is:
+
+```yaml
+mcp_servers:
+  - name: external-crm
+    url: https://crm.example.com/mcp
+    auth:
+      mode: oauth
+```
+
+No `client_id`, `client_secret`, `authorization_endpoint`, or `token_endpoint`. The authorization server **must** advertise RFC 7591 dynamic client registration. If it doesn't, seed `OrchidMCPClientRegistrationStore` with the pre-known endpoints and credentials before first use.
+
+## OrchidAuthContext entry point
+
+`OrchidAuthContext` — the graph's identity token — is resolved **once** per HTTP request by `OrchidIdentityResolver` at the API entry point. It flows through the entire LangGraph state unchanged. MCP servers with `auth.mode: passthrough` receive its `bearer_header`; MCP servers with `auth.mode: oauth` bypass it entirely and use their own per-user token.
+
+## External reading
+
+- <ExternalLink href="PLACEHOLDER">OAuth 2.1 draft</ExternalLink>
+- <ExternalLink href="https://datatracker.ietf.org/doc/html/rfc6749">RFC 6749: The OAuth 2.0 Authorization Framework</ExternalLink>
+- <ExternalLink href="PLACEHOLDER">Auth0: OAuth 2.0 overview</ExternalLink>
+
+<Sources files={["orchid/orchid_ai/mcp/client.py", "orchid/orchid_ai/mcp/AGENTS.md", "orchid/orchid_ai/config/schema_mcp.py", "orchid/orchid_ai/core/mcp.py", "orchid-mcp/AGENTS.md"]} />

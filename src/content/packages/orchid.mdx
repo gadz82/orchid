@@ -1,0 +1,157 @@
+---
+title: "orchid"
+description: "The core Python library: ABCs, agents, graph builder, RAG, and persistence."
+package: "orchid"
+section: "packages"
+order: 20
+tags: []
+sources:
+  - "orchid/README.md"
+  - "orchid/AGENTS.md"
+  - "orchid/orchid_ai/core/agent.py"
+  - "orchid/orchid_ai/core/state.py"
+  - "orchid/orchid_ai/core/identity.py"
+  - "orchid/orchid_ai/core/mcp.py"
+  - "orchid/orchid_ai/core/repository.py"
+  - "orchid/orchid_ai/persistence/base.py"
+related: ["/packages/orchid-api", "/packages/orchid-cli", "/concepts/agents"]
+example: ""
+external: []
+---
+
+`orchid-ai` is the distributable Python library at the heart of the Orchid framework. It provides the abstract base classes, the LangGraph graph builder, the hierarchical RAG pipeline, and pluggable chat persistence — everything your agents and consumers need, with no API server, no CLI, and no vendor-specific code. Deploy it anywhere Python runs.
+
+## Installation
+
+```bash
+pip install orchid-ai
+
+# PostgreSQL storage (optional — SQLite is the default)
+pip install "orchid-ai[postgres]"
+```
+
+## Module map
+
+### `core/`
+
+Pure Python abstractions with zero external dependencies beyond the standard library. Every other module in the package depends on `core/` — never the reverse. This is where the ABCs live: `OrchidAgent`, `OrchidIdentityResolver`, `OrchidMCPClient`, and the vector-store interfaces. See [Agents](/concepts/agents) and [Persistence](/concepts/persistence).
+
+### `agents/`
+
+`GenericAgent` — the concrete, YAML-driven agent — and its three collaborators: `SkillDetector` (skill matching), `MCPDispatcher` (MCP tool routing), and `SkillExecutor` (multi-step skill pipelines). Most deployments never need to subclass `GenericAgent`; the YAML surface covers the common case. See [Agents](/concepts/agents) and [Tool Strategies](/concepts/tool-strategies).
+
+### `graph/`
+
+LangGraph wiring: `build_graph()` factory, the supervisor node, and state definitions. The graph is assembled once at startup from `OrchidAgentsConfig` and reused for every request. See [Supervisor](/concepts/supervisor).
+
+### `config/`
+
+YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`) validated by Pydantic, plus the tool-parameter registry. Use `load_config(path)` to load and validate `agents.yaml`.
+
+### `rag/`
+
+Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and the Qdrant backend. All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through Qdrant-specific imports outside `rag/backends/`. See [RAG](/concepts/rag).
+
+### `persistence/`
+
+`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) and PostgreSQL (`OrchidPostgresChatStorage`) implementations. Also contains the outbound MCP OAuth token stores and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
+
+### `documents/`
+
+File parsing pipeline: PDF (PyMuPDF), DOCX, XLSX, CSV, and image (via vision LLM). All parsers follow the parse-once pattern — call `extract_text()` once and pass the result to both the prompt builder and `ingest_document(pre_extracted_text=...)`. See [Document Parsing](/concepts/document-parsing).
+
+### `mcp/`
+
+`StreamableHttpMCPClient` — the concrete MCP client that implements the three auth modes (`none`, `passthrough`, `oauth`) and drives capability caching via `OrchidSessionWarmer`. See [MCP](/concepts/mcp).
+
+## Public ABCs
+
+| ABC | Module | Purpose |
+|-----|--------|---------|
+| `OrchidAgent` | `core.agent` | Agent identity + `run()`, `summarise()`, `fetch_rag_context()`, `extract_conversation_history()` |
+| `OrchidIdentityResolver` | `core.identity` | Bearer token → `OrchidAuthContext` (pluggable per deployment) |
+| `OrchidMCPToolCaller` | `core.mcp` | Call MCP tools (narrow interface — tool handlers depend on this) |
+| `OrchidMCPDiscoverable` | `core.mcp` | Discover MCP server capabilities (separate from tool-calling) |
+| `OrchidVectorReader` | `core.repository` | Vector store retrieval (agents depend on this only) |
+| `OrchidVectorWriter` | `core.repository` | Vector store indexing (indexers depend on this only) |
+| `OrchidVectorStoreAdmin` | `core.repository` | Collection management (admin operations only) |
+| `OrchidChatStorage` | `persistence.base` | Chat session + message CRUD |
+
+## Writing a custom agent
+
+When YAML alone isn't enough, subclass `OrchidAgent` in your consumer project and reference it by dotted import path in `agents.yaml`:
+
+```python
+from __future__ import annotations
+
+from orchid_ai.core.agent import OrchidAgent
+from orchid_ai.core.state import OrchidAgentState
+
+
+class CatalogAgent(OrchidAgent):
+    @property
+    def name(self) -> str:
+        return "catalog"
+
+    @property
+    def description(self) -> str:
+        return "Searches the product catalog and answers inventory questions."
+
+    async def run(self, state: OrchidAgentState) -> dict:
+        query = self.extract_user_query(state)
+        history = self.extract_conversation_history(state)
+
+        # Retrieve relevant catalog chunks
+        rag_context = await self.fetch_rag_context(query, scope=self._rag_scope(state))
+
+        # Synthesise a response using the injected LLM
+        response = await self.summarise(
+            query,
+            rag_data=rag_context,
+            conversation_history=history,
+        )
+        return {"messages": [response]}
+```
+
+Wire it up in `agents.yaml`:
+
+```yaml
+agents:
+  catalog:
+    class: myproject.agents.catalog.CatalogAgent
+    description: "Searches the product catalog and answers inventory questions."
+    prompt: "You are a catalog specialist..."
+    rag_namespace: catalog
+```
+
+The framework resolves the class at startup via `importlib`. The agent inherits `summarise()`, `fetch_rag_context()`, `extract_user_query()`, and `extract_conversation_history()` from the base class — override only what you need.
+
+<Callout variant="info" title="core/ has zero external dependencies">
+`orchid_ai/core/` imports only the Python standard library and `langchain-core` (for `Document` and message types). Concrete implementations — Qdrant, asyncpg, litellm — live in `rag/backends/`, `persistence/`, and `agents/` respectively. This boundary is enforced: adding any external import to `core/` is an architectural bug.
+</Callout>
+
+## LLM configuration
+
+Orchid uses LangChain's `BaseChatModel` as its LLM abstraction. The `build_chat_model(model_string)` factory creates one from a LiteLLM-style model string, supporting OpenAI, Anthropic, Google Gemini, Groq, and Ollama out of the box. The model is configured per-agent in `agents.yaml`:
+
+```yaml
+agents:
+  search:
+    llm:
+      model: "openai/gpt-4o-mini"
+      temperature: 0.1
+```
+
+See [Multi-LLM support](/concepts/multi-llm) for the full provider matrix.
+
+## Running tests
+
+```bash
+cd orchid
+source .venv/bin/activate
+pytest tests/ -x
+ruff check orchid_ai/
+ruff format orchid_ai/
+```
+
+<Sources files={["orchid/README.md", "orchid/AGENTS.md", "orchid/orchid_ai/core/agent.py", "orchid/orchid_ai/core/state.py", "orchid/orchid_ai/core/identity.py", "orchid/orchid_ai/core/mcp.py", "orchid/orchid_ai/core/repository.py", "orchid/orchid_ai/persistence/base.py"]} />

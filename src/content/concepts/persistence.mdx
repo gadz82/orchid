@@ -1,0 +1,81 @@
+---
+title: "Chat Persistence"
+description: "OrchidChatStorage ABC, built-in PostgreSQL and SQLite backends, and pluggable custom backends."
+package: "orchid"
+section: "concepts"
+order: 17
+tags: []
+sources:
+  - "orchid/orchid_ai/persistence/base.py"
+  - "orchid/orchid_ai/persistence/AGENTS.md"
+  - "orchid/AGENTS.md"
+related: ["/concepts/agents", "/examples/custom-storage"]
+example: "/examples/custom-storage"
+external: []
+---
+
+Orchid persists chat sessions and messages through the `OrchidChatStorage` ABC. The library ships two built-in backends; consumers can supply their own by pointing `storage.class` at any importable subclass.
+
+## OrchidChatStorage interface
+
+```python
+class OrchidChatStorage(ABC):
+    async def init_db(self) -> None          # open connection + run migrations
+    async def close(self) -> None
+
+    async def create_chat(tenant_id, user_id, title) -> OrchidChatSession
+    async def list_chats(tenant_id, user_id)  -> list[OrchidChatSession]
+    async def get_chat(chat_id)               -> OrchidChatSession | None
+    async def delete_chat(chat_id)            -> None   # cascades to messages
+    async def update_title(chat_id, title)    -> None
+    async def mark_shared(chat_id)            -> None
+
+    async def add_message(chat_id, role, content, agents_used, metadata) -> OrchidChatMessage
+    async def get_messages(chat_id, limit, offset) -> list[OrchidChatMessage]
+```
+
+The API layer depends only on this interface — swapping the backend requires no code changes in routers or agents.
+
+## Built-in backends
+
+| Class | Driver | When to use |
+|---|---|---|
+| `OrchidSQLiteChatStorage` | `aiosqlite` | Local development, single-process demos |
+| `OrchidPostgresChatStorage` | `asyncpg` | Production, multi-worker deployments |
+
+Configure via `orchid.yml`:
+
+```yaml
+storage:
+  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  dsn: postgresql://user:pass@host:5432/db
+```
+
+## Custom backends
+
+Subclass `OrchidChatStorage` in your own project and reference it by dotted import path:
+
+```yaml
+storage:
+  class: myproject.storage.mysql.MySQLChatStorage
+  dsn: mysql+asyncmy://user:pass@host:3306/db
+```
+
+The factory resolves the class at startup via `importlib`. The constructor must accept `*, dsn: str`.
+
+## Migrations
+
+The migration system uses versioned modules named `v{NNN}_{description}.py` (e.g. `v001_initial_schema.py`). Each module exposes `VERSION`, `up(conn, *, dialect)`, and `down(conn, *, dialect)`. `OrchidMigrationRunner` runs framework migrations first, then integrator migrations from `extra_migrations_package` — recorded with an `"ext:"` prefix to avoid collisions.
+
+```yaml
+storage:
+  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  dsn: postgresql://...
+  extra_migrations_package: myapp.migrations
+```
+
+<Callout variant="info" title="Persist original messages only">
+Always save the original user message to chat history — not the version with file content prepended. Prepending extracted text to the user message is a prompt augmentation pattern for the current LLM call. Persisting that augmented string would cause the stored message to be significantly longer, wasteful to re-load, and misleading if the underlying document changes.
+</Callout>
+
+<Sources files={["orchid/orchid_ai/persistence/base.py", "orchid/orchid_ai/persistence/AGENTS.md", "orchid/AGENTS.md"]} />

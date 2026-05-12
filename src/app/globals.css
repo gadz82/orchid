@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@plugin "@tailwindcss/typography";
+
+/* ── Orchid Dark Theme ───────────────────────────────────── */
+:root {
+    --orchid-bg: #0D0B11;
+    --orchid-surface: #161322;
+    --orchid-card: #1E1A2C;
+    --orchid-accent: #B06AB3;
+    --orchid-accent-hover: #C87ECB;
+    --orchid-accent-glow: #D490D7;
+    --orchid-text: #E8E0F0;
+    --orchid-muted: #7E7394;
+    --orchid-border: #2A2440;
+    --orchid-user-bubble: #2D2547;
+    --orchid-assistant-bubble: #1A1628;
+    --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+    --shadow-glow: 0 0 20px rgba(176, 106, 179, 0.15);
+}
+
+/* ── Tailwind v4 theme inline ──────────────────────────────── */
+@theme inline {
+    --color-orchid-bg: var(--orchid-bg);
+    --color-orchid-surface: var(--orchid-surface);
+    --color-orchid-card: var(--orchid-card);
+    --color-orchid-accent: var(--orchid-accent);
+    --color-orchid-accent-hover: var(--orchid-accent-hover);
+    --color-orchid-accent-glow: var(--orchid-accent-glow);
+    --color-orchid-text: var(--orchid-text);
+    --color-orchid-dark: var(--orchid-text);
+    --color-orchid-muted: var(--orchid-muted);
+    --color-orchid-border: var(--orchid-border);
+    --color-orchid-user-bubble: var(--orchid-user-bubble);
+    --color-orchid-assistant-bubble: var(--orchid-assistant-bubble);
+    --shadow-card: var(--shadow-card);
+    --shadow-glow: var(--shadow-glow);
+    --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* ── Base ──────────────────────────────────────────────────── */
+body {
+    background: var(--orchid-bg);
+    color: var(--orchid-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar styling ─────────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--orchid-border);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--orchid-muted);
+}
+
+/* ── Selection ─────────────────────────────────────────────── */
+::selection {
+    background: rgba(176, 106, 179, 0.3);
+    color: var(--orchid-text);
+}

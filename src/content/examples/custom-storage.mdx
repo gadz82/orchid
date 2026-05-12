@@ -1,0 +1,102 @@
+---
+title: "Custom Storage Backend"
+description: "Plug in a custom OrchidChatStorage subclass via the storage.class field."
+package: "cross-cutting"
+section: "examples"
+order: 60
+tags: ["persistence"]
+sources:
+  - examples/custom-storage/orchid.yml
+  - examples/custom-storage/agents.yaml
+related:
+  - /concepts/persistence
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The `custom-storage` example shows how to replace Orchid's built-in PostgreSQL or SQLite backends with any `OrchidChatStorage` subclass — in this case a JSON-file backend. The framework resolves the class at startup via dotted import path, calls its constructor with `dsn=` and `extra_migrations_package=`, and uses it for all chat session and message persistence. The agent itself is a trivial echo so the demo keeps focus on the storage layer.
+
+## Run it
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/custom-storage/orchid.yml \
+  uvicorn orchid_api.main:app --port 8000
+```
+
+Or via the CLI:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/custom-storage/orchid.yml
+```
+
+After sending a few messages, inspect `/data/custom_storage_chats.json` to see the persisted sessions.
+
+## Configuration walkthrough
+
+`orchid.yml` is minimal — the only non-default setting is `storage.class`:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/custom-storage/agents.yaml
+
+llm:
+  model: ollama/llama3.2
+
+auth:
+  dev_bypass: true
+
+storage:
+  class: examples.custom-storage.storage.json_file.OrchidJSONChatStorage
+  dsn: /data/custom_storage_chats.json
+  # extra_migrations_package is optional; JSON backend ignores it.
+
+tracing:
+  langsmith_tracing: false
+```
+
+`agents.yaml` defines a single echo agent — its only purpose is generating chat history for the storage backend to persist:
+
+```yaml
+# agents.yaml
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+  rag:
+    enabled: false
+
+agents:
+  echo:
+    description: "Demo agent that confirms messages and reminds the user about JSON persistence."
+    prompt: |
+      You are a friendly demo assistant. Acknowledge the user's message
+      in one short sentence and remind them that the chat is being
+      persisted to a JSON file by the custom storage backend.
+    tools: []
+    execution_hints:
+      parallel_safe: true
+```
+
+## What to look for
+
+- `storage.class: examples.custom-storage.storage.json_file.OrchidJSONChatStorage` → any class on the Python path that subclasses `OrchidChatStorage` can be plugged in here; the framework calls `__init__(dsn=..., extra_migrations_package=...)`.
+- `storage.dsn` → passed as a keyword argument to the constructor; interpretation is entirely up to the backend (file path, connection string, etc.).
+- The JSON backend intentionally ignores `extra_migrations_package` → the ABC declares this kwarg but implementations are free to no-op it.
+- Run `orchid chat list --config examples/custom-storage/orchid.yml` after a session to verify the backend surfaced saved sessions correctly.
+
+## Related concepts
+
+- [Chat Persistence](/concepts/persistence)
+
+## Sources
+
+- examples/custom-storage/orchid.yml
+- examples/custom-storage/agents.yaml
+- examples/custom-storage/storage/json_file.py
