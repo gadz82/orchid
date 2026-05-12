@@ -11,7 +11,7 @@ name: Deploy orchid-website to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [gh-pages]
   workflow_dispatch:
 
 permissions:
