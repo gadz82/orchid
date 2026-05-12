@@ -38,30 +38,24 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Configure Pages
-        id: pages
-        uses: actions/configure-pages@v5
-        with:
-          # Tells configure-pages this is a Next.js static export; it computes
-          # the right base_path for project pages (e.g. /orchid).
-          static_site_generator: next
-          # enablement: true makes the action POST to /repos/{owner}/{repo}/pages
-          # with build_type=workflow. This both enables Pages on the repo (if it
-          # is not already) and switches Source to "GitHub Actions" — eliminating
-          # the manual UI step and the cryptic
-          #   "TypeError: error must be an instance of Error"
-          # that surfaces from this action when Pages is off or set to branch
-          # source. Requires `pages: write` permission, already declared above.
-          enablement: true
+      # NOTE: actions/configure-pages is intentionally not used here.
+      # On this repository it consistently fails with the cryptic
+      #   "TypeError: error must be an instance of Error"
+      # which masks an underlying error in the Pages REST API call
+      # (private-repo plan limits / org policy / etc).
+      #
+      # Workaround: enable Pages manually once via
+      #   Settings → Pages → Source = "GitHub Actions"
+      # then hardcode BASE_PATH below. For gadz82/orchid the site is served at
+      # https://gadz82.github.io/orchid/, so BASE_PATH is "/orchid".
+      # If you ever rename the repo, update BASE_PATH accordingly.
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build (next export + pagefind)
         env:
-          # next.config.mjs reads process.env.BASE_PATH and applies it to both
-          # basePath and assetPrefix. For gadz82/orchid this resolves to "/orchid".
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          BASE_PATH: /orchid
         run: npm run build
 
       - name: Upload Pages artifact
