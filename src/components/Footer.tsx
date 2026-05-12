@@ -13,12 +13,9 @@ export default function Footer() {
           <Link href={siteConfig.contactUrl} className="hover:text-orchid-text transition-colors">
             Contact
           </Link>
-          <a
-            href={`mailto:${siteConfig.contactEmail}`}
-            className="hover:text-orchid-text transition-colors"
-          >
-            {siteConfig.contactEmail}
-          </a>
+          <ExternalLink href={siteConfig.linkedinUrl} className="hover:text-orchid-text transition-colors">
+            LinkedIn
+          </ExternalLink>
         </div>
         <div className="shrink-0">
           Licensed under{' '}

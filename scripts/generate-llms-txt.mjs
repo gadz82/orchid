@@ -12,7 +12,9 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = join(__dirname, '..');
 const CONTENT_DIR = join(ROOT, 'src', 'content');
 const PUBLIC_DIR = join(ROOT, 'public');
-const BASE_URL = 'https://orchid.example.com';
+// Canonical site URL used to build absolute URLs in llms.txt / llms-full.txt.
+// Kept in sync with scripts/generate-sitemap.mjs and siteConfig.siteUrl.
+const BASE_URL = 'https://gadz82.github.io/orchid';
 
 mkdirSync(PUBLIC_DIR, { recursive: true });
 

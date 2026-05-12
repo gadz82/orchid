@@ -17,6 +17,8 @@ example: "/examples/mcp-auth"
 external: []
 ---
 
+<RepoLink package="orchid-mcp" />
+
 `orchid-mcp` is a **fork-and-deploy boilerplate**, not a published npm package. It is a TypeScript/Node.js MCP gateway that exposes your Orchid deployment to any MCP-capable host LLM — Claude Desktop, Claude Code, Cursor, or anything that speaks the MCP 2025-03-26 Streamable HTTP transport. Clone the source, configure a handful of environment variables, and any host LLM can call `orchid_ask(...)` as naturally as a built-in tool.
 
 The gateway is intentionally thin: it owns MCP transport, identity resolution, session mapping, and HTTP translation. It never duplicates framework logic. All agent routing, RAG retrieval, tool execution, and HITL approvals happen upstream in `orchid-api`.

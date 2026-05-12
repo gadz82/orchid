@@ -384,7 +384,7 @@
   {
     "route": "/contact",
     "title": "Contact",
-    "description": "Get in touch with the Orchid team or open an issue on GitHub.",
+    "description": "Get in touch with the Orchid maintainer or open an issue on GitHub.",
     "package": "cross-cutting",
     "section": "meta",
     "tags": [

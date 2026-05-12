@@ -12,7 +12,10 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = join(__dirname, '..');
 const CONTENT_DIR = join(ROOT, 'src', 'content');
 const PUBLIC_DIR = join(ROOT, 'public');
-const BASE_URL = 'https://orchid.example.com';
+// Canonical site URL used to build absolute <loc> entries in sitemap.xml.
+// Mirrors siteConfig.siteUrl (the file lives in TS so we can't import here).
+// Trailing slash is intentionally omitted — paths joined below already start with "/".
+const BASE_URL = 'https://gadz82.github.io/orchid';
 
 mkdirSync(PUBLIC_DIR, { recursive: true });
 

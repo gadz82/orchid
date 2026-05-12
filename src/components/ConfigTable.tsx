@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import rawSchema from '@/data/config-schema.json';
 import rawPractices from '@/data/config-best-practices.json';
 
@@ -183,13 +184,15 @@ export default function ConfigTable({ file }: Props) {
                           if (!route) return null;
                           const label = route.split('/').pop() ?? ex;
                           return (
-                            <a
+                            // next/link prepends basePath (/orchid on GH Pages)
+                            // so the badge points to /orchid/examples/* not /examples/*.
+                            <Link
                               key={ex}
                               href={route}
                               className="inline-block rounded bg-orchid-accent/10 px-1.5 py-0.5 text-xs font-medium text-orchid-accent hover:bg-orchid-accent/20 transition-colors"
                             >
                               {label}
-                            </a>
+                            </Link>
                           );
                         })}
                       </div>
