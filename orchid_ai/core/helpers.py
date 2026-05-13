@@ -52,47 +52,44 @@ def extract_conversation_history(
     to ``max_turns`` exchange pairs.
     """
     messages = state.get("messages", [])
+    if not messages:
+        return []
+
     history: list[dict[str, str]] = []
-    max_messages = max_turns * 2
+    for msg in messages:
+        msg_type = getattr(msg, "type", None) or type(msg).__name__.lower()
+        content = str(msg.content) if hasattr(msg, "content") else str(msg)
 
-    # Skip the last HumanMessage (current query — added separately)
-    end_idx = len(messages)
-    for i in range(len(messages) - 1, -1, -1):
-        msg = messages[i]
-        if hasattr(msg, "type") and msg.type == "human":
-            end_idx = i
-            break
-        if type(msg).__name__ == "HumanMessage":
-            end_idx = i
-            break
-
-    for msg in messages[:end_idx]:
-        content = str(getattr(msg, "content", "")).strip()
-        if not content:
+        if not content.strip():
             continue
 
-        is_human = (hasattr(msg, "type") and msg.type == "human") or type(msg).__name__ == "HumanMessage"
-        is_ai = (hasattr(msg, "type") and msg.type == "ai") or type(msg).__name__ == "AIMessage"
+        # Skip internal messages (e.g. supervisor routing)
+        if any(content.startswith(prefix) for prefix in skip_prefixes):
+            continue
 
-        if is_human:
-            if max_chars and len(content) > max_chars:
-                content = content[:max_chars] + "\u2026"
+        if msg_type in ("human", "humanmessage"):
+            if max_chars is not None and len(content) > max_chars:
+                content = content[:max_chars] + "…"
             history.append({"role": "user", "content": content})
-
-        elif is_ai:
-            # Skip internal supervisor messages
-            if any(content.startswith(prefix) for prefix in skip_prefixes):
-                continue
-            # Strip agent name prefixes from content
+        elif msg_type in ("ai", "aimessage"):
             for prefix in strip_prefixes:
                 if content.startswith(prefix):
-                    content = content[len(prefix) :].strip()
+                    content = content[len(prefix) :]
                     break
-            if max_chars and len(content) > max_chars:
-                content = content[:max_chars] + "\u2026"
+            if max_chars is not None and len(content) > max_chars:
+                content = content[:max_chars] + "…"
             history.append({"role": "assistant", "content": content})
 
-    return history[-max_messages:]
+    # Drop the last user message — it will be added separately as the current query
+    if history and history[-1]["role"] == "user":
+        history = history[:-1]
+
+    # Keep only the most recent turns to avoid exceeding context limits
+    max_messages = max_turns * 2
+    if len(history) > max_messages:
+        history = history[-max_messages:]
+
+    return history
 
 
 # ── Conversation history compression ───────────────────────────
@@ -129,7 +126,7 @@ async def compress_conversation_history(
             temperature=0.0,
         )
         summary_text = result.content or ""
-    except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+    except Exception as exc:
         logger.warning("History compression failed (%s), falling back to truncation", exc)
         return recent
 

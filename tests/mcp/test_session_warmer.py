@@ -19,7 +19,7 @@ from orchid_ai.config.schema import (
     OrchidMCPAuthConfig,
     OrchidMCPServerConfig,
 )
-from orchid_ai.core.mcp import OrchidMCPAuthRequiredError, OrchidMCPClient, OrchidMCPToolResult
+from orchid_ai.core.mcp import OrchidCacheableMCPClient, OrchidMCPAuthRequiredError, OrchidMCPToolResult
 from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.mcp.inventory import OrchidMCPServerInventory
 from orchid_ai.mcp.session_warmer import OrchidSessionWarmer, OrchidWarmReport
@@ -28,7 +28,7 @@ from orchid_ai.mcp.session_warmer import OrchidSessionWarmer, OrchidWarmReport
 # ── Test doubles ────────────────────────────────────────────────
 
 
-class _FakeMCPClient(OrchidMCPClient):
+class _FakeMCPClient(OrchidCacheableMCPClient):
     def __init__(
         self,
         url: str,

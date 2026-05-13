@@ -38,6 +38,25 @@ class NullVectorReader(OrchidVectorReader):
     ) -> list[OrchidSearchResult]:
         return []
 
+    async def retrieve_sparse(
+        self,
+        query: str,
+        namespace: str,
+        k: int = 5,
+        scope: OrchidRAGScope | None = None,
+        metadata_filters: dict[str, Any] | None = None,
+    ) -> list[OrchidSearchResult]:
+        return []
+
+    async def lookup_cached_tool_results(
+        self,
+        tool_name: str,
+        namespace: str,
+        scope: OrchidRAGScope | None = None,
+        max_age_seconds: int = 3600,
+    ) -> list[OrchidSearchResult]:
+        return []
+
 
 class NullDocStore(OrchidDocStore):
     """No-op doc store — accepts writes silently and returns nothing on read.

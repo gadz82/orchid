@@ -80,3 +80,23 @@ class OrchidMCPClient(OrchidMCPToolCaller, OrchidMCPDiscoverable, ABC):
     """
 
     pass
+
+
+class OrchidCacheableMCPClient(OrchidMCPClient, ABC):
+    """MCP client that supports proactive capability-cache warming.
+
+    Implementations (e.g. :class:`StreamableHttpMCPClient`) may
+    discover capabilities once and serve them from an in-memory
+    cache for the process lifetime.  This ABC formalises the
+    contract needed by :class:`OrchidSessionWarmer`.
+    """
+
+    @abstractmethod
+    def invalidate_cache(self) -> None:
+        """Force re-discovery of capabilities on the next call."""
+        ...
+
+    @abstractmethod
+    async def warm_cache(self, auth: OrchidAuthContext) -> None:
+        """Pre-populate the capabilities cache with the given auth context."""
+        ...

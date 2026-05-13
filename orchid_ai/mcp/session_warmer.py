@@ -171,12 +171,13 @@ class OrchidSessionWarmer:
 
     @staticmethod
     def _invalidate(client: OrchidMCPClient) -> None:
-        invalidator = getattr(client, "invalidate_cache", None)
-        if callable(invalidator):
-            try:
-                invalidator()
-            except Exception as exc:
-                logger.warning("[OrchidSessionWarmer] invalidate_cache raised: %s", exc)
+        from ..core.mcp import OrchidCacheableMCPClient
+
+        try:
+            if isinstance(client, OrchidCacheableMCPClient):
+                client.invalidate_cache()
+        except Exception as exc:
+            logger.warning("[OrchidSessionWarmer] invalidate_cache raised: %s", exc)
 
     async def _warm_one_entry(
         self,
