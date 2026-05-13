@@ -241,6 +241,114 @@ def route_to_agents(state: GraphState) -> list[Send] | str:
 # ── Routing phase ────────────────────────────────────────────
 
 
+# ── Routing helpers ────────────────────────────────────────────
+
+
+def _inject_auth_hints(state: GraphState) -> str:
+    """Build an auth-status hint string for the routing system prompt.
+
+    When MCP servers require OAuth tokens that are not yet available,
+    the supervisor should know which agents are degraded so it can
+    route around them.
+    """
+    mcp_auth_status = state.get("mcp_auth_status", {})
+    unauthorized = [name for name, ok in mcp_auth_status.items() if not ok]
+    if not unauthorized:
+        return ""
+    return (
+        f"\n\nNOTE: The following external services require user authorization "
+        f"and are currently unavailable: {', '.join(unauthorized)}. "
+        f"Agents that depend solely on these services may have limited capabilities."
+    )
+
+
+async def _extract_and_compress_history(
+    state: GraphState,
+    sup: OrchidSupervisorConfig,
+    chat_model: BaseChatModel | None = None,
+) -> list[dict[str, str]]:
+    """Extract conversation history, optionally compressing older turns."""
+    history = OrchidAgent.extract_conversation_history(
+        state,
+        max_turns=sup.history_max_turns,
+        max_chars=sup.history_max_chars,
+    )
+    if history and sup.history_summary_enabled and chat_model:
+        history = await OrchidAgent.compress_conversation_history(
+            history,
+            chat_model=chat_model,
+            recent_turns=sup.history_summary_recent_turns,
+        )
+    # Filter conversation summaries — internal compression artifacts
+    return [m for m in history if not m.get("content", "").startswith("[Conversation summary]")] if history else []
+
+
+def _validate_skill_activation(
+    skill_name: str,
+    skills: dict[str, OrchidOrchestratorSkillConfig],
+    agent_descriptions: dict[str, str],
+) -> GraphState | None:
+    """Validate and expand an orchestrator skill into a state update.
+
+    Returns a state update (dict) on success, or ``None`` when the
+    skill name is unknown (caller should fall back to agent routing).
+    """
+    if skill_name not in skills:
+        logger.warning("[Supervisor] Unknown skill '%s', falling back to agent routing", skill_name)
+        return None
+
+    skill = skills[skill_name]
+    skill_agents = [step.agent for step in skill.steps]
+    skill_instructions_map = {step.agent: step.instruction for step in skill.steps if step.instruction}
+
+    valid_skill_agents = [a for a in skill_agents if a in agent_descriptions]
+    if not valid_skill_agents:
+        fallback = f"Skill '{skill_name}' references unknown agents."
+        return {
+            "messages": [AIMessage(content=fallback)],
+            "final_response": fallback,
+            "active_agents": [],
+            "pending_agents": [],
+        }
+
+    first, *rest = valid_skill_agents
+    logger.info(
+        "[Supervisor] orchestrator skill '%s': %s",
+        skill_name,
+        " → ".join(valid_skill_agents),
+    )
+    return {
+        "active_agents": [first],
+        "pending_agents": rest,
+        "execution_mode": "sequential",
+        "skill_instructions": skill_instructions_map,
+        "messages": [AIMessage(content=(f"[Supervisor] Skill '{skill_name}': {' → '.join(valid_skill_agents)}"))],
+    }
+
+
+def _recover_agent_names(
+    reasoning: str,
+    agent_descriptions: dict[str, str],
+) -> list[str]:
+    """Recover agent names from the LLM's reasoning text.
+
+    Small models sometimes return an empty agents list but mention
+    agent names in their reasoning field.  This extracts them as a
+    best-effort fallback.
+    """
+    reasoning_lower = reasoning.lower()
+    recovered: list[str] = []
+    for name in agent_descriptions:
+        if name in reasoning_lower:
+            recovered.append(name)
+    if recovered:
+        logger.warning(
+            "[Supervisor] Recovered agent names from reasoning: %s (original agents list was empty)",
+            recovered,
+        )
+    return recovered
+
+
 async def _route(
     state: GraphState,
     model: str,
@@ -261,16 +369,7 @@ async def _route(
     sup = supervisor_config or OrchidSupervisorConfig()
     routing_template = sup.routing_system_prompt or ROUTING_SYSTEM_PROMPT
 
-    # Inject MCP auth status hint so the supervisor can make informed routing decisions
-    mcp_auth_status = state.get("mcp_auth_status", {})
-    unauthorized = [name for name, ok in mcp_auth_status.items() if not ok]
-    auth_hint = ""
-    if unauthorized:
-        auth_hint = (
-            f"\n\nNOTE: The following external services require user authorization "
-            f"and are currently unavailable: {', '.join(unauthorized)}. "
-            f"Agents that depend solely on these services may have limited capabilities."
-        )
+    auth_hint = _inject_auth_hints(state)
 
     system = routing_template.format(
         assistant_name=sup.assistant_name,
@@ -278,26 +377,7 @@ async def _route(
         skill_descriptions=skill_text,
     )
 
-    # Use extract_conversation_history for clean, bounded context.
-    # This respects max_turns/max_chars limits and filters supervisor noise.
-    history = OrchidAgent.extract_conversation_history(
-        state,
-        max_turns=sup.history_max_turns,
-        max_chars=sup.history_max_chars,
-    )
-
-    # Compress older turns when sliding-window summarization is enabled
-    if history and sup.history_summary_enabled and chat_model:
-        history = await OrchidAgent.compress_conversation_history(
-            history,
-            chat_model=chat_model,
-            recent_turns=sup.history_summary_recent_turns,
-        )
-
-    # Filter conversation summaries — internal compression artifacts
-    clean_history = (
-        [m for m in history if not m.get("content", "").startswith("[Conversation summary]")] if history else []
-    )
+    clean_history = await _extract_and_compress_history(state, sup, chat_model)
 
     llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     if clean_history:
@@ -345,40 +425,13 @@ async def _route(
 
     # ── Orchestrator skill activation ──
     if execution == "skill":
-        skill_name = decision.skill or ""
-        if skill_name in (orchestrator_skills or {}):
-            skill = orchestrator_skills[skill_name]
-            skill_agents = [step.agent for step in skill.steps]
-            skill_instructions_map = {step.agent: step.instruction for step in skill.steps if step.instruction}
-
-            # Validate all agents in the skill exist
-            valid_skill_agents = [a for a in skill_agents if a in agent_descriptions]
-            if not valid_skill_agents:
-                fallback = f"Skill '{skill_name}' references unknown agents."
-                return {
-                    "messages": [AIMessage(content=fallback)],
-                    "final_response": fallback,
-                    "active_agents": [],
-                    "pending_agents": [],
-                }
-
-            first, *rest = valid_skill_agents
-            logger.info(
-                "[Supervisor] orchestrator skill '%s': %s",
-                skill_name,
-                " → ".join(valid_skill_agents),
-            )
-            return {
-                "active_agents": [first],
-                "pending_agents": rest,
-                "execution_mode": "sequential",
-                "skill_instructions": skill_instructions_map,
-                "messages": [
-                    AIMessage(content=(f"[Supervisor] Skill '{skill_name}': {' → '.join(valid_skill_agents)}"))
-                ],
-            }
-        else:
-            logger.warning("[Supervisor] Unknown skill '%s', falling back to agent routing", skill_name)
+        skill_result = _validate_skill_activation(
+            decision.skill or "",
+            orchestrator_skills or {},
+            agent_descriptions,
+        )
+        if skill_result is not None:
+            return skill_result
 
     # ── Direct response (no sub-agent needed) ──
     if direct and not agents:
@@ -395,15 +448,7 @@ async def _route(
     # Recovery: if the LLM returned empty agents but mentioned an agent name
     # in the reasoning (common with small models), extract it.
     if not valid and not direct:
-        reasoning_lower = decision.reasoning.lower()
-        for name in agent_descriptions:
-            if name in reasoning_lower:
-                valid.append(name)
-        if valid:
-            logger.warning(
-                "[Supervisor] Recovered agent names from reasoning: %s (original agents list was empty)",
-                valid,
-            )
+        valid = _recover_agent_names(decision.reasoning, agent_descriptions)
 
     if not valid:
         fallback = "I'm not sure how to help with that request. Could you rephrase or provide more details?"

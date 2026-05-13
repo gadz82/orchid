@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field, model_validator
 
 from .mcp_gateway import OrchidMCPGatewayConfig
@@ -215,64 +217,72 @@ class OrchidAgentsConfig(BaseModel):
         return self
 
 
-def _apply_defaults(
-    agent: OrchidAgentConfig,
-    name: str,
-    defaults: OrchidDefaultsConfig,
-    global_tools: dict[str, OrchidBuiltinToolConfig] | None = None,
-) -> None:
-    """Recursively apply default values and set agent names."""
-    # Set name from dict key
-    agent.name = name
+def _inherit_field(agent_obj: Any, defaults_obj: Any, field_name: str) -> None:
+    """Copy *field_name* from *defaults_obj* to *agent_obj* when the agent
+    left it unset and the defaults explicitly set it.
 
-    # Merge LLM defaults
+    Uses :attr:`pydantic.BaseModel.model_fields_set` to detect explicit
+    assignment instead of comparing against magic default values.
+    """
+    agent_fields: set[str] = getattr(agent_obj, "model_fields_set", set()) or set()
+    defaults_fields: set[str] = getattr(defaults_obj, "model_fields_set", set()) or set()
+    if field_name not in agent_fields and field_name in defaults_fields:
+        setattr(agent_obj, field_name, getattr(defaults_obj, field_name))
+
+
+def _merge_llm_defaults(agent: OrchidAgentConfig, defaults: OrchidDefaultsConfig) -> None:
     if agent.llm is None:
         agent.llm = defaults.llm.model_copy()
 
-    # Merge RAG defaults (only if not explicitly set to non-default)
-    if agent.rag.k == 5 and defaults.rag.k != 5:
-        agent.rag.k = defaults.rag.k
-    if agent.rag.enabled and not defaults.rag.enabled:
-        agent.rag.enabled = defaults.rag.enabled
-    if agent.rag.rag_ttl == 0 and defaults.rag.rag_ttl != 0:
-        agent.rag.rag_ttl = defaults.rag.rag_ttl
-    if agent.rag.max_context_chars is None:
-        agent.rag.max_context_chars = defaults.rag.max_context_chars
 
-    # Merge retrieval block — strategy + transformers inherit
-    # independently so an agent can override one without losing the
-    # other.  ``strategy`` falls back to ``"simple"`` when neither
-    # agent nor defaults set it; ``query_transformers`` falls back to
-    # ``[]`` (no transformers) on the same path.
-    if agent.rag.retrieval.strategy is None:
-        agent.rag.retrieval.strategy = defaults.rag.retrieval.strategy or "simple"
-    if agent.rag.retrieval.query_transformers is None:
-        agent.rag.retrieval.query_transformers = list(defaults.rag.retrieval.query_transformers or [])
-    if not agent.rag.retrieval.metadata_filters and defaults.rag.retrieval.metadata_filters:
-        agent.rag.retrieval.metadata_filters = dict(defaults.rag.retrieval.metadata_filters)
+def _merge_rag_defaults(agent: OrchidAgentConfig, defaults: OrchidDefaultsConfig) -> None:
+    rag = agent.rag
+    d_rag = defaults.rag
 
-    # Merge transformer prompt overrides — each scalar field inherits
-    # independently when the agent leaves it ``None``, so an agent can
-    # override one transformer's prompt without losing the others.
-    _merge_transformer_prompts(agent.rag.retrieval, defaults.rag.retrieval)
+    # Top-level RAG fields — inherit when unset
+    _inherit_field(rag, d_rag, "k")
+    _inherit_field(rag, d_rag, "enabled")
+    _inherit_field(rag, d_rag, "rag_ttl")
+    if rag.max_context_chars is None:
+        rag.max_context_chars = d_rag.max_context_chars
 
-    # Merge ingestion block — ``strategy`` falls back to ``"recursive"``
-    # when neither side sets it; chunk knobs inherit independently.
-    if agent.rag.ingestion.strategy is None:
-        agent.rag.ingestion.strategy = defaults.rag.ingestion.strategy or "recursive"
-    if agent.rag.ingestion.chunk_size == 1000 and defaults.rag.ingestion.chunk_size != 1000:
-        agent.rag.ingestion.chunk_size = defaults.rag.ingestion.chunk_size
-    if agent.rag.ingestion.chunk_overlap == 200 and defaults.rag.ingestion.chunk_overlap != 200:
-        agent.rag.ingestion.chunk_overlap = defaults.rag.ingestion.chunk_overlap
-    if agent.rag.ingestion.parent_chunk_size == 0 and defaults.rag.ingestion.parent_chunk_size != 0:
-        agent.rag.ingestion.parent_chunk_size = defaults.rag.ingestion.parent_chunk_size
-    if agent.rag.ingestion.parent_chunk_overlap == 200 and defaults.rag.ingestion.parent_chunk_overlap != 200:
-        agent.rag.ingestion.parent_chunk_overlap = defaults.rag.ingestion.parent_chunk_overlap
-    if not agent.rag.ingestion.post_processors and defaults.rag.ingestion.post_processors:
-        agent.rag.ingestion.post_processors = list(defaults.rag.ingestion.post_processors)
 
-    # Collect injectable MCP tool names + TTLs
+def _merge_retrieval_defaults(agent: OrchidAgentConfig, defaults: OrchidDefaultsConfig) -> None:
+    r = agent.rag.retrieval
+    dr = defaults.rag.retrieval
+
+    if r.strategy is None:
+        r.strategy = dr.strategy or "simple"
+    if r.query_transformers is None:
+        r.query_transformers = list(dr.query_transformers or [])
+    if not r.metadata_filters and dr.metadata_filters:
+        r.metadata_filters = dict(dr.metadata_filters)
+
+    _merge_transformer_prompts(r, dr)
+
+
+def _merge_ingestion_defaults(agent: OrchidAgentConfig, defaults: OrchidDefaultsConfig) -> None:
+    i = agent.rag.ingestion
+    di = defaults.rag.ingestion
+
+    if i.strategy is None:
+        i.strategy = di.strategy or "recursive"
+
+    _inherit_field(i, di, "chunk_size")
+    _inherit_field(i, di, "chunk_overlap")
+    _inherit_field(i, di, "parent_chunk_size")
+    _inherit_field(i, di, "parent_chunk_overlap")
+
+    if not i.post_processors and di.post_processors:
+        i.post_processors = list(di.post_processors)
+
+
+def _collect_injectable_tools(
+    agent: OrchidAgentConfig,
+    global_tools: dict[str, OrchidBuiltinToolConfig] | None,
+) -> None:
     agent_ttl = agent.rag.rag_ttl
+
     for server in agent.mcp_servers:
         for tool in server.tools:
             if isinstance(tool, OrchidToolConfig) and tool.inject_to_rag:
@@ -281,7 +291,6 @@ def _apply_defaults(
                 if effective_ttl > 0:
                     agent.injectable_tool_ttls[tool.name] = effective_ttl
 
-    # Collect injectable built-in tool names + TTLs
     if global_tools:
         for tool_name in agent.tools:
             tool_cfg = global_tools.get(tool_name)
@@ -292,7 +301,11 @@ def _apply_defaults(
                 if effective_ttl > 0:
                     agent.injectable_tool_ttls[key] = effective_ttl
 
-    # Collect tools requiring human approval (HITL)
+
+def _collect_approval_tools(
+    agent: OrchidAgentConfig,
+    global_tools: dict[str, OrchidBuiltinToolConfig] | None,
+) -> None:
     for server in agent.mcp_servers:
         for tool in server.tools:
             if isinstance(tool, OrchidToolConfig) and tool.requires_approval:
@@ -303,30 +316,50 @@ def _apply_defaults(
             if tool_cfg and tool_cfg.requires_approval:
                 agent.approval_tools.add(tool_name)
 
-    # Collect built-in tools whose ``parallel_safe`` is explicitly
-    # ``True`` — used by the agentic loop's parallel-dispatch path
-    # when the agent has ``parallel_tools: true``.
+
+def _collect_parallel_safe_tools(
+    agent: OrchidAgentConfig,
+    global_tools: dict[str, OrchidBuiltinToolConfig] | None,
+) -> None:
     if global_tools:
         for tool_name in agent.tools:
             tool_cfg = global_tools.get(tool_name)
             if tool_cfg and tool_cfg.parallel_safe is True:
                 agent.parallel_safe_builtin_tools.add(tool_name)
 
-    # Cache resolved built-in tool configs so
-    # ``OrchidAgentConfig.effective_rag(tool_name)`` can look up
-    # per-tool RAG overrides at runtime — the agent only knows tool
-    # names, not the underlying ``OrchidBuiltinToolConfig`` objects on
-    # ``OrchidAgentsConfig.tools``.
+
+def _cache_builtin_tool_configs(
+    agent: OrchidAgentConfig,
+    global_tools: dict[str, OrchidBuiltinToolConfig] | None,
+) -> None:
     if global_tools:
         for tool_name in agent.tools:
             tool_cfg = global_tools.get(tool_name)
             if tool_cfg is not None:
                 agent.builtin_tool_configs[tool_name] = tool_cfg
 
-    # Recurse into children — but reject any child that opts into
-    # mini-agents.  Nesting is forbidden by spec §2 to keep the
-    # graph topology bounded.  ``mini_agent.enabled`` may only be
-    # set on top-level agents, never on children of another agent.
+
+def _apply_defaults(
+    agent: OrchidAgentConfig,
+    name: str,
+    defaults: OrchidDefaultsConfig,
+    global_tools: dict[str, OrchidBuiltinToolConfig] | None = None,
+) -> None:
+    """Recursively apply default values and set agent names."""
+    agent.name = name
+
+    _merge_llm_defaults(agent, defaults)
+    _merge_rag_defaults(agent, defaults)
+    _merge_retrieval_defaults(agent, defaults)
+    _merge_ingestion_defaults(agent, defaults)
+
+    _collect_injectable_tools(agent, global_tools)
+    _collect_approval_tools(agent, global_tools)
+    _collect_parallel_safe_tools(agent, global_tools)
+    _cache_builtin_tool_configs(agent, global_tools)
+
+    # Recurse into children — mini-agents may only be enabled on
+    # top-level agents (no nesting).
     if agent.children:
         for child_name, child in agent.children.items():
             if child.mini_agent.enabled:
