@@ -49,8 +49,6 @@ from .skill_executor import SkillExecutor
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
 
-_wall_clock = time.time  # cache TTL must use wall clock — dynamic.py stores time.time()
-
 
 class GenericAgent(OrchidAgent):
     """
@@ -709,7 +707,7 @@ class GenericAgent(OrchidAgent):
             return {}
 
         async def _lookup(tool_name: str, ttl: int) -> tuple[str, Any]:
-            min_time = _wall_clock() - ttl
+            min_time = time.time() - ttl
             result = await self.reader.lookup_cached_tool_results(
                 namespace=self._config.rag.namespace,
                 scope=scope,

@@ -79,7 +79,7 @@ class ReformulateTransformer(OrchidQueryTransformer):
                     reformulated[:80],
                 )
                 return [reformulated]
-        except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+        except Exception as exc:
             logger.warning("[ReformulateTransformer] Failed: %s", exc)
 
         return [query]

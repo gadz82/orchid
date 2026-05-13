@@ -13,7 +13,7 @@ Themed modules:
   - :mod:`schema_agent` — :class:`OrchidAgentConfig`,
                          :class:`OrchidDefaultsConfig`,
                          :class:`OrchidAgentsConfig`,
-                         and the ``_apply_defaults`` recursive merger.
+                         and the recursive defaults merger.
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ from .schema_agent import (
     OrchidAgentConfig,
     OrchidAgentsConfig,
     OrchidDefaultsConfig,
-    _apply_defaults,
 )
 from .schema_events import (
     ActAsUserIdentity,
@@ -105,5 +104,4 @@ __all__ = [
     "OrchidTriggerRetryConfig",
     "OrchidValidatorConfig",
     "ServiceAccountIdentity",
-    "_apply_defaults",
 ]

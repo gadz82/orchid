@@ -25,13 +25,13 @@ from typing import Any, ClassVar
 
 from langchain_core.documents import Document
 
-from .scopes import OrchidRAGScope  # noqa: F401 — used in type annotations
+from .scopes import OrchidRAGScope
 from .sparse import OrchidSparseVector
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class OrchidSearchResult:
     """A document with its relevance score."""
 
