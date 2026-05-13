@@ -101,7 +101,6 @@ orchid_ai/events/
     graph_runner.py             GraphJobRunner (chat binding +
                                 final-message persistence + on_failure)
   AGENTS.md                     this file
-  CLAUDE.md                     symlink → AGENTS.md
 ```
 
 A sibling package outside ``events/`` carries the identity-mixin
