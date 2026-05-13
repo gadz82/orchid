@@ -85,9 +85,11 @@ result = await graph.ainvoke({
 
 This library is consumed by:
 
-- **[orchid-api](https://github.com/gadz82/orchid-api)** -- FastAPI HTTP server
-- **[orchid-cli](https://github.com/gadz82/orchid-cli)** -- Typer command-line interface
-- **[orchid-frontend](https://github.com/gadz82/orchid-frontend)** -- Next.js chat UI
+- **[orchid-api](https://github.com/gadz82/orchid-api)** — FastAPI HTTP server
+- **[orchid-cli](https://github.com/gadz82/orchid-cli)** — Typer command-line interface
+- **[orchid-frontend](https://github.com/gadz82/orchid-frontend)** — Next.js chat UI
+- **[orchid-mcp](https://github.com/gadz82/orchid-mcp)** — MCP gateway for Claude Desktop/Cursor
+- **[orchid-examples](https://github.com/gadz82/orchid-examples)** — Example configurations and custom agents
 
 ## Architecture
 
