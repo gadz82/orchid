@@ -55,7 +55,7 @@ jobs:
 
       - name: Build (next export + pagefind)
         env:
-          BASE_PATH: /orchid
+          BASE_PATH: ""
         run: npm run build
 
       - name: Upload Pages artifact
