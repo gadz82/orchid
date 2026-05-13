@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Literal as TypingLiteral
+from typing import Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
@@ -51,7 +51,7 @@ class OrchidRoutingDecision(BaseModel):
     """LLM-generated routing decision — guaranteed valid via structured output."""
 
     reasoning: str = Field(description="Brief analysis of the user's intent")
-    execution: TypingLiteral["parallel", "sequential", "skill"] = Field(
+    execution: Literal["parallel", "sequential", "skill"] = Field(
         default="parallel",
         description="Execution mode: parallel (independent agents), sequential (dependent), or skill (pre-defined workflow)",
     )

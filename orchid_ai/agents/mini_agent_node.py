@@ -62,7 +62,7 @@ try:  # pragma: no cover — exercised by tests when langgraph is installed.
     from langgraph.errors import GraphBubbleUp as _GraphBubbleUp
 
     _GRAPH_BUBBLE_UP_EXCS: tuple[type[BaseException], ...] = (_GraphBubbleUp,)
-except Exception:  # pragma: no cover — fallback when imports fail.
+except ImportError:  # pragma: no cover — fallback when langgraph is not installed.
     _GRAPH_BUBBLE_UP_EXCS = ()
 
 

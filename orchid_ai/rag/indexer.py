@@ -20,6 +20,7 @@ Usage (startup hook):
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Callable
 
 from ..core.repository import Document, OrchidVectorWriter
@@ -103,15 +104,9 @@ class StaticIndexer:
         return counts
 
 
+@dataclass(slots=True)
 class _NamespaceData:
     """Internal storage for a registered namespace."""
 
-    __slots__ = ("shared_docs", "tenant_docs_fn")
-
-    def __init__(
-        self,
-        shared_docs: list[Document],
-        tenant_docs_fn: Callable[[str], list[Document]] | None,
-    ):
-        self.shared_docs = shared_docs
-        self.tenant_docs_fn = tenant_docs_fn
+    shared_docs: list[Document]
+    tenant_docs_fn: Callable[[str], list[Document]] | None = None

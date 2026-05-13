@@ -14,6 +14,8 @@ from __future__ import annotations
 import logging
 import os
 
+import yaml
+
 logger = logging.getLogger(__name__)
 
 # ── Nested YAML path → flat env var mapping ────────────────────
@@ -93,8 +95,6 @@ def apply_yaml_to_env(
         Number of env vars applied.
     """
     try:
-        import yaml
-
         with open(config_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     except FileNotFoundError:

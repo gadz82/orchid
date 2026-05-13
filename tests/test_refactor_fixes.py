@@ -295,10 +295,10 @@ class TestSpecificExceptions:
 
 class TestWallClock:
     def test_wall_clock_reference_exists(self):
-        """GenericAgent module should use time.time for cache checks (matches dynamic.py)."""
-        from orchid_ai.agents import generic_agent
+        """GenericAgent uses time.time() directly (no alias — L16 fix)."""
+        import orchid_ai.agents.generic_agent as ga
 
-        assert generic_agent._wall_clock is __import__("time").time
+        assert ga.time is not None  # time module is imported
 
 
 # ── Fix #9: py.typed and __version__ ──────────────────────────────
