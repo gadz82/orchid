@@ -1,6 +1,6 @@
 ---
 title: "Hierarchical RAG"
-description: "OrchidRAGScope, the 5-level hierarchy, vector store interfaces, and the parse-once pattern."
+description: "OrchidRAGScope, the 5-level hierarchy, retrieval strategies, ingestion pipelines, and the parse-once pattern."
 package: "orchid"
 section: "concepts"
 order: 12
@@ -8,22 +8,36 @@ tags: []
 sources:
   - "orchid/orchid_ai/rag/scopes.py"
   - "orchid/orchid_ai/core/scopes.py"
+  - "orchid/orchid_ai/rag/strategies/__init__.py"
+  - "orchid/orchid_ai/rag/strategies/simple.py"
+  - "orchid/orchid_ai/rag/strategies/multi_query.py"
+  - "orchid/orchid_ai/rag/strategies/hyde.py"
+  - "orchid/orchid_ai/rag/strategies/hybrid.py"
+  - "orchid/orchid_ai/rag/strategies/graph_rag.py"
   - "orchid/orchid_ai/rag/AGENTS.md"
   - "orchid/AGENTS.md"
 related: ["/concepts/embeddings", "/concepts/document-parsing", "/concepts/agents"]
-example: "/examples/restaurant"
+example: "/examples/rag-strategies"
 external:
   - label: "LlamaIndex: hierarchical retrieval"
-    url: "PLACEHOLDER"
+    url: "https://docs.llamaindex.ai/en/stable/examples/retrievers/auto_merging_retriever/"
   - label: "Pinecone: what is RAG?"
-    url: "PLACEHOLDER"
+    url: "https://www.pinecone.io/learn/retrieval-augmented-generation/"
   - label: "Anthropic: when to use RAG vs long context"
-    url: "PLACEHOLDER"
+    url: "https://www.anthropic.com/news/contextual-retrieval"
+  - label: "HyDE: Precise Zero-Shot Dense Retrieval"
+    url: "https://arxiv.org/abs/2212.10496"
+  - label: "Reciprocal Rank Fusion (Cormack et al., 2009)"
+    url: "https://plg.uwaterloo.ca/~gvcormack/cormacksigir2009-rrf.pdf"
+  - label: "GraphRAG: Microsoft Research"
+    url: "https://www.microsoft.com/en-us/research/blog/graphrag-unlocking-llm-discovery-on-narrative-private-data/"
+  - label: "LangChain: multi-query retriever"
+    url: "https://python.langchain.com/docs/modules/data_connection/retrievers/MultiQueryRetriever"
 ---
 
 <MultiLLMBadge />
 
-Orchid's RAG subsystem is built around a five-level scope hierarchy. Every vector read and write carries an `OrchidRAGScope` — a frozen dataclass that encodes exactly which slice of the Qdrant collection a given operation is allowed to see or write to.
+Orchid's RAG subsystem is built around a five-level scope hierarchy and a pluggable strategy architecture. Every vector read and write carries an `OrchidRAGScope` — a frozen dataclass that encodes exactly which slice of the vector store a given operation is allowed to see or write to. Retrieval behaviour is controlled by the `rag.retrieval.strategy` field in `agents.yaml`, with five built-in strategies and an extension point for custom ones.
 
 ## The scope hierarchy
 
@@ -57,6 +71,158 @@ docs = await self.fetch_rag_context(query, scope, namespace="learning", k=5)
 
 `OrchidRAGScope` is a frozen dataclass living in `orchid_ai/core/scopes.py`. Because it has zero external dependencies, it can be constructed anywhere — agents, indexers, tests — without importing backend-specific code.
 
+## Retrieval strategies
+
+Orchid ships five retrieval strategies, each implementing the `OrchidRetrievalStrategy` ABC. Strategies are stateless and selected per-agent via `rag.retrieval.strategy` in `agents.yaml`. Unknown strategy names fall back to `simple` with a warning — a typo never crashes the agent.
+
+### `simple` — single dense retrieval
+
+The default. One `reader.retrieve()` call with the user query as-is. Fastest path, best for well-formed queries where the corpus contains a near-verbatim match.
+
+```yaml
+rag:
+  retrieval:
+    strategy: simple
+```
+
+**When to use:** Baseline retrieval, low-latency requirements, queries that closely match corpus vocabulary.
+
+### `multi_query` — fan-out with paraphrases
+
+The LLM generates N paraphrases of the original query (default 3), retrieves against each independently in parallel, then merges results by score with deduplication. Improves recall for ambiguous, informal, or multi-intent questions.
+
+```yaml
+rag:
+  retrieval:
+    strategy: multi_query
+    # multi_query:
+    #   num_queries: 3      # default
+    #   retrieval_timeout: 30.0
+```
+
+Without a `chat_model` the strategy degrades gracefully to single-query retrieval. External `pre_strategy=False` transformers compose orthogonally — pair with `query_transformers: [hyde, decompose]` for multi-query × HyDE fan-out.
+
+**When to use:** Ambiguous queries, broad recall needs, user questions that may not match corpus terminology.
+
+### `hyde` — hypothetical document embeddings
+
+Generates N plausible answer paragraphs via the LLM, then retrieves documents similar to those hypothetical answers **in addition to** the original query. Results are merged by document ID (highest score wins). Effective when user vocabulary differs significantly from corpus vocabulary.
+
+```yaml
+rag:
+  retrieval:
+    strategy: hyde
+    hyde:
+      n_hypothetical: 2     # default: 1
+```
+
+Like `multi_query`, HyDE composes with external transformers and degrades to dense-only when no chat model is available.
+
+**When to use:** Domain-specific corpora where users ask questions in lay terms, conceptual queries where the answer structure matters more than keyword overlap.
+
+### `hybrid` — dense + sparse fusion
+
+Issues two parallel retrievals — one against the dense embedding lane and one against the sparse/lexical lane (BM25 by default, SPLADE behind an optional extra) — then fuses rankings via Reciprocal Rank Fusion (RRF, default) or weighted-linear fusion. Each lane fetches `k × lane_multiplier` candidates so the fusion has enough headroom to surface dense-only or sparse-only matches.
+
+```yaml
+rag:
+  retrieval:
+    strategy: hybrid
+    hybrid:
+      sparse_encoder: bm25       # or splade (optional extra)
+      sparse_weight: 0.4         # for linear fusion
+      fusion: rrf                # or linear
+      rrf_k: 60                  # RRF smoothing constant
+```
+
+When the backend lacks sparse support, the strategy logs a warning and degrades to dense-only. Sparse encoder failures also fall back to the dense lane.
+
+**When to use:** Mixed corpora with both semantic content (best for dense) and exact-match terms like product codes, IDs, or technical jargon (best for sparse).
+
+### `graph_rag` — knowledge-graph-augmented retrieval
+
+A four-step pipeline: (1) resolve seed entities from the query via `graph_store.find_entities()`, (2) walk the graph up to `max_hops` from every seed, (3) fetch text chunks via the standard vector lane, (4) serialise the visited sub-graph as a synthetic `OrchidSearchResult` and prepend it as context. When no `graph_store` is wired or no seed entities are found, falls back to `SimpleRetrieval`.
+
+```yaml
+rag:
+  retrieval:
+    strategy: graph_rag
+    graph:
+      max_hops: 2
+      fuse_with_vectors: true
+      # relation_filter: ["related_to", "depends_on"]  # optional
+```
+
+The sub-graph is serialised as plain text (`Entity (type) [-relation-> Other]`) and injected as a synthetic document with `source: graph_rag`. The `entity_serializer` constructor kwarg accepts a custom serialiser for domain-specific formats (RDF turtle, JSON-LD, …).
+
+**When to use:** Corpora with rich relational structure — product catalogs with dependencies, organizational hierarchies, compliance frameworks with cross-references.
+
+### Custom strategies
+
+Register at startup via `register_retrieval_strategy()` and reference by name in `agents.yaml`:
+
+```python
+from orchid_ai.rag.strategies import register_retrieval_strategy
+from my_strategies import RecencyWeightedRetrieval
+
+register_retrieval_strategy("recency_simple", RecencyWeightedRetrieval)
+```
+
+```yaml
+rag:
+  retrieval:
+    strategy: recency_simple   # registered at startup
+```
+
+See the [RAG Strategies example](/examples/rag-strategies) for a working `recency_simple` strategy registered from a startup hook.
+
+## Ingestion strategies
+
+While retrieval controls **how** documents are fetched, ingestion controls **how** documents are chunked and indexed. Four built-in ingestion strategies implement `OrchidIngestionStrategy`:
+
+| Strategy | Behaviour | Best for |
+|---|---|---|
+| `recursive` | `RecursiveCharacterTextSplitter` with configurable chunk size/overlap | General-purpose documents |
+| `semantic` | Splits at semantic boundaries (paragraphs, sections) | Prose-heavy content |
+| `hierarchical` | Parent-child chunking: large parent chunks with smaller child chunks for retrieval | Auto-merging retrieval patterns |
+| `headered` | Preserves document headers/structure in chunk metadata | Structured documents with headings |
+
+Set via `rag.ingestion.strategy` in `agents.yaml`. Custom ingestion strategies register via `register_ingestion_strategy()`.
+
+## Query transformers
+
+Transformers modify the query **before** retrieval runs. They can fire at agent entry (`pre_strategy=True`) or internally within a fan-out strategy (`pre_strategy=False`):
+
+| Transformer | Flag | Behaviour |
+|---|---|---|
+| `reformulate` | `pre_strategy=True` | LLM rewrites the query for clarity |
+| `multi_query` | `pre_strategy=False` | Generates N paraphrases |
+| `hyde` | `pre_strategy=False` | Generates hypothetical answer paragraphs |
+| `decompose` | `pre_strategy=False` | Breaks complex queries into sub-queries |
+
+Pre-strategy transformers run once at agent entry via `apply_pre_strategy()`. Strategy-internal transformers fan out inside the retrieval strategy itself.
+
+## Dynamic injection
+
+After each tool call, `GenericAgent` optionally injects the result into the vector store. On the next turn the agent retrieves its own prior tool output alongside static knowledge — providing a short-term memory that survives across conversation turns within the same chat. Controlled by `inject_to_rag()` which is per-tool, not per-agent.
+
+Use the `exclude_dynamic: true` retrieval flag to keep dynamically-injected tool output out of the retrieval path.
+
+## Metadata filtering
+
+`OrchidVectorReader.retrieve(...)` accepts an optional `metadata_filters` parameter that operates alongside the scope filter. The mini-language supports:
+
+| Form | Meaning |
+|---|---|
+| `{"status": "published"}` | Exact match |
+| `{"language": ["en", "fr"]}` | Match-any (OR within the field) |
+| `{"view_count": {"gte": 100}}` | Range — `gte`/`lte`/`gt`/`lt` |
+| `{"published_at": {"gte": "2026-01"}}` | ISO-8601 strings → `DatetimeRange` |
+| `{"tags": {"contains": "alpha"}}` | Substring / list-contains |
+| `{"deprecated": {"not": True}}` | Negation (`must_not`) |
+
+The Qdrant backend translates these via `build_metadata_filter_clauses` and infers payload index types when the agent didn't declare `payload_indexes` explicitly.
+
 ## Vector store interfaces
 
 The framework exposes three purpose-segregated ABCs:
@@ -71,24 +237,24 @@ The framework exposes three purpose-segregated ABCs:
 
 ## Namespace conventions
 
-Namespaces are Qdrant collection prefixes that separate different kinds of knowledge:
+Namespaces are vector store collection prefixes that separate different kinds of knowledge:
 
 | Namespace | Contents |
 |---|---|
-| `learning` | Tenant knowledge base (courses, documents, wikis) |
+| `learning` | Tenant knowledge base (documents, wikis) |
 | `notifications` | Agent-generated structured data |
 | `uploads` | User-uploaded files (scoped to the uploading user's chat) |
 
 Set an agent's namespace via `rag.namespace` in `agents.yaml`. Leave it empty to skip RAG retrieval.
 
-## Dynamic injection
-
-After each tool call, `GenericAgent` optionally injects the result into Qdrant. On the next turn the agent retrieves its own prior tool output alongside static knowledge — providing a short-term memory that survives across conversation turns within the same chat.
-
 ## External reading
 
-- <ExternalLink href="PLACEHOLDER">LlamaIndex: hierarchical retrieval</ExternalLink>
-- <ExternalLink href="PLACEHOLDER">Pinecone: what is RAG?</ExternalLink>
-- <ExternalLink href="PLACEHOLDER">Anthropic: when to use RAG vs long context</ExternalLink>
+- <ExternalLink href="https://docs.llamaindex.ai/en/stable/examples/retrievers/auto_merging_retriever/">LlamaIndex: hierarchical retrieval</ExternalLink>
+- <ExternalLink href="https://www.pinecone.io/learn/retrieval-augmented-generation/">Pinecone: what is RAG?</ExternalLink>
+- <ExternalLink href="https://www.anthropic.com/news/contextual-retrieval">Anthropic: when to use RAG vs long context</ExternalLink>
+- <ExternalLink href="https://arxiv.org/abs/2212.10496">HyDE: Precise Zero-Shot Dense Retrieval (Lee et al., 2022)</ExternalLink>
+- <ExternalLink href="https://plg.uwaterloo.ca/~gvcormack/cormacksigir2009-rrf.pdf">Reciprocal Rank Fusion (Cormack et al., 2009)</ExternalLink>
+- <ExternalLink href="https://www.microsoft.com/en-us/research/blog/graphrag-unlocking-llm-discovery-on-narrative-private-data/">GraphRAG: Microsoft Research</ExternalLink>
+- <ExternalLink href="https://python.langchain.com/docs/modules/data_connection/retrievers/MultiQueryRetriever">LangChain: multi-query retriever</ExternalLink>
 
-<Sources files={["orchid/orchid_ai/rag/scopes.py", "orchid/orchid_ai/core/scopes.py", "orchid/orchid_ai/rag/AGENTS.md", "orchid/AGENTS.md"]} />
+<Sources files={["orchid/orchid_ai/rag/scopes.py", "orchid/orchid_ai/core/scopes.py", "orchid/orchid_ai/rag/strategies/__init__.py", "orchid/orchid_ai/rag/strategies/simple.py", "orchid/orchid_ai/rag/strategies/multi_query.py", "orchid/orchid_ai/rag/strategies/hyde.py", "orchid/orchid_ai/rag/strategies/hybrid.py", "orchid/orchid_ai/rag/strategies/graph_rag.py", "orchid/orchid_ai/rag/AGENTS.md", "orchid/AGENTS.md"]} />
