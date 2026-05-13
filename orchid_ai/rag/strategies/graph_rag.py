@@ -25,6 +25,7 @@ gets sensible results.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any, Callable
 
@@ -135,7 +136,7 @@ class GraphRAGRetrieval(OrchidRetrievalStrategy):
 
         # Step 4 — serialise the sub-graph as a synthetic result.
         graph_text = self._serialiser(entities, edges)
-        graph_doc_id = f"graph::{abs(hash(graph_text))}"
+        graph_doc_id = f"graph::{hashlib.sha256(graph_text.encode()).hexdigest()[:16]}"
         graph_result = OrchidSearchResult(
             document=Document(
                 id=graph_doc_id,

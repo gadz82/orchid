@@ -74,7 +74,9 @@ class TestCacheInAgentsConfig:
 class TestCacheGraphWiring:
     """build_graph() sets up LLM cache when enabled."""
 
-    def test_cache_enabled_calls_set_llm_cache(self):
+    def test_cache_enabled_does_not_set_global_llm_cache(self):
+        """Process-global LLM cache is no longer set (C3 fix — prevents
+        silent reuse across multiple build_graph calls)."""
         from orchid_ai.graph.graph import build_graph
         from orchid_ai.runtime import OrchidRuntime
 
@@ -95,7 +97,7 @@ class TestCacheGraphWiring:
 
         with patch("langchain_core.globals.set_llm_cache") as mock_set:
             build_graph(config=config, runtime=runtime)
-            mock_set.assert_called_once()
+            mock_set.assert_not_called()
 
     def test_cache_disabled_no_set_llm_cache(self):
         from orchid_ai.graph.graph import build_graph

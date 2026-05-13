@@ -82,7 +82,7 @@ class OrchidPostgresChatStorage(OrchidChatStorage):
         self._pool = await asyncpg.create_pool(self._dsn, min_size=2, max_size=10)
         async with self._pool.acquire() as conn:
             await self._migrator.run_up(conn)
-        safe_dsn = self._dsn.split("@")[-1] if "@" in self._dsn else self._dsn
+        safe_dsn = self._dsn.split("@")[-1] if "@" in self._dsn else "***"
         logger.info("[OrchidChatStorage:pg] Initialised — %s", safe_dsn)
 
     async def close(self) -> None:

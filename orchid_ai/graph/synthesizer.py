@@ -174,7 +174,7 @@ class ResponseSynthesizer:
                 len(final),
             )
             logger.info("[Supervisor] synthesis complete (%d chars)", len(final))
-        except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+        except Exception as exc:
             logger.error("[Supervisor] LLM API error during synthesis: %s", exc, exc_info=True)
             error_msg = str(exc)
             if "503" in error_msg or "high demand" in error_msg.lower():

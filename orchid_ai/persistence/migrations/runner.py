@@ -20,6 +20,7 @@ from __future__ import annotations
 import importlib
 import logging
 import pkgutil
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine
 
@@ -80,7 +81,7 @@ def discover_migrations(package: str | None = None) -> list[Migration]:
     return sorted(migrations, key=lambda m: m.version)
 
 
-class OrchidMigrationRunner:
+class OrchidMigrationRunner(ABC):
     """
     Backend-agnostic migration runner.
 
@@ -103,21 +104,25 @@ class OrchidMigrationRunner:
     def __init__(self, *, extra_migrations_package: str | None = None) -> None:
         self.extra_migrations_package = extra_migrations_package
 
+    @abstractmethod
     async def ensure_migrations_table(self, conn: Any) -> None:
         """Create the _migrations tracking table if it doesn't exist."""
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     async def get_applied_versions(self, conn: Any) -> set[str]:
         """Return the set of already-applied migration versions."""
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     async def record_version(self, conn: Any, version: str, description: str) -> None:
         """Record a migration as applied."""
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     async def remove_version(self, conn: Any, version: str) -> None:
         """Remove a migration record (on rollback)."""
-        raise NotImplementedError
+        ...
 
     async def _apply_pass(
         self,
