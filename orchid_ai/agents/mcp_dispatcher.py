@@ -177,8 +177,7 @@ class MCPDispatcher:
         meta: dict[str, Any] = {}
         discovered_tools: list[OrchidToolConfig] = []
 
-        # Discover tools, prompts, and resources concurrently
-        async def _discover_tools():
+        async def _discover_raw_tools():
             if not server_config.discover_all_tools:
                 return []
             try:
@@ -198,41 +197,11 @@ class MCPDispatcher:
                 logger.warning("[%s] Could not discover tools from '%s': %s", agent_name, server_name, exc)
                 return []
 
-        async def _discover_prompts():
-            if not (server_config.discover_all_prompts or server_config.prompts):
-                return None
-            try:
-                prompts = await client.list_prompts(auth)
-                if not server_config.discover_all_prompts and server_config.prompts:
-                    allowed = set(server_config.prompts)
-                    prompts = [p for p in prompts if p["name"] in allowed]
-                if prompts:
-                    logger.info("[%s] Loaded %d prompts from '%s'", agent_name, len(prompts), server_name)
-                    return prompts
-            except Exception as exc:
-                logger.warning("[%s] Could not load prompts from '%s': %s", agent_name, server_name, exc)
-            return None
+        prompts_result = await _discover_server_prompts(client, server_config, auth, agent_name)
+        resources_result = await _discover_server_resources(client, server_config, auth, agent_name)
 
-        async def _discover_resources():
-            if not (server_config.discover_all_resources or server_config.resources):
-                return None
-            try:
-                resources = await client.list_resources(auth)
-                if not server_config.discover_all_resources and server_config.resources:
-                    allowed = set(server_config.resources)
-                    resources = [r for r in resources if r["name"] in allowed or r.get("uri") in allowed]
-                if resources:
-                    logger.info("[%s] Loaded %d resources from '%s'", agent_name, len(resources), server_name)
-                    return resources
-            except Exception as exc:
-                logger.warning("[%s] Could not load resources from '%s': %s", agent_name, server_name, exc)
-            return None
-
-        tools_result, prompts_result, resources_result = await asyncio.gather(
-            _discover_tools(),
-            _discover_prompts(),
-            _discover_resources(),
-        )
+        # Run tools discovery concurrently with prompts/resources
+        tools_result = await _discover_raw_tools()
 
         discovered_tools = tools_result or []
         if prompts_result:
@@ -282,55 +251,37 @@ class MCPDispatcher:
 
             # ── Tools ──────────────────────────────────────────
             if server_config.discover_all_tools or server_config.tools:
-                try:
-                    list_tools_start = time.perf_counter()
-                    raw_tools = await client.list_tools(auth)
-                    list_tools_elapsed = (time.perf_counter() - list_tools_start) * 1000
-                    perf_logger.info(
-                        "[PERF][agent=%s][mcp] list_tools server=%s took %.1f ms (raw_count=%d)",
-                        agent_name,
-                        server_name,
-                        list_tools_elapsed,
-                        len(raw_tools),
-                    )
-                    if not server_config.discover_all_tools:
-                        whitelist = {t.name for t in server_config.tools}
-                        raw_tools = [t for t in raw_tools if t["name"] in whitelist]
-                    for t in raw_tools:
-                        caps.raw_tools.append(t)
-                        caps.tool_client_map[t["name"]] = (client, server_config)
-                        annotations = MCPToolAnnotations.from_raw(t.get("annotations"))
-                        if annotations is not None:
-                            caps.tool_annotations[t["name"]] = annotations
-                    logger.info(
-                        "[%s] Discovered %d tools from '%s': %s",
-                        agent_name,
-                        len(raw_tools),
-                        server_name,
-                        [t["name"] for t in raw_tools],
-                    )
-                except Exception as exc:
-                    # Broad catch: MCP servers can fail with HTTP errors (401, 500),
-                    # transport errors, or protocol errors.  Degrade gracefully.
-                    logger.warning("[%s] Could not discover tools from '%s': %s", agent_name, server_name, exc)
+                list_tools_start = time.perf_counter()
+                raw_tools = await _discover_server_tools(client, server_config, auth, agent_name)
+                list_tools_elapsed = (time.perf_counter() - list_tools_start) * 1000
+                perf_logger.info(
+                    "[PERF][agent=%s][mcp] list_tools server=%s took %.1f ms (raw_count=%d)",
+                    agent_name,
+                    server_name,
+                    list_tools_elapsed,
+                    len(raw_tools),
+                )
+                for t in raw_tools:
+                    caps.raw_tools.append(t)
+                    caps.tool_client_map[t["name"]] = (client, server_config)
+                    annotations = MCPToolAnnotations.from_raw(t.get("annotations"))
+                    if annotations is not None:
+                        caps.tool_annotations[t["name"]] = annotations
 
             # ── Prompts ────────────────────────────────────────
             if server_config.discover_all_prompts or server_config.prompts:
-                try:
-                    list_prompts_start = time.perf_counter()
-                    prompts = await client.list_prompts(auth)
-                    list_prompts_elapsed = (time.perf_counter() - list_prompts_start) * 1000
-                    perf_logger.info(
-                        "[PERF][agent=%s][mcp] list_prompts server=%s took %.1f ms (count=%d)",
-                        agent_name,
-                        server_name,
-                        list_prompts_elapsed,
-                        len(prompts),
-                    )
-                    if not server_config.discover_all_prompts and server_config.prompts:
-                        allowed = set(server_config.prompts)
-                        prompts = [p for p in prompts if p["name"] in allowed]
+                list_prompts_start = time.perf_counter()
+                prompts = await _discover_server_prompts(client, server_config, auth, agent_name)
+                list_prompts_elapsed = (time.perf_counter() - list_prompts_start) * 1000
+                perf_logger.info(
+                    "[PERF][agent=%s][mcp] list_prompts server=%s took %.1f ms (count=%d)",
+                    agent_name,
+                    server_name,
+                    list_prompts_elapsed,
+                    len(prompts or []),
+                )
 
+                if prompts:
                     for prompt_def in prompts:
                         has_required = any(a.get("required") for a in prompt_def.get("arguments", []))
                         if has_required:
@@ -360,33 +311,24 @@ class MCPDispatcher:
                                 server_name,
                                 exc,
                             )
-                except Exception as exc:
-                    logger.warning("[%s] Could not list prompts from '%s': %s", agent_name, server_name, exc)
 
             # ── Resources ──────────────────────────────────────
             if server_config.discover_all_resources or server_config.resources:
-                try:
-                    list_resources_start = time.perf_counter()
-                    resources = await client.list_resources(auth)
-                    list_resources_elapsed = (time.perf_counter() - list_resources_start) * 1000
-                    perf_logger.info(
-                        "[PERF][agent=%s][mcp] list_resources server=%s took %.1f ms (count=%d)",
-                        agent_name,
-                        server_name,
-                        list_resources_elapsed,
-                        len(resources),
-                    )
-                    if not server_config.discover_all_resources and server_config.resources:
-                        allowed = set(server_config.resources)
-                        resources = [r for r in resources if r["name"] in allowed or r.get("uri") in allowed]
+                list_resources_start = time.perf_counter()
+                resources = await _discover_server_resources(client, server_config, auth, agent_name)
+                list_resources_elapsed = (time.perf_counter() - list_resources_start) * 1000
+                perf_logger.info(
+                    "[PERF][agent=%s][mcp] list_resources server=%s took %.1f ms (count=%d)",
+                    agent_name,
+                    server_name,
+                    list_resources_elapsed,
+                    len(resources or []),
+                )
 
+                if resources:
                     for res in resources:
                         try:
                             content = await client.read_resource(res["uri"], auth)
-                            # ``read_resource`` returns "" for resources whose
-                            # initial pre-read failed (negative cache hit) —
-                            # skip storing them so the agent's system prompt
-                            # doesn't grow empty ``[name]\n`` blocks.
                             if content:
                                 caps.resource_contents[res["name"]] = content
                         except Exception as exc:
@@ -397,8 +339,6 @@ class MCPDispatcher:
                                 server_name,
                                 exc,
                             )
-                except Exception as exc:
-                    logger.warning("[%s] Could not list resources from '%s': %s", agent_name, server_name, exc)
 
             srv_elapsed = (time.perf_counter() - srv_start) * 1000
             perf_logger.info(
@@ -443,3 +383,77 @@ class MCPDispatcher:
                 }
             )
         return result
+
+
+# ── Shared capability discovery helpers ──────────────────────────
+
+
+async def _discover_server_tools(
+    client: OrchidMCPClient,
+    server_config: OrchidMCPServerConfig,
+    auth: OrchidAuthContext,
+    agent_name: str,
+) -> list[dict[str, Any]]:
+    """List tools from a single MCP server with whitelist filtering."""
+    if not (server_config.discover_all_tools or server_config.tools):
+        return []
+    try:
+        raw_tools = await client.list_tools(auth)
+        if not server_config.discover_all_tools:
+            whitelist = {t.name for t in server_config.tools}
+            raw_tools = [t for t in raw_tools if t["name"] in whitelist]
+        logger.info(
+            "[%s] Discovered %d tools from '%s': %s",
+            agent_name,
+            len(raw_tools),
+            server_config.name,
+            [t["name"] for t in raw_tools],
+        )
+        return raw_tools
+    except Exception as exc:
+        logger.warning("[%s] Could not discover tools from '%s': %s", agent_name, server_config.name, exc)
+        return []
+
+
+async def _discover_server_prompts(
+    client: OrchidMCPClient,
+    server_config: OrchidMCPServerConfig,
+    auth: OrchidAuthContext,
+    agent_name: str,
+) -> list[dict[str, Any]] | None:
+    """List prompts from a single MCP server with whitelist filtering."""
+    if not (server_config.discover_all_prompts or server_config.prompts):
+        return None
+    try:
+        prompts = await client.list_prompts(auth)
+        if not server_config.discover_all_prompts and server_config.prompts:
+            allowed = set(server_config.prompts)
+            prompts = [p for p in prompts if p["name"] in allowed]
+        if prompts:
+            logger.info("[%s] Loaded %d prompts from '%s'", agent_name, len(prompts), server_config.name)
+            return prompts
+    except Exception as exc:
+        logger.warning("[%s] Could not load prompts from '%s': %s", agent_name, server_config.name, exc)
+    return None
+
+
+async def _discover_server_resources(
+    client: OrchidMCPClient,
+    server_config: OrchidMCPServerConfig,
+    auth: OrchidAuthContext,
+    agent_name: str,
+) -> list[dict[str, Any]] | None:
+    """List resources from a single MCP server with whitelist filtering."""
+    if not (server_config.discover_all_resources or server_config.resources):
+        return None
+    try:
+        resources = await client.list_resources(auth)
+        if not server_config.discover_all_resources and server_config.resources:
+            allowed = set(server_config.resources)
+            resources = [r for r in resources if r["name"] in allowed or r.get("uri") in allowed]
+        if resources:
+            logger.info("[%s] Loaded %d resources from '%s'", agent_name, len(resources), server_config.name)
+            return resources
+    except Exception as exc:
+        logger.warning("[%s] Could not load resources from '%s': %s", agent_name, server_config.name, exc)
+    return None

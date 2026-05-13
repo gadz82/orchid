@@ -193,6 +193,38 @@ def _resolve_provider_kwargs(prefix: str, model_name: str, **extra: Any) -> dict
     return provider_kwargs
 
 
+class _LiteLLMEmbeddings(Embeddings):
+    """Thin wrapper around litellm.aembedding for LangChain compatibility.
+
+    Instantiated at module level so it can be independently tested
+    and subclassed.
+    """
+
+    def __init__(self, model: str, litellm_kwargs: dict[str, Any] | None = None) -> None:
+        self._model = model
+        self._litellm_kwargs = litellm_kwargs or {}
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        import asyncio
+
+        return asyncio.get_event_loop().run_until_complete(self.aembed_documents(texts))
+
+    def embed_query(self, text: str) -> list[float]:
+        import asyncio
+
+        return asyncio.get_event_loop().run_until_complete(self.aembed_query(text))
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        import litellm
+
+        response = await litellm.aembedding(model=self._model, input=texts, **self._litellm_kwargs)
+        return [item["embedding"] for item in response.data]
+
+    async def aembed_query(self, text: str) -> list[float]:
+        result = await self.aembed_documents([text])
+        return result[0]
+
+
 def _build_fallback_embeddings(model: str, **kwargs: Any) -> Embeddings:
     """Build embeddings using OpenAI-compatible or LiteLLM fallback."""
     # Try langchain-openai for bare model names (text-embedding-3-small etc.)
@@ -212,31 +244,8 @@ def _build_fallback_embeddings(model: str, **kwargs: Any) -> Embeddings:
 
     litellm_kwargs = get_llm_kwargs(model)
 
-    class _LiteLLMEmbeddings(Embeddings):
-        """Thin wrapper around litellm.aembedding for LangChain compatibility."""
-
-        def embed_documents(self, texts: list[str]) -> list[list[float]]:
-            import asyncio
-
-            return asyncio.get_event_loop().run_until_complete(self.aembed_documents(texts))
-
-        def embed_query(self, text: str) -> list[float]:
-            import asyncio
-
-            return asyncio.get_event_loop().run_until_complete(self.aembed_query(text))
-
-        async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
-            import litellm
-
-            response = await litellm.aembedding(model=model, input=texts, **litellm_kwargs)
-            return [item["embedding"] for item in response.data]
-
-        async def aembed_query(self, text: str) -> list[float]:
-            result = await self.aembed_documents([text])
-            return result[0]
-
     logger.info("[Embeddings] Using LiteLLM fallback for model '%s'", model)
-    return _LiteLLMEmbeddings()
+    return _LiteLLMEmbeddings(model=model, litellm_kwargs=litellm_kwargs)
 
 
 class BatchLimitingEmbeddings(Embeddings):

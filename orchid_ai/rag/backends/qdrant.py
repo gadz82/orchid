@@ -64,6 +64,10 @@ _RANGE_OPERATORS = ("gte", "lte", "gt", "lt")
 _DENSE_NAME = "dense"
 _SPARSE_NAME = "sparse"
 
+# Stable v5 UUID namespace for point IDs — ensures re-indexing the same
+# document replaces the point rather than creating a duplicate.
+_POINT_ID_NAMESPACE = uuid.UUID("1f23d4a0-2b6e-44b9-9c5c-c2b7e3c8d1e0")
+
 
 def build_metadata_filter_clauses(
     metadata_filters: dict[str, Any],
@@ -823,7 +827,7 @@ class QdrantRepository(OrchidVectorStoreRepository):
 
             points.append(
                 PointStruct(
-                    id=str(uuid.uuid4()),
+                    id=str(uuid.uuid5(_POINT_ID_NAMESPACE, doc.id or doc.page_content)),
                     vector=vector_payload,
                     payload=payload,
                 )

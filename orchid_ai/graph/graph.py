@@ -90,6 +90,166 @@ def _latest_human_message_id(state: GraphState) -> str | None:
     return None
 
 
+class _AgentNodeWrapper:
+    """LangGraph node that wraps an :class:`OrchidAgent` with per-agent guardrails
+    and the optional mini-agent decomposer hook.
+
+    Extracted from the :func:`_create_agent_node` closure so each concern
+    lives in its own method.
+
+    SRP — each method has one reason to change:
+    - Input guardrails
+    - Mini-agent decomposer
+    - Agent execution
+    - Output guardrails
+    """
+
+    def __init__(
+        self,
+        agent: OrchidAgent,
+        input_guardrails: OrchidGuardrailChain | None = None,
+        output_guardrails: OrchidGuardrailChain | None = None,
+        agent_config: OrchidAgentConfig | None = None,
+    ) -> None:
+        self._agent = agent
+        self._input_guardrails = input_guardrails
+        self._output_guardrails = output_guardrails
+        self._agent_config = agent_config
+        self.__name__ = f"{agent.name}_agent"
+
+    async def __call__(self, state: GraphState) -> GraphState:
+        auth = state.get("auth_context")
+
+        blocked = await self._run_input_guardrails(state, auth)
+        if blocked is not None:
+            return blocked
+
+        decomposer_update = await self._run_decomposer(state, auth)
+        if decomposer_update is not None:
+            decomposer_update.setdefault("active_agents", [])
+            return decomposer_update
+
+        agent_result = await self._run_agent(state, auth)
+
+        await self._run_output_guardrails(state, auth, agent_result)
+
+        agent_result["active_agents"] = []
+        return agent_result
+
+    async def _run_input_guardrails(self, state: GraphState, auth: Any) -> GraphState | None:
+        if not self._input_guardrails or self._input_guardrails.empty:
+            return None
+
+        query = self._agent.extract_user_query(state)
+        ctx = OrchidGuardrailContext(
+            direction=OrchidGuardrailDirection.INPUT,
+            agent_name=self._agent.name,
+            tenant_key=auth.tenant_key if auth else "default",
+            user_id=auth.user_id if auth else "",
+            chat_id=state.get("chat_id", ""),
+        )
+        result = await self._input_guardrails.evaluate(query, ctx)
+        if result.blocked:
+            logger.warning(
+                "[Guardrails] Agent '%s' input blocked by '%s': %s",
+                self._agent.name,
+                result.guardrail_name,
+                result.message,
+            )
+            return {
+                "messages": [AIMessage(content=f"[{self._agent.name.title()} Agent] {result.message}")],
+                "active_agents": [],
+            }
+        return None
+
+    async def _run_decomposer(self, state: GraphState, auth: Any) -> GraphState | None:
+        if self._agent_config is None or not self._agent_config.mini_agent.enabled or auth is None:
+            return None
+
+        from ..agents.mini_agent_decomposer import maybe_decompose
+
+        decomp_start = time.perf_counter()
+        update = await maybe_decompose(
+            agent_config=self._agent_config,
+            chat_model=getattr(self._agent, "_chat_model", None),
+            mcp_clients=getattr(self._agent, "mcp_clients", None) or [],
+            auth=auth,
+            state=state,
+        )
+        decomp_elapsed = (time.perf_counter() - decomp_start) * 1000
+        perf_logger.info(
+            "[PERF][agent=%s] step=decomposer took %.1f ms (forked=%s)",
+            self._agent.name,
+            decomp_elapsed,
+            bool(update and "mini_agent_decisions" in update),
+        )
+        return update
+
+    async def _run_agent(self, state: GraphState, auth: Any) -> GraphState:
+        prev_chat_id = self._agent._current_chat_id
+        prev_message_id = self._agent._current_message_id
+        self._agent._current_chat_id = state.get("chat_id") or None
+        self._agent._current_message_id = _latest_human_message_id(state)
+
+        agent_start = time.perf_counter()
+        perf_logger.info("[PERF][agent=%s] >>> START", self._agent.name)
+        try:
+            result = await self._agent.run(state)
+        except Exception as exc:
+            logger.error(
+                "[Graph] Agent '%s' raised an unhandled exception: %s",
+                self._agent.name,
+                exc,
+                exc_info=True,
+            )
+            result = {
+                "messages": [
+                    AIMessage(
+                        content=(
+                            f"[{self._agent.name.title()} Agent] I'm temporarily unable to process "
+                            "your request. Please try again in a few moments."
+                        )
+                    )
+                ],
+            }
+        finally:
+            self._agent._current_chat_id = prev_chat_id
+            self._agent._current_message_id = prev_message_id
+        agent_elapsed = (time.perf_counter() - agent_start) * 1000
+        perf_logger.info("[PERF][agent=%s] <<< DONE total=%.1f ms", self._agent.name, agent_elapsed)
+        return result
+
+    async def _run_output_guardrails(self, state: GraphState, auth: Any, agent_result: GraphState) -> None:
+        if not self._output_guardrails or self._output_guardrails.empty:
+            return
+
+        agent_messages = agent_result.get("messages", [])
+        if not agent_messages:
+            return
+
+        response_text = str(agent_messages[-1].content) if hasattr(agent_messages[-1], "content") else ""
+        ctx = OrchidGuardrailContext(
+            direction=OrchidGuardrailDirection.OUTPUT,
+            agent_name=self._agent.name,
+            tenant_key=auth.tenant_key if auth else "default",
+            user_id=auth.user_id if auth else "",
+            chat_id=state.get("chat_id", ""),
+            metadata={"rag_context": agent_result.get("rag_context", {}).get(self._agent.name, [])},
+        )
+        result = await self._output_guardrails.evaluate(response_text, ctx)
+        if result.blocked:
+            logger.warning(
+                "[Guardrails] Agent '%s' output blocked by '%s': %s",
+                self._agent.name,
+                result.guardrail_name,
+                result.message,
+            )
+            agent_result["messages"] = [AIMessage(content=f"[{self._agent.name.title()} Agent] {result.message}")]
+        elif result.action == OrchidGuardrailAction.REDACT and result.redacted_content is not None:
+            logger.info("[Guardrails] Agent '%s' output redacted by '%s'", self._agent.name, result.guardrail_name)
+            agent_result["messages"] = [AIMessage(content=result.redacted_content)]
+
+
 def _create_agent_node(
     agent: OrchidAgent,
     input_guardrails: OrchidGuardrailChain | None = None,
@@ -97,7 +257,7 @@ def _create_agent_node(
     agent_config: OrchidAgentConfig | None = None,
 ):
     """
-    Wrap a OrchidAgent into a LangGraph node function (closure).
+    Wrap a OrchidAgent into a LangGraph node function.
 
     When per-agent guardrails are configured, input is checked before
     ``agent.run()`` and output is checked after.
@@ -106,140 +266,12 @@ def _create_agent_node(
     additionally runs the decomposer hook BEFORE
     ``agent.run()``.  If the decomposer chooses to fork, the wrapper
     returns the decision state update (with no AIMessage) and the
-    graph's conditional edge fans out into mini-agents.  This lives
-    at the wrapper level rather than inside ``GenericAgent.run()``
-    so any ``OrchidAgent`` subclass — ``GenericAgent`` or a custom
-    class like the helpdesk ``SupportAgent`` — opts in uniformly via
-    its YAML ``mini_agent.enabled: true`` flag.
+    graph's conditional edge fans out into mini-agents.
+
+    Returns an :class:`_AgentNodeWrapper` — a callable LangGraph node
+    that delegates to focused per-concern methods.
     """
-
-    async def node(state: GraphState) -> GraphState:
-        auth = state.get("auth_context")
-
-        # ── Per-agent INPUT guardrails ──
-        if input_guardrails and not input_guardrails.empty:
-            query = agent.extract_user_query(state)
-            ctx = OrchidGuardrailContext(
-                direction=OrchidGuardrailDirection.INPUT,
-                agent_name=agent.name,
-                tenant_key=auth.tenant_key if auth else "default",
-                user_id=auth.user_id if auth else "",
-                chat_id=state.get("chat_id", ""),
-            )
-            result = await input_guardrails.evaluate(query, ctx)
-            if result.blocked:
-                logger.warning(
-                    "[Guardrails] Agent '%s' input blocked by '%s': %s",
-                    agent.name,
-                    result.guardrail_name,
-                    result.message,
-                )
-                return {
-                    "messages": [AIMessage(content=f"[{agent.name.title()} Agent] {result.message}")],
-                    "active_agents": [],
-                }
-
-        # ── mini-agent decomposer hook ──
-        # Runs ONLY when ``agent_config.mini_agent.enabled`` is true.
-        # Returns either a state update (fork → no agent.run; or
-        # short-circuit error) or ``None`` (continue to agent.run).
-        if agent_config is not None and agent_config.mini_agent.enabled and auth is not None:
-            from ..agents.mini_agent_decomposer import maybe_decompose
-
-            decomp_start = time.perf_counter()
-            decomposer_update = await maybe_decompose(
-                agent_config=agent_config,
-                chat_model=getattr(agent, "_chat_model", None),
-                mcp_clients=getattr(agent, "mcp_clients", None) or [],
-                auth=auth,
-                state=state,
-            )
-            decomp_elapsed = (time.perf_counter() - decomp_start) * 1000
-            perf_logger.info(
-                "[PERF][agent=%s] step=decomposer took %.1f ms (forked=%s)",
-                agent.name,
-                decomp_elapsed,
-                bool(decomposer_update and "mini_agent_decisions" in decomposer_update),
-            )
-            if decomposer_update is not None:
-                decomposer_update.setdefault("active_agents", [])
-                return decomposer_update
-
-        # ── Run agent ──
-        # Pin the current chat id + latest user message id onto the
-        # agent so ``emit_signal(chat_id="self")`` can auto-populate
-        # ``ChatBinding.source_message_id`` (§LS5).  Restore the
-        # prior values in a ``finally`` so a graph that re-uses the
-        # same agent instance across turns or across chats doesn't
-        # leak state across invocations.
-        prev_chat_id = agent._current_chat_id
-        prev_message_id = agent._current_message_id
-        agent._current_chat_id = state.get("chat_id") or None
-        agent._current_message_id = _latest_human_message_id(state)
-
-        agent_start = time.perf_counter()
-        perf_logger.info("[PERF][agent=%s] >>> START", agent.name)
-        try:
-            agent_result = await agent.run(state)
-        except Exception as exc:
-            logger.error(
-                "[Graph] Agent '%s' raised an unhandled exception: %s",
-                agent.name,
-                exc,
-                exc_info=True,
-            )
-            agent_result = {
-                "messages": [
-                    AIMessage(
-                        content=(
-                            f"[{agent.name.title()} Agent] I'm temporarily unable to process "
-                            "your request. Please try again in a few moments."
-                        )
-                    )
-                ],
-            }
-        finally:
-            # Restore the agent's per-call state so concurrent / later
-            # invocations don't observe leaked context (§LS5).
-            agent._current_chat_id = prev_chat_id
-            agent._current_message_id = prev_message_id
-        agent_elapsed = (time.perf_counter() - agent_start) * 1000
-        perf_logger.info("[PERF][agent=%s] <<< DONE total=%.1f ms", agent.name, agent_elapsed)
-
-        # ── Per-agent OUTPUT guardrails ──
-        if output_guardrails and not output_guardrails.empty:
-            # Extract agent's response text from messages
-            agent_messages = agent_result.get("messages", [])
-            if agent_messages:
-                response_text = str(agent_messages[-1].content) if hasattr(agent_messages[-1], "content") else ""
-                ctx = OrchidGuardrailContext(
-                    direction=OrchidGuardrailDirection.OUTPUT,
-                    agent_name=agent.name,
-                    tenant_key=auth.tenant_key if auth else "default",
-                    user_id=auth.user_id if auth else "",
-                    chat_id=state.get("chat_id", ""),
-                    metadata={"rag_context": agent_result.get("rag_context", {}).get(agent.name, [])},
-                )
-                result = await output_guardrails.evaluate(response_text, ctx)
-                if result.blocked:
-                    logger.warning(
-                        "[Guardrails] Agent '%s' output blocked by '%s': %s",
-                        agent.name,
-                        result.guardrail_name,
-                        result.message,
-                    )
-                    agent_result["messages"] = [AIMessage(content=f"[{agent.name.title()} Agent] {result.message}")]
-                elif result.action == OrchidGuardrailAction.REDACT and result.redacted_content is not None:
-                    logger.info("[Guardrails] Agent '%s' output redacted by '%s'", agent.name, result.guardrail_name)
-                    agent_result["messages"] = [AIMessage(content=result.redacted_content)]
-
-        # Clear active_agents so the supervisor knows this agent is done
-        # and can proceed to synthesis or advance the sequential pipeline.
-        agent_result["active_agents"] = []
-        return agent_result
-
-    node.__name__ = f"{agent.name}_agent"  # helps LangSmith tracing
-    return node
+    return _AgentNodeWrapper(agent, input_guardrails, output_guardrails, agent_config)
 
 
 def _instantiate_agent(
