@@ -5,7 +5,6 @@ package: "orchid-cli"
 section: "packages"
 order: 22
 tags: []
-sources:
   - "orchid-cli/README.md"
   - "orchid-cli/AGENTS.md"
   - "orchid-cli/orchid_cli/main.py"
@@ -136,4 +135,3 @@ Every `chat`, `index`, and `mcp` command goes through `commands/_session.py:reso
 
 The CLI is an independent OAuth 2.0 client: it runs a full Authorization Code + PKCE flow against the upstream IdP, stores tokens in `~/.orchid/tokens.json` (permissions `0o600`), and refreshes them automatically when they expire. It never delegates auth to `orchid-api`.
 
-<Sources files={["orchid-cli/README.md", "orchid-cli/AGENTS.md", "orchid-cli/orchid_cli/main.py", "orchid-cli/orchid_cli/bootstrap.py", "orchid-cli/orchid_cli/commands/"]} />

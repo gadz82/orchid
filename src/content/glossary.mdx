@@ -5,7 +5,6 @@ package: "cross-cutting"
 section: "meta"
 order: 61
 tags: ["reference", "definitions"]
-sources:
   - "orchid/orchid_ai/core/agent.py"
   - "orchid/orchid_ai/core/state.py"
   - "orchid/orchid_ai/rag/scopes.py"
@@ -24,7 +23,7 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 |---|---|
 | **Agent** | A named, YAML-configured unit of intelligence that handles a specific domain. Each agent has a description, a set of tools, and an optional custom class. See [Agents](/concepts/agents). |
 | **Agentic loop** | The inner reasoning cycle where an LLM issues `tool_calls`, the framework executes them, and the results are fed back until the LLM produces a final answer. See [Agents](/concepts/agents). |
-| **AGENTS.md** | A per-package Markdown file containing AI-specific context: structure, rules, patterns, and pitfalls. Symlinked as `CLAUDE.md` so AI coding assistants read it automatically. |
+| **AGENTS.md** | A per-package Markdown file containing AI-specific context: structure, rules, patterns, and pitfalls. |
 | **Bearer token** | An HTTP `Authorization: Bearer <token>` credential. Orchid resolves it to an `OrchidAuthContext` at the API entry point via `OrchidIdentityResolver`. See [OAuth & Auth](/concepts/oauth). |
 | **Boilerplate** | The minimal code needed to wire a new consumer agent into Orchid — typically a YAML entry plus an optional Python subclass of `OrchidAgent`. |
 | **DCR (Dynamic Client Registration)** | RFC 7591 — the protocol Orchid uses in `oauth` MCP auth mode to register a new OAuth client with a server's authorisation server at runtime, without pre-provisioned credentials. See [OAuth & Auth](/concepts/oauth). |
@@ -48,28 +47,3 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 | **Vector store** | A database optimised for approximate nearest-neighbour search over embedding vectors. Orchid supports Qdrant (full-featured, containerised) and ChromaDB (embedded, on-disk, zero-infra CLI default). See [Hierarchical RAG](/concepts/rag). |
 | **YAML-first** | Orchid's design principle that new agents, tool strategies, and parser registrations are added via YAML configuration rather than code changes, following the Open/Closed principle. See [Configuration](/configuration). |
 
-<Sources
-  files={[
-    "orchid/orchid_ai/core/agent.py",
-    "orchid/orchid_ai/core/state.py",
-    "orchid/orchid_ai/rag/scopes.py",
-    "orchid/orchid_ai/persistence/base.py",
-    "orchid/AGENTS.md",
-    ".knowledge/adr/ADR-021-mini-agents.md",
-    ".knowledge/adr/ADR-029-pollen-bloom.md"
-  ]}
-  pages={[
-    "/concepts/agents",
-    "/concepts/rag",
-    "/concepts/mcp",
-    "/concepts/oauth",
-    "/concepts/embeddings",
-    "/concepts/persistence",
-    "/concepts/supervisor",
-    "/concepts/tool-strategies",
-    "/concepts/document-parsing",
-    "/concepts/mini-agents",
-    "/concepts/pollen-bloom",
-    "/configuration"
-  ]}
-/>

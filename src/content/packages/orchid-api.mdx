@@ -5,7 +5,6 @@ package: "orchid-api"
 section: "packages"
 order: 21
 tags: []
-sources:
   - "orchid-api/README.md"
   - "orchid-api/AGENTS.md"
   - "orchid-api/orchid_api/main.py"
@@ -121,4 +120,3 @@ Set `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` to enable LangSmith. All
 The `get_auth_context` dependency in `auth.py` resolves the Bearer token exactly once per request. Routers receive a fully populated `OrchidAuthContext` and pass it downstream — they never call the identity resolver themselves, never initiate OAuth flows, and never re-read the Authorization header. This single-resolution pattern keeps auth logic in one place and avoids subtle double-resolution bugs.
 </Callout>
 
-<Sources files={["orchid-api/README.md", "orchid-api/AGENTS.md", "orchid-api/orchid_api/main.py", "orchid-api/orchid_api/context.py", "orchid-api/orchid_api/auth.py", "orchid-api/orchid_api/settings.py", "orchid-api/orchid_api/tracing.py"]} />

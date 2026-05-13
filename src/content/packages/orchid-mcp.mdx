@@ -5,7 +5,6 @@ package: "orchid-mcp"
 section: "packages"
 order: 23
 tags: []
-sources:
   - "orchid-mcp/README.md"
   - "orchid-mcp/AGENTS.md"
   - "orchid-mcp/src/tools/registry.ts"
@@ -139,4 +138,3 @@ Add to `~/.cursor/mcp.json`:
 6. **Review hardening defaults**: rate limiter (`ORCHID_MCP_RATE_LIMIT_RPM`, `ORCHID_MCP_RATE_LIMIT_BURST`) and circuit breaker (`ORCHID_MCP_CIRCUIT_BREAKER_THRESHOLD`) ship with sensible defaults — tune for your traffic profile.
 7. **Run checks**: `npm run typecheck && npm run lint && npm test` must all be green before deploying.
 
-<Sources files={["orchid-mcp/README.md", "orchid-mcp/AGENTS.md", "orchid-mcp/src/tools/registry.ts", "orchid-mcp/src/auth/base.ts", "orchid-mcp/src/sessions/base.ts", "orchid-mcp/src/http/orchidClient.ts"]} />

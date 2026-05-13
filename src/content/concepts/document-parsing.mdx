@@ -5,7 +5,6 @@ package: "orchid"
 section: "concepts"
 order: 19
 tags: []
-sources:
   - "orchid/orchid_ai/documents/parsers.py"
   - "orchid/orchid_ai/documents/pipeline.py"
   - "orchid/orchid_ai/documents/AGENTS.md"
@@ -71,4 +70,3 @@ For consumer projects, call `register_parser(ext, cls)` at startup rather than m
 
 After extraction, `ingest_document` splits text into overlapping chunks via `RecursiveCharacterTextSplitter` (defaults: `chunk_size=1000`, `chunk_overlap=200`, split on `\n\n` first). Each chunk is embedded and stored in the vector store with scope metadata — `tenant_id`, `user_id`, `chat_id`, and `scope="chat_shared"` — so it is visible to all agents in the same chat.
 
-<Sources files={["orchid/orchid_ai/documents/parsers.py", "orchid/orchid_ai/documents/pipeline.py", "orchid/orchid_ai/documents/AGENTS.md", "orchid/AGENTS.md"]} />

@@ -5,7 +5,6 @@ package: "orchid"
 section: "concepts"
 order: 10
 tags: []
-sources:
   - "orchid/orchid_ai/core/agent.py"
   - "orchid/orchid_ai/agents/generic_agent.py"
   - "orchid/AGENTS.md"
@@ -107,4 +106,3 @@ The framework resolves the class at startup via `importlib`. Custom agents recei
 
 Any agent — including custom `OrchidAgent` subclasses — can opt into **mini-agent fan-out** with a single YAML flag. When enabled, a decomposer runs before `run()` each turn; if the query contains independent sub-tasks, it fans out into N parallel mini-agents and synthesises their outcomes into one final response. See [Mini-Agents](/concepts/mini-agents) for the full decision tree and YAML reference.
 
-<Sources files={["orchid/orchid_ai/core/agent.py", "orchid/orchid_ai/agents/generic_agent.py", "orchid/AGENTS.md", "examples/basketball/agents.yaml"]} />

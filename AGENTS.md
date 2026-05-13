@@ -167,7 +167,7 @@ When writing concept or package pages (Phase 2+), every non-obvious claim must b
 
 ## Brand-name prohibition
 
-**A specific integrator brand name is forbidden from appearing anywhere in committed files inside `orchid-website/`.** The exact term is defined in the root `CLAUDE.md`; run `grep -ri <term> orchid-website/` before declaring any task done.
+**A specific integrator brand name is forbidden from appearing anywhere in committed files inside `orchid-website/`.** The exact term is defined in the root `AGENTS.md`; run `grep -ri <term> orchid-website/` before declaring any task done.
 
 This applies to code, comments, docstrings, env-var names, README prose, test fixtures, and this file. Use generic terms instead (`acme.example.com`, `mytenant.example`, `INTEGRATOR_CLIENT_ID`, …). Platform-specific work for that integrator belongs in the consumer directory at the monorepo root (outside `orchid-website/`).
 

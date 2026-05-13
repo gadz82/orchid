@@ -5,7 +5,6 @@ package: "orchid"
 section: "concepts"
 order: 20
 tags: ["parallelism", "fan-out", "yaml"]
-sources:
   - "orchid/.knowledge/adr/ADR-021-mini-agents.md"
   - "orchid/orchid_ai/agents/generic_agent.py"
   - "orchid/orchid_ai/graph/supervisor.py"
@@ -98,17 +97,3 @@ Four SSE events surface mini-agent activity to the frontend without exposing per
 - **Mini outcomes never reach chat history.** Only the synthesised parent response is persisted via `OrchidChatStorage`.
 - **Phase A and B compose.** Mini-agents inherit `parent_config.parallel_tools` — each mini benefits from parallel tool calls within its own loop.
 
-<Sources
-  files={[
-    ".knowledge/adr/ADR-021-mini-agents.md",
-    "orchid/orchid_ai/agents/generic_agent.py",
-    "orchid/orchid_ai/graph/supervisor.py",
-    "examples/helpdesk/config/agents.yaml"
-  ]}
-  pages={[
-    "/concepts/agents",
-    "/concepts/supervisor",
-    "/concepts/tool-strategies",
-    "/examples/helpdesk"
-  ]}
-/>

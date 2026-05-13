@@ -5,7 +5,6 @@ package: "orchid"
 section: "concepts"
 order: 21
 tags: ["events", "scheduling", "webhooks", "async"]
-sources:
   - ".knowledge/adr/ADR-029-pollen-bloom.md"
   - ".knowledge/documentation/guides/extending-pollen.md"
   - ".knowledge/documentation/concepts/run-visibility.md"
@@ -144,16 +143,3 @@ All three layers between emitter and supervisor are independently pluggable:
 
 `GET /runs/{run_id}/stream` reuses the existing SSE infrastructure. It emits the same events the chat stream produces (`agent.started`, `tool.called`, `tool.completed`, `agent.finished`), plus four Bloom-specific events: `bloom.signal.ingested`, `bloom.run.queued`, `bloom.run.started`, `bloom.run.finished`.
 
-<Sources
-  files={[
-    ".knowledge/adr/ADR-029-pollen-bloom.md",
-    ".knowledge/documentation/guides/extending-pollen.md",
-    ".knowledge/documentation/concepts/run-visibility.md"
-  ]}
-  pages={[
-    "/concepts/agents",
-    "/concepts/supervisor",
-    "/concepts/persistence",
-    "/concepts/mcp"
-  ]}
-/>

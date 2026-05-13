@@ -5,7 +5,6 @@ package: "cross-cutting"
 section: "meta"
 order: 60
 tags: ["production", "deployment", "patterns"]
-sources:
   - "orchid/orchid_ai/rag/scopes.py"
   - "orchid/orchid_ai/agents/strategies.py"
   - "orchid/orchid_ai/persistence/base.py"
@@ -167,23 +166,3 @@ Orchid routes all LLM calls through LiteLLM, so switching providers is a single 
 
 For production workloads, start with OpenAI or Anthropic for reliability, then benchmark Groq for latency-sensitive paths. Use Ollama for local development to avoid API costs during iteration.
 
-<Sources
-  files={[
-    "orchid/orchid_ai/rag/scopes.py",
-    "orchid/orchid_ai/agents/strategies.py",
-    "orchid/orchid_ai/persistence/base.py",
-    "orchid/AGENTS.md",
-    "orchid-mcp/AGENTS.md",
-    "orchid-api/AGENTS.md"
-  ]}
-  pages={[
-    "/concepts/rag",
-    "/concepts/mcp",
-    "/concepts/oauth",
-    "/concepts/tool-strategies",
-    "/concepts/embeddings",
-    "/concepts/persistence",
-    "/concepts/supervisor",
-    "/configuration"
-  ]}
-/>

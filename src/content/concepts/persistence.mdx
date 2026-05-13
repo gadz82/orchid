@@ -5,7 +5,6 @@ package: "orchid"
 section: "concepts"
 order: 17
 tags: []
-sources:
   - "orchid/orchid_ai/persistence/base.py"
   - "orchid/orchid_ai/persistence/AGENTS.md"
   - "orchid/AGENTS.md"
@@ -78,4 +77,3 @@ storage:
 Always save the original user message to chat history — not the version with file content prepended. Prepending extracted text to the user message is a prompt augmentation pattern for the current LLM call. Persisting that augmented string would cause the stored message to be significantly longer, wasteful to re-load, and misleading if the underlying document changes.
 </Callout>
 
-<Sources files={["orchid/orchid_ai/persistence/base.py", "orchid/orchid_ai/persistence/AGENTS.md", "orchid/AGENTS.md"]} />
