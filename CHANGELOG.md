@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.7.3 (2026-05-13)
+
+### Bug Fixes
+
+- Add links to orchid-examples in READMEs across projects. [skip_ci]
+  ([`b241e17`](https://github.com/gadz82/orchid/commit/b241e17c2213fc1b77076c76dcb73cf5c9f95d0c))
+
+- Delegate conversation history extraction to helper function and implement cacheable MCP client
+  ([`1b4388c`](https://github.com/gadz82/orchid/commit/1b4388ca002a7b24fc5b2e2118e20fea5780e90b))
+
+- Modularize supervisor, agent, and config logic to improve readability, maintainability, and reuse
+  ([`8c909b8`](https://github.com/gadz82/orchid/commit/8c909b8388507b3400c483a08b0ec7f6536c27b8))
+
+- Refine imports, improve exception handling, remove `_wall_clock`, and migrate `_NamespaceData` to
+  dataclass
+  ([`5800122`](https://github.com/gadz82/orchid/commit/5800122bae45538c6d463db35d9795c83b6b5492))
+
+
 ## v1.7.2 (2026-05-13)
 
 ### Bug Fixes
