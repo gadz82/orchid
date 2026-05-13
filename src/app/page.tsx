@@ -24,7 +24,7 @@ const PILLARS = [
     icon: Database,
     title: 'Hierarchical RAG',
     description:
-      'Five-level scoped retrieval (root→tenant→user→chat→agent) with pluggable query strategies and Qdrant built-in.',
+      'Five-level scoped retrieval (root→tenant→user→chat→agent) with pluggable query strategies and Qdrant / ChromaDB built-in.',
     href: '/concepts/rag',
   },
   {

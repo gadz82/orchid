@@ -20,7 +20,7 @@ external:
     url: "PLACEHOLDER"
 ---
 
-Orchid uses pluggable embedding models to convert documents and queries into dense vectors stored in Qdrant. The embedding model is configured once at the deployment level — all agents in a deployment share the same model and collection dimensions.
+Orchid uses pluggable embedding models to convert documents and queries into dense vectors stored in the vector backend (Qdrant or ChromaDB). The embedding model is configured once at the deployment level — all agents in a deployment share the same model and collection dimensions.
 
 ## Supported models and dimensions
 
@@ -41,12 +41,12 @@ defaults:
 Any LiteLLM-compatible embedding model string is accepted. The `LiteLLMEmbedder` in `orchid_ai/rag/embeddings.py` delegates the actual call to LiteLLM.
 
 <Callout variant="warning" title="Switching models requires re-indexing">
-Qdrant collections are created with a fixed vector dimension. If you change `embedding_model` after ingesting documents, the dimensions of new vectors will not match the existing collection and inserts will fail. Drop and recreate the collection, then re-index all documents from scratch.
+Vector store collections are created with a fixed vector dimension. If you change `embedding_model` after ingesting documents, the dimensions of new vectors will not match the existing collections and inserts will fail. Drop and recreate the collections, then re-index all documents from scratch. This applies to both Qdrant and ChromaDB.
 </Callout>
 
 ## How embeddings are generated
 
-Embedding happens lazily inside `QdrantRepository.upsert()`. Documents passed to `ingest_document()` are chunked first, then embedded on the fly — you never need to call the embedder directly.
+Embedding happens lazily inside the vector store repository. Documents passed to `ingest_document()` are chunked first, then embedded on the fly — you never need to call the embedder directly.
 
 On the retrieval side, the query string is embedded once per retrieval call and used to search all configured namespaces in parallel (domain namespace + `uploads`). Results are merged by score and the top-k are returned.
 

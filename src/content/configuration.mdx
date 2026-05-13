@@ -24,7 +24,7 @@ external: []
 
 Orchid splits its configuration across two YAML files with distinct responsibilities. Understanding the boundary between them is the fastest way to understand how the framework is assembled at runtime.
 
-**`orchid.yml`** is the infrastructure and runtime configuration file. It tells the API server which LLM provider to use, where Qdrant is running, which database backs chat persistence, and how authentication is wired. Everything in `orchid.yml` maps directly to an environment variable — the file is a convenience layer on top of env vars, and real environment variables always win. Think of it as the deployment manifest.
+**`orchid.yml`** is the infrastructure and runtime configuration file. It tells the API server which LLM provider to use, which vector backend (Qdrant or ChromaDB) handles embeddings, which database backs chat persistence, and how authentication is wired. Everything in `orchid.yml` maps directly to an environment variable — the file is a convenience layer on top of env vars, and real environment variables always win. Think of it as the deployment manifest.
 
 **`agents.yaml`** is the agent behavior configuration file. It defines which agents exist, what models and tools they use, how the supervisor orchestrates them, and how RAG retrieval is tuned. This file is loaded and validated against a Pydantic schema at startup. Adding a new agent, adjusting conversation history limits, or enabling sliding-window summarization all happen here — no code changes needed.
 

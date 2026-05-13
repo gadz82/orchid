@@ -14,10 +14,12 @@ sources:
   - "orchid/orchid_ai/rag/strategies/hyde.py"
   - "orchid/orchid_ai/rag/strategies/hybrid.py"
   - "orchid/orchid_ai/rag/strategies/graph_rag.py"
+  - "orchid/orchid_ai/rag/backends/qdrant.py"
+  - "orchid-cli/orchid_cli/rag/backends/chroma.py"
   - "orchid/orchid_ai/rag/AGENTS.md"
   - "orchid/AGENTS.md"
 related: ["/concepts/embeddings", "/concepts/document-parsing", "/concepts/agents"]
-example: "/examples/rag-strategies"
+example: "/examples/recipes"
 external:
   - label: "LlamaIndex: hierarchical retrieval"
     url: "https://docs.llamaindex.ai/en/stable/examples/retrievers/auto_merging_retriever/"
@@ -221,7 +223,7 @@ Use the `exclude_dynamic: true` retrieval flag to keep dynamically-injected tool
 | `{"tags": {"contains": "alpha"}}` | Substring / list-contains |
 | `{"deprecated": {"not": True}}` | Negation (`must_not`) |
 
-The Qdrant backend translates these via `build_metadata_filter_clauses` and infers payload index types when the agent didn't declare `payload_indexes` explicitly.
+The Qdrant backend translates these via `build_metadata_filter_clauses`; the ChromaDB backend translates them into MongoDB-style `where` clauses (`$eq`, `$in`, `$gte`, etc.) via `_translate_metadata_filter`. Both backends infer payload index types when the agent didn't declare them explicitly.
 
 ## Vector store interfaces
 
@@ -233,7 +235,12 @@ The framework exposes three purpose-segregated ABCs:
 | `OrchidVectorWriter` | Indexers (write-only) | `upsert(documents, namespace)`, `delete(ids, namespace)` |
 | `OrchidVectorStoreAdmin` | Admin operations | Collection management, scope promotion |
 
-`QdrantRepository` in `rag/backends/qdrant.py` implements all three. Never import `qdrant_client` outside of `rag/backends/` — all access goes through these ABCs.
+The framework ships two concrete backends:
+
+- **`QdrantRepository`** (`rag/backends/qdrant.py`) — full-featured: dense+sparse hybrid search, scope promotion, dynamic cache lookups. Requires a running Qdrant container.
+- **`ChromadbRepository`** (`orchid_cli/rag/backends/chroma.py`) — zero-infrastructure: embedded, on-disk storage via `chromadb.PersistentClient`. The `orchid-cli` default. Dense-only in v1 (no sparse vectors). Stores data at `~/.orchid/chroma/`.
+
+Both implement all three ABCs. Never import `qdrant_client` or `chromadb` outside of their respective backend modules — all access goes through these ABCs. (The ChromaDB backend lives in `orchid-cli/` — the CLI registers it in `VECTOR_BACKEND_REGISTRY` at startup so the library never imports it directly.)
 
 ## Namespace conventions
 
@@ -257,4 +264,4 @@ Set an agent's namespace via `rag.namespace` in `agents.yaml`. Leave it empty to
 - <ExternalLink href="https://www.microsoft.com/en-us/research/blog/graphrag-unlocking-llm-discovery-on-narrative-private-data/">GraphRAG: Microsoft Research</ExternalLink>
 - <ExternalLink href="https://python.langchain.com/docs/modules/data_connection/retrievers/MultiQueryRetriever">LangChain: multi-query retriever</ExternalLink>
 
-<Sources files={["orchid/orchid_ai/rag/scopes.py", "orchid/orchid_ai/core/scopes.py", "orchid/orchid_ai/rag/strategies/__init__.py", "orchid/orchid_ai/rag/strategies/simple.py", "orchid/orchid_ai/rag/strategies/multi_query.py", "orchid/orchid_ai/rag/strategies/hyde.py", "orchid/orchid_ai/rag/strategies/hybrid.py", "orchid/orchid_ai/rag/strategies/graph_rag.py", "orchid/orchid_ai/rag/AGENTS.md", "orchid/AGENTS.md"]} />
+<Sources files={["orchid/orchid_ai/rag/scopes.py", "orchid/orchid_ai/core/scopes.py", "orchid/orchid_ai/rag/strategies/__init__.py", "orchid/orchid_ai/rag/strategies/simple.py", "orchid/orchid_ai/rag/strategies/multi_query.py", "orchid/orchid_ai/rag/strategies/hyde.py", "orchid/orchid_ai/rag/strategies/hybrid.py", "orchid/orchid_ai/rag/strategies/graph_rag.py", "orchid/orchid_ai/rag/backends/qdrant.py", "orchid-cli/orchid_cli/rag/backends/chroma.py", "orchid/orchid_ai/rag/AGENTS.md", "orchid/AGENTS.md"]} />

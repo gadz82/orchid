@@ -1,0 +1,132 @@
+---
+title: "Recipes"
+description: "Zero-infrastructure RAG cookbook example using ChromaDB and Ollama — no Docker, no external services."
+package: "cross-cutting"
+section: "examples"
+order: 35
+tags: ["rag", "chromadb", "ollama"]
+sources:
+  - "examples/recipes/orchid.yml"
+  - "examples/recipes/agents.yaml"
+  - "examples/recipes/hooks/startup.py"
+related:
+  - "/concepts/rag"
+  - "/concepts/embeddings"
+  - "/concepts/agents"
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+This example shows Orchid running with **zero infrastructure**: no Docker, no Qdrant, no external API keys. The vector store is ChromaDB, an embedded, on-disk database that persists vectors at `~/.orchid/chroma/`. The LLM and embedding model both run locally through Ollama.
+
+Two agents — `cookbook` and `mealplanner` — draw on a shared recipe corpus seeded at startup. `cookbook` answers ingredient questions and suggests substitutions; `mealplanner` builds dietary-aware weekly meal plans. Both use simple dense retrieval with reformulation so natural-language queries match the recipe corpus regardless of phrasing.
+
+## Run it
+
+```bash
+# From the repo root
+pip install -e orchid -e orchid-cli
+
+# Send a recipe question
+orchid chat send "What can I make with chicken and rice?" \
+  --config examples/recipes/orchid.yml
+
+# Ask for a meal plan
+orchid chat send "Plan a vegan dinner for Monday" \
+  --agent mealplanner \
+  --config examples/recipes/orchid.yml
+
+# Interactive session
+orchid chat interactive --config examples/recipes/orchid.yml
+```
+
+Ollama must be running locally with `llama3.2` and `nomic-embed-text` pulled.
+
+## Configuration walkthrough
+
+### orchid.yml
+
+```yaml
+llm:
+  model: ollama/llama3.2
+
+auth:
+  dev_bypass: true
+
+rag:
+  vector_backend: chroma          # on-disk, no Docker needed
+  embedding_model: ollama/nomic-embed-text   # 768-d, runs locally
+
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: ~/.orchid/recipes.db
+
+startup:
+  hook: examples.recipes.hooks.startup.seed_recipes
+```
+
+The `rag.vector_backend: chroma` key is what makes this example zero-infra — ChromaDB stores vectors as files under `~/.orchid/chroma/` via its `PersistentClient`. No Docker container, no Qdrant URL. The `startup.hook` seeds 8 recipes at bootstrap so agents have material to retrieve without manual indexing.
+
+### agents.yaml
+
+```yaml
+version: "1"
+
+defaults:
+  llm:
+    model: ollama/llama3.2
+    temperature: 0.2
+
+agents:
+  cookbook:
+    description: >
+      General cooking and recipe assistant.  Answers questions about
+      ingredients, techniques, substitutions.
+    prompt: |
+      You are a helpful chef assisting with cooking questions.
+      Answer using the retrieved recipe documents.
+    rag:
+      namespace: recipes
+      k: 5
+      retrieval:
+        strategy: simple
+        query_transformers: [reformulate]
+
+  mealplanner:
+    description: >
+      Meal-planning assistant that considers dietary restrictions
+      and available ingredients.
+    prompt: |
+      You are a meal-planning assistant.  Build meal plans from the
+      retrieved recipe documents.
+    rag:
+      namespace: recipes
+      k: 8
+      retrieval:
+        strategy: simple
+        query_transformers: [reformulate]
+```
+
+Both agents share the `recipes` namespace. The `query_transformers: [reformulate]` flag smooths out natural-language questions — a user asking "What can I cook with stuff in my fridge?" gets useful results even when the query structure is loose.
+
+## What to look for
+
+- **`vector_backend: chroma`** — the single YAML key that swaps the entire RAG backend from Qdrant to ChromaDB. No code changes, no config restructure.
+- **Startup hook seeding** — `hooks/startup.py` uses `reader.upsert()` to populate 8 recipes into ChromaDB at bootstrap. Each recipe carries metadata (cuisine, course, prep time, dietary tags) available for filtered retrieval.
+- **Zero Docker** — ChromaDB is an embedded database. `~/.orchid/chroma/` is just files on disk. You can inspect them or delete them to start fresh.
+- **Ollama all the way** — both the LLM (`llama3.2`) and embeddings (`nomic-embed-text`) run locally. No OpenAI or Gemini API key required.
+- **Metadata filtering** — recipes are tagged with `cuisine`, `course`, `dietary`, `prep_time_min`, and `difficulty`. Query with `metadata_filters: {"cuisine": "italian"}` to narrow results.
+
+## Related concepts
+
+- [Hierarchical RAG](/concepts/rag) — scope hierarchy, retrieval strategies, metadata filtering
+- [Embeddings](/concepts/embeddings) — supported models, dimension differences
+- [Agents](/concepts/agents) — YAML-driven agent configuration
+
+## Sources
+
+- `examples/recipes/orchid.yml`
+- `examples/recipes/agents.yaml`
+- `examples/recipes/hooks/startup.py`

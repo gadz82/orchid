@@ -28,7 +28,7 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 | **Bearer token** | An HTTP `Authorization: Bearer <token>` credential. Orchid resolves it to an `OrchidAuthContext` at the API entry point via `OrchidIdentityResolver`. See [OAuth & Auth](/concepts/oauth). |
 | **Boilerplate** | The minimal code needed to wire a new consumer agent into Orchid — typically a YAML entry plus an optional Python subclass of `OrchidAgent`. |
 | **DCR (Dynamic Client Registration)** | RFC 7591 — the protocol Orchid uses in `oauth` MCP auth mode to register a new OAuth client with a server's authorisation server at runtime, without pre-provisioned credentials. See [OAuth & Auth](/concepts/oauth). |
-| **Embedding** | A fixed-length numeric vector that encodes the semantic meaning of a text chunk. Orchid uses embeddings to index and retrieve documents in Qdrant. See [Embeddings](/concepts/embeddings). |
+| **Embedding** | A fixed-length numeric vector that encodes the semantic meaning of a text chunk. Orchid uses embeddings to index and retrieve documents in the vector store (Qdrant or ChromaDB). See [Embeddings](/concepts/embeddings). |
 | **Hierarchical RAG** | Orchid's five-level scoping system (root → tenant → user → chat → agent) that controls which vector collections an agent can read from. See [Hierarchical RAG](/concepts/rag). |
 | **Bloom** | The execution layer of Pollen + Bloom. Triggers match incoming Signals and run them through the LangGraph supervisor as `JobRun`s. See [Pollen + Bloom](/concepts/pollen-bloom). |
 | **`LLMProvider`** | The abstract interface (`orchid_ai.core.llm`) for simple text completions. Injected by the graph builder; consumer agents call `self.summarise()` rather than depending on a concrete provider. |
@@ -37,7 +37,7 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 | **`OrchidAuthContext`** | A dataclass (`orchid_ai.core.state`) carrying `tenant_key`, `user_id`, and `bearer_header`. Resolved once at the API entry point and threaded through the graph. See [OAuth & Auth](/concepts/oauth). |
 | **`OrchidChatStorage`** | The ABC (`orchid_ai.persistence.base`) for chat session and message persistence. The library ships a PostgreSQL implementation; consumers can provide alternatives. See [Persistence](/concepts/persistence). |
 | **`OrchidMCPClient`** | The abstract MCP client (`orchid_ai.core.mcp`) combining `OrchidMCPToolCaller` and `OrchidMCPDiscoverable`. Handles capability discovery, caching, and tool invocation. See [MCP Integration](/concepts/mcp). |
-| **`OrchidRAGScope`** | A factory class (`orchid_ai.rag.scopes`) that constructs typed, hierarchical Qdrant filter objects. Always use this — never pass raw `tenant_id` strings. See [Hierarchical RAG](/concepts/rag). |
+| **`OrchidRAGScope`** | A frozen dataclass (`orchid_ai.rag.scopes`) that constructs typed, hierarchical filter objects for the vector store backend. Always use this — never pass raw `tenant_id` strings. See [Hierarchical RAG](/concepts/rag). |
 | **Parse-once** | The pattern of calling `extract_text()` exactly once per document and passing the result to both the prompt builder and `ingest_document(pre_extracted_text=...)`. Avoids double-parsing cost. See [Document Parsing](/concepts/document-parsing). |
 | **Pollen** | The event-ingestion substrate of Pollen + Bloom. Ingests, persists, and dispatches immutable `Signal`s from webhooks, schedulers, agents, or custom producers. See [Pollen + Bloom](/concepts/pollen-bloom). |
 | **Passthrough auth** | MCP auth mode where the user's bearer token is forwarded unchanged to the MCP server. The server must trust the same identity provider as the Orchid API. See [MCP Integration](/concepts/mcp). |
@@ -45,7 +45,7 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 | **Sliding-window summarization** | An opt-in supervisor feature that compresses older conversation turns into a summary, keeping only the most recent exchanges verbatim. Reduces token usage for long sessions. See [Supervisor](/concepts/supervisor). |
 | **Supervisor** | The LangGraph node that routes user messages to the correct agent, manages conversation history, and assembles the final response. Configurable via the `supervisor:` YAML section. See [Supervisor](/concepts/supervisor). |
 | **Tool strategy** | The algorithm used by `GenericAgent` to invoke tools during skill execution: `all` (parallel), `sequential`, or `llm_decides`. See [Tool Strategies](/concepts/tool-strategies). |
-| **Vector store** | A database optimised for approximate nearest-neighbour search over embedding vectors. Orchid uses Qdrant as its vector store backend. See [Hierarchical RAG](/concepts/rag). |
+| **Vector store** | A database optimised for approximate nearest-neighbour search over embedding vectors. Orchid supports Qdrant (full-featured, containerised) and ChromaDB (embedded, on-disk, zero-infra CLI default). See [Hierarchical RAG](/concepts/rag). |
 | **YAML-first** | Orchid's design principle that new agents, tool strategies, and parser registrations are added via YAML configuration rather than code changes, following the Open/Closed principle. See [Configuration](/configuration). |
 
 <Sources

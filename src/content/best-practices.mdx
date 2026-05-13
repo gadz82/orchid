@@ -35,7 +35,7 @@ Use **chat scope** sparingly — only when a document is relevant only to a sing
 
 Use **agent scope** when a specialised agent (e.g. a legal-review agent) needs its own curated knowledge base that other agents in the same graph must not access.
 
-Never pass raw `tenant_id` strings as Qdrant filters. Always construct scopes via `OrchidRAGScope` — this is the only way to guarantee the hierarchy is respected and future scope changes are backward-compatible.
+Never pass raw `tenant_id` strings as vector store filters. Always construct scopes via `OrchidRAGScope` — this is the only way to guarantee the hierarchy is respected and future scope changes are backward-compatible.
 
 See [Hierarchical RAG](/concepts/rag) for the full scope API.
 
@@ -67,7 +67,7 @@ Orchid supports any embedding model exposed via LiteLLM. The three most common c
 | `text-embedding-3-small` (OpenAI) | 1536 | Low cost, strong multilingual |
 | `gemini-embedding-001` (Google) | 3072 | Highest quality, highest cost |
 
-**Switching embedding models requires a full re-index.** Qdrant collections are created with a fixed vector dimension. If you change `embeddings.model` in `orchid.yml` after data has been indexed, you must drop and recreate every collection. There is no automatic migration.
+**Switching embedding models requires a full re-index.** Vector store collections are created with a fixed vector dimension. If you change `embeddings.model` in `orchid.yml` after data has been indexed, you must drop and recreate every collection. There is no automatic migration — this applies equally to Qdrant and ChromaDB.
 
 Establish your embedding model choice before ingesting production data. If you anticipate switching, keep a record of which model was used for each collection in your operational runbook.
 

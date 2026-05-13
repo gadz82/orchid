@@ -319,12 +319,13 @@
     "type": "string",
     "required": false,
     "default": "qdrant",
-    "description": "Vector database backend \u2014 'qdrant' is the only supported backend.",
+    "description": "Vector database backend — 'qdrant' (full-featured, containerised) or 'chroma' (embedded, on-disk, CLI default).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
       "/examples/graph-kb",
-      "/examples/helpdesk"
+      "/examples/helpdesk",
+      "/examples/recipes"
     ]
   },
   {

@@ -52,7 +52,7 @@ YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`)
 
 ### `rag/`
 
-Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and the Qdrant backend. All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through Qdrant-specific imports outside `rag/backends/`. See [RAG](/concepts/rag).
+Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends (Qdrant for full-featured deployments, ChromaDB for zero-infra local usage). All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. The ChromaDB backend lives in `orchid-cli/` and is registered in `VECTOR_BACKEND_REGISTRY` at CLI startup. See [RAG](/concepts/rag).
 
 ### `persistence/`
 
@@ -129,7 +129,7 @@ agents:
 The framework resolves the class at startup via `importlib`. The agent inherits `summarise()`, `fetch_rag_context()`, `extract_user_query()`, and `extract_conversation_history()` from the base class — override only what you need.
 
 <Callout variant="info" title="core/ has zero external dependencies">
-`orchid_ai/core/` imports only the Python standard library and `langchain-core` (for `Document` and message types). Concrete implementations — Qdrant, asyncpg, litellm — live in `rag/backends/`, `persistence/`, and `agents/` respectively. This boundary is enforced: adding any external import to `core/` is an architectural bug.
+`orchid_ai/core/` imports only the Python standard library and `langchain-core` (for `Document` and message types). Concrete implementations — Qdrant, ChromaDB, asyncpg, litellm — live in `rag/backends/`, `persistence/`, `agents/`, and `orchid-cli/orchid_cli/rag/` respectively. This boundary is enforced: adding any external import to `core/` is an architectural bug.
 </Callout>
 
 ## LLM configuration

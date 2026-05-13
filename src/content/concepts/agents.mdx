@@ -27,7 +27,7 @@ Every agent in Orchid is a Python class that satisfies the `OrchidAgent` abstrac
 |--------|---------|
 | `name` (abstract property) | Unique identifier, e.g. `"basketball"` — used in LangGraph node names |
 | `description` (abstract property) | Human-readable intent description; the supervisor LLM reads this to decide routing |
-| `rag_namespace` (property) | Qdrant collection name. Override if the agent uses RAG; default is `""` (no RAG) |
+| `rag_namespace` (property) | Vector store collection name for RAG. Override if the agent uses RAG; default is `""` (no RAG) |
 | `run(state)` (abstract) | Main agent logic — receives the full `OrchidAgentState`, returns a partial update |
 
 The base class also provides shared helpers every subclass can use without reimplementing:
@@ -44,7 +44,7 @@ For most use cases, `GenericAgent` is the right choice. It is a concrete subclas
 1. RAG retrieval (tenant-scoped via `OrchidRAGScope`)
 2. Skill check — if the query matches a configured skill, run it and skip to step 6
 3. Agentic tool-calling loop — MCP + built-in tools via native `tool_calls`
-4. Dynamic RAG injection — write tool results back to Qdrant for future retrieval
+4. Dynamic RAG injection — write tool results back to the vector store for future retrieval
 5. LLM summarisation — synthesise the final response
 
 ## Defining an agent in YAML

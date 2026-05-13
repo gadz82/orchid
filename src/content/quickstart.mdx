@@ -34,7 +34,7 @@ cd orchid
 
 ## Run the basketball demo
 
-The demo ships with a single Compose file that starts the API server, Qdrant vector store, and all dependencies:
+The demo ships with a single Compose file that starts the API server, Qdrant vector store, and all dependencies. For a zero-infrastructure alternative (no Docker, ChromaDB instead of Qdrant), try the [Recipes example](/examples/recipes) which runs entirely locally with Ollama.
 
 ```bash
 docker compose -f docker-compose.demo.yml up --build
