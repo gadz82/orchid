@@ -318,7 +318,7 @@ async def _route(
         llm_elapsed = (time.perf_counter() - llm_start) * 1000
         perf_logger.info("[PERF][supervisor.route] structured LLM call took %.1f ms", llm_elapsed)
         logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
-    except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+    except Exception as exc:
         # Handle LLM API failures gracefully
         logger.error("[Supervisor] LLM API error during routing: %s", exc, exc_info=True)
         error_msg = str(exc)

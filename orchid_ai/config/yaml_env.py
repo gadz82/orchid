@@ -95,7 +95,7 @@ def apply_yaml_to_env(
     try:
         import yaml
 
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     except FileNotFoundError:
         logger.warning("[Config] YAML config %s not found — ignoring", config_path)

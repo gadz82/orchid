@@ -357,42 +357,9 @@ def _builtin_tools_for_parent(
     parent_config: OrchidAgentConfig,
 ) -> tuple[set[str], list[dict[str, Any]]]:
     """Mirror ``GenericAgent._builtin_tools_to_litellm`` against parent_config."""
-    from ..config.tool_registry import get_tool
+    from .tool_utils import tools_to_litellm_format
 
-    def _tool_param_to_jsonschema(t: str) -> str:
-        return {"int": "integer", "float": "number", "bool": "boolean"}.get(t, "string")
-
-    names: set[str] = set()
-    defs: list[dict[str, Any]] = []
-    for tool_name in parent_config.tools:
-        try:
-            entry = get_tool(tool_name)
-        except KeyError:
-            continue
-        names.add(tool_name)
-        properties: dict[str, Any] = {}
-        required: list[str] = []
-        for p in entry.parameters.values():
-            properties[p.name] = {
-                "type": _tool_param_to_jsonschema(p.type),
-                "description": p.description,
-            }
-            if p.required:
-                required.append(p.name)
-        schema: dict[str, Any] = {"type": "object", "properties": properties}
-        if required:
-            schema["required"] = required
-        defs.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": tool_name,
-                    "description": entry.description,
-                    "parameters": schema,
-                },
-            }
-        )
-    return names, defs
+    return tools_to_litellm_format(parent_config.tools)
 
 
 def _inherit_parallel_safety(
@@ -409,33 +376,23 @@ def _inherit_parallel_safety(
     ``GenericAgent._resolve_parallel_safety`` against the (already
     filtered) mini ``tool_map``.
     """
-    if not parent_config.parallel_tools:
-        return None
-
-    approval_set = parent_config.approval_tools or set()
-    builtin_safe = parent_config.parallel_safe_builtin_tools or set()
+    from .tool_utils import resolve_parallel_safety
 
     mcp_overrides: dict[str, bool] = {}
     for server in parent_config.mcp_servers:
         for tool in server.tools:
-            if tool.parallel_safe is None:
-                continue
-            mcp_overrides[tool.name] = tool.parallel_safe
+            if tool.parallel_safe is not None:
+                mcp_overrides[tool.name] = tool.parallel_safe
 
-    safety: dict[str, bool] = {}
-    for tool_name in tool_map:
-        if tool_name in approval_set:
-            safety[tool_name] = False
-            continue
-        if tool_name in builtin_tool_names:
-            safety[tool_name] = tool_name in builtin_safe
-            continue
-        if tool_name in mcp_overrides:
-            safety[tool_name] = mcp_overrides[tool_name]
-            continue
-        annotations = caps.tool_annotations.get(tool_name) if caps else None
-        safety[tool_name] = bool(annotations and annotations.read_only_hint is True)
-    return safety
+    return resolve_parallel_safety(
+        tool_map=tool_map,
+        builtin_tool_names=builtin_tool_names,
+        caps=caps,
+        parallel_tools_enabled=bool(parent_config.parallel_tools),
+        approval_tools=parent_config.approval_tools,
+        parallel_safe_builtin_tools=parent_config.parallel_safe_builtin_tools,
+        mcp_parallel_overrides=mcp_overrides,
+    )
 
 
 def _build_mini_system_prompt(

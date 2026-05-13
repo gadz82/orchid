@@ -126,6 +126,27 @@ class OrchidAgent(ABC):
         """
         ...
 
+    # ── Peer wiring (cross-agent skill steps) ────────────────
+
+    def needs_peer_wiring(self) -> bool:
+        """Return ``True`` if this agent requires cross-agent peer wiring.
+
+        Subclasses that support delegation to other agents via skill
+        steps must override this method and return ``True`` when at
+        least one skill step references another agent.
+        """
+        return False
+
+    def wire_peers(self, peers: dict[str, "OrchidAgent"]) -> None:
+        """Receive a mapping of peer agent names to instances.
+
+        Called by the graph builder after all agents are instantiated
+        but before the graph is compiled.  Subclasses that override
+        :meth:`needs_peer_wiring` should also override this method to
+        store the peer mapping.
+        """
+        pass
+
     # ── Shared helpers ──────────────────────────────────────
 
     @staticmethod
@@ -279,7 +300,7 @@ class OrchidAgent(ABC):
                 temperature=0.0,
             )
             summary_text = result.content or ""
-        except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+        except Exception as exc:
             logger.warning("History compression failed (%s), falling back to truncation", exc)
             # Fallback: just keep the recent turns (no summary)
             return recent
@@ -384,7 +405,7 @@ class OrchidAgent(ABC):
 
     async def emit_signal(
         self,
-        type: str,
+        signal_type: str,
         payload: dict[str, Any],
         *,
         dedupe_key: str | None = None,
@@ -477,7 +498,7 @@ class OrchidAgent(ABC):
             identity_claim = dict(identity)
 
         envelope = SignalEnvelope(
-            type=type,
+            type=signal_type,
             payload=dict(payload),
             source=f"internal:agent:{self.name}",
             occurred_at=_dt.datetime.now(tz=_dt.UTC),

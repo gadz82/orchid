@@ -108,7 +108,8 @@ class SpladeEncoder(OrchidSparseEncoder):
 
         tokenizer = self._tokenizer
         model = self._model
-        assert tokenizer is not None and model is not None  # noqa: S101 — _ensure_loaded ran
+        if tokenizer is None or model is None:
+            raise RuntimeError("Tokenizer or model not loaded — _ensure_loaded must run first")
 
         with torch.no_grad():
             tokens = tokenizer(

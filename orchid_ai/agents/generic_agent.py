@@ -95,7 +95,11 @@ class GenericAgent(OrchidAgent):
             agent_peers=self._agent_peers,
         )
 
-    def set_agent_peers(self, peers: dict[str, Any]) -> None:
+    def needs_peer_wiring(self) -> bool:
+        """Return ``True`` if any skill step references another agent."""
+        return any(step.agent is not None for skill in self._config.skills.values() for step in skill.steps)
+
+    def wire_peers(self, peers: dict[str, Any]) -> None:
         """Set peer agents for cross-agent skill steps.
 
         Called by the graph builder after all agents are instantiated.
@@ -566,31 +570,17 @@ class GenericAgent(OrchidAgent):
         4. MCP tool without YAML override → ``True`` iff the server
            advertised ``readOnlyHint=True`` for that tool; else ``False``.
         """
-        if not self._config.parallel_tools:
-            return None
+        from .tool_utils import resolve_parallel_safety
 
-        approval_set = self._config.approval_tools or set()
-        builtin_safe = self._config.parallel_safe_builtin_tools or set()
-        mcp_overrides = self._mcp_parallel_overrides()
-
-        safety: dict[str, bool] = {}
-        for tool_name in tool_map:
-            if tool_name in approval_set:
-                safety[tool_name] = False
-                continue
-            if tool_name in builtin_tool_names:
-                safety[tool_name] = tool_name in builtin_safe
-                continue
-
-            override = mcp_overrides.get(tool_name)
-            if override is not None:
-                safety[tool_name] = override
-                continue
-
-            annotations = caps.tool_annotations.get(tool_name)
-            safety[tool_name] = bool(annotations and annotations.read_only_hint is True)
-
-        return safety
+        return resolve_parallel_safety(
+            tool_map=tool_map,
+            builtin_tool_names=builtin_tool_names,
+            caps=caps,
+            parallel_tools_enabled=bool(self._config.parallel_tools),
+            approval_tools=self._config.approval_tools,
+            parallel_safe_builtin_tools=self._config.parallel_safe_builtin_tools,
+            mcp_parallel_overrides=self._mcp_parallel_overrides(),
+        )
 
     def _mcp_parallel_overrides(self) -> dict[str, bool | None]:
         """Collect explicit per-tool ``parallel_safe`` overrides from YAML.
@@ -687,49 +677,9 @@ class GenericAgent(OrchidAgent):
 
         Returns ``(builtin_tool_names, litellm_tool_defs)``.
         """
-        from ..config.tool_registry import get_tool
+        from .tool_utils import tools_to_litellm_format
 
-        names: set[str] = set()
-        defs: list[dict[str, Any]] = []
-
-        for tool_name in self._config.tools:
-            if skip_tools and (tool_name in skip_tools or f"builtin_{tool_name}" in skip_tools):
-                continue
-            try:
-                entry = get_tool(tool_name)
-            except KeyError:
-                continue
-
-            names.add(tool_name)
-
-            # Build JSON Schema properties from ToolParameter metadata
-            properties: dict[str, Any] = {}
-            required: list[str] = []
-            for p in entry.parameters.values():
-                prop: dict[str, str] = {
-                    "type": _tool_param_type_to_json_schema(p.type),
-                    "description": p.description,
-                }
-                properties[p.name] = prop
-                if p.required:
-                    required.append(p.name)
-
-            schema: dict[str, Any] = {"type": "object", "properties": properties}
-            if required:
-                schema["required"] = required
-
-            defs.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "description": entry.description,
-                        "parameters": schema,
-                    },
-                }
-            )
-
-        return names, defs
+        return tools_to_litellm_format(self._config.tools, skip_tools=skip_tools)
 
     # ── Built-in tool call helper ────────────────────────────────
 
@@ -783,22 +733,3 @@ class GenericAgent(OrchidAgent):
             logger.warning("[%s] No SkillDetector available — skill detection skipped", self.name)
             return None
         return await self._skill_detector.detect(query, self._config.skills)
-
-
-# ── Module-level helpers ─────────────────────────────────────────
-
-_PARAM_TYPE_MAP: dict[str, str] = {
-    "string": "string",
-    "str": "string",
-    "int": "integer",
-    "integer": "integer",
-    "float": "number",
-    "number": "number",
-    "bool": "boolean",
-    "boolean": "boolean",
-}
-
-
-def _tool_param_type_to_json_schema(param_type: str) -> str:
-    """Map a ``ToolParameter.type`` string to a JSON Schema type."""
-    return _PARAM_TYPE_MAP.get(param_type.lower(), "string")

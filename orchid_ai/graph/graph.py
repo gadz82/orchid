@@ -46,7 +46,6 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
-from ..agents.generic_agent import GenericAgent
 from ..agents.mini_agent_aggregator import aggregator_node_factory
 from ..agents.mini_agent_node import mini_agent_node_factory
 from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidGuardrailsConfig
@@ -559,14 +558,6 @@ def build_graph(
     """
     from ..llm_factory import build_chat_model as _build_chat_model
 
-    # ── Enable LLM response caching if configured ──
-    if config.defaults.cache_enabled:
-        from langchain_core.caches import InMemoryCache
-        from langchain_core.globals import set_llm_cache
-
-        set_llm_cache(InMemoryCache())
-        logger.info("[Graph] LLM response caching enabled (InMemoryCache)")
-
     reader = runtime.get_reader()
     # graph store reaches the agent so ``graph_rag`` retrieval
     # can traverse entities/edges.  Returns a NullGraphStore
@@ -677,18 +668,15 @@ def build_graph(
     if agents_out is not None:
         agents_out.update(agent_map)
     for agent in agents:
-        if not isinstance(agent, GenericAgent):
+        if not agent.needs_peer_wiring():
             continue
-        # Check if any skill step references another agent
-        needs_peers = any(step.agent is not None for skill in agent._config.skills.values() for step in skill.steps)
-        if needs_peers:
-            peers = {name: peer for name, peer in agent_map.items() if name != agent.name}
-            agent.set_agent_peers(peers)
-            logger.info(
-                "[Graph] agent '%s' wired with peers: %s",
-                agent.name,
-                list(peers.keys()),
-            )
+        peers = {name: peer for name, peer in agent_map.items() if name != agent.name}
+        agent.wire_peers(peers)
+        logger.info(
+            "[Graph] agent '%s' wired with peers: %s",
+            agent.name,
+            list(peers.keys()),
+        )
 
     # ── Supervisor chat model (may have its own fallback) ──
     sup_fallback = sup.fallback_model or default_fallback

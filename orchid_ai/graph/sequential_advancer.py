@@ -131,7 +131,7 @@ class SequentialAdvancer:
                 remaining,
                 handoff[:100],
             )
-        except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as exc:
+        except Exception as exc:
             logger.error("[Supervisor] LLM API error during sequential handoff: %s", exc, exc_info=True)
             handoff = f"Continue with {next_agent} to address the user's request."
 
