@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v1.7.2 (2026-05-13)
+
+### Bug Fixes
+
+- Extract shared tool utils into `tool_utils` for code reuse, simplify graph and agent logic, and
+  standardize exception handling across modules
+  ([`b458818`](https://github.com/gadz82/orchid/commit/b458818d0ba0dc013eb55b5476368584deb0fbf6))
+
+### Chores
+
+- Add GitHub Actions workflow to deploy orchid-website to GitHub Pages
+  ([`0b2ba81`](https://github.com/gadz82/orchid/commit/0b2ba812e65df3acdf349df0544b3d4c4c1e6d6a))
+
+- Add GitHub Actions workflow to deploy orchid-website to GitHub Pages
+  ([`cb6fe40`](https://github.com/gadz82/orchid/commit/cb6fe4078ac7ecce65a8f561f77601b16cb09cff))
+
+- Add GitHub Actions workflow to deploy orchid-website to GitHub Pages
+  ([`17d8560`](https://github.com/gadz82/orchid/commit/17d856086c749d2437bbfb36627ffcc727577a50))
+
+- Orchid github pages next application [skip_ci]
+  ([`499e43a`](https://github.com/gadz82/orchid/commit/499e43afb344f7737e100125b805e465585c9162))
+
+### Continuous Integration
+
+- Bypass actions/configure-pages, hardcode BASE_PATH=/orchid [skip ci]
+  ([`7e11849`](https://github.com/gadz82/orchid/commit/7e118495581eed42ece3528f63671c7a824b8d5b))
+
+
 ## v1.7.1 (2026-05-10)
 
 ### Bug Fixes
