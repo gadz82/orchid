@@ -92,9 +92,10 @@ def test_eq_same_values():
 
 
 def test_eq_different_values():
+    """Auth contexts with same identity (tenant+user) are equal regardless of token."""
     a = OrchidAuthContext(access_token="tok1", tenant_key="t", user_id="u")
     b = OrchidAuthContext(access_token="tok2", tenant_key="t", user_id="u")
-    assert a != b
+    assert a == b
 
 
 def test_eq_not_implemented_for_non_auth():

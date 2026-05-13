@@ -171,71 +171,15 @@ class OrchidAgent(ABC):
     ) -> list[dict[str, str]]:
         """Extract recent conversation history from graph state.
 
-        Returns a list of ``{"role": "user"|"assistant", "content": ...}``
-        dicts suitable for injection into an LLM message list.
-
-        The last user message is **excluded** — it should be appended
-        separately as the current query to avoid duplication.
-
-        Parameters
-        ----------
-        state : OrchidAgentState
-            Full graph state containing ``messages``.
-        max_turns : int
-            Maximum number of user/assistant exchanges to keep.
-            Older messages are trimmed to avoid blowing up the context window.
-        max_chars : int | None
-            When set, individual message content is truncated to this
-            many characters (with an ``…`` suffix).  ``None`` means
-            no truncation.
-        skip_prefixes : tuple[str, ...]
-            Messages whose content starts with any of these prefixes are
-            dropped entirely (e.g. internal supervisor routing messages).
-        strip_prefixes : tuple[str, ...]
-            Prefixes to strip from assistant messages (e.g. ``"[MyAgent]\\n"``).
-            Only the first matching prefix is stripped.
+        Delegates to :func:`core.helpers.extract_conversation_history`.
         """
-        all_messages = state.get("messages", [])
-        if not all_messages:
-            return []
-
-        history: list[dict[str, str]] = []
-        for msg in all_messages:
-            # Duck-type: LangChain messages expose .type and .content
-            msg_type = getattr(msg, "type", None) or type(msg).__name__.lower()
-            content = str(msg.content) if hasattr(msg, "content") else str(msg)
-
-            if not content.strip():
-                continue
-
-            # Skip internal messages (e.g. supervisor routing)
-            if any(content.startswith(prefix) for prefix in skip_prefixes):
-                continue
-
-            if msg_type in ("human", "humanmessage"):
-                if max_chars is not None and len(content) > max_chars:
-                    content = content[:max_chars] + "…"
-                history.append({"role": "user", "content": content})
-            elif msg_type in ("ai", "aimessage"):
-                # Strip known agent prefixes for a clean dialogue
-                for prefix in strip_prefixes:
-                    if content.startswith(prefix):
-                        content = content[len(prefix) :]
-                        break
-                if max_chars is not None and len(content) > max_chars:
-                    content = content[:max_chars] + "…"
-                history.append({"role": "assistant", "content": content})
-
-        # Drop the last user message — it will be added separately as the current query
-        if history and history[-1]["role"] == "user":
-            history = history[:-1]
-
-        # Keep only the most recent turns to avoid exceeding context limits
-        max_messages = max_turns * 2
-        if len(history) > max_messages:
-            history = history[-max_messages:]
-
-        return history
+        return _helpers.extract_conversation_history(
+            state,
+            max_turns=max_turns,
+            max_chars=max_chars,
+            skip_prefixes=skip_prefixes,
+            strip_prefixes=strip_prefixes,
+        )
 
     @staticmethod
     async def compress_conversation_history(

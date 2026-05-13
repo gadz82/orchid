@@ -19,12 +19,13 @@ Themed modules:
 from __future__ import annotations
 
 from .mcp_errors import OrchidMCPAuthRequiredError, OrchidMCPDiscoveryError
-from .mcp_interfaces import OrchidMCPClient, OrchidMCPDiscoverable, OrchidMCPToolCaller
+from .mcp_interfaces import OrchidCacheableMCPClient, OrchidMCPClient, OrchidMCPDiscoverable, OrchidMCPToolCaller
 from .mcp_registration import OrchidMCPClientRegistration, OrchidMCPClientRegistrationStore
 from .mcp_result import OrchidMCPToolResult
 from .mcp_tokens import OrchidMCPTokenRecord, OrchidMCPTokenStore
 
 __all__ = [
+    "OrchidCacheableMCPClient",
     "OrchidMCPAuthRequiredError",
     "OrchidMCPClient",
     "OrchidMCPClientRegistration",

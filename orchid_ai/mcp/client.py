@@ -26,7 +26,7 @@ from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
 
-from ..core.mcp import OrchidMCPClient, OrchidMCPToolResult
+from ..core.mcp import OrchidCacheableMCPClient, OrchidMCPToolResult
 from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class _CapabilitiesCache:
     populated: bool = False
 
 
-class StreamableHttpMCPClient(OrchidMCPClient):
+class StreamableHttpMCPClient(OrchidCacheableMCPClient):
     """MCP client that connects via Streamable HTTP or SSE transport.
 
     Capabilities are discovered once on first use (or on

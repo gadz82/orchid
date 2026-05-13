@@ -180,14 +180,10 @@ class OrchidAuthContext:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, OrchidAuthContext):
             return NotImplemented
-        return (
-            self.access_token == other.access_token
-            and self.tenant_key == other.tenant_key
-            and self.user_id == other.user_id
-        )
+        return self.tenant_key == other.tenant_key and self.user_id == other.user_id
 
     def __hash__(self) -> int:
-        return hash((self.access_token, self.tenant_key, self.user_id))
+        return hash((self.tenant_key, self.user_id))
 
 
 # ── LangGraph State ─────────────────────────────────────────────
