@@ -16,7 +16,10 @@ from __future__ import annotations
 __version__ = "0.0.0"
 
 from .checkpointing.factory import build_checkpointer, shutdown_checkpointer
+from .config.frontmatter import MarkdownFile, load_markdown_file, parse_frontmatter
 from .config.loader import load_config
+from .config.md_loader import load_md_config, md_infrastructure_to_env
+from .config.watcher import ConfigSnapshot, OrchidConfigWatcher, YamlConfigWatcher
 from .core.agent import OrchidAgent
 from .core.guardrails import (
     OrchidGuardrail,
@@ -260,6 +263,9 @@ __all__ = [
     "ReformulateTransformer",
     "SimpleRetrieval",
     # ── Factories + RAG registries ────────────────────
+    "ConfigSnapshot",
+    "YamlConfigWatcher",
+    "OrchidConfigWatcher",
     "build_chat_model",
     "build_chat_storage",
     "build_checkpointer",
@@ -276,6 +282,11 @@ __all__ = [
     "get_retrieval_strategy",
     "iter_entry_point_plugins",
     "load_config",
+    "load_markdown_file",
+    "load_md_config",
+    "MarkdownFile",
+    "md_infrastructure_to_env",
+    "parse_frontmatter",
     "register_doc_store_backend",
     "register_graph_store_backend",
     "register_ingestion_strategy",
