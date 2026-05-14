@@ -538,116 +538,6 @@ class Orchid:
             )
         return instance
 
-
-def _resolve_agents_dir_from_md(
-    root_path: Path,
-    frontmatter: dict[str, Any],
-    agents_dir_override: Path | None,
-) -> Path:
-    from .config.md_loader import _resolve_agents_dir
-
-    return _resolve_agents_dir(root_path, frontmatter, agents_dir_override)
-
-
-# ── Hybrid config factory (YAML root + MD agents) ──────────
-
-
-async def _build_hybrid_config(
-    *,
-    orchid_yml_path: Path,
-    agents_dir: Path,
-    apply_yaml: bool,
-    skip_yaml_sections: set[str] | None = None,
-    model: str = "",
-    vector_backend: str = "",
-    qdrant_url: str = "",
-    embedding_model: str = "",
-    chat_storage_class: str = "",
-    chat_db_dsn: str = "",
-    chat_extra_migrations_package: str | None = None,
-    mcp_token_store_class: str = "",
-    mcp_token_store_dsn: str = "",
-    mcp_client_registration_store_class: str = "",
-    mcp_client_registration_store_dsn: str = "",
-    mcp_gateway_state_store_class: str = "",
-    mcp_gateway_state_store_dsn: str = "",
-    checkpointer_type: str = "",
-    checkpointer_dsn: str = "",
-    startup_hook: str = "",
-    startup_hook_kwargs: dict[str, Any] | None = None,
-    runtime_overrides: dict[str, Any] | None = None,
-) -> Orchid:
-    """Hybrid bootstrap: YAML root (``orchid.yml``) for infrastructure +
-    top-level config, ``agents_dir/*.md`` for per-agent configs."""
-    import yaml
-
-    from .config.md_loader import _load_agents, _AGENT_BEHAVIOUR_SECTIONS, _INFRASTRUCTURE_SECTIONS
-    from .config.schema import OrchidAgentsConfig
-    from .config.yaml_env import apply_yaml_to_env
-
-    # ── 1. Apply YAML infrastructure → env vars ─────────
-    if apply_yaml and str(orchid_yml_path):
-        os.environ.setdefault("ORCHID_CONFIG", str(orchid_yml_path))
-        apply_yaml_to_env(str(orchid_yml_path), skip_sections=skip_yaml_sections)
-
-    # ── 2. Read orchid.yml for top-level agent config ───
-    yaml_data: dict[str, Any] = {}
-    try:
-        with open(orchid_yml_path, encoding="utf-8") as f:
-            yaml_data = yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        pass
-
-    # ── 3. Build top-level config data ───────────────────
-    config_data: dict[str, Any] = {}
-    for section in _AGENT_BEHAVIOUR_SECTIONS:
-        if section in yaml_data:
-            config_data[section] = yaml_data[section]
-    # Copy any unrecognised non-infra sections
-    for key, value in yaml_data.items():
-        if key not in _INFRASTRUCTURE_SECTIONS and key not in _AGENT_BEHAVIOUR_SECTIONS and key != "agents":
-            config_data[key] = value
-
-    # ── 4. Load agents from MD directory ─────────────────
-    agent_configs, _ = _load_agents(agents_dir)
-    config_data["agents"] = agent_configs
-
-    # ── 5. Validate ──────────────────────────────────────
-    config = OrchidAgentsConfig.model_validate(config_data)
-
-    # ── 6. Build runtime with the pre-loaded config ──────
-    result = await _build_runtime(
-        config_path=str(orchid_yml_path),
-        apply_yaml=False,
-        config=config,
-        model=model,
-        vector_backend=vector_backend,
-        qdrant_url=qdrant_url,
-        embedding_model=embedding_model,
-        chat_storage_class=chat_storage_class,
-        chat_db_dsn=chat_db_dsn,
-        chat_extra_migrations_package=chat_extra_migrations_package,
-        mcp_token_store_class=mcp_token_store_class,
-        mcp_token_store_dsn=mcp_token_store_dsn,
-        mcp_client_registration_store_class=mcp_client_registration_store_class,
-        mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
-        mcp_gateway_state_store_class=mcp_gateway_state_store_class,
-        mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
-        checkpointer_type=checkpointer_type,
-        checkpointer_dsn=checkpointer_dsn,
-        startup_hook=startup_hook,
-        startup_hook_kwargs=startup_hook_kwargs,
-        runtime_overrides=runtime_overrides,
-        skip_yaml_sections=skip_yaml_sections,
-    )
-    return Orchid(
-        config=result.config,
-        runtime=result.runtime,
-        chat_repo=result.chat_repo,
-        mcp_token_store=result.mcp_token_store,
-        _owns_resources=True,
-    )
-
     # ── Async context manager ───────────────────────────────
 
     async def __aenter__(self) -> "Orchid":
@@ -1146,6 +1036,116 @@ async def _build_hybrid_config(
             interrupted=True,
             approvals_needed=approvals,
         )
+
+
+def _resolve_agents_dir_from_md(
+    root_path: Path,
+    frontmatter: dict[str, Any],
+    agents_dir_override: Path | None,
+) -> Path:
+    from .config.md_loader import _resolve_agents_dir
+
+    return _resolve_agents_dir(root_path, frontmatter, agents_dir_override)
+
+
+# ── Hybrid config factory (YAML root + MD agents) ──────────
+
+
+async def _build_hybrid_config(
+    *,
+    orchid_yml_path: Path,
+    agents_dir: Path,
+    apply_yaml: bool,
+    skip_yaml_sections: set[str] | None = None,
+    model: str = "",
+    vector_backend: str = "",
+    qdrant_url: str = "",
+    embedding_model: str = "",
+    chat_storage_class: str = "",
+    chat_db_dsn: str = "",
+    chat_extra_migrations_package: str | None = None,
+    mcp_token_store_class: str = "",
+    mcp_token_store_dsn: str = "",
+    mcp_client_registration_store_class: str = "",
+    mcp_client_registration_store_dsn: str = "",
+    mcp_gateway_state_store_class: str = "",
+    mcp_gateway_state_store_dsn: str = "",
+    checkpointer_type: str = "",
+    checkpointer_dsn: str = "",
+    startup_hook: str = "",
+    startup_hook_kwargs: dict[str, Any] | None = None,
+    runtime_overrides: dict[str, Any] | None = None,
+) -> Orchid:
+    """Hybrid bootstrap: YAML root (``orchid.yml``) for infrastructure +
+    top-level config, ``agents_dir/*.md`` for per-agent configs."""
+    import yaml
+
+    from .config.md_loader import _load_agents, _AGENT_BEHAVIOUR_SECTIONS, _INFRASTRUCTURE_SECTIONS
+    from .config.schema import OrchidAgentsConfig
+    from .config.yaml_env import apply_yaml_to_env
+
+    # ── 1. Apply YAML infrastructure → env vars ─────────
+    if apply_yaml and str(orchid_yml_path):
+        os.environ.setdefault("ORCHID_CONFIG", str(orchid_yml_path))
+        apply_yaml_to_env(str(orchid_yml_path), skip_sections=skip_yaml_sections)
+
+    # ── 2. Read orchid.yml for top-level agent config ───
+    yaml_data: dict[str, Any] = {}
+    try:
+        with open(orchid_yml_path, encoding="utf-8") as f:
+            yaml_data = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        pass
+
+    # ── 3. Build top-level config data ───────────────────
+    config_data: dict[str, Any] = {}
+    for section in _AGENT_BEHAVIOUR_SECTIONS:
+        if section in yaml_data:
+            config_data[section] = yaml_data[section]
+    # Copy any unrecognised non-infra sections
+    for key, value in yaml_data.items():
+        if key not in _INFRASTRUCTURE_SECTIONS and key not in _AGENT_BEHAVIOUR_SECTIONS and key != "agents":
+            config_data[key] = value
+
+    # ── 4. Load agents from MD directory ─────────────────
+    agent_configs, _ = _load_agents(agents_dir)
+    config_data["agents"] = agent_configs
+
+    # ── 5. Validate ──────────────────────────────────────
+    config = OrchidAgentsConfig.model_validate(config_data)
+
+    # ── 6. Build runtime with the pre-loaded config ──────
+    result = await _build_runtime(
+        config_path=str(orchid_yml_path),
+        apply_yaml=False,
+        config=config,
+        model=model,
+        vector_backend=vector_backend,
+        qdrant_url=qdrant_url,
+        embedding_model=embedding_model,
+        chat_storage_class=chat_storage_class,
+        chat_db_dsn=chat_db_dsn,
+        chat_extra_migrations_package=chat_extra_migrations_package,
+        mcp_token_store_class=mcp_token_store_class,
+        mcp_token_store_dsn=mcp_token_store_dsn,
+        mcp_client_registration_store_class=mcp_client_registration_store_class,
+        mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+        mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+        mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
+        checkpointer_type=checkpointer_type,
+        checkpointer_dsn=checkpointer_dsn,
+        startup_hook=startup_hook,
+        startup_hook_kwargs=startup_hook_kwargs,
+        runtime_overrides=runtime_overrides,
+        skip_yaml_sections=skip_yaml_sections,
+    )
+    return Orchid(
+        config=result.config,
+        runtime=result.runtime,
+        chat_repo=result.chat_repo,
+        mcp_token_store=result.mcp_token_store,
+        _owns_resources=True,
+    )
 
 
 @dataclass(frozen=True)
