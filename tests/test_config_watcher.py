@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from orchid_ai.config.md_loader import load_md_config
-from orchid_ai.config.watcher import ConfigSnapshot, OrchidConfigWatcher, YamlConfigWatcher
+from orchid_ai.config.watcher import (
+    OrchidConfigSnapshot,
+    OrchidConfigWatcher,
+    OrchidYamlConfigWatcher,
+)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -43,18 +47,18 @@ def _make_md_snapshot(tmp_path: Path) -> tuple[OrchidConfigWatcher, Path, Path]:
 
 
 # ──────────────────────────────────────────────────────────────────
-# ConfigSnapshot
+# OrchidConfigSnapshot
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestConfigSnapshot:
+class TestOrchidConfigSnapshot:
     def test_snapshot_is_frozen(self, tmp_path):
         root = tmp_path / "orchid.md"
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
         _write_orchid_md(root)
         config, hashes = load_md_config(root, agents_dir=agents_dir)
-        snap = ConfigSnapshot(config=config, file_hashes=hashes, root_path=root.resolve())
+        snap = OrchidConfigSnapshot(config=config, file_hashes=hashes, root_path=root.resolve())
         with pytest.raises(Exception):
             snap.file_hashes = {}  # type: ignore[misc]
 
@@ -64,7 +68,7 @@ class TestConfigSnapshot:
         agents_dir.mkdir()
         _write_orchid_md(root)
         config, hashes = load_md_config(root, agents_dir=agents_dir)
-        snap = ConfigSnapshot(config=config, file_hashes=hashes, root_path=root.resolve())
+        snap = OrchidConfigSnapshot(config=config, file_hashes=hashes, root_path=root.resolve())
         assert str(root.resolve()) in snap.file_hashes
         assert len(snap.file_hashes[str(root.resolve())]) == 64
 
@@ -190,11 +194,11 @@ class TestOrchidConfigWatcherReloadAgent:
 
 
 # ──────────────────────────────────────────────────────────────────
-# YamlConfigWatcher
+# OrchidYamlConfigWatcher
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestYamlConfigWatcher:
+class TestOrchidYamlConfigWatcher:
     def test_initial_snapshot(self, tmp_path):
         import yaml
 
@@ -215,7 +219,7 @@ class TestYamlConfigWatcher:
         orchid_yml.write_text("", encoding="utf-8")
 
         config = load_config(agents_yml)
-        watcher = YamlConfigWatcher(
+        watcher = OrchidYamlConfigWatcher(
             orchid_yml_path=orchid_yml,
             agents_yaml_path=agents_yml,
             initial_config=config,
@@ -239,7 +243,7 @@ class TestYamlConfigWatcher:
         orchid_yml.write_text("", encoding="utf-8")
 
         config = load_config(agents_yml)
-        watcher = YamlConfigWatcher(
+        watcher = OrchidYamlConfigWatcher(
             orchid_yml_path=orchid_yml,
             agents_yaml_path=agents_yml,
             initial_config=config,
@@ -266,7 +270,7 @@ class TestYamlConfigWatcher:
         orchid_yml.write_text("", encoding="utf-8")
 
         config = load_config(agents_yml)
-        watcher = YamlConfigWatcher(
+        watcher = OrchidYamlConfigWatcher(
             orchid_yml_path=orchid_yml,
             agents_yaml_path=agents_yml,
             initial_config=config,
@@ -294,7 +298,7 @@ class TestYamlConfigWatcher:
         orchid_yml.write_text("", encoding="utf-8")
 
         config = load_config(agents_yml)
-        watcher = YamlConfigWatcher(
+        watcher = OrchidYamlConfigWatcher(
             orchid_yml_path=orchid_yml,
             agents_yaml_path=agents_yml,
             initial_config=config,
@@ -326,7 +330,7 @@ class TestYamlConfigWatcher:
         orchid_yml.write_text("", encoding="utf-8")
 
         config = load_config(agents_yml)
-        watcher = YamlConfigWatcher(
+        watcher = OrchidYamlConfigWatcher(
             orchid_yml_path=orchid_yml,
             agents_yaml_path=agents_yml,
             initial_config=config,

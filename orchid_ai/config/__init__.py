@@ -27,7 +27,14 @@ from .schema import (
     OrchidOrchestratorSkillConfig,
 )
 from .tool_registry import call_tool, load_tools_from_config, register_tool
-from .watcher import ConfigSnapshot, OrchidConfigWatcher, YamlConfigWatcher
+from .watcher import (
+    ConfigSnapshot,
+    OrchidConfigSnapshot,
+    OrchidConfigWatcher,
+    OrchidConfigWatcherBase,
+    OrchidYamlConfigWatcher,
+    YamlConfigWatcher,
+)
 
 __all__ = [
     "OrchidAgentsConfig",
@@ -41,7 +48,10 @@ __all__ = [
     "OrchidOrchestratorSkillConfig",
     "ConfigSnapshot",
     "MarkdownFile",
+    "OrchidConfigSnapshot",
     "OrchidConfigWatcher",
+    "OrchidConfigWatcherBase",
+    "OrchidYamlConfigWatcher",
     "YamlConfigWatcher",
     "load_config",
     "load_markdown_file",

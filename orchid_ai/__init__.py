@@ -19,7 +19,14 @@ from .checkpointing.factory import build_checkpointer, shutdown_checkpointer
 from .config.frontmatter import MarkdownFile, load_markdown_file, parse_frontmatter
 from .config.loader import load_config
 from .config.md_loader import load_md_config, md_infrastructure_to_env
-from .config.watcher import ConfigSnapshot, OrchidConfigWatcher, YamlConfigWatcher
+from .config.watcher import (
+    ConfigSnapshot,
+    OrchidConfigSnapshot,
+    OrchidConfigWatcher,
+    OrchidConfigWatcherBase,
+    OrchidYamlConfigWatcher,
+    YamlConfigWatcher,
+)
 from .core.agent import OrchidAgent
 from .core.guardrails import (
     OrchidGuardrail,
@@ -264,8 +271,11 @@ __all__ = [
     "SimpleRetrieval",
     # ── Factories + RAG registries ────────────────────
     "ConfigSnapshot",
-    "YamlConfigWatcher",
+    "OrchidConfigSnapshot",
     "OrchidConfigWatcher",
+    "OrchidConfigWatcherBase",
+    "OrchidYamlConfigWatcher",
+    "YamlConfigWatcher",
     "build_chat_model",
     "build_chat_storage",
     "build_checkpointer",

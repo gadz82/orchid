@@ -388,7 +388,7 @@ class TestLoadMDConfig:
         assert config.agents["psychologist"].description == "Sports psychologist"
         assert len(config.agents) == 2
 
-    def test_duplicate_agent_name_does_not_false_positive(self, tmp_path):
+    def test_different_stems_produce_different_agents(self, tmp_path):
         root = tmp_path / "orchid.md"
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
@@ -591,3 +591,59 @@ class TestLoadAgents:
         assert configs["test_agent"]["description"] == "Test"
         assert configs["test_agent"]["prompt"] == "Prompt body."
         assert str((agents_dir / "test_agent.md").resolve()) in hashes
+
+
+# ──────────────────────────────────────────────────────────────────
+# Edge cases
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestFrontmatterEdgeCases:
+    def test_invalid_yaml_returns_empty_dict(self):
+        from orchid_ai.config.frontmatter import parse_frontmatter
+
+        text = "---\n[invalid yaml\n---\n\nBody."
+        fm, body = parse_frontmatter(text)
+        assert fm == {}
+        assert "Body." in body
+
+    def test_missing_closing_delimiter_returns_empty(self):
+        from orchid_ai.config.frontmatter import parse_frontmatter
+
+        text = "---\nkey: value\n\nNo closing delimiter."
+        fm, body = parse_frontmatter(text)
+        assert fm == {}
+        assert "key: value" in body
+
+    def test_frontmatter_parses_to_list_returns_empty(self):
+        from orchid_ai.config.frontmatter import parse_frontmatter
+
+        text = "---\n- item1\n- item2\n---\n\nBody."
+        fm, body = parse_frontmatter(text)
+        assert fm == {}
+        assert "Body." in body
+
+    def test_frontmatter_parses_to_scalar_returns_empty(self):
+        from orchid_ai.config.frontmatter import parse_frontmatter
+
+        text = "---\njust a string\n---\n\nBody."
+        fm, body = parse_frontmatter(text)
+        assert fm == {}
+        assert "Body." in body
+
+    def test_only_opening_delimiter(self):
+        from orchid_ai.config.frontmatter import parse_frontmatter
+
+        text = "---\n"
+        fm, body = parse_frontmatter(text)
+        assert fm == {}
+        # No closing delimiter — entire text (minus opening) is treated as body
+        assert body == "---"
+
+    def test_only_opening_delimiter_with_content(self):
+        from orchid_ai.config.frontmatter import parse_frontmatter
+
+        text = "---\nsome content"
+        fm, body = parse_frontmatter(text)
+        assert fm == {}
+        assert "some content" in body

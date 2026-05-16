@@ -17,34 +17,7 @@ from .yaml_env import YAML_TO_ENV
 
 logger = logging.getLogger(__name__)
 
-_INFRASTRUCTURE_SECTIONS: frozenset[str] = frozenset(
-    {
-        "agents",
-        "llm",
-        "auth",
-        "startup",
-        "rag",
-        "upload",
-        "storage",
-        "mcp_auth",
-        "checkpointer",
-        "api",
-        "tracing",
-    }
-)
-
-_AGENT_BEHAVIOUR_SECTIONS: frozenset[str] = frozenset(
-    {
-        "version",
-        "defaults",
-        "tools",
-        "skills",
-        "supervisor",
-        "guardrails",
-        "mcp_gateway",
-        "events",
-    }
-)
+_AGENT_BEHAVIOUR_FIELDS: frozenset[str] = frozenset(OrchidAgentsConfig.model_fields.keys())
 
 
 def _infer_agent_name(path: Path) -> str:
@@ -59,26 +32,8 @@ def _merge_agent_md(md: MarkdownFile) -> dict[str, Any]:
     ``class`` frontmatter key is passed through verbatim and is aliased
     to ``class_path`` by Pydantic during validation.
     """
-    fm = dict(md.frontmatter)
-    data: dict[str, Any] = {}
-
-    if "description" in fm:
-        data["description"] = fm.pop("description")
-
+    data: dict[str, Any] = dict(md.frontmatter)
     data["prompt"] = md.body
-
-    # Handle ``class`` alias — passed as-is, Pydantic maps to ``class_path``
-    # Don't pop it; let it be in the dict for Pydantic to alias.
-    # But we need to remove it from fm and add it to data with the right key
-    # Actually, OrchidAgentConfig has: class_path: str | None = Field(alias="class")
-    # So passing {"class": "..."} works for validation.
-    if "class" in fm:
-        data["class"] = fm.pop("class")
-
-    # Remaining frontmatter keys map 1:1 to OrchidAgentConfig fields
-    for key in list(fm):
-        data[key] = fm.pop(key)
-
     return data
 
 
@@ -187,6 +142,41 @@ def _resolve_agents_dir(
     return root_path.parent / "agents"
 
 
+def build_config_data_from_yaml(
+    yaml_data: dict[str, Any],
+    agent_configs: dict[str, dict[str, Any]],
+    agent_behaviour_fields: frozenset[str],
+) -> dict[str, Any]:
+    """Build a validated config input dict from YAML data + assembled agents.
+
+    Shared by ``load_md_config`` and ``_build_hybrid_config`` to avoid
+    duplicating the section-filtering logic.
+
+    Parameters
+    ----------
+    yaml_data : dict
+        Parsed YAML frontmatter (MD) or ``yaml.safe_load`` output (YAML).
+    agent_configs : dict
+        Assembled per-agent config dicts keyed by agent name.
+    agent_behaviour_fields : frozenset
+        The set of field names on ``OrchidAgentsConfig`` — typically
+        ``OrchidAgentsConfig.model_fields.keys()``.
+
+    Returns
+    -------
+    dict[str, Any]
+        Ready for ``OrchidAgentsConfig.model_validate``.
+    """
+    config_data: dict[str, Any] = {}
+
+    for key, value in yaml_data.items():
+        if key in agent_behaviour_fields:
+            config_data[key] = value
+
+    config_data["agents"] = agent_configs
+    return config_data
+
+
 def load_md_config(
     root_path: str | Path,
     agents_dir: str | Path | None = None,
@@ -239,20 +229,7 @@ def load_md_config(
     file_hashes.update(agent_hashes)
 
     # ── 5. Build OrchidAgentsConfig input dict ─────────────────
-    config_data: dict[str, Any] = {}
-
-    # Copy agent-behaviour keys from root frontmatter
-    for section in _AGENT_BEHAVIOUR_SECTIONS:
-        if section in root_fm:
-            config_data[section] = root_fm[section]
-
-    # Copy any unrecognised sections (future-proofing)
-    for key, value in root_fm.items():
-        if key not in _INFRASTRUCTURE_SECTIONS and key not in _AGENT_BEHAVIOUR_SECTIONS and key != "agents":
-            config_data[key] = value
-
-    # Assign assembled agent configs
-    config_data["agents"] = agent_configs
+    config_data = build_config_data_from_yaml(root_fm, agent_configs, _AGENT_BEHAVIOUR_FIELDS)
 
     # ── 6. Validate ───────────────────────────────────────────
     config = OrchidAgentsConfig.model_validate(config_data)
