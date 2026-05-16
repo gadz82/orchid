@@ -63,11 +63,11 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
 
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-    if not text.startswith("---\n") and not text.startswith("---\r"):
+    if not text.startswith("---\n"):
         return {}, text.strip()
 
-    # Skip the opening delimiter line (--- followed by whitespace/newline)
-    opening_end = text.index("\n") + 1 if "\n" in text[:6] else len(text)
+    # Skip the opening delimiter line (--- followed by newline)
+    opening_end = text.index("\n") + 1
     rest = text[opening_end:]
 
     # Handle empty frontmatter: after opening, rest starts with ---
@@ -93,7 +93,11 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     if not fm_text.strip():
         return {}, body
 
-    parsed = yaml.safe_load(fm_text)
+    try:
+        parsed = yaml.safe_load(fm_text)
+    except yaml.YAMLError:
+        return {}, body
+
     if not isinstance(parsed, dict):
         return {}, body
 

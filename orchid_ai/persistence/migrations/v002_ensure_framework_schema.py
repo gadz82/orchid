@@ -10,14 +10,14 @@ databases and keeps fresh databases unchanged.
 
 from __future__ import annotations
 
-from .v001_initial_schema import _PG_UP, _SQLITE_UP
+from ._schema_ddl import PG_UP, SQLITE_UP
 
 VERSION = "002"
 DESCRIPTION = "Ensure framework-owned schema exists after legacy v001 records"
 
 
 async def up(conn, *, dialect: str = "postgres") -> None:
-    stmts = _SQLITE_UP if dialect == "sqlite" else _PG_UP
+    stmts = SQLITE_UP if dialect == "sqlite" else PG_UP
     for sql in stmts:
         await conn.execute(sql)
 

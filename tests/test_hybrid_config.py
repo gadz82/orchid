@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from orchid_ai.config.md_loader import _load_agents, build_config_data_from_yaml
 from orchid_ai.config.schema import OrchidAgentsConfig
 
 
@@ -28,14 +29,14 @@ tools:
 You are a sports psychologist.
 """
 
+_AGENT_BEHAVIOUR_FIELDS = frozenset(OrchidAgentsConfig.model_fields.keys())
+
 
 class TestHybridConfigBuilding:
     """Test the config-building part of hybrid mode without full runtime init."""
 
     def test_hybrid_builds_valid_config(self, tmp_path):
         import yaml
-
-        from orchid_ai.config.md_loader import _load_agents, _AGENT_BEHAVIOUR_SECTIONS, _INFRASTRUCTURE_SECTIONS
 
         # Setup orchid.yml with both infra and agent-behaviour keys
         root = tmp_path / "orchid.yml"
@@ -67,18 +68,11 @@ class TestHybridConfigBuilding:
         with open(root, encoding="utf-8") as f:
             yaml_data = yaml.safe_load(f) or {}
 
-        # Build top-level config data
-        config_data: dict = {}
-        for section in _AGENT_BEHAVIOUR_SECTIONS:
-            if section in yaml_data:
-                config_data[section] = yaml_data[section]
-        for key, value in yaml_data.items():
-            if key not in _INFRASTRUCTURE_SECTIONS and key not in _AGENT_BEHAVIOUR_SECTIONS and key != "agents":
-                config_data[key] = value
-
         # Load agents from MD
         agent_configs, _ = _load_agents(agents_dir)
-        config_data["agents"] = agent_configs
+
+        # Build config data using the shared helper
+        config_data = build_config_data_from_yaml(yaml_data, agent_configs, _AGENT_BEHAVIOUR_FIELDS)
 
         # Validate
         config = OrchidAgentsConfig.model_validate(config_data)
@@ -95,8 +89,6 @@ class TestHybridConfigBuilding:
     def test_hybrid_with_no_top_level_agents_key(self, tmp_path):
         import yaml
 
-        from orchid_ai.config.md_loader import _load_agents, _AGENT_BEHAVIOUR_SECTIONS, _INFRASTRUCTURE_SECTIONS
-
         root = tmp_path / "orchid.yml"
         root.write_text(
             "version: '1'\ndefaults:\n  rag:\n    enabled: false\n",
@@ -110,16 +102,8 @@ class TestHybridConfigBuilding:
         with open(root, encoding="utf-8") as f:
             yaml_data = yaml.safe_load(f) or {}
 
-        config_data: dict = {}
-        for section in _AGENT_BEHAVIOUR_SECTIONS:
-            if section in yaml_data:
-                config_data[section] = yaml_data[section]
-        for key, value in yaml_data.items():
-            if key not in _INFRASTRUCTURE_SECTIONS and key not in _AGENT_BEHAVIOUR_SECTIONS and key != "agents":
-                config_data[key] = value
-
         agent_configs, _ = _load_agents(agents_dir)
-        config_data["agents"] = agent_configs
+        config_data = build_config_data_from_yaml(yaml_data, agent_configs, _AGENT_BEHAVIOUR_FIELDS)
 
         config = OrchidAgentsConfig.model_validate(config_data)
         assert "my_agent" in config.agents
@@ -127,8 +111,6 @@ class TestHybridConfigBuilding:
 
     def test_hybrid_defaults_merge(self, tmp_path):
         import yaml
-
-        from orchid_ai.config.md_loader import _load_agents, _AGENT_BEHAVIOUR_SECTIONS
 
         root = tmp_path / "orchid.yml"
         root.write_text(
@@ -149,13 +131,8 @@ class TestHybridConfigBuilding:
         with open(root, encoding="utf-8") as f:
             yaml_data = yaml.safe_load(f) or {}
 
-        config_data: dict = {}
-        for section in _AGENT_BEHAVIOUR_SECTIONS:
-            if section in yaml_data:
-                config_data[section] = yaml_data[section]
-
         agent_configs, _ = _load_agents(agents_dir)
-        config_data["agents"] = agent_configs
+        config_data = build_config_data_from_yaml(yaml_data, agent_configs, _AGENT_BEHAVIOUR_FIELDS)
 
         config = OrchidAgentsConfig.model_validate(config_data)
         agent = config.agents["agent"]
