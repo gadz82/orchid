@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v1.7.4 (2026-05-18)
+
+### Bug Fixes
+
+- Add InternalEmissionProducer for YAML-driven internal emissions, implement v002 migration for
+  schema fixes, and update tests
+  ([`db5f7a6`](https://github.com/gadz82/orchid/commit/db5f7a697dddf7a14478039b256624b50ad51545))
+
+- Add Markdown and YAML config watcher tests, export config-related utilities, and refine imports
+  ([`d46725d`](https://github.com/gadz82/orchid/commit/d46725d5112d56c44a1a1316efb649000afecef7))
+
+- Modularize config watcher, introduce `OrchidConfigWatcherBase`, update related tests and imports
+  ([`865483c`](https://github.com/gadz82/orchid/commit/865483c26e4942057519dfe227575bd212366c2d))
+
+- Modularize config watcher, introduce `OrchidConfigWatcherBase`, update related tests and imports
+  ([`cec960b`](https://github.com/gadz82/orchid/commit/cec960ba7b89d0ce2630f995b999f8db0f88196f))
+
+- Remove redundant CLAUDE.md symlinks across modules [skip ci]
+  ([`a96dc13`](https://github.com/gadz82/orchid/commit/a96dc135fe43f882415b2daf773e9077438a5715))
+
+- Remove references to v002 migration in tests, align with unified v001 migration
+  ([`453f546`](https://github.com/gadz82/orchid/commit/453f5461269a49b8134d57405320c17a4c8ed3b9))
+
+- Remove unused `NamedVector` import and update query logic in Qdrant backend
+  ([`1278822`](https://github.com/gadz82/orchid/commit/12788229b32df27ebbe05c32fd7dc25ddb3153b0))
+
+- Remove unused v002 migration file as it is no longer required for schema management
+  ([`bf81286`](https://github.com/gadz82/orchid/commit/bf81286187c674c9f8f5e0988e6f7fcff5562079))
+
+- Update references to v002 migration, remove legacy test, and align schema with unified v001
+  migration
+  ([`38caa49`](https://github.com/gadz82/orchid/commit/38caa49ec8ef7d7b92d3346e47acf01204bd63b2))
+
+
 ## v1.7.3 (2026-05-13)
 
 ### Bug Fixes
