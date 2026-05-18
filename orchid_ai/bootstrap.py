@@ -121,6 +121,7 @@ async def _build_runtime(
     config_path: str = "",
     apply_yaml: bool = True,
     agents_config_path: str = "",
+    config: OrchidAgentsConfig | None = None,
     model: str = "",
     vector_backend: str = "",
     qdrant_url: str = "",
@@ -158,6 +159,10 @@ async def _build_runtime(
     agents_config_path : str
         Path to ``agents.yaml``.  When empty, resolved from
         ``AGENTS_CONFIG_PATH`` env var or ``"agents.yaml"`` default.
+    config : OrchidAgentsConfig | None
+        Pre-loaded configuration.  When provided, the YAML loader is
+        skipped entirely (``agents_config_path`` is ignored).  Used by
+        Markdown config loaders that already have the parsed config.
     model, vector_backend, qdrant_url, embedding_model : str
         Primary LLM + RAG settings.
     chat_storage_class, chat_db_dsn : str
@@ -217,7 +222,10 @@ async def _build_runtime(
     )
 
     # ── 3. Load agents config ─────────────────────────────────
-    agents_config = load_config(overrides.agents_config_path)
+    if config is not None:
+        agents_config = config
+    else:
+        agents_config = load_config(overrides.agents_config_path)
 
     # ── 4. Reader + pre-created collections ───────────────────
     reader = await _prepare_reader(overrides, agents_config)

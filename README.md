@@ -13,6 +13,7 @@ Orchid (alias for Orchestrator-Index) lets you define AI agents via YAML configu
 ## Features
 
 - **YAML-driven agents** — define agents, tools, skills, and prompts in `agents.yaml`
+- **Markdown-driven agents** — define agents in `orchid.md` + `agents/*.md` with rich Markdown prompts, YAML frontmatter, and hot-reload support
 - **Multi-provider LLM** — OpenAI, Anthropic, Google Gemini, Groq, Ollama via LiteLLM
 - **Hierarchical RAG** — 5-level scoping (shared, tenant, user, chat, agent) with Qdrant built-in support
 - **Pluggable retrieval strategies** — `simple`, `multi_query`, `hyde`, `hybrid`, `graph_rag` plus integrator-registered custom strategies
@@ -1576,6 +1577,44 @@ mcp_gateway:
 Exposed via `orchid-api`'s `GET /mcp-gateway/config` endpoint. Env-var
 overrides (`ORCHID_MCP_GATEWAY_TOOL_*`, `ORCHID_MCP_GATEWAY_PROMPTS_FILE`)
 live in `orchid-api`, not here.
+
+## Markdown Configuration
+
+Orchid supports three configuration modes:
+
+- **All-YAML** (default): `orchid.yml` + `agents.yaml`
+- **All-MD**: `orchid.md` + `agents/*.md`
+- **Hybrid**: `orchid.yml` + `agents/*.md`
+
+MD config uses YAML frontmatter for structured fields and the Markdown body for system prompts — no YAML block scalars, full syntax highlighting, and diff-friendly PR reviews. Each `agents/<name>.md` file becomes one agent.
+
+```markdown
+---
+description: "Basketball expert"
+tools:
+  - get_player_stats
+  - compare_players
+---
+
+# Basketball Expert
+
+You are a basketball statistics expert.
+```
+
+Auto-detection picks the right loader based on file extension and directory contents. An on-demand SHA-256 watcher detects changes and hot-reloads the graph without a restart.
+
+```bash
+# MD config
+ORCHID_CONFIG=orchid.md uvicorn orchid_api.main:app --port 8000
+
+# Hybrid: YAML infra + MD agents
+ORCHID_CONFIG=orchid.yml AGENTS_CONFIG_PATH=agents/ uvicorn orchid_api.main:app
+
+# With hot-reload polling (default 30s)
+ORCHID_RELOAD_INTERVAL=10
+```
+
+See [`examples/md-config/`](https://github.com/gadz82/orchid/tree/main/examples/md-config) for a full working example.
 
 ## Testing
 

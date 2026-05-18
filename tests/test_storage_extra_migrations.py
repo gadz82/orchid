@@ -1,7 +1,7 @@
 """End-to-end SQLite test for integrator migrations.
 
 Exercises ``OrchidSQLiteChatStorage(extra_migrations_package=...)`` against a
-real in-memory aiosqlite database: the framework's v001 runs first, then
+real in-memory aiosqlite database: the framework migrations run first, then
 the integrator migration creates an extra table.  Verifies the table
 exists and the recorded version keys use the ``ext:`` prefix.
 """
@@ -94,7 +94,7 @@ async def test_integrator_migration_runs_after_framework() -> None:
             "integrator_widgets",
         }
 
-        # Framework migration runs first (bare key), integrator
+        # Framework migrations run first (bare keys), integrator
         # migration runs last with the ``ext:`` prefix.
         cursor = await storage._conn.execute("SELECT version FROM _migrations ORDER BY version")
         versions = [row[0] async for row in cursor]
@@ -116,12 +116,12 @@ async def test_without_extras_only_framework_tables() -> None:
         tables = {row[0] async for row in cursor}
         assert "chat_sessions" in tables
         assert "mcp_oauth_tokens" in tables
-        assert "mcp_client_registrations" in tables  # unified v001
+        assert "mcp_client_registrations" in tables
         assert "integrator_widgets" not in tables
 
         cursor = await storage._conn.execute("SELECT version FROM _migrations ORDER BY version")
         versions = [row[0] async for row in cursor]
-        # Unified framework migration — no integrator extras.
+        # Framework migrations only - no integrator extras.
         assert versions == ["001"]
     finally:
         await storage.close()
