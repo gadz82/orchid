@@ -3,7 +3,7 @@
 Mirrors :class:`orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore`
 but for per-server metadata rather than per-user tokens — one row per
 MCP server, keyed by ``server_name`` alone.  The underlying table is
-created by the shared v002 migration.
+created by the shared v001 initial schema.
 
 Configuration::
 

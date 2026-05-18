@@ -1,8 +1,8 @@
 """Shared DDL for framework migrations.
 
-Extracted so that ``v001_initial_schema`` and ``v002_ensure_framework_schema``
-import from a single source of truth — updating the schema once updates both
-migrations.
+Extracted so that ``v001_initial_schema``
+imports from a single source of truth — updating the schema once updates
+all migrations.
 """
 
 from __future__ import annotations

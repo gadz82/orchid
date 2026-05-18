@@ -11,7 +11,6 @@ from __future__ import annotations
 import datetime as _dt
 import uuid as _uuid
 
-import aiosqlite
 import pytest
 
 from orchid_ai.core.events.errors import SignalDuplicateError
@@ -33,73 +32,6 @@ async def storage():
     await s.init_db()
     yield s
     await s.close()
-
-
-async def test_event_storage_repairs_legacy_chat_only_v001(tmp_path) -> None:
-    db_path = tmp_path / "legacy-chat.db"
-    conn = await aiosqlite.connect(db_path)
-    try:
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS _migrations (
-                version TEXT PRIMARY KEY,
-                description TEXT NOT NULL DEFAULT '',
-                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )
-            """
-        )
-        await conn.execute(
-            "INSERT INTO _migrations (version, description) VALUES (?, ?)",
-            ("001", "Legacy chat-only schema"),
-        )
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS chat_sessions (
-                id TEXT PRIMARY KEY,
-                tenant_id TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                title TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                is_shared INTEGER NOT NULL DEFAULT 0
-            )
-            """
-        )
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id TEXT PRIMARY KEY,
-                chat_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
-                role TEXT NOT NULL,
-                content TEXT NOT NULL,
-                agents_used TEXT NOT NULL DEFAULT '[]',
-                created_at TEXT NOT NULL,
-                metadata TEXT NOT NULL DEFAULT '{}'
-            )
-            """
-        )
-        await conn.commit()
-    finally:
-        await conn.close()
-
-    s = SQLiteEventStorage(dsn=str(db_path))
-    await s.init_db()
-    try:
-        record = await s.triggers.latest("morning-trivia")
-        assert record is None
-
-        cursor = await s._conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' "
-            "AND name IN ('triggers', 'signals', 'signal_queue', 'job_runs')"
-        )
-        tables = {row[0] async for row in cursor}
-        assert tables == {"triggers", "signals", "signal_queue", "job_runs"}
-
-        cursor = await s._conn.execute("SELECT version FROM _migrations ORDER BY version")
-        versions = [row[0] async for row in cursor]
-        assert versions == ["001", "002"]
-    finally:
-        await s.close()
 
 
 def _make_signal(
