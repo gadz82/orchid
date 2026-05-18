@@ -5,6 +5,7 @@ package: "orchid-frontend"
 section: "packages"
 order: 24
 tags: []
+sources:
   - "orchid-frontend/README.md"
   - "orchid-frontend/AGENTS.md"
   - "orchid-frontend/src/app/"
@@ -65,19 +66,29 @@ Every visible UI behaviour is driven by a YAML key in `agents.yaml` or an `orchi
 
 ## Adding an agent without touching code
 
-Add an entry to `agents.yaml`, redeploy `orchid-api`. The UI picks it up automatically on the next page load — no frontend code changes, no rebuild of the frontend.
+Add an entry to config, redeploy `orchid-api`. The UI picks it up automatically on the next page load — no frontend code changes, no rebuild of the frontend.
 
-```yaml
-# agents.yaml diff
-agents:
+<CodePair
+  yaml={`agents:
   search:
     description: "Searches the knowledge base and summarises findings."
     prompt: "You are a search specialist. Use your tools to find relevant information."
     llm:
       model: "openai/gpt-4o-mini"
     tools:
-      - search_knowledge_base
-```
+      - search_knowledge_base`}
+  yamlLabel="agents.yaml"
+  md={`---
+description: "Searches the knowledge base and summarises findings."
+llm:
+  model: "openai/gpt-4o-mini"
+tools:
+  - search_knowledge_base
+---
+
+You are a search specialist. Use your tools to find relevant information.`}
+  mdLabel="agents/search.md"
+/>
 
 The supervisor reads the new `agents:` section at startup and includes the agent in its routing decisions. If the frontend renders an agent-picker it re-fetches the list from `orchid-api`; if it routes automatically the supervisor handles it transparently.
 

@@ -1,10 +1,11 @@
 ---
 title: "Configuration Reference"
-description: "Complete reference for orchid.yml and agents.yaml: all sections, keys, defaults, and best practices."
+description: "Complete reference for orchid.yml + orchid.md and agents.yaml + agents/*.md: all sections, keys, defaults, and best practices."
 package: "cross-cutting"
 section: "configuration"
 order: 30
-tags: ["configuration", "yaml", "reference"]
+tags: ["configuration", "yaml", "markdown", "reference"]
+sources:
   - "orchid/orchid_ai/config/schema.py"
   - "orchid/orchid_ai/config/schema_agent.py"
   - "orchid/orchid_ai/config/schema_supervisor.py"
@@ -15,28 +16,31 @@ tags: ["configuration", "yaml", "reference"]
   - "orchid/orchid_ai/config/schema_mini_agent.py"
   - "orchid/orchid_ai/config/schema_guardrails.py"
   - "orchid/orchid_ai/config/yaml_env.py"
+  - "orchid/orchid_ai/config/frontmatter.py"
+  - "orchid/orchid_ai/config/md_loader.py"
+  - "orchid/orchid_ai/config/watcher.py"
   - "orchid-api/orchid_api/settings.py"
 related: ["/concepts/agents", "/concepts/rag", "/concepts/mcp", "/concepts/supervisor"]
 example: ""
 external: []
 ---
 
-Orchid splits its configuration across two YAML files with distinct responsibilities. Understanding the boundary between them is the fastest way to understand how the framework is assembled at runtime.
+Orchid supports two configuration formats with identical capabilities. Choose the one that fits your workflow — or mix both in hybrid mode.
 
-**`orchid.yml`** is the infrastructure and runtime configuration file. It tells the API server which LLM provider to use, which vector backend (Qdrant or ChromaDB) handles embeddings, which database backs chat persistence, and how authentication is wired. Everything in `orchid.yml` maps directly to an environment variable — the file is a convenience layer on top of env vars, and real environment variables always win. Think of it as the deployment manifest.
+**YAML** uses two files: `orchid.yml` for infrastructure and `agents.yaml` for agent behavior. Every key maps to an environment variable; real env vars always win. This is the original format, well-suited for programmatic generation and CI pipelines.
 
-**`agents.yaml`** is the agent behavior configuration file. It defines which agents exist, what models and tools they use, how the supervisor orchestrates them, and how RAG retrieval is tuned. This file is loaded and validated against a Pydantic schema at startup. Adding a new agent, adjusting conversation history limits, or enabling sliding-window summarization all happen here — no code changes needed.
+**Markdown** uses `orchid.md` for infrastructure and `agents/*.md` for per-agent configs. Each agent file has YAML frontmatter for structured fields and a Markdown body that becomes the system prompt directly — no YAML string escaping or multi-line block scalars. An on-demand SHA-256 watcher detects file changes and rebuilds the graph without restarting.
 
-Both tables below are generated directly from the Pydantic schema in `orchid_ai.config.schema` and the YAML-to-env mapping in `orchid_ai.config.yaml_env`. Use the filter input to locate a specific key; every row has a stable anchor link you can share.
+Both formats produce identical `OrchidAgentsConfig` output. The tables below cover all keys regardless of format.
 
 ---
 
-## orchid.yml
+## Infrastructure Config
 
-Runtime and infrastructure keys. Every key maps to a flat environment variable via `ORCHID_CONFIG` → `YAML_TO_ENV`. When the same variable is set in both `orchid.yml` and the environment, the environment wins.
+Runtime and infrastructure keys. In YAML these live in `orchid.yml`; in Markdown they are the frontmatter of `orchid.md`. Every key maps to a flat environment variable via `ORCHID_CONFIG` → `YAML_TO_ENV`. When the same variable is set in both the config file and the environment, the environment wins.
 
-<Callout variant="best-practice" title="Use orchid.yml for deployment, env vars for secrets">
-  Check `orchid.yml` into version control for structure and non-secret defaults (model names, URLs, feature flags). Inject secrets (`*_API_KEY`, database DSNs with passwords) exclusively via environment variables or a secrets manager — never store them in YAML.
+<Callout variant="best-practice" title="Use config files for deployment, env vars for secrets">
+  Check your config file into version control for structure and non-secret defaults (model names, URLs, feature flags). Inject secrets (`*_API_KEY`, database DSNs with passwords) exclusively via environment variables or a secrets manager — never store them in YAML or frontmatter.
 </Callout>
 
 <Callout variant="warning" title="auth.dev_bypass is for local development only">
@@ -47,16 +51,16 @@ Runtime and infrastructure keys. Every key maps to a flat environment variable v
 
 ---
 
-## agents.yaml
+## Agent Behavior Config
 
-Agent behavior and orchestration configuration. Validated against `OrchidAgentsConfig` at startup — unknown keys raise an error, so typos surface immediately. Defaults cascade: values set under `defaults:` apply to every agent unless overridden per-agent.
+Agent behavior and orchestration configuration. In YAML these live in `agents.yaml`; in Markdown they are individual `agents/<name>.md` files with YAML frontmatter + Markdown body. Validated against `OrchidAgentsConfig` at startup — unknown keys raise an error, so typos surface immediately. Defaults cascade: values set under `defaults:` apply to every agent unless overridden per-agent.
 
 <Callout variant="best-practice" title="supervisor.history_summary_enabled">
   Enable sliding-window summarization for long-running chat sessions with token-priced LLMs. When enabled, the supervisor compresses older turns via a cheap LLM call and keeps only the most recent `history_summary_recent_turns` exchanges verbatim. Disable for short-form workflows or real-time pipelines where the summarization call adds latency with no benefit.
 </Callout>
 
 <Callout variant="best-practice" title="agents[].mcp_servers[].auth.mode">
-  Default to `none` for local MCP servers that share the process or a private network — no credentials needed. Use `passthrough` when the MCP server trusts your bearer token (same identity provider). Use `oauth` when each user must independently authorize the MCP server; Orchid discovers everything from the server's `401` response via RFC 9728 and RFC 7591 — no `client_id` or `client_secret` lives in YAML.
+  Default to `none` for local MCP servers that share the process or a private network — no credentials needed. Use `passthrough` when the MCP server trusts your bearer token (same identity provider). Use `oauth` when each user must independently authorize the MCP server; Orchid discovers everything from the server's `401` response via RFC 9728 and RFC 7591 — no `client_id` or `client_secret` lives in config.
 </Callout>
 
 <Callout variant="best-practice" title="defaults.llm.fallback_model">
@@ -67,3 +71,76 @@ Agent behavior and orchestration configuration. Validated against `OrchidAgentsC
 
 ---
 
+## Load Modes
+
+| Mode | Root File | Agent Configs | Detection |
+|------|-----------|---------------|-----------|
+| YAML | `orchid.yml` | `agents.yaml` | `.yml` or `.yaml` extension |
+| MD | `orchid.md` | `agents/*.md` | `.md` extension |
+| Hybrid | `orchid.yml` | `agents/*.md` | `AGENTS_CONFIG_PATH` points to a directory |
+
+### YAML Mode
+
+```bash
+ORCHID_CONFIG=orchid.yml uvicorn orchid_api.main:app
+```
+
+### MD Mode
+
+```bash
+ORCHID_CONFIG=orchid.md uvicorn orchid_api.main:app
+```
+
+### Hybrid Mode
+
+Keep `orchid.yml` for infrastructure while using `agents/*.md` for agents:
+
+```bash
+ORCHID_CONFIG=orchid.yml AGENTS_CONFIG_PATH=agents/ uvicorn orchid_api.main:app
+```
+
+---
+
+## Hot-Reload (MD Only)
+
+The on-demand config watcher detects file changes via SHA-256 hashing — no background threads, no fs-notify libraries.
+
+- The `OrchidConfigWatcher` tracks `orchid.md` + `agents/*.md` by their current hashes.
+- `Orchid.reload_config()` calls `watcher.reload_if_changed()` and rebuilds the LangGraph when a change is detected.
+- Graph rebuild is serialised via `asyncio.Lock` — existing requests complete with the old config.
+- The API middleware (`ConfigReloadMiddleware`) polls the watcher at most every `ORCHID_RELOAD_INTERVAL` seconds (default 30, set to 0 to disable).
+
+```bash
+# Enable hot-reload with 10-second polling:
+ORCHID_RELOAD_INTERVAL=10
+```
+
+---
+
+## MD File Format
+
+### `orchid.md` — Root Config
+
+Infrastructure keys (llm, auth, rag, storage) map to environment variables. Agent behavior keys (version, defaults, tools, skills, supervisor, guardrails, events) are validated against the Pydantic schema. The body after the closing `---` is free-form documentation.
+
+### `agents/<name>.md` — Per-Agent Config
+
+Each agent file has YAML frontmatter for structured fields and a Markdown body for the system prompt. The filename stem becomes the agent name.
+
+| Agent MD field | YAML equivalent | Notes |
+|---|---|---|
+| Frontmatter `description` | `agents.<name>.description` | Short, for supervisor routing |
+| MD body | `agents.<name>.prompt` | Rich Markdown, stripped of leading/trailing whitespace |
+| Frontmatter `class` | `agents.<name>.class` | Aliased to `class_path` |
+| Frontmatter `rag`, `tools`, etc. | `agents.<name>.rag`, etc. | 1:1 mapping |
+| Filename `basketball.md` | Dict key `basketball` | Agent name from filename stem |
+
+---
+
+## Equivalence
+
+MD and YAML configs produce identical `OrchidAgentsConfig` output. Run the equivalence test:
+
+```bash
+cd orchid && .venv/bin/python examples/md-config/test_equivalence.py
+```

@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 110
 tags: ["document-parsing", "rag"]
+sources:
   - examples/wiki/orchid.yml
   - examples/wiki/agents.yaml
 related:
@@ -40,8 +41,8 @@ orchid chat send "How do I configure hybrid RAG?" \
 
 `orchid.yml` adds a startup hook that seeds both corpora:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/wiki/agents.yaml
 
@@ -64,13 +65,36 @@ storage:
 
 startup:
   hook: examples.wiki.hooks.startup.bootstrap_wiki
-  # seeds wiki_docs (headered) + wiki_faq (recursive) corpora
-```
+  # seeds wiki_docs (headered) + wiki_faq (recursive) corpora`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: gemini/gemini-flash-latest
 
-`agents.yaml` shows the two-tier corpus and the per-tool RAG override:
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
 
-```yaml
-# agents.yaml (trimmed)
+upload:
+  namespace: uploads
+  chunk_size: 800
+  chunk_overlap: 150
+
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/wiki_chats.db
+
+startup:
+  hook: examples.wiki.hooks.startup.bootstrap_wiki
+---`}
+  mdLabel="orchid.md"
+/>
+
+Agent configs show the two-tier corpus and the per-tool RAG override:
+
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 defaults:
@@ -120,8 +144,36 @@ agents:
     rag:
       namespace: wiki_faq
       k: 3
-      # inherits defaults: recursive ingestion, simple retrieval
-```
+      # inherits defaults: recursive ingestion, simple retrieval`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  rag:
+    ingestion:
+      strategy: recursive
+      chunk_size: 600
+      chunk_overlap: 100
+    retrieval:
+      strategy: simple
+      query_transformers: [reformulate]
+
+tools:
+  lookup_glossary:
+    handler: examples.wiki.hooks.tools.lookup_glossary
+    description: "Fetch a term's definition from the glossary store."
+    inject_to_rag: true
+    rag_ttl: 3600
+    rag:
+      namespace: glossary_cache
+      ingestion:
+        strategy: semantic
+      retrieval:
+        strategy: simple
+---`}
+  mdLabel="orchid.md (infra + shared)"
+/>
 
 ## What to look for
 

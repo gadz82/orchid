@@ -15,12 +15,7 @@
     "package": "cross-cutting",
     "section": "ecosystem",
     "tags": [],
-    "sources": [
-      "CLAUDE.md",
-      "orchid/AGENTS.md",
-      "orchid-api/AGENTS.md",
-      "orchid-cli/AGENTS.md"
-    ]
+    "sources": []
   },
   {
     "route": "/quickstart",
@@ -29,11 +24,7 @@
     "package": "cross-cutting",
     "section": "quickstart",
     "tags": [],
-    "sources": [
-      "CLAUDE.md",
-      "examples/basketball/orchid.yml",
-      "examples/basketball/agents.yaml"
-    ]
+    "sources": []
   },
   {
     "route": "/concepts/agents",
@@ -56,7 +47,7 @@
   {
     "route": "/concepts/rag",
     "title": "Hierarchical RAG",
-    "description": "OrchidRAGScope, the 5-level hierarchy, vector store interfaces, and the parse-once pattern.",
+    "description": "OrchidRAGScope, the 5-level hierarchy, retrieval strategies, ingestion pipelines, and the parse-once pattern.",
     "package": "orchid",
     "section": "concepts",
     "tags": [],
@@ -87,7 +78,7 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": []
   },
   {
     "route": "/concepts/multi-llm",
@@ -200,12 +191,13 @@
   {
     "route": "/configuration",
     "title": "Configuration Reference",
-    "description": "Complete reference for orchid.yml and agents.yaml: all sections, keys, defaults, and best practices.",
+    "description": "Complete reference for orchid.yml + orchid.md and agents.yaml + agents/*.md: all sections, keys, defaults, and best practices.",
     "package": "cross-cutting",
     "section": "configuration",
     "tags": [
       "configuration",
       "yaml",
+      "markdown",
       "reference"
     ],
     "sources": ""
@@ -258,6 +250,19 @@
       "tool-strategies",
       "supervisor",
       "events"
+    ],
+    "sources": ""
+  },
+  {
+    "route": "/examples/recipes",
+    "title": "Recipes",
+    "description": "Zero-infrastructure RAG cookbook example using ChromaDB and Ollama — no Docker, no external services.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "rag",
+      "chromadb",
+      "ollama"
     ],
     "sources": ""
   },

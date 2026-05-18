@@ -5,6 +5,7 @@ package: "orchid"
 section: "concepts"
 order: 16
 tags: []
+sources:
   - "orchid/orchid_ai/core/agent.py"
   - "orchid/orchid_ai/config/schema_llm.py"
   - "orchid/AGENTS.md"
@@ -27,14 +28,14 @@ external:
 
 <MultiLLMBadge />
 
-Orchid is provider-agnostic. Agents, the supervisor, and the embedding pipeline each accept a LiteLLM-style model string — switch between Anthropic, OpenAI, Google, Ollama, Groq, or any other LiteLLM provider by editing a single line in `agents.yaml`.
+Orchid is provider-agnostic. Agents, the supervisor, and the embedding pipeline each accept a LiteLLM-style model string — switch between Anthropic, OpenAI, Google, Ollama, Groq, or any other LiteLLM provider by editing a single line.
 
 ## Setting the model per agent
 
 Model strings follow LiteLLM's `provider/model-name` convention:
 
-```yaml
-defaults:
+<CodePair
+  yaml={`defaults:
   llm:
     model: "gemini/gemini-2.5-flash"
     temperature: 0.2
@@ -46,8 +47,33 @@ agents:
       model: "openai/gpt-4o"
       temperature: 0.1
   analysis:
-    # inherits defaults.llm
+    # inherits defaults.llm`}
+  yamlLabel="agents.yaml"
+  md={`---
+defaults:
+  llm:
+    model: "gemini/gemini-2.5-flash"
+    temperature: 0.2
+    fallback_model: "ollama/llama3.2"
+---
+
+Orchid infrastructure config.`}
+  mdLabel="orchid.md + agents/stats.md"
+/>
+
+The `stats` agent would live in `agents/stats.md` with its own frontmatter:
+
+```markdown
+---
+llm:
+  model: "openai/gpt-4o"
+  temperature: 0.1
+---
+
+Stats agent prompt body...
 ```
+
+The `analysis` agent inherits defaults from the root config.
 
 Each agent can use a different provider. The optional `fallback_model` is tried automatically on 503, rate-limit, or timeout errors.
 

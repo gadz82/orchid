@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 100
 tags: ["rag"]
+sources:
   - examples/graph_kb/orchid.yml
   - examples/graph_kb/agents.yaml
 related:
@@ -40,8 +41,8 @@ ORCHID_CONFIG=examples/graph_kb/orchid.yml \
 
 `orchid.yml` adds a startup hook that seeds the graph and registers the in-memory store:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/graph_kb/agents.yaml
 
@@ -63,13 +64,34 @@ storage:
 startup:
   hook: examples.graph_kb.hooks.startup.bootstrap_graph_kb
   # seeds InMemoryGraphStore with org-chart entities + edges
-  # and a few text chunks for vector fan-out
-```
+  # and a few text chunks for vector fan-out`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: gemini/gemini-flash-latest
 
-`agents.yaml` configures the `graph_rag` strategy with hop limits and relation filters:
+auth:
+  dev_bypass: true
 
-```yaml
-# agents.yaml (trimmed)
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
+
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/graph_kb_chats.db
+
+startup:
+  hook: examples.graph_kb.hooks.startup.bootstrap_graph_kb
+---`}
+  mdLabel="orchid.md"
+/>
+
+Agent configs configure the `graph_rag` strategy with hop limits and relation filters:
+
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 defaults:
@@ -96,7 +118,42 @@ agents:
           enabled: true
           max_hops: 2
           fuse_with_vectors: true
-          relation_filter: [reports_to, works_on, manages]
+          relation_filter: [reports_to, works_on, manages]`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  llm:
+    model: "gemini/gemini-flash-latest"
+    temperature: 0.2
+  rag:
+    enabled: true
+    k: 5
+---`}
+  mdLabel="orchid.md (infra + defaults)"
+/>
+
+The `org_chart` agent lives in `agents/org_chart.md`:
+
+```markdown
+---
+description: "Answers org-chart and project questions using GraphRAG."
+rag:
+  namespace: graph_kb
+  k: 5
+  retrieval:
+    strategy: graph_rag
+    graph:
+      enabled: true
+      max_hops: 2
+      fuse_with_vectors: true
+      relation_filter: [reports_to, works_on, manages]
+---
+
+Answer org-chart and project questions strictly from retrieved context.
+Quote exact relation labels (e.g. reports_to, works_on) in your answer.
+If the question cannot be answered from the data, say so plainly.
 ```
 
 ## What to look for

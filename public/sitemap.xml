@@ -2,217 +2,223 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://gadz82.github.io/orchid/</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/ecosystem</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/quickstart</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/agents</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/supervisor</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/rag</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/mcp</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/oauth</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/embeddings</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/multi-llm</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/persistence</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/tool-strategies</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/document-parsing</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/mini-agents</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/concepts/pollen-bloom</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/packages/orchid</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/packages/orchid-api</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/packages/orchid-cli</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/packages/orchid-mcp</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/packages/orchid-frontend</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/configuration</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/basketball</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/helpdesk</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/restaurant</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://gadz82.github.io/orchid/examples/recipes</loc>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/learning</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/mcp-auth</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/custom-storage</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/rag-strategies</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/tool-strategies</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/prompt-customization</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/graph-kb</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/examples/wiki</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/best-practices</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/glossary</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gadz82.github.io/orchid/contact</loc>
-    <lastmod>2026-05-12</lastmod>
+    <lastmod>2026-05-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>

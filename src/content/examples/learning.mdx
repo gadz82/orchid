@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 40
 tags: ["agents", "rag", "events"]
+sources:
   - examples/learning/agents.yaml
 related:
   - /concepts/rag
@@ -40,8 +41,8 @@ pip install -e ./orchid -e ./orchid-cli
 
 `agents.yaml` defines the digest agent and the full event pipeline:
 
-```yaml
-# agents.yaml (trimmed)
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 defaults:
@@ -102,7 +103,74 @@ events:
       retry: { max: 2, backoff: exponential }
       parallelism: per_user
 
-# ...truncated
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+  rag:
+    enabled: false
+
+events:
+  enabled: true
+
+  store:
+    class: orchid_ai.events.backends.sqlite.SQLiteEventStorage
+    extra_args:
+      dsn: /data/chats.db
+
+  queue:
+    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
+    poll_interval_ms: 200
+    lease_seconds: 30
+    max_attempts: 2
+
+  producers:
+    - class: examples.learning.producers.weekly_digest.WeeklyDigestFanoutProducer
+      extra_args:
+        cron: "0 6 * * 1"
+    - class: orchid_ai.events.producers.internal.InternalEmissionProducer
+
+  processors:
+    - class: orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor
+      concurrency: 4
+
+  triggers:
+    - id: weekly-digest
+      "on": { signal: weekly-digest.due }
+      emits:
+        agent: digest
+        prompt_template: |
+          Build a personalised weekly learning digest for user
+          {{user_id}} in tenant {{tenant_key}}, week {{payload.week_iso}}.
+        identity:
+          mode: addressed_to_user
+          service_account: digest-bot
+          user_id_from: signal.user_id
+      retry: { max: 2, backoff: exponential }
+      parallelism: per_user
+---`}
+  mdLabel="orchid.md (infra + events)"
+/>
+
+The `digest` agent lives in `agents/digest.md`:
+
+```markdown
+---
+description: "Personalised weekly learning digest."
+rag:
+  enabled: false
+execution_hints:
+  parallel_safe: true
+---
+
+Build a short personalised digest for the named learner.
+Sections: Highlights from last week, Recommended next steps,
+One stretch goal. Keep it under 150 words.
 ```
 
 ## What to look for

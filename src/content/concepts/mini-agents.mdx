@@ -5,6 +5,7 @@ package: "orchid"
 section: "concepts"
 order: 20
 tags: ["parallelism", "fan-out", "yaml"]
+sources:
   - "orchid/.knowledge/adr/ADR-021-mini-agents.md"
   - "orchid/orchid_ai/agents/generic_agent.py"
   - "orchid/orchid_ai/graph/supervisor.py"
@@ -39,10 +40,10 @@ supervisor ──Send──> {name}_agent (parent + decomposer hook)
 
 At the start of every turn, a **decomposer** runs as a cheap structured-output call. If the query is simple (`should_fork=false`) the parent agent runs normally — no overhead. If the decomposer identifies N independent sub-tasks, the graph fans out via `Send`, each mini runs its own full agentic loop in parallel, and the aggregator synthesises the results.
 
-## Enabling via YAML
+## Enabling via config
 
-```yaml
-agents:
+<CodePair
+  yaml={`agents:
   helpdesk:
     description: "Handles support tickets and knowledge-base lookups."
     prompt: "You are a support specialist..."
@@ -50,8 +51,20 @@ agents:
       enabled: true
       max_minis: 3          # default 3, hard cap 8
       timeout_seconds: 30   # per-mini timeout
-      tool_allowlist_mode: strict   # strict | parent_full | inferred
-```
+      tool_allowlist_mode: strict   # strict | parent_full | inferred`}
+  yamlLabel="agents.yaml"
+  md={`---
+description: "Handles support tickets and knowledge-base lookups."
+mini_agent:
+  enabled: true
+  max_minis: 3          # default 3, hard cap 8
+  timeout_seconds: 30   # per-mini timeout
+  tool_allowlist_mode: strict   # strict | parent_full | inferred
+---
+
+You are a support specialist...`}
+  mdLabel="agents/helpdesk.md"
+/>
 
 That single `mini_agent.enabled: true` flag is the only change required. Custom agent subclasses opt in the same way — the decomposer runs at the graph-wrapper level before `run()` is called, so no code changes are needed inside the agent.
 

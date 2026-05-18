@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-05-12
+Last generated: 2026-05-18
 
 ## Overview
 
@@ -20,7 +20,7 @@ https://gadz82.github.io/orchid/concepts/agents
 Supervisor — The LangGraph supervisor: routing, history limits, and sliding-window summarisation.
 https://gadz82.github.io/orchid/concepts/supervisor
 
-Hierarchical RAG — OrchidRAGScope, the 5-level hierarchy, vector store interfaces, and the parse-once pattern.
+Hierarchical RAG — OrchidRAGScope, the 5-level hierarchy, retrieval strategies, ingestion pipelines, and the parse-once pattern.
 https://gadz82.github.io/orchid/concepts/rag
 
 MCP Integration — Connecting MCP servers to Orchid agents: none, passthrough, and OAuth auth modes.
@@ -69,7 +69,7 @@ https://gadz82.github.io/orchid/packages/orchid-frontend
 
 ## Configuration
 
-Configuration Reference — Complete reference for orchid.yml and agents.yaml: all sections, keys, defaults, and best practices.
+Configuration Reference — Complete reference for orchid.yml + orchid.md and agents.yaml + agents/*.md: all sections, keys, defaults, and best practices.
 https://gadz82.github.io/orchid/configuration
 
 ## Examples
@@ -82,6 +82,9 @@ https://gadz82.github.io/orchid/examples/helpdesk
 
 Restaurant Demo — RAG with dynamic injection, multi-agent sequential routing, custom agent class, and event-driven deep research.
 https://gadz82.github.io/orchid/examples/restaurant
+
+Recipes — Zero-infrastructure RAG cookbook example using ChromaDB and Ollama — no Docker, no external services.
+https://gadz82.github.io/orchid/examples/recipes
 
 Examples — Working examples showing different Orchid capabilities and integration patterns.
 https://gadz82.github.io/orchid/examples

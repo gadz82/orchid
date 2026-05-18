@@ -5,6 +5,7 @@ package: "orchid"
 section: "concepts"
 order: 17
 tags: []
+sources:
   - "orchid/orchid_ai/persistence/base.py"
   - "orchid/orchid_ai/persistence/AGENTS.md"
   - "orchid/AGENTS.md"
@@ -42,23 +43,37 @@ The API layer depends only on this interface — swapping the backend requires n
 | `OrchidSQLiteChatStorage` | `aiosqlite` | Local development, single-process demos |
 | `OrchidPostgresChatStorage` | `asyncpg` | Production, multi-worker deployments |
 
-Configure via `orchid.yml`:
+Configure via config:
 
-```yaml
+<CodePair
+  yaml={`storage:
+  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  dsn: postgresql://user:pass@host:5432/db`}
+  yamlLabel="orchid.yml"
+  md={`---
 storage:
   class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
   dsn: postgresql://user:pass@host:5432/db
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
 ## Custom backends
 
 Subclass `OrchidChatStorage` in your own project and reference it by dotted import path:
 
-```yaml
+<CodePair
+  yaml={`storage:
+  class: myproject.storage.mysql.MySQLChatStorage
+  dsn: mysql+asyncmy://user:pass@host:3306/db`}
+  yamlLabel="orchid.yml"
+  md={`---
 storage:
   class: myproject.storage.mysql.MySQLChatStorage
   dsn: mysql+asyncmy://user:pass@host:3306/db
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
 The factory resolves the class at startup via `importlib`. The constructor must accept `*, dsn: str`.
 
@@ -66,12 +81,20 @@ The factory resolves the class at startup via `importlib`. The constructor must 
 
 The migration system uses versioned modules named `v{NNN}_{description}.py` (e.g. `v001_initial_schema.py`). Each module exposes `VERSION`, `up(conn, *, dialect)`, and `down(conn, *, dialect)`. `OrchidMigrationRunner` runs framework migrations first, then integrator migrations from `extra_migrations_package` — recorded with an `"ext:"` prefix to avoid collisions.
 
-```yaml
+<CodePair
+  yaml={`storage:
+  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  dsn: postgresql://...
+  extra_migrations_package: myapp.migrations`}
+  yamlLabel="orchid.yml"
+  md={`---
 storage:
   class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
   dsn: postgresql://...
   extra_migrations_package: myapp.migrations
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
 <Callout variant="info" title="Persist original messages only">
 Always save the original user message to chat history — not the version with file content prepended. Prepending extracted text to the user message is a prompt augmentation pattern for the current LLM call. Persisting that augmented string would cause the stored message to be significantly longer, wasteful to re-load, and misleading if the underlying document changes.

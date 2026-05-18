@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 60
 tags: ["persistence"]
+sources:
   - examples/custom-storage/orchid.yml
   - examples/custom-storage/agents.yaml
 related:
@@ -38,8 +39,8 @@ After sending a few messages, inspect `/data/custom_storage_chats.json` to see t
 
 `orchid.yml` is minimal — the only non-default setting is `storage.class`:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/custom-storage/agents.yaml
 
@@ -55,13 +56,29 @@ storage:
   # extra_migrations_package is optional; JSON backend ignores it.
 
 tracing:
+  langsmith_tracing: false`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: ollama/llama3.2
+
+auth:
+  dev_bypass: true
+
+storage:
+  class: examples.custom-storage.storage.json_file.OrchidJSONChatStorage
+  dsn: /data/custom_storage_chats.json
+
+tracing:
   langsmith_tracing: false
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
-`agents.yaml` defines a single echo agent — its only purpose is generating chat history for the storage backend to persist:
+Agent configs define a single echo agent — its only purpose is generating chat history for the storage backend to persist:
 
-```yaml
-# agents.yaml
+<CodePair
+  yaml={`# agents.yaml
 version: "1"
 
 defaults:
@@ -80,7 +97,34 @@ agents:
       persisted to a JSON file by the custom storage backend.
     tools: []
     execution_hints:
-      parallel_safe: true
+      parallel_safe: true`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+  rag:
+    enabled: false
+---`}
+  mdLabel="orchid.md (infra + defaults)"
+/>
+
+The `echo` agent lives in `agents/echo.md`:
+
+```markdown
+---
+description: "Demo agent that confirms messages and reminds the user about JSON persistence."
+tools: []
+execution_hints:
+  parallel_safe: true
+---
+
+You are a friendly demo assistant. Acknowledge the user's message
+in one short sentence and remind them that the chat is being
+persisted to a JSON file by the custom storage backend.
 ```
 
 ## What to look for

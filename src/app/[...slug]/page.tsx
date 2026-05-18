@@ -14,6 +14,7 @@ import Sources from '@/components/Sources';
 import ConfigTable from '@/components/ConfigTable';
 import RepoLink from '@/components/RepoLink';
 import MdxLink from '@/components/MdxLink';
+import CodePair from '@/components/CodePair';
 
 export const dynamicParams = false;
 
@@ -21,9 +22,6 @@ const CONTENT_DIR = join(process.cwd(), 'src', 'content');
 
 const MDX_COMPONENTS = {
   pre: MdxPre,
-  // Internal links in markdown (e.g. [foo](/configuration)) compile to <a> by
-  // default, which bypasses Next.js basePath. MdxLink routes same-origin paths
-  // through next/link so they get prefixed correctly under GitHub Pages.
   a: MdxLink,
   Callout,
   ExternalLink,
@@ -32,6 +30,7 @@ const MDX_COMPONENTS = {
   Sources,
   ConfigTable,
   RepoLink,
+  CodePair,
 };
 
 function slugToContentPath(slug: string[]): string | null {

@@ -5,6 +5,7 @@ package: "orchid"
 section: "concepts"
 order: 14
 tags: []
+sources:
   - "orchid/orchid_ai/mcp/client.py"
   - "orchid/orchid_ai/mcp/AGENTS.md"
   - "orchid/orchid_ai/config/schema_mcp.py"
@@ -63,15 +64,24 @@ Both ABCs live in `orchid_ai/core/mcp.py`. SQLite and PostgreSQL implementations
 
 ## No credentials in YAML
 
-The MCP 2025-03-26 authorization model is zero-config by design. The only field in `agents.yaml` is:
+The MCP 2025-03-26 authorization model is zero-config by design. The only field in config is:
 
-```yaml
+<CodePair
+  yaml={`mcp_servers:
+  - name: external-crm
+    url: https://crm.example.com/mcp
+    auth:
+      mode: oauth`}
+  yamlLabel="agents.yaml"
+  md={`---
 mcp_servers:
   - name: external-crm
     url: https://crm.example.com/mcp
     auth:
       mode: oauth
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
 No `client_id`, `client_secret`, `authorization_endpoint`, or `token_endpoint`. The authorization server **must** advertise RFC 7591 dynamic client registration. If it doesn't, seed `OrchidMCPClientRegistrationStore` with the pre-known endpoints and credentials before first use.
 

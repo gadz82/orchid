@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 50
 tags: ["mcp", "oauth"]
+sources:
   - examples/mcp-auth/orchid.yml
   - examples/mcp-auth/agents.yaml
 related:
@@ -42,8 +43,8 @@ orchid chat interactive --config examples/mcp-auth/orchid.yml
 
 `orchid.yml` configures the MCP OAuth token store and API base URL for callback construction:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/mcp-auth/agents.yaml
 
@@ -60,13 +61,29 @@ mcp_auth:
 
 # Base URL used to build the OAuth redirect URI
 api:
+  base_url: http://localhost:8000`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: ollama/llama3.2
+
+auth:
+  dev_bypass: true
+
+mcp_auth:
+  token_store_class: orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore
+  token_store_dsn: ~/.orchid/chats.db
+
+api:
   base_url: http://localhost:8000
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
-`agents.yaml` shows all three auth modes:
+Agent configs show all three auth modes:
 
-```yaml
-# agents.yaml (trimmed)
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 supervisor:
@@ -77,7 +94,7 @@ agents:
     description: "Agent using a local MCP server with no authentication."
     mcp_servers:
       - name: local-server
-        url: "${LOCAL_MCP_URL}"
+        url: "\${LOCAL_MCP_URL}"
         tools: "*"
         # auth omitted → defaults to mode: "none"
 
@@ -85,7 +102,7 @@ agents:
     description: "Agent forwarding the platform bearer token to an internal MCP server."
     mcp_servers:
       - name: internal-platform
-        url: "${INTERNAL_MCP_URL}"
+        url: "\${INTERNAL_MCP_URL}"
         tools: "*"
         auth:
           mode: passthrough
@@ -94,7 +111,7 @@ agents:
     description: "Agent using OAuth with dynamic client registration for an external CRM."
     mcp_servers:
       - name: external-crm
-        url: "${CRM_MCP_URL}"
+        url: "\${CRM_MCP_URL}"
         tools: "*"
         auth:
           mode: oauth
@@ -105,21 +122,29 @@ agents:
     description: "Agent connecting to all three server types simultaneously."
     mcp_servers:
       - name: local-utils
-        url: "${LOCAL_MCP_URL}"
+        url: "\${LOCAL_MCP_URL}"
         tools: "*"
       - name: platform-api
-        url: "${INTERNAL_MCP_URL}"
+        url: "\${INTERNAL_MCP_URL}"
         tools: "*"
         auth:
           mode: passthrough
       - name: crm-tools
-        url: "${CRM_MCP_URL}"
+        url: "\${CRM_MCP_URL}"
         tools: "*"
         auth:
           mode: oauth    # degraded gracefully if user hasn't authorized yet
 
-# ...truncated
-```
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+supervisor:
+  assistant_name: "Multi-Auth Demo"
+---`}
+  mdLabel="orchid.md (infra + shared)"
+/>
 
 ## What to look for
 

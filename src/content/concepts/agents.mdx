@@ -5,6 +5,7 @@ package: "orchid"
 section: "concepts"
 order: 10
 tags: []
+sources:
   - "orchid/orchid_ai/core/agent.py"
   - "orchid/orchid_ai/agents/generic_agent.py"
   - "orchid/AGENTS.md"
@@ -16,7 +17,7 @@ external: []
 
 <MultiLLMBadge />
 
-Every agent in Orchid is a Python class that satisfies the `OrchidAgent` abstract base class. The framework discovers and wires agents at startup from `agents.yaml` — no manual graph editing required.
+Every agent in Orchid is a Python class that satisfies the `OrchidAgent` abstract base class. The framework discovers and wires agents at startup from config files (`agents.yaml` or `agents/*.md`) — no manual graph editing required.
 
 ## The OrchidAgent ABC
 
@@ -38,7 +39,7 @@ The base class also provides shared helpers every subclass can use without reimp
 
 ## GenericAgent: no Python required
 
-For most use cases, `GenericAgent` is the right choice. It is a concrete subclass whose behaviour is entirely driven by an `OrchidAgentConfig` parsed from YAML. Its `run()` executes a fixed six-step pipeline:
+For most use cases, `GenericAgent` is the right choice. It is a concrete subclass whose behaviour is entirely driven by an `OrchidAgentConfig` parsed from config files. Its `run()` executes a fixed six-step pipeline:
 
 1. RAG retrieval (tenant-scoped via `OrchidRAGScope`)
 2. Skill check — if the query matches a configured skill, run it and skip to step 6
@@ -46,10 +47,10 @@ For most use cases, `GenericAgent` is the right choice. It is a concrete subclas
 4. Dynamic RAG injection — write tool results back to the vector store for future retrieval
 5. LLM summarisation — synthesise the final response
 
-## Defining an agent in YAML
+## Defining an agent
 
-```yaml
-agents:
+<CodePair
+  yaml={`agents:
   basketball:
     description: >
       NBA basketball expert. Knows player stats, team rosters,
@@ -75,8 +76,31 @@ agents:
           - tool: get_player_stats
             source: builtin
           - tool: compare_players
-            source: builtin
-```
+            source: builtin`}
+  yamlLabel="agents.yaml"
+  md={`---
+description: "NBA basketball expert. Knows player stats, team rosters, and can compare players head-to-head."
+llm:
+  model: "ollama/llama3.2"
+  temperature: 0.2
+tools:
+  - get_player_stats
+  - compare_players
+  - get_team_roster
+skills:
+  scouting_report:
+    description: "Get a player's stats then compare with a rival"
+    steps:
+      - tool: get_player_stats
+        source: builtin
+      - tool: compare_players
+        source: builtin
+---
+
+You are a Basketball Expert AI assistant.
+Use your tools to provide data-driven analysis.`}
+  mdLabel="agents/basketball.md"
+/>
 
 ## Collaborators (Single Responsibility Principle)
 
@@ -90,19 +114,27 @@ agents:
 
 ## Custom agents via dotted imports
 
-When YAML isn't enough, subclass `OrchidAgent` in your own project and reference it by dotted path:
+When config files aren't enough, subclass `OrchidAgent` in your own project and reference it by dotted path:
 
-```yaml
-agents:
+<CodePair
+  yaml={`agents:
   support:
     class: myproject.agents.support.SupportAgent
     description: "Handles support tickets and knowledge-base lookups."
-    prompt: "You are a support specialist..."
-```
+    prompt: "You are a support specialist..."`}
+  yamlLabel="agents.yaml"
+  md={`---
+class: myproject.agents.support.SupportAgent
+description: "Handles support tickets and knowledge-base lookups."
+---
+
+You are a support specialist...`}
+  mdLabel="agents/support.md"
+/>
 
 The framework resolves the class at startup via `importlib`. Custom agents receive the same injected dependencies (`reader`, `mcp_clients`, `chat_model`) as `GenericAgent` — override only what you need, inherit the rest.
 
 ## Mini-agents (opt-in fan-out)
 
-Any agent — including custom `OrchidAgent` subclasses — can opt into **mini-agent fan-out** with a single YAML flag. When enabled, a decomposer runs before `run()` each turn; if the query contains independent sub-tasks, it fans out into N parallel mini-agents and synthesises their outcomes into one final response. See [Mini-Agents](/concepts/mini-agents) for the full decision tree and YAML reference.
+Any agent — including custom `OrchidAgent` subclasses — can opt into **mini-agent fan-out** with a single config flag. When enabled, a decomposer runs before `run()` each turn; if the query contains independent sub-tasks, it fans out into N parallel mini-agents and synthesises their outcomes into one final response. See [Mini-Agents](/concepts/mini-agents) for the full decision tree and config reference.
 

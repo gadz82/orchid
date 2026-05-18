@@ -26,13 +26,20 @@ Orchid uses pluggable embedding models to convert documents and queries into den
 | `text-embedding-3-small` | 1536 | OpenAI |
 | `gemini/gemini-embedding-001` | 3072 | Google |
 
-Set the embedding model in `orchid.yml`:
+Set the embedding model:
 
-```yaml
+<CodePair
+  yaml={`defaults:
+  rag:
+    embedding_model: "ollama/nomic-embed-text"`}
+  yamlLabel="orchid.yml"
+  md={`---
 defaults:
   rag:
     embedding_model: "ollama/nomic-embed-text"
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
 Any LiteLLM-compatible embedding model string is accepted. The `LiteLLMEmbedder` in `orchid_ai/rag/embeddings.py` delegates the actual call to LiteLLM.
 

@@ -5,6 +5,7 @@ package: "orchid"
 section: "concepts"
 order: 12
 tags: []
+sources:
   - "orchid/orchid_ai/rag/scopes.py"
   - "orchid/orchid_ai/core/scopes.py"
   - "orchid/orchid_ai/rag/strategies/__init__.py"
@@ -74,17 +75,24 @@ docs = await self.fetch_rag_context(query, scope, namespace="learning", k=5)
 
 ## Retrieval strategies
 
-Orchid ships five retrieval strategies, each implementing the `OrchidRetrievalStrategy` ABC. Strategies are stateless and selected per-agent via `rag.retrieval.strategy` in `agents.yaml`. Unknown strategy names fall back to `simple` with a warning — a typo never crashes the agent.
+Orchid ships five retrieval strategies, each implementing the `OrchidRetrievalStrategy` ABC. Strategies are stateless and selected per-agent via `rag.retrieval.strategy`. Unknown strategy names fall back to `simple` with a warning — a typo never crashes the agent.
 
 ### `simple` — single dense retrieval
 
 The default. One `reader.retrieve()` call with the user query as-is. Fastest path, best for well-formed queries where the corpus contains a near-verbatim match.
 
-```yaml
+<CodePair
+  yaml={`rag:
+  retrieval:
+    strategy: simple`}
+  yamlLabel="agents.yaml"
+  md={`---
 rag:
   retrieval:
     strategy: simple
-```
+---`}
+  mdLabel="agents/<name>.md"
+/>
 
 **When to use:** Baseline retrieval, low-latency requirements, queries that closely match corpus vocabulary.
 
@@ -92,14 +100,24 @@ rag:
 
 The LLM generates N paraphrases of the original query (default 3), retrieves against each independently in parallel, then merges results by score with deduplication. Improves recall for ambiguous, informal, or multi-intent questions.
 
-```yaml
+<CodePair
+  yaml={`rag:
+  retrieval:
+    strategy: multi_query
+    # multi_query:
+    #   num_queries: 3      # default
+    #   retrieval_timeout: 30.0`}
+  yamlLabel="agents.yaml"
+  md={`---
 rag:
   retrieval:
     strategy: multi_query
     # multi_query:
     #   num_queries: 3      # default
     #   retrieval_timeout: 30.0
-```
+---`}
+  mdLabel="agents/<name>.md"
+/>
 
 Without a `chat_model` the strategy degrades gracefully to single-query retrieval. External `pre_strategy=False` transformers compose orthogonally — pair with `query_transformers: [hyde, decompose]` for multi-query × HyDE fan-out.
 
@@ -109,13 +127,22 @@ Without a `chat_model` the strategy degrades gracefully to single-query retrieva
 
 Generates N plausible answer paragraphs via the LLM, then retrieves documents similar to those hypothetical answers **in addition to** the original query. Results are merged by document ID (highest score wins). Effective when user vocabulary differs significantly from corpus vocabulary.
 
-```yaml
+<CodePair
+  yaml={`rag:
+  retrieval:
+    strategy: hyde
+    hyde:
+      n_hypothetical: 2     # default: 1`}
+  yamlLabel="agents.yaml"
+  md={`---
 rag:
   retrieval:
     strategy: hyde
     hyde:
       n_hypothetical: 2     # default: 1
-```
+---`}
+  mdLabel="agents/<name>.md"
+/>
 
 Like `multi_query`, HyDE composes with external transformers and degrades to dense-only when no chat model is available.
 
@@ -125,7 +152,17 @@ Like `multi_query`, HyDE composes with external transformers and degrades to den
 
 Issues two parallel retrievals — one against the dense embedding lane and one against the sparse/lexical lane (BM25 by default, SPLADE behind an optional extra) — then fuses rankings via Reciprocal Rank Fusion (RRF, default) or weighted-linear fusion. Each lane fetches `k × lane_multiplier` candidates so the fusion has enough headroom to surface dense-only or sparse-only matches.
 
-```yaml
+<CodePair
+  yaml={`rag:
+  retrieval:
+    strategy: hybrid
+    hybrid:
+      sparse_encoder: bm25       # or splade (optional extra)
+      sparse_weight: 0.4         # for linear fusion
+      fusion: rrf                # or linear
+      rrf_k: 60                  # RRF smoothing constant`}
+  yamlLabel="agents.yaml"
+  md={`---
 rag:
   retrieval:
     strategy: hybrid
@@ -134,7 +171,9 @@ rag:
       sparse_weight: 0.4         # for linear fusion
       fusion: rrf                # or linear
       rrf_k: 60                  # RRF smoothing constant
-```
+---`}
+  mdLabel="agents/<name>.md"
+/>
 
 When the backend lacks sparse support, the strategy logs a warning and degrades to dense-only. Sparse encoder failures also fall back to the dense lane.
 
@@ -144,7 +183,16 @@ When the backend lacks sparse support, the strategy logs a warning and degrades 
 
 A four-step pipeline: (1) resolve seed entities from the query via `graph_store.find_entities()`, (2) walk the graph up to `max_hops` from every seed, (3) fetch text chunks via the standard vector lane, (4) serialise the visited sub-graph as a synthetic `OrchidSearchResult` and prepend it as context. When no `graph_store` is wired or no seed entities are found, falls back to `SimpleRetrieval`.
 
-```yaml
+<CodePair
+  yaml={`rag:
+  retrieval:
+    strategy: graph_rag
+    graph:
+      max_hops: 2
+      fuse_with_vectors: true
+      # relation_filter: ["related_to", "depends_on"]  # optional`}
+  yamlLabel="agents.yaml"
+  md={`---
 rag:
   retrieval:
     strategy: graph_rag
@@ -152,7 +200,9 @@ rag:
       max_hops: 2
       fuse_with_vectors: true
       # relation_filter: ["related_to", "depends_on"]  # optional
-```
+---`}
+  mdLabel="agents/<name>.md"
+/>
 
 The sub-graph is serialised as plain text (`Entity (type) [-relation-> Other]`) and injected as a synthetic document with `source: graph_rag`. The `entity_serializer` constructor kwarg accepts a custom serialiser for domain-specific formats (RDF turtle, JSON-LD, …).
 
@@ -160,7 +210,7 @@ The sub-graph is serialised as plain text (`Entity (type) [-relation-> Other]`) 
 
 ### Custom strategies
 
-Register at startup via `register_retrieval_strategy()` and reference by name in `agents.yaml`:
+Register at startup via `register_retrieval_strategy()` and reference by name in config:
 
 ```python
 from orchid_ai.rag.strategies import register_retrieval_strategy
@@ -169,11 +219,18 @@ from my_strategies import RecencyWeightedRetrieval
 register_retrieval_strategy("recency_simple", RecencyWeightedRetrieval)
 ```
 
-```yaml
+<CodePair
+  yaml={`rag:
+  retrieval:
+    strategy: recency_simple   # registered at startup`}
+  yamlLabel="agents.yaml"
+  md={`---
 rag:
   retrieval:
     strategy: recency_simple   # registered at startup
-```
+---`}
+  mdLabel="agents/<name>.md"
+/>
 
 See the [RAG Strategies example](/examples/rag-strategies) for a working `recency_simple` strategy registered from a startup hook.
 
@@ -188,7 +245,7 @@ While retrieval controls **how** documents are fetched, ingestion controls **how
 | `hierarchical` | Parent-child chunking: large parent chunks with smaller child chunks for retrieval | Auto-merging retrieval patterns |
 | `headered` | Preserves document headers/structure in chunk metadata | Structured documents with headings |
 
-Set via `rag.ingestion.strategy` in `agents.yaml`. Custom ingestion strategies register via `register_ingestion_strategy()`.
+Set via `rag.ingestion.strategy`. Custom ingestion strategies register via `register_ingestion_strategy()`.
 
 ## Query transformers
 
@@ -251,7 +308,7 @@ Namespaces are vector store collection prefixes that separate different kinds of
 | `notifications` | Agent-generated structured data |
 | `uploads` | User-uploaded files (scoped to the uploading user's chat) |
 
-Set an agent's namespace via `rag.namespace` in `agents.yaml`. Leave it empty to skip RAG retrieval.
+Set an agent's namespace via `rag.namespace`. Leave it empty to skip RAG retrieval.
 
 ## External reading
 

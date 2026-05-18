@@ -5,6 +5,7 @@ package: "orchid"
 section: "concepts"
 order: 11
 tags: []
+sources:
   - "orchid/orchid_ai/graph/supervisor.py"
   - "orchid/orchid_ai/config/schema_supervisor.py"
   - "orchid/AGENTS.md"
@@ -32,9 +33,19 @@ In `parallel` mode the supervisor fans out to multiple agents simultaneously usi
 
 ## Configuring the supervisor
 
-All supervisor options live under the `supervisor:` key in `agents.yaml`:
+All supervisor options live under the `supervisor:` key:
 
-```yaml
+<CodePair
+  yaml={`supervisor:
+  assistant_name: "Sports AI"
+  history_max_turns: 20
+  history_max_chars: 1000
+  history_summary_enabled: true
+  history_summary_model: "ollama/llama3.2"
+  history_summary_recent_turns: 10
+  routing_model: "ollama/llama3.2"`}
+  yamlLabel="agents.yaml"
+  md={`---
 supervisor:
   assistant_name: "Sports AI"
   history_max_turns: 20
@@ -43,7 +54,9 @@ supervisor:
   history_summary_model: "ollama/llama3.2"
   history_summary_recent_turns: 10
   routing_model: "ollama/llama3.2"
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
 | Field | Default | Purpose |
 |---|---|---|

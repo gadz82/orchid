@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-05-12
+Last generated: 2026-05-18
 
 ## Overview
 
@@ -31,8 +31,6 @@ The library (`orchid`) contains only ABCs, the `GenericAgent` implementation, an
 `orchid-frontend` and `orchid-mcp` talk to `orchid-api` over HTTP only — they have no Python import dependency on the framework. This makes them portable boilerplate: fork either one, point it at any `orchid-api` deployment, and it works. The MCP gateway, in particular, is designed to be forked by integrators who want to expose Orchid agents inside their own MCP host infrastructure without touching the Python layer.
 
 ---
-
-*Sources: root `CLAUDE.md`, `orchid/AGENTS.md`, `orchid-api/AGENTS.md`, `orchid-cli/AGENTS.md`*
 
 ---
 
@@ -63,7 +61,7 @@ cd orchid
 
 ## Run the basketball demo
 
-The demo ships with a single Compose file that starts the API server, Qdrant vector store, and all dependencies:
+The demo ships with a single Compose file that starts the API server, Qdrant vector store, and all dependencies. For a zero-infrastructure alternative (no Docker, ChromaDB instead of Qdrant), try the [Recipes example](/examples/recipes) which runs entirely locally with Ollama.
 
 ```bash
 docker compose -f docker-compose.demo.yml up --build
@@ -104,8 +102,6 @@ Explore the [configuration reference](/configuration) for all `orchid.yml` and `
 
 ---
 
-*Sources: root `CLAUDE.md`, `examples/basketball/orchid.yml`, `examples/basketball/agents.yaml`*
-
 ---
 
 ## Concepts
@@ -114,7 +110,7 @@ Explore the [configuration reference](/configuration) for all `orchid.yml` and `
 URL: https://gadz82.github.io/orchid/concepts/agents
 Description: How OrchidAgent works: YAML configuration, skills, MCP tools, and the run lifecycle.
 
-Every agent in Orchid is a Python class that satisfies the `OrchidAgent` abstract base class. The framework discovers and wires agents at startup from `agents.yaml` — no manual graph editing required.
+Every agent in Orchid is a Python class that satisfies the `OrchidAgent` abstract base class. The framework discovers and wires agents at startup from config files (`agents.yaml` or `agents/*.md`) — no manual graph editing required.
 
 ## The OrchidAgent ABC
 
@@ -124,7 +120,7 @@ Every agent in Orchid is a Python class that satisfies the `OrchidAgent` abstrac
 |--------|---------|
 | `name` (abstract property) | Unique identifier, e.g. `"basketball"` — used in LangGraph node names |
 | `description` (abstract property) | Human-readable intent description; the supervisor LLM reads this to decide routing |
-| `rag_namespace` (property) | Qdrant collection name. Override if the agent uses RAG; default is `""` (no RAG) |
+| `rag_namespace` (property) | Vector store collection name for RAG. Override if the agent uses RAG; default is `""` (no RAG) |
 | `run(state)` (abstract) | Main agent logic — receives the full `OrchidAgentState`, returns a partial update |
 
 The base class also provides shared helpers every subclass can use without reimplementing:
@@ -136,18 +132,18 @@ The base class also provides shared helpers every subclass can use without reimp
 
 ## GenericAgent: no Python required
 
-For most use cases, `GenericAgent` is the right choice. It is a concrete subclass whose behaviour is entirely driven by an `OrchidAgentConfig` parsed from YAML. Its `run()` executes a fixed six-step pipeline:
+For most use cases, `GenericAgent` is the right choice. It is a concrete subclass whose behaviour is entirely driven by an `OrchidAgentConfig` parsed from config files. Its `run()` executes a fixed six-step pipeline:
 
 1. RAG retrieval (tenant-scoped via `OrchidRAGScope`)
 2. Skill check — if the query matches a configured skill, run it and skip to step 6
 3. Agentic tool-calling loop — MCP + built-in tools via native `tool_calls`
-4. Dynamic RAG injection — write tool results back to Qdrant for future retrieval
+4. Dynamic RAG injection — write tool results back to the vector store for future retrieval
 5. LLM summarisation — synthesise the final response
 
-## Defining an agent in YAML
+## Defining an agent
 
-```yaml
-agents:
+<CodePair
+  yaml={`agents:
   basketball:
     description: >
       NBA basketball expert. Knows player stats, team rosters,
@@ -173,8 +169,31 @@ agents:
           - tool: get_player_stats
             source: builtin
           - tool: compare_players
-            source: builtin
-```
+            source: builtin`}
+  yamlLabel="agents.yaml"
+  md={`---
+description: "NBA basketball expert. Knows player stats, team rosters, and can compare players head-to-head."
+llm:
+  model: "ollama/llama3.2"
+  temperature: 0.2
+tools:
+  - get_player_stats
+  - compare_players
+  - get_team_roster
+skills:
+  scouting_report:
+    description: "Get a player's stats then compare with a rival"
+    steps:
+      - tool: get_player_stats
+        source: builtin
+      - tool: compare_players
+        source: builtin
+---
+
+You are a Basketball Expert AI assistant.
+Use your tools to provide data-driven analysis.`}
+  mdLabel="agents/basketball.md"
+/>
 
 ## Collaborators (Single Responsibility Principle)
 
@@ -188,21 +207,13 @@ agents:
 
 ## Custom agents via dotted imports
 
-When YAML isn't enough, subclass `OrchidAgent` in your own project and reference it by dotted path:
-
-```yaml
-agents:
-  support:
-    class: myproject.agents.support.SupportAgent
-    description: "Handles support tickets and knowledge-base lookups."
-    prompt: "You are a support specialist..."
-```
+When config files aren't enough, subclass `OrchidAgent` in your own project and reference it by dotted path:
 
 The framework resolves the class at startup via `importlib`. Custom agents receive the same injected dependencies (`reader`, `mcp_clients`, `chat_model`) as `GenericAgent` — override only what you need, inherit the rest.
 
 ## Mini-agents (opt-in fan-out)
 
-Any agent — including custom `OrchidAgent` subclasses — can opt into **mini-agent fan-out** with a single YAML flag. When enabled, a decomposer runs before `run()` each turn; if the query contains independent sub-tasks, it fans out into N parallel mini-agents and synthesises their outcomes into one final response. See [Mini-Agents](/concepts/mini-agents) for the full decision tree and YAML reference.
+Any agent — including custom `OrchidAgent` subclasses — can opt into **mini-agent fan-out** with a single config flag. When enabled, a decomposer runs before `run()` each turn; if the query contains independent sub-tasks, it fans out into N parallel mini-agents and synthesises their outcomes into one final response. See [Mini-Agents](/concepts/mini-agents) for the full decision tree and config reference.
 
 ---
 
@@ -225,18 +236,7 @@ In `parallel` mode the supervisor fans out to multiple agents simultaneously usi
 
 ## Configuring the supervisor
 
-All supervisor options live under the `supervisor:` key in `agents.yaml`:
-
-```yaml
-supervisor:
-  assistant_name: "Sports AI"
-  history_max_turns: 20
-  history_max_chars: 1000
-  history_summary_enabled: true
-  history_summary_model: "ollama/llama3.2"
-  history_summary_recent_turns: 10
-  routing_model: "ollama/llama3.2"
-```
+All supervisor options live under the `supervisor:` key:
 
 | Field | Default | Purpose |
 |---|---|---|
@@ -269,9 +269,9 @@ When `history_summary_enabled: true`, turns older than the `history_summary_rece
 
 ### Hierarchical RAG
 URL: https://gadz82.github.io/orchid/concepts/rag
-Description: OrchidRAGScope, the 5-level hierarchy, vector store interfaces, and the parse-once pattern.
+Description: OrchidRAGScope, the 5-level hierarchy, retrieval strategies, ingestion pipelines, and the parse-once pattern.
 
-Orchid's RAG subsystem is built around a five-level scope hierarchy. Every vector read and write carries an `OrchidRAGScope` — a frozen dataclass that encodes exactly which slice of the Qdrant collection a given operation is allowed to see or write to.
+Orchid's RAG subsystem is built around a five-level scope hierarchy and a pluggable strategy architecture. Every vector read and write carries an `OrchidRAGScope` — a frozen dataclass that encodes exactly which slice of the vector store a given operation is allowed to see or write to. Retrieval behaviour is controlled by the `rag.retrieval.strategy` field in `agents.yaml`, with five built-in strategies and an extension point for custom ones.
 
 ## The scope hierarchy
 
@@ -305,36 +305,17 @@ docs = await self.fetch_rag_context(query, scope, namespace="learning", k=5)
 
 `OrchidRAGScope` is a frozen dataclass living in `orchid_ai/core/scopes.py`. Because it has zero external dependencies, it can be constructed anywhere — agents, indexers, tests — without importing backend-specific code.
 
-## Vector store interfaces
+## Retrieval strategies
 
-The framework exposes three purpose-segregated ABCs:
+Orchid ships five retrieval strategies, each implementing the `OrchidRetrievalStrategy` ABC. Strategies are stateless and selected per-agent via `rag.retrieval.strategy`. Unknown strategy names fall back to `simple` with a warning — a typo never crashes the agent.
 
-| ABC | Who depends on it | Methods |
-|---|---|---|
-| `OrchidVectorReader` | Agents (read-only) | `retrieve(query, namespace, k, scope)` |
-| `OrchidVectorWriter` | Indexers (write-only) | `upsert(documents, namespace)`, `delete(ids, namespace)` |
-| `OrchidVectorStoreAdmin` | Admin operations | Collection management, scope promotion |
+### `simple` — single dense retrieval
 
-`QdrantRepository` in `rag/backends/qdrant.py` implements all three. Never import `qdrant_client` outside of `rag/backends/` — all access goes through these ABCs.
+The default. One `reader.retrieve()` call with the user query as-is. Fastest path, best for well-formed queries where the corpus contains a near-verbatim match.
 
-## Namespace conventions
-
-Namespaces are Qdrant collection prefixes that separate different kinds of knowledge:
-
-| Namespace | Contents |
-|---|---|
-| `learning` | Tenant knowledge base (courses, documents, wikis) |
-| `notifications` | Agent-generated structured data |
-| `uploads` | User-uploaded files (scoped to the uploading user's chat) |
-
-Set an agent's namespace via `rag.namespace` in `agents.yaml`. Leave it empty to skip RAG retrieval.
-
-## Dynamic injection
-
-After each tool call, `GenericAgent` optionally injects the result into Qdrant. On the next turn the agent retrieves its own prior tool output alongside static knowledge — providing a short-term memory that survives across conversation turns within the same chat.
-
-## External reading
-
+- 
+- 
+- 
 - 
 - 
 -
@@ -358,24 +339,7 @@ Orchid agents can call any MCP server over Streamable HTTP or SSE transport. The
 
 ## Three auth modes
 
-Each MCP server declaration carries exactly one field under `auth:` — the `mode`. No credentials, no endpoints, no client IDs live in YAML.
-
-```yaml
-mcp_servers:
-  - name: public-weather
-    url: https://weather.example.com/mcp
-    # auth defaults to: mode: none
-
-  - name: tenant-catalog
-    url: https://catalog.example.com/mcp
-    auth:
-      mode: passthrough
-
-  - name: external-crm
-    url: https://crm.example.com/mcp
-    auth:
-      mode: oauth
-```
+Each MCP server declaration carries exactly one field under `auth:` — the `mode`. No credentials, no endpoints, no client IDs live in config.
 
 | Mode | Behaviour |
 |------|-----------|
@@ -451,15 +415,7 @@ Both ABCs live in `orchid_ai/core/mcp.py`. SQLite and PostgreSQL implementations
 
 ## No credentials in YAML
 
-The MCP 2025-03-26 authorization model is zero-config by design. The only field in `agents.yaml` is:
-
-```yaml
-mcp_servers:
-  - name: external-crm
-    url: https://crm.example.com/mcp
-    auth:
-      mode: oauth
-```
+The MCP 2025-03-26 authorization model is zero-config by design. The only field in config is:
 
 No `client_id`, `client_secret`, `authorization_endpoint`, or `token_endpoint`. The authorization server **must** advertise RFC 7591 dynamic client registration. If it doesn't, seed `OrchidMCPClientRegistrationStore` with the pre-known endpoints and credentials before first use.
 
@@ -479,7 +435,7 @@ No `client_id`, `client_secret`, `authorization_endpoint`, or `token_endpoint`. 
 URL: https://gadz82.github.io/orchid/concepts/embeddings
 Description: Supported embedding models, dimension differences, and re-indexing requirements.
 
-Orchid uses pluggable embedding models to convert documents and queries into dense vectors stored in Qdrant. The embedding model is configured once at the deployment level — all agents in a deployment share the same model and collection dimensions.
+Orchid uses pluggable embedding models to convert documents and queries into dense vectors stored in the vector backend (Qdrant or ChromaDB). The embedding model is configured once at the deployment level — all agents in a deployment share the same model and collection dimensions.
 
 ## Supported models and dimensions
 
@@ -489,19 +445,13 @@ Orchid uses pluggable embedding models to convert documents and queries into den
 | `text-embedding-3-small` | 1536 | OpenAI |
 | `gemini/gemini-embedding-001` | 3072 | Google |
 
-Set the embedding model in `orchid.yml`:
-
-```yaml
-defaults:
-  rag:
-    embedding_model: "ollama/nomic-embed-text"
-```
+Set the embedding model:
 
 Any LiteLLM-compatible embedding model string is accepted. The `LiteLLMEmbedder` in `orchid_ai/rag/embeddings.py` delegates the actual call to LiteLLM.
 
 ## How embeddings are generated
 
-Embedding happens lazily inside `QdrantRepository.upsert()`. Documents passed to `ingest_document()` are chunked first, then embedded on the fly — you never need to call the embedder directly.
+Embedding happens lazily inside the vector store repository. Documents passed to `ingest_document()` are chunked first, then embedded on the fly — you never need to call the embedder directly.
 
 On the retrieval side, the query string is embedded once per retrieval call and used to search all configured namespaces in parallel (domain namespace + `uploads`). Results are merged by score and the top-k are returned.
 
@@ -521,27 +471,25 @@ When `rag.retrieval.strategy: hybrid` is set, Orchid runs a dense vector search 
 URL: https://gadz82.github.io/orchid/concepts/multi-llm
 Description: Provider agnosticism via LiteLLM: configure any model per agent, swap at runtime.
 
-Orchid is provider-agnostic. Agents, the supervisor, and the embedding pipeline each accept a LiteLLM-style model string — switch between Anthropic, OpenAI, Google, Ollama, Groq, or any other LiteLLM provider by editing a single line in `agents.yaml`.
+Orchid is provider-agnostic. Agents, the supervisor, and the embedding pipeline each accept a LiteLLM-style model string — switch between Anthropic, OpenAI, Google, Ollama, Groq, or any other LiteLLM provider by editing a single line.
 
 ## Setting the model per agent
 
 Model strings follow LiteLLM's `provider/model-name` convention:
 
-```yaml
-defaults:
-  llm:
-    model: "gemini/gemini-2.5-flash"
-    temperature: 0.2
-    fallback_model: "ollama/llama3.2"
+The `stats` agent would live in `agents/stats.md` with its own frontmatter:
 
-agents:
-  stats:
-    llm:
-      model: "openai/gpt-4o"
-      temperature: 0.1
-  analysis:
-    # inherits defaults.llm
+```markdown
+---
+llm:
+  model: "openai/gpt-4o"
+  temperature: 0.1
+---
+
+Stats agent prompt body...
 ```
+
+The `analysis` agent inherits defaults from the root config.
 
 Each agent can use a different provider. The optional `fallback_model` is tried automatically on 503, rate-limit, or timeout errors.
 
@@ -620,36 +568,17 @@ The API layer depends only on this interface — swapping the backend requires n
 | `OrchidSQLiteChatStorage` | `aiosqlite` | Local development, single-process demos |
 | `OrchidPostgresChatStorage` | `asyncpg` | Production, multi-worker deployments |
 
-Configure via `orchid.yml`:
-
-```yaml
-storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
-  dsn: postgresql://user:pass@host:5432/db
-```
+Configure via config:
 
 ## Custom backends
 
 Subclass `OrchidChatStorage` in your own project and reference it by dotted import path:
-
-```yaml
-storage:
-  class: myproject.storage.mysql.MySQLChatStorage
-  dsn: mysql+asyncmy://user:pass@host:3306/db
-```
 
 The factory resolves the class at startup via `importlib`. The constructor must accept `*, dsn: str`.
 
 ## Migrations
 
 The migration system uses versioned modules named `v{NNN}_{description}.py` (e.g. `v001_initial_schema.py`). Each module exposes `VERSION`, `up(conn, *, dialect)`, and `down(conn, *, dialect)`. `OrchidMigrationRunner` runs framework migrations first, then integrator migrations from `extra_migrations_package` — recorded with an `"ext:"` prefix to avoid collisions.
-
-```yaml
-storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
-  dsn: postgresql://...
-  extra_migrations_package: myapp.migrations
-```
 
 ---
 
@@ -668,19 +597,6 @@ Tool call strategies control how `GenericAgent` invokes tools on a given MCP ser
 | `llm_decides` | Asks the LLM which tools to call and with what arguments. Falls back to `all` if the LLM call fails or returns invalid JSON. |
 
 ## Configuring a strategy per MCP server
-
-```yaml
-agents:
-  catalog:
-    mcp_servers:
-      - name: product-db
-        url: https://db.example.com/mcp
-        tool_call_strategy: sequential
-        tools:
-          - name: search_catalog
-          - name: filter_results
-          - name: rank_by_score
-```
 
 The strategy applies to that server's tools within skill steps. Each server in an agent's `mcp_servers` list can use a different strategy.
 
@@ -718,17 +634,6 @@ class PriorityStrategy(OrchidToolCallStrategy):
         ...
 
 register_strategy("priority", PriorityStrategy)
-```
-
-```yaml
-agents:
-  triage:
-    mcp_servers:
-      - name: kb
-        tool_call_strategy: priority
-        tools:
-          - name: search_kb
-          - name: get_article
 ```
 
 Strategies are looked up by name at execution time from `STRATEGY_REGISTRY`. An unknown name falls back to `all` with a warning log.
@@ -793,7 +698,7 @@ For consumer projects, call `register_parser(ext, cls)` at startup rather than m
 
 ## Chunking
 
-After extraction, `ingest_document` splits text into overlapping chunks via `RecursiveCharacterTextSplitter` (defaults: `chunk_size=1000`, `chunk_overlap=200`, split on `\n\n` first). Each chunk is embedded and stored in Qdrant with scope metadata — `tenant_id`, `user_id`, `chat_id`, and `scope="chat_shared"` — so it is visible to all agents in the same chat.
+After extraction, `ingest_document` splits text into overlapping chunks via `RecursiveCharacterTextSplitter` (defaults: `chunk_size=1000`, `chunk_overlap=200`, split on `\n\n` first). Each chunk is embedded and stored in the vector store with scope metadata — `tenant_id`, `user_id`, `chat_id`, and `scope="chat_shared"` — so it is visible to all agents in the same chat.
 
 ---
 
@@ -826,19 +731,7 @@ supervisor ──Send──> {name}_agent (parent + decomposer hook)
 
 At the start of every turn, a **decomposer** runs as a cheap structured-output call. If the query is simple (`should_fork=false`) the parent agent runs normally — no overhead. If the decomposer identifies N independent sub-tasks, the graph fans out via `Send`, each mini runs its own full agentic loop in parallel, and the aggregator synthesises the results.
 
-## Enabling via YAML
-
-```yaml
-agents:
-  helpdesk:
-    description: "Handles support tickets and knowledge-base lookups."
-    prompt: "You are a support specialist..."
-    mini_agent:
-      enabled: true
-      max_minis: 3          # default 3, hard cap 8
-      timeout_seconds: 30   # per-mini timeout
-      tool_allowlist_mode: strict   # strict | parent_full | inferred
-```
+## Enabling via config
 
 That single `mini_agent.enabled: true` flag is the only change required. Custom agent subclasses opt in the same way — the decomposer runs at the graph-wrapper level before `run()` is called, so no code changes are needed inside the agent.
 
@@ -928,45 +821,7 @@ Five objects, clear lifecycle:
 
 Scheduling is not a separate concept — `Schedule` rows produce synthetic `cron` signals on the same dispatch path as webhooks and internal emissions.
 
-## Configuring Pollen + Bloom in YAML
-
-```yaml
-events:
-  enabled: true
-
-  store:
-    class: orchid_ai.events.backends.postgres.PostgresEventStore
-
-  queue:
-    class: orchid_ai.events.queues.postgres.PostgresSignalQueue
-
-  producers:
-    - class: orchid_ai.events.producers.http.HTTPIngestionProducer
-      mount: /signals
-    - class: orchid_ai.events.producers.scheduler.SchedulerProducer
-
-  processors:
-    - class: orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor
-      concurrency: 4
-
-  triggers:
-    - id: morning-digest
-      on: { signal: cron, cron: "0 7 * * 1-5" }
-      emits:
-        agent: notifications
-        prompt_template: "Build the morning digest for {{tenant_key}}"
-        identity: { mode: service_account, name: digest-bot }
-      retry: { max: 3, backoff: exponential }
-
-    - id: high-priority-ticket
-      on:
-        signal: support.ticket.created
-        when: "payload.priority == 'high'"
-      emits:
-        agent: helpdesk
-        prompt_template: "New high-priority ticket: {{payload.summary}}"
-        identity: { mode: act_as_user, user_id_from: signal.user_id }
-```
+## Configuring Pollen + Bloom
 
 ## Signal sources
 
@@ -1055,7 +910,7 @@ YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`)
 
 ### `rag/`
 
-Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and the Qdrant backend. All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through Qdrant-specific imports outside `rag/backends/`. See [RAG](/concepts/rag).
+Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends (Qdrant for full-featured deployments, ChromaDB for zero-infra local usage). All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. The ChromaDB backend lives in `orchid-cli/` and is registered in `VECTOR_BACKEND_REGISTRY` at CLI startup. See [RAG](/concepts/rag).
 
 ### `persistence/`
 
@@ -1117,30 +972,13 @@ class CatalogAgent(OrchidAgent):
         return {"messages": [response]}
 ```
 
-Wire it up in `agents.yaml`:
-
-```yaml
-agents:
-  catalog:
-    class: myproject.agents.catalog.CatalogAgent
-    description: "Searches the product catalog and answers inventory questions."
-    prompt: "You are a catalog specialist..."
-    rag_namespace: catalog
-```
+Wire it up in config:
 
 The framework resolves the class at startup via `importlib`. The agent inherits `summarise()`, `fetch_rag_context()`, `extract_user_query()`, and `extract_conversation_history()` from the base class — override only what you need.
 
 ## LLM configuration
 
-Orchid uses LangChain's `BaseChatModel` as its LLM abstraction. The `build_chat_model(model_string)` factory creates one from a LiteLLM-style model string, supporting OpenAI, Anthropic, Google Gemini, Groq, and Ollama out of the box. The model is configured per-agent in `agents.yaml`:
-
-```yaml
-agents:
-  search:
-    llm:
-      model: "openai/gpt-4o-mini"
-      temperature: 0.1
-```
+Orchid uses LangChain's `BaseChatModel` as its LLM abstraction. The `build_chat_model(model_string)` factory creates one from a LiteLLM-style model string, supporting OpenAI, Anthropic, Google Gemini, Groq, and Ollama out of the box. The model is configured per-agent:
 
 See [Multi-LLM support](/concepts/multi-llm) for the full provider matrix.
 
@@ -1264,6 +1102,8 @@ URL: https://gadz82.github.io/orchid/packages/orchid-cli
 Description: Command-line interface for interacting with Orchid without running the API.
 
 `orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. The default storage is SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via environment variables when you need it.
+
+The CLI defaults to **ChromaDB** (`vector_backend: chroma`) for zero-infrastructure RAG — vectors live on disk at `~/.orchid/chroma/`, no Qdrant container required. Set `VECTOR_BACKEND=qdrant` to switch to Qdrant when you need sparse/hybrid search or scope promotion.
 
 ## Installation
 
@@ -1561,19 +1401,7 @@ Every visible UI behaviour is driven by a YAML key in `agents.yaml` or an `orchi
 
 ## Adding an agent without touching code
 
-Add an entry to `agents.yaml`, redeploy `orchid-api`. The UI picks it up automatically on the next page load — no frontend code changes, no rebuild of the frontend.
-
-```yaml
-# agents.yaml diff
-agents:
-  search:
-    description: "Searches the knowledge base and summarises findings."
-    prompt: "You are a search specialist. Use your tools to find relevant information."
-    llm:
-      model: "openai/gpt-4o-mini"
-    tools:
-      - search_knowledge_base
-```
+Add an entry to config, redeploy `orchid-api`. The UI picks it up automatically on the next page load — no frontend code changes, no rebuild of the frontend.
 
 The supervisor reads the new `agents:` section at startup and includes the agent in its routing decisions. If the frontend renders an agent-picker it re-fetches the list from `orchid-api`; if it routes automatically the supervisor handles it transparently.
 
@@ -1603,29 +1431,103 @@ This proxy pattern means the frontend never needs to know anything about the ups
 
 ### Configuration Reference
 URL: https://gadz82.github.io/orchid/configuration
-Description: Complete reference for orchid.yml and agents.yaml: all sections, keys, defaults, and best practices.
+Description: Complete reference for orchid.yml + orchid.md and agents.yaml + agents/*.md: all sections, keys, defaults, and best practices.
 
-Orchid splits its configuration across two YAML files with distinct responsibilities. Understanding the boundary between them is the fastest way to understand how the framework is assembled at runtime.
+Orchid supports two configuration formats with identical capabilities. Choose the one that fits your workflow — or mix both in hybrid mode.
 
-**`orchid.yml`** is the infrastructure and runtime configuration file. It tells the API server which LLM provider to use, where Qdrant is running, which database backs chat persistence, and how authentication is wired. Everything in `orchid.yml` maps directly to an environment variable — the file is a convenience layer on top of env vars, and real environment variables always win. Think of it as the deployment manifest.
+**YAML** uses two files: `orchid.yml` for infrastructure and `agents.yaml` for agent behavior. Every key maps to an environment variable; real env vars always win. This is the original format, well-suited for programmatic generation and CI pipelines.
 
-**`agents.yaml`** is the agent behavior configuration file. It defines which agents exist, what models and tools they use, how the supervisor orchestrates them, and how RAG retrieval is tuned. This file is loaded and validated against a Pydantic schema at startup. Adding a new agent, adjusting conversation history limits, or enabling sliding-window summarization all happen here — no code changes needed.
+**Markdown** uses `orchid.md` for infrastructure and `agents/*.md` for per-agent configs. Each agent file has YAML frontmatter for structured fields and a Markdown body that becomes the system prompt directly — no YAML string escaping or multi-line block scalars. An on-demand SHA-256 watcher detects file changes and rebuilds the graph without restarting.
 
-Both tables below are generated directly from the Pydantic schema in `orchid_ai.config.schema` and the YAML-to-env mapping in `orchid_ai.config.yaml_env`. Use the filter input to locate a specific key; every row has a stable anchor link you can share.
-
----
-
-## orchid.yml
-
-Runtime and infrastructure keys. Every key maps to a flat environment variable via `ORCHID_CONFIG` → `YAML_TO_ENV`. When the same variable is set in both `orchid.yml` and the environment, the environment wins.
+Both formats produce identical `OrchidAgentsConfig` output. The tables below cover all keys regardless of format.
 
 ---
 
-## agents.yaml
+## Infrastructure Config
 
-Agent behavior and orchestration configuration. Validated against `OrchidAgentsConfig` at startup — unknown keys raise an error, so typos surface immediately. Defaults cascade: values set under `defaults:` apply to every agent unless overridden per-agent.
+Runtime and infrastructure keys. In YAML these live in `orchid.yml`; in Markdown they are the frontmatter of `orchid.md`. Every key maps to a flat environment variable via `ORCHID_CONFIG` → `YAML_TO_ENV`. When the same variable is set in both the config file and the environment, the environment wins.
 
 ---
+
+## Agent Behavior Config
+
+Agent behavior and orchestration configuration. In YAML these live in `agents.yaml`; in Markdown they are individual `agents/<name>.md` files with YAML frontmatter + Markdown body. Validated against `OrchidAgentsConfig` at startup — unknown keys raise an error, so typos surface immediately. Defaults cascade: values set under `defaults:` apply to every agent unless overridden per-agent.
+
+---
+
+## Load Modes
+
+| Mode | Root File | Agent Configs | Detection |
+|------|-----------|---------------|-----------|
+| YAML | `orchid.yml` | `agents.yaml` | `.yml` or `.yaml` extension |
+| MD | `orchid.md` | `agents/*.md` | `.md` extension |
+| Hybrid | `orchid.yml` | `agents/*.md` | `AGENTS_CONFIG_PATH` points to a directory |
+
+### YAML Mode
+
+```bash
+ORCHID_CONFIG=orchid.yml uvicorn orchid_api.main:app
+```
+
+### MD Mode
+
+```bash
+ORCHID_CONFIG=orchid.md uvicorn orchid_api.main:app
+```
+
+### Hybrid Mode
+
+Keep `orchid.yml` for infrastructure while using `agents/*.md` for agents:
+
+```bash
+ORCHID_CONFIG=orchid.yml AGENTS_CONFIG_PATH=agents/ uvicorn orchid_api.main:app
+```
+
+---
+
+## Hot-Reload (MD Only)
+
+The on-demand config watcher detects file changes via SHA-256 hashing — no background threads, no fs-notify libraries.
+
+- The `OrchidConfigWatcher` tracks `orchid.md` + `agents/*.md` by their current hashes.
+- `Orchid.reload_config()` calls `watcher.reload_if_changed()` and rebuilds the LangGraph when a change is detected.
+- Graph rebuild is serialised via `asyncio.Lock` — existing requests complete with the old config.
+- The API middleware (`ConfigReloadMiddleware`) polls the watcher at most every `ORCHID_RELOAD_INTERVAL` seconds (default 30, set to 0 to disable).
+
+```bash
+# Enable hot-reload with 10-second polling:
+ORCHID_RELOAD_INTERVAL=10
+```
+
+---
+
+## MD File Format
+
+### `orchid.md` — Root Config
+
+Infrastructure keys (llm, auth, rag, storage) map to environment variables. Agent behavior keys (version, defaults, tools, skills, supervisor, guardrails, events) are validated against the Pydantic schema. The body after the closing `---` is free-form documentation.
+
+### `agents/<name>.md` — Per-Agent Config
+
+Each agent file has YAML frontmatter for structured fields and a Markdown body for the system prompt. The filename stem becomes the agent name.
+
+| Agent MD field | YAML equivalent | Notes |
+|---|---|---|
+| Frontmatter `description` | `agents.<name>.description` | Short, for supervisor routing |
+| MD body | `agents.<name>.prompt` | Rich Markdown, stripped of leading/trailing whitespace |
+| Frontmatter `class` | `agents.<name>.class` | Aliased to `class_path` |
+| Frontmatter `rag`, `tools`, etc. | `agents.<name>.rag`, etc. | 1:1 mapping |
+| Filename `basketball.md` | Dict key `basketball` | Agent name from filename stem |
+
+---
+
+## Equivalence
+
+MD and YAML configs produce identical `OrchidAgentsConfig` output. Run the equivalence test:
+
+```bash
+cd orchid && .venv/bin/python examples/md-config/test_equivalence.py
+```
 
 ---
 
@@ -1663,76 +1565,20 @@ orchid chat interactive --config examples/basketball/orchid.yml
 
 ## Configuration walkthrough
 
-`orchid.yml` sets the runtime environment — LLM, storage backend, and pointer to `agents.yaml`:
+`orchid.yml` sets the runtime environment — LLM, storage backend, and pointer to agent configs:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/basketball/agents.yaml
+Agent configs define the agents, their tools, and two cross-agent skills:
 
-llm:
-  model: ollama/llama3.2
-  ollama_api_base: http://host.docker.internal:11434
+The `basketball` agent lives in `agents/basketball.md`:
 
-auth:
-  dev_bypass: true          # skip identity check for local dev
+```markdown
+---
+description: "NBA basketball expert with player stats and roster tools."
+tools: [get_player_stats, compare_players, get_team_roster]
+---
 
-storage:
-  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
-  dsn: /data/chats.db       # custom SQLite backend plugged in via dotted import
-
-# ...truncated
-```
-
-`agents.yaml` defines the agents, their tools, and two cross-agent skills:
-
-```yaml
-# agents.yaml (trimmed)
-version: "1"
-
-defaults:
-  llm:
-    model: "ollama/llama3.2"
-    temperature: 0.2
-  rag:
-    enabled: false
-
-tools:
-  get_player_stats:
-    handler: "examples.basketball.tools.basketball.get_player_stats"
-    description: "Get stats for an NBA player"
-  compare_players:
-    handler: "examples.basketball.tools.basketball.compare_players"
-    description: "Side-by-side comparison of two NBA players"
-  assess_motivation:
-    handler: "examples.basketball.tools.psychology.assess_motivation"
-    description: "Assess a player's motivation level"
-  # ...truncated
-
-skills:
-  player_performance_review:
-    description: "Get a player's stats then assess their motivation"
-    steps:
-      - agent: basketball
-        instruction: "Look up the player's current stats"
-      - agent: psychologist
-        instruction: "Assess their motivation and suggest mental strategies"
-
-agents:
-  basketball:
-    description: "NBA basketball expert with player stats and roster tools."
-    prompt: |
-      You are a Basketball Expert AI assistant. Provide insightful
-      basketball analysis using the stats from your tools.
-    tools: [get_player_stats, compare_players, get_team_roster]
-
-  psychologist:
-    description: "Sports psychologist for motivation and team dynamics."
-    prompt: |
-      You are a Sports Psychologist specialized in basketball performance.
-    tools: [assess_motivation, suggest_mental_strategy, analyze_team_dynamics]
-
-# ...truncated
+You are a Basketball Expert AI assistant. Provide insightful
+basketball analysis using the stats from your tools.
 ```
 
 ## What to look for
@@ -1784,92 +1630,25 @@ orchid chat interactive --config examples/helpdesk/config/orchid.yml
 
 `orchid.yml` points to the agents config and configures the LLM and storage:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/helpdesk/config/agents.yaml
+Agent configs define a three-agent pipeline with a cross-agent skill and event-driven triage:
 
-llm:
-  model: gemini/gemini-flash-latest
+The `support` agent lives in `agents/support.md` with its own frontmatter and Markdown body:
 
-auth:
-  dev_bypass: true
-
-rag:
-  vector_backend: qdrant
-  qdrant_url: http://qdrant:6333
-  embedding_model: gemini/gemini-embedding-001
-
-# ...truncated
-```
-
-`agents.yaml` defines a three-agent pipeline with a cross-agent skill and event-driven triage:
-
-```yaml
-# agents.yaml (trimmed)
-version: "1"
-
-supervisor:
-  assistant_name: "Helpdesk AI"
-  routing_system_prompt: |
-    Route new issues to triage first, then support.
-    Route escalation requests to the escalation agent.
-
-skills:
-  auto_resolve:
-    description: "Full ticket resolution: triage → support → escalation"
-    steps:
-      - agent: triage
-        instruction: "Classify this issue by priority and category"
-      - agent: support
-        instruction: "Search the KB and provide a detailed resolution"
-      - agent: escalation
-        instruction: "Confirm closure or create an escalation plan"
-
-agents:
-  triage:
-    description: "Ticket triage and classification agent."
-    prompt: |
-      Classify each incoming issue by priority and category.
-      Use the classify_ticket tool.
-    tools: [classify_ticket]
-    rag:
-      enabled: false
-    execution_hints:
-      parallel_safe: false   # runs before support
-
-  support:
-    class: examples.helpdesk.agents.support.SupportAgent   # custom class
-    description: "Technical support agent with KB search and ticket status."
-    tools: [classify_ticket, search_kb, get_ticket_status]
-    mini_agent:
-      enabled: true
-      max_count: 3
-    parallel_tools: true
-    rag:
-      namespace: knowledge_base
-      k: 5
-
-  escalation:
-    description: "Escalation management for critical or unresolved issues."
-    tools: [get_ticket_status, classify_ticket]
-    rag:
-      enabled: false
-
-# Event-driven: fires on high-priority tickets from an external webhook
-events:
+```markdown
+---
+class: examples.helpdesk.agents.support.SupportAgent
+description: "Technical support agent with KB search and ticket status."
+tools: [classify_ticket, search_kb, get_ticket_status]
+mini_agent:
   enabled: true
-  triggers:
-    - id: high-priority-ticket
-      "on":
-        signal: support.ticket.created
-        when: "payload.priority == 'high'"
-      emits:
-        agent: support
-        identity: { mode: act_as_user, user_id_from: signal.user_id }
-        proactive_chat: true
+  max_count: 3
+parallel_tools: true
+rag:
+  namespace: knowledge_base
+  k: 5
+---
 
-# ...truncated
+Technical support agent with KB search and ticket status.
 ```
 
 ## What to look for
@@ -1922,104 +1701,7 @@ orchid chat interactive --config examples/restaurant/config/orchid.yml
 
 `orchid.yml` connects the LLM, Qdrant, and the custom SQLite storage backend:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/restaurant/config/agents.yaml
-
-llm:
-  model: gemini/gemini-flash-latest
-
-auth:
-  dev_bypass: true
-
-rag:
-  vector_backend: qdrant
-  qdrant_url: http://qdrant:6333
-  embedding_model: gemini/gemini-embedding-001   # 3072-d
-
-storage:
-  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
-  dsn: /data/restaurant_chats.db
-
-# ...truncated
-```
-
-`agents.yaml` shows the three agents, their skills, and the event trigger:
-
-```yaml
-# agents.yaml (trimmed)
-version: "1"
-
-supervisor:
-  assistant_name: "Restaurant AI"
-
-defaults:
-  llm:
-    model: "gemini/gemini-flash-latest"
-    temperature: 0.3
-  rag:
-    retrieval:
-      strategy: multi_query
-      query_transformers: [reformulate]
-
-skills:
-  full_dining_experience:
-    description: "Browse menu → place order → collect review"
-    steps:
-      - agent: menu
-        instruction: "Search menu for items matching the customer's preferences"
-      - agent: orders
-        instruction: "Place an order for the recommended items"
-      - agent: reviews
-        instruction: "Analyze the customer's review"
-
-agents:
-  menu:
-    description: "Restaurant menu expert with dietary filtering."
-    tools: [search_menu, get_daily_specials]
-    rag:
-      namespace: menu
-      k: 10
-      retrieval:
-        strategy: multi_query
-        query_transformers: [reformulate]
-    guardrails:
-      output:
-        - type: groundedness
-          fail_action: warn
-          config:
-            min_overlap: 0.25
-
-  orders:
-    description: "Order placement and billing."
-    tools: [place_order, get_order_status, calculate_bill]
-    rag:
-      enabled: false
-    execution_hints:
-      depends_on: [menu]    # runs after menu in sequential routing
-
-  reviews:
-    class: examples.restaurant.agents.reviews.ReviewsAgent
-    description: "Customer review analyst with sentiment analysis."
-    tools: [analyze_sentiment]
-    rag:
-      namespace: reviews
-      k: 10
-
-# Event-driven: a chat-time signal triggers a background research Bloom
-events:
-  enabled: true
-  triggers:
-    - id: deep-research
-      "on": { signal: research.requested }
-      emits:
-        agent: reviews
-        identity: { mode: act_as_user, user_id_from: signal.user_id }
-        respect_chat_binding: true   # Bloom reply lands in the originating chat
-
-# ...truncated
-```
+Agent configs show the three agents, their skills, and the event trigger:
 
 ## What to look for
 
@@ -2045,11 +1727,164 @@ events:
 
 ---
 
+### Recipes
+URL: https://gadz82.github.io/orchid/examples/recipes
+Description: Zero-infrastructure RAG cookbook example using ChromaDB and Ollama — no Docker, no external services.
+
+## What this demonstrates
+
+This example shows Orchid running with **zero infrastructure**: no Docker, no Qdrant, no external API keys. The vector store is ChromaDB, an embedded, on-disk database that persists vectors at `~/.orchid/chroma/`. The LLM and embedding model both run locally through Ollama.
+
+Two agents — `cookbook` and `mealplanner` — draw on a shared recipe corpus seeded at startup. `cookbook` answers ingredient questions and suggests substitutions; `mealplanner` builds dietary-aware weekly meal plans. Both use simple dense retrieval with reformulation so natural-language queries match the recipe corpus regardless of phrasing.
+
+## Run it
+
+```bash
+# From the repo root
+pip install -e orchid -e orchid-cli
+
+# Send a recipe question
+orchid chat send "What can I make with chicken and rice?" \
+  --config examples/recipes/orchid.yml
+
+# Ask for a meal plan
+orchid chat send "Plan a vegan dinner for Monday" \
+  --agent mealplanner \
+  --config examples/recipes/orchid.yml
+
+# Interactive session
+orchid chat interactive --config examples/recipes/orchid.yml
+```
+
+Ollama must be running locally with `llama3.2` and `nomic-embed-text` pulled.
+
+## Configuration walkthrough
+
+### orchid.yml
+
+The `rag.vector_backend: chroma` key is what makes this example zero-infra — ChromaDB stores vectors as files under `~/.orchid/chroma/` via its `PersistentClient`. No Docker container, no Qdrant URL. The `startup.hook` seeds 8 recipes at bootstrap so agents have material to retrieve without manual indexing.
+
+### agents.yaml
+
+<CodePair
+  yaml={`version: "1"
+
+defaults:
+  llm:
+    model: ollama/llama3.2
+    temperature: 0.2
+
+agents:
+  cookbook:
+    description: >
+      General cooking and recipe assistant.  Answers questions about
+      ingredients, techniques, substitutions.
+    prompt: |
+      You are a helpful chef assisting with cooking questions.
+      Answer using the retrieved recipe documents.
+    rag:
+      namespace: recipes
+      k: 5
+      retrieval:
+        strategy: simple
+        query_transformers: [reformulate]
+
+  mealplanner:
+    description: >
+      Meal-planning assistant that considers dietary restrictions
+      and available ingredients.
+    prompt: |
+      You are a meal-planning assistant.  Build meal plans from the
+      retrieved recipe documents.
+    rag:
+      namespace: recipes
+      k: 8
+      retrieval:
+        strategy: simple
+        query_transformers: [reformulate]`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  llm:
+    model: ollama/llama3.2
+    temperature: 0.2
+---`}
+  mdLabel="orchid.md (infra + defaults)"
+/>
+
+The `cookbook` agent lives in `agents/cookbook.md`:
+
+```markdown
+---
+description: "General cooking and recipe assistant."
+rag:
+  namespace: recipes
+  k: 5
+  retrieval:
+    strategy: simple
+    query_transformers: [reformulate]
+---
+
+You are a helpful chef assisting with cooking questions.
+Answer using the retrieved recipe documents.
+```
+
+Both agents share the `recipes` namespace. The `query_transformers: [reformulate]` flag smooths out natural-language questions — a user asking "What can I cook with stuff in my fridge?" gets useful results even when the query structure is loose.
+
+## What to look for
+
+- **`vector_backend: chroma`** — the single YAML key that swaps the entire RAG backend from Qdrant to ChromaDB. No code changes, no config restructure.
+- **Startup hook seeding** — `hooks/startup.py` uses `reader.upsert()` to populate 8 recipes into ChromaDB at bootstrap. Each recipe carries metadata (cuisine, course, prep time, dietary tags) available for filtered retrieval.
+- **Zero Docker** — ChromaDB is an embedded database. `~/.orchid/chroma/` is just files on disk. You can inspect them or delete them to start fresh.
+- **Ollama all the way** — both the LLM (`llama3.2`) and embeddings (`nomic-embed-text`) run locally. No OpenAI or Gemini API key required.
+- **Metadata filtering** — recipes are tagged with `cuisine`, `course`, `dietary`, `prep_time_min`, and `difficulty`. Query with `metadata_filters: {"cuisine": "italian"}` to narrow results.
+
+## Related concepts
+
+- [Hierarchical RAG](/concepts/rag) — scope hierarchy, retrieval strategies, metadata filtering
+- [Embeddings](/concepts/embeddings) — supported models, dimension differences
+- [Agents](/concepts/agents) — YAML-driven agent configuration
+
+## Sources
+
+- `examples/recipes/orchid.yml`
+- `examples/recipes/agents.yaml`
+- `examples/recipes/hooks/startup.py`
+
+---
+
 ### Examples
 URL: https://gadz82.github.io/orchid/examples
 Description: Working examples showing different Orchid capabilities and integration patterns.
 
+## Orchid Examples
 
+This page lists the example projects that demonstrate Orchid's capabilities. Each example is a self-contained project showing different patterns and integrations.
+
+### Examples Repository
+
+All examples are now hosted in a dedicated repository: **[orchid-examples](https://github.com/gadz82/orchid-examples)**.
+
+The examples repository contains:
+- Ready-to-run configurations (`orchid.yml` and `agents.yaml`)
+- Custom agent implementations
+- Built-in tool definitions
+- Storage backends (SQLite and PostgreSQL)
+- Identity resolvers
+- Startup hooks and event producers
+- Test suites for each example
+
+### Running Examples
+
+Each example can be run in three ways:
+
+1. **Docker Compose** — Full stack with API, Qdrant, and dependencies
+2. **Standalone API** — Run with `uvicorn` and local Ollama
+3. **CLI** — Interactive or scripted chat sessions
+
+See the individual example pages below for specific instructions.
 
 ---
 
@@ -2084,69 +1919,20 @@ pip install -e ./orchid -e ./orchid-cli
 
 `agents.yaml` defines the digest agent and the full event pipeline:
 
-```yaml
-# agents.yaml (trimmed)
-version: "1"
+The `digest` agent lives in `agents/digest.md`:
 
-defaults:
-  llm:
-    model: "ollama/llama3.2"
-    temperature: 0.2
-  rag:
-    enabled: false
+```markdown
+---
+description: "Personalised weekly learning digest."
+rag:
+  enabled: false
+execution_hints:
+  parallel_safe: true
+---
 
-agents:
-  digest:
-    description: "Personalised weekly learning digest."
-    prompt: |
-      Build a short personalised digest for the named learner.
-      Sections: Highlights from last week, Recommended next steps,
-      One stretch goal. Keep it under 150 words.
-    rag:
-      enabled: false
-    execution_hints:
-      parallel_safe: true
-
-events:
-  enabled: true
-
-  store:
-    class: orchid_ai.events.backends.sqlite.SQLiteEventStorage
-    extra_args:
-      dsn: /data/chats.db
-
-  queue:
-    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
-    poll_interval_ms: 200
-    lease_seconds: 30
-    max_attempts: 2
-
-  producers:
-    - class: examples.learning.producers.weekly_digest.WeeklyDigestFanoutProducer
-      extra_args:
-        cron: "0 6 * * 1"          # every Monday at 06:00 UTC
-    - class: orchid_ai.events.producers.internal.InternalEmissionProducer
-
-  processors:
-    - class: orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor
-      concurrency: 4
-
-  triggers:
-    - id: weekly-digest
-      "on": { signal: weekly-digest.due }
-      emits:
-        agent: digest
-        prompt_template: |
-          Build a personalised weekly learning digest for user
-          {{user_id}} in tenant {{tenant_key}}, week {{payload.week_iso}}.
-        identity:
-          mode: addressed_to_user
-          service_account: digest-bot
-          user_id_from: signal.user_id
-      retry: { max: 2, backoff: exponential }
-      parallelism: per_user
-
-# ...truncated
+Build a short personalised digest for the named learner.
+Sections: Highlights from last week, Recommended next steps,
+One stretch goal. Keep it under 150 words.
 ```
 
 ## What to look for
@@ -2202,84 +1988,7 @@ orchid chat interactive --config examples/mcp-auth/orchid.yml
 
 `orchid.yml` configures the MCP OAuth token store and API base URL for callback construction:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/mcp-auth/agents.yaml
-
-llm:
-  model: ollama/llama3.2
-
-auth:
-  dev_bypass: true
-
-# MCP OAuth token storage (per-user, same DB as chat history)
-mcp_auth:
-  token_store_class: orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore
-  token_store_dsn: ~/.orchid/chats.db
-
-# Base URL used to build the OAuth redirect URI
-api:
-  base_url: http://localhost:8000
-```
-
-`agents.yaml` shows all three auth modes:
-
-```yaml
-# agents.yaml (trimmed)
-version: "1"
-
-supervisor:
-  assistant_name: "Multi-Auth Demo"
-
-agents:
-  local-tools:
-    description: "Agent using a local MCP server with no authentication."
-    mcp_servers:
-      - name: local-server
-        url: "${LOCAL_MCP_URL}"
-        tools: "*"
-        # auth omitted → defaults to mode: "none"
-
-  internal-api:
-    description: "Agent forwarding the platform bearer token to an internal MCP server."
-    mcp_servers:
-      - name: internal-platform
-        url: "${INTERNAL_MCP_URL}"
-        tools: "*"
-        auth:
-          mode: passthrough
-
-  crm-integration:
-    description: "Agent using OAuth with dynamic client registration for an external CRM."
-    mcp_servers:
-      - name: external-crm
-        url: "${CRM_MCP_URL}"
-        tools: "*"
-        auth:
-          mode: oauth
-          # No client_id, client_secret, or endpoints — the framework
-          # discovers them via RFC 9728 → 8414 → 7591 on first 401.
-
-  hybrid-agent:
-    description: "Agent connecting to all three server types simultaneously."
-    mcp_servers:
-      - name: local-utils
-        url: "${LOCAL_MCP_URL}"
-        tools: "*"
-      - name: platform-api
-        url: "${INTERNAL_MCP_URL}"
-        tools: "*"
-        auth:
-          mode: passthrough
-      - name: crm-tools
-        url: "${CRM_MCP_URL}"
-        tools: "*"
-        auth:
-          mode: oauth    # degraded gracefully if user hasn't authorized yet
-
-# ...truncated
-```
+Agent configs show all three auth modes:
 
 ## What to look for
 
@@ -2330,49 +2039,21 @@ After sending a few messages, inspect `/data/custom_storage_chats.json` to see t
 
 `orchid.yml` is minimal — the only non-default setting is `storage.class`:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/custom-storage/agents.yaml
+Agent configs define a single echo agent — its only purpose is generating chat history for the storage backend to persist:
 
-llm:
-  model: ollama/llama3.2
+The `echo` agent lives in `agents/echo.md`:
 
-auth:
-  dev_bypass: true
+```markdown
+---
+description: "Demo agent that confirms messages and reminds the user about JSON persistence."
+tools: []
+execution_hints:
+  parallel_safe: true
+---
 
-storage:
-  class: examples.custom-storage.storage.json_file.OrchidJSONChatStorage
-  dsn: /data/custom_storage_chats.json
-  # extra_migrations_package is optional; JSON backend ignores it.
-
-tracing:
-  langsmith_tracing: false
-```
-
-`agents.yaml` defines a single echo agent — its only purpose is generating chat history for the storage backend to persist:
-
-```yaml
-# agents.yaml
-version: "1"
-
-defaults:
-  llm:
-    model: "ollama/llama3.2"
-    temperature: 0.2
-  rag:
-    enabled: false
-
-agents:
-  echo:
-    description: "Demo agent that confirms messages and reminds the user about JSON persistence."
-    prompt: |
-      You are a friendly demo assistant. Acknowledge the user's message
-      in one short sentence and remind them that the chat is being
-      persisted to a JSON file by the custom storage backend.
-    tools: []
-    execution_hints:
-      parallel_safe: true
+You are a friendly demo assistant. Acknowledge the user's message
+in one short sentence and remind them that the chat is being
+persisted to a JSON file by the custom storage backend.
 ```
 
 ## What to look for
@@ -2425,90 +2106,7 @@ Replace `simple_searcher` with `multi_query_searcher`, `hyde_searcher`, or `rece
 
 `orchid.yml` sets Qdrant and Gemini embeddings (3072-d), plus the startup hook:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/rag-strategies/agents.yaml
-
-llm:
-  model: gemini/gemini-flash-latest
-
-rag:
-  vector_backend: qdrant
-  qdrant_url: http://qdrant:6333
-  embedding_model: gemini/gemini-embedding-001   # 3072-d
-
-storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
-  dsn: /data/rag_strategies_chats.db
-
-startup:
-  hook: examples.rag-strategies.hooks.startup.bootstrap_rag_strategies
-  # seeds the release_notes corpus + registers recency_simple
-```
-
-`agents.yaml` defines four agents with identical prompts but different `rag.retrieval.strategy`:
-
-```yaml
-# agents.yaml (trimmed)
-version: "1"
-
-defaults:
-  llm:
-    model: "gemini/gemini-flash-latest"
-    temperature: 0.2
-  rag:
-    enabled: true
-    k: 5
-    retrieval:
-      strategy: simple
-
-agents:
-  simple_searcher:
-    description: "Single dense query — fastest baseline."
-    prompt: &shared_prompt |
-      Answer release-history questions from retrieved documents.
-      Quote release IDs. If nothing is retrieved, say so.
-    rag:
-      namespace: release_notes
-      k: 5
-      retrieval:
-        strategy: simple
-        query_transformers: [reformulate]
-
-  multi_query_searcher:
-    description: "Fan-out with N paraphrases — broader recall."
-    prompt: *shared_prompt
-    rag:
-      namespace: release_notes
-      k: 5
-      retrieval:
-        strategy: multi_query
-        query_transformers: [reformulate]
-
-  hyde_searcher:
-    description: "Hypothetical-document embeddings — robust to off-vocabulary queries."
-    prompt: *shared_prompt
-    rag:
-      namespace: release_notes
-      k: 5
-      retrieval:
-        strategy: hyde
-        query_transformers: [reformulate]
-        hyde:
-          n_hypothetical: 2
-
-  recency_searcher:
-    description: "Custom strategy: dense retrieval re-ranked by published_at."
-    prompt: *shared_prompt
-    rag:
-      namespace: release_notes
-      k: 5
-      retrieval:
-        strategy: recency_simple   # registered by startup hook
-
-# ...truncated
-```
+Agent configs define four agents with identical prompts but different `rag.retrieval.strategy`:
 
 ## What to look for
 
@@ -2562,108 +2160,7 @@ KB_MCP_URL=http://localhost:9001/mcp \
 
 `orchid.yml` registers the custom `priority` strategy via the startup hook:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/tool-strategies/agents.yaml
-
-llm:
-  model: gemini/gemini-flash-latest
-
-auth:
-  dev_bypass: true
-
-storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
-  dsn: /data/tool_strategies_chats.db
-
-startup:
-  hook: examples.tool-strategies.hooks.startup.bootstrap_strategies
-  # registers the custom "priority" strategy
-```
-
-`agents.yaml` shows all four strategy modes plus `parallel_tools`:
-
-```yaml
-# agents.yaml (trimmed)
-version: "1"
-
-defaults:
-  llm:
-    model: "gemini/gemini-flash-latest"
-    temperature: 0.2
-  rag:
-    enabled: false
-
-tools:
-  metric_a:
-    handler: "examples.tool-strategies.tools.metrics.metric_a"
-    parallel_safe: true
-  metric_b:
-    handler: "examples.tool-strategies.tools.metrics.metric_b"
-    parallel_safe: true
-  metric_c:
-    handler: "examples.tool-strategies.tools.metrics.metric_c"
-    parallel_safe: true
-
-agents:
-  fanout_lookup:
-    description: "All tools run concurrently; results merged."
-    mcp_servers:
-      - name: knowledge_base
-        url: ${KB_MCP_URL}
-        tool_call_strategy: all
-        tools:
-          - { name: cache_lookup }
-          - { name: primary_lookup }
-          - { name: slow_lookup }
-    skills:
-      lookup_everywhere:
-        steps:
-          - { tool: cache_lookup, source: mcp, server: knowledge_base }
-          - { tool: primary_lookup, source: mcp, server: knowledge_base }
-          - { tool: slow_lookup, source: mcp, server: knowledge_base }
-
-  pipeline_lookup:
-    description: "Tools run in order; each receives previous results."
-    mcp_servers:
-      - name: knowledge_base
-        url: ${KB_MCP_URL}
-        tool_call_strategy: sequential
-        tools:
-          - { name: cache_lookup }
-          - { name: primary_lookup }
-          - { name: slow_lookup }
-
-  smart_lookup:
-    description: "LLM picks which tools to call."
-    mcp_servers:
-      - name: knowledge_base
-        url: ${KB_MCP_URL}
-        tool_call_strategy: llm_decides
-        tools:
-          - { name: cache_lookup }
-          - { name: primary_lookup }
-          - { name: slow_lookup }
-
-  cascade_lookup:
-    description: "Custom priority strategy: stop at first non-empty result."
-    mcp_servers:
-      - name: knowledge_base
-        url: ${KB_MCP_URL}
-        tool_call_strategy: priority   # registered by startup hook
-        tools:
-          - { name: cache_lookup }       # tried first
-          - { name: primary_lookup }     # used only if cache misses
-          - { name: slow_lookup }        # final fallback
-
-  parallel_searcher:
-    description: "Agentic-loop parallel dispatch via parallel_tools flag."
-    parallel_tools: true              # parallel_safe tools run concurrently
-    tools: [metric_a, metric_b, metric_c]
-
-# ...truncated
-```
+Agent configs show all four strategy modes plus `parallel_tools`:
 
 ## What to look for
 
@@ -2714,91 +2211,7 @@ orchid config validate examples/prompt-customization/agents.yaml
 
 `orchid.yml` is identical to other demos — only `agents.config_path` matters here:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/prompt-customization/agents.yaml
-
-llm:
-  model: ollama/llama3.2
-
-auth:
-  dev_bypass: true
-
-rag:
-  vector_backend: qdrant
-  qdrant_url: http://qdrant:6333
-  embedding_model: ollama/nomic-embed-text
-```
-
-`agents.yaml` shows all customization layers, trimmed to the key fields:
-
-```yaml
-# agents.yaml (trimmed)
-version: "1"
-
-defaults:
-  rag:
-    retrieval:
-      strategy: multi_query
-      query_transformers: [reformulate]
-      transformer_prompts:
-        reformulate: |
-          Rewrite the user's latest message into a standalone legal
-          search query. Resolve pronouns, expand acronyms.
-          Return ONLY the rewritten query.
-
-supervisor:
-  assistant_name: "Legal Reference Desk"
-  routing_system_prompt: |
-    You coordinate the {assistant_name}'s specialist agents.
-    Available agents: {agent_descriptions}
-    Choose ONE agent for legal questions; otherwise answer directly.
-  synthesis_system_prompt: |
-    You are the {assistant_name}'s lead counsel. Synthesise findings
-    into a legal brief with section headings. Append a Disclaimer.
-
-agents:
-  legal_advisor:
-    prompt: |
-      You are an expert legal research assistant. Cite each claim
-      to a specific source paragraph. Flag uncertain jurisdictions.
-      Frame everything as general information, not legal advice.
-
-    # Per-section template overrides for the agentic loop
-    prompt_sections:
-      prior_results_header: "\n=== MEMOIRE FROM PRIOR TURNS ===\n"
-      rag_header: "\n=== SOURCE CITATIONS ===\n"
-      prior_results_max_chars: 8000
-      resource_max_chars: 4000
-
-    rag:
-      namespace: legal
-      k: 8
-      retrieval:
-        strategy: hyde
-        transformer_prompts:
-          hyde:
-            single: |
-              Write a paragraph that reads like a legal treatise
-              answering the user's question. Use formal English.
-            multi: |
-              Write {n} distinct legal-treatise paragraphs with
-              different jurisdictional lenses.
-          decompose: |
-            Split the user's question into at most {n} independent
-            legal sub-issues, each answerable on its own.
-          # reformulate inherits from defaults
-
-    mini_agent:
-      enabled: false   # toggle true to exercise decomposer/aggregator prompts
-      decomposer_prompt: |
-        Split the user's request into 2-{max_count} sub-issues.
-      aggregator_prompt: |
-        Combine per-sub-issue outcomes into a single legal brief.
-
-# ...truncated
-```
+Agent configs show all customization layers, trimmed to the key fields:
 
 ## What to look for
 
@@ -2851,63 +2264,28 @@ ORCHID_CONFIG=examples/graph_kb/orchid.yml \
 
 `orchid.yml` adds a startup hook that seeds the graph and registers the in-memory store:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/graph_kb/agents.yaml
+Agent configs configure the `graph_rag` strategy with hop limits and relation filters:
 
-llm:
-  model: gemini/gemini-flash-latest
+The `org_chart` agent lives in `agents/org_chart.md`:
 
-auth:
-  dev_bypass: true
-
+```markdown
+---
+description: "Answers org-chart and project questions using GraphRAG."
 rag:
-  vector_backend: qdrant
-  qdrant_url: http://qdrant:6333
-  embedding_model: gemini/gemini-embedding-001   # 3072-d
+  namespace: graph_kb
+  k: 5
+  retrieval:
+    strategy: graph_rag
+    graph:
+      enabled: true
+      max_hops: 2
+      fuse_with_vectors: true
+      relation_filter: [reports_to, works_on, manages]
+---
 
-storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
-  dsn: /data/graph_kb_chats.db
-
-startup:
-  hook: examples.graph_kb.hooks.startup.bootstrap_graph_kb
-  # seeds InMemoryGraphStore with org-chart entities + edges
-  # and a few text chunks for vector fan-out
-```
-
-`agents.yaml` configures the `graph_rag` strategy with hop limits and relation filters:
-
-```yaml
-# agents.yaml (trimmed)
-version: "1"
-
-defaults:
-  llm:
-    model: "gemini/gemini-flash-latest"
-    temperature: 0.2
-  rag:
-    enabled: true
-    k: 5
-
-agents:
-  org_chart:
-    description: "Answers org-chart and project questions using GraphRAG."
-    prompt: |
-      Answer org-chart and project questions strictly from retrieved context.
-      Quote exact relation labels (e.g. reports_to, works_on) in your answer.
-      If the question cannot be answered from the data, say so plainly.
-    rag:
-      namespace: graph_kb
-      k: 5
-      retrieval:
-        strategy: graph_rag
-        graph:
-          enabled: true
-          max_hops: 2
-          fuse_with_vectors: true
-          relation_filter: [reports_to, works_on, manages]
+Answer org-chart and project questions strictly from retrieved context.
+Quote exact relation labels (e.g. reports_to, works_on) in your answer.
+If the question cannot be answered from the data, say so plainly.
 ```
 
 ## What to look for
@@ -2960,88 +2338,7 @@ orchid chat send "How do I configure hybrid RAG?" \
 
 `orchid.yml` adds a startup hook that seeds both corpora:
 
-```yaml
-# orchid.yml (trimmed)
-agents:
-  config_path: examples/wiki/agents.yaml
-
-llm:
-  model: gemini/gemini-flash-latest
-
-rag:
-  vector_backend: qdrant
-  qdrant_url: http://qdrant:6333
-  embedding_model: gemini/gemini-embedding-001   # 3072-d
-
-upload:
-  namespace: uploads
-  chunk_size: 800
-  chunk_overlap: 150
-
-storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
-  dsn: /data/wiki_chats.db
-
-startup:
-  hook: examples.wiki.hooks.startup.bootstrap_wiki
-  # seeds wiki_docs (headered) + wiki_faq (recursive) corpora
-```
-
-`agents.yaml` shows the two-tier corpus and the per-tool RAG override:
-
-```yaml
-# agents.yaml (trimmed)
-version: "1"
-
-defaults:
-  rag:
-    ingestion:
-      strategy: recursive
-      chunk_size: 600
-      chunk_overlap: 100
-    retrieval:
-      strategy: simple
-      query_transformers: [reformulate]
-
-tools:
-  lookup_glossary:
-    handler: examples.wiki.hooks.tools.lookup_glossary
-    description: "Fetch a term's definition from the glossary store."
-    inject_to_rag: true          # tool result is cached into RAG
-    rag_ttl: 3600
-    rag:                         # per-tool RAG override
-      namespace: glossary_cache
-      ingestion:
-        strategy: semantic       # chunk at topic shifts, not character counts
-      retrieval:
-        strategy: simple
-
-agents:
-  docs:
-    description: "Long-form documentation with section-aware chunking and hybrid retrieval."
-    rag:
-      namespace: wiki_docs
-      k: 5
-      ingestion:
-        strategy: headered        # prepends nearest markdown heading to each chunk
-        chunk_size: 800
-        chunk_overlap: 150
-      retrieval:
-        strategy: hybrid          # dense + BM25 fusion
-        query_transformers: [reformulate]
-        hybrid:
-          sparse_encoder: bm25
-          fusion: rrf
-          rrf_k: 60
-    tools: [lookup_glossary]
-
-  faq:
-    description: "Short FAQ snippets with simple retrieval."
-    rag:
-      namespace: wiki_faq
-      k: 3
-      # inherits defaults: recursive ingestion, simple retrieval
-```
+Agent configs show the two-tier corpus and the per-tool RAG override:
 
 ## What to look for
 
@@ -3086,7 +2383,7 @@ Use **chat scope** sparingly — only when a document is relevant only to a sing
 
 Use **agent scope** when a specialised agent (e.g. a legal-review agent) needs its own curated knowledge base that other agents in the same graph must not access.
 
-Never pass raw `tenant_id` strings as Qdrant filters. Always construct scopes via `OrchidRAGScope` — this is the only way to guarantee the hierarchy is respected and future scope changes are backward-compatible.
+Never pass raw `tenant_id` strings as vector store filters. Always construct scopes via `OrchidRAGScope` — this is the only way to guarantee the hierarchy is respected and future scope changes are backward-compatible.
 
 See [Hierarchical RAG](/concepts/rag) for the full scope API.
 
@@ -3118,7 +2415,7 @@ Orchid supports any embedding model exposed via LiteLLM. The three most common c
 | `text-embedding-3-small` (OpenAI) | 1536 | Low cost, strong multilingual |
 | `gemini-embedding-001` (Google) | 3072 | Highest quality, highest cost |
 
-**Switching embedding models requires a full re-index.** Qdrant collections are created with a fixed vector dimension. If you change `embeddings.model` in `orchid.yml` after data has been indexed, you must drop and recreate every collection. There is no automatic migration.
+**Switching embedding models requires a full re-index.** Vector store collections are created with a fixed vector dimension. If you change `embeddings.model` in `orchid.yml` after data has been indexed, you must drop and recreate every collection. There is no automatic migration — this applies equally to Qdrant and ChromaDB.
 
 Establish your embedding model choice before ingesting production data. If you anticipate switching, keep a record of which model was used for each collection in your operational runbook.
 
@@ -3230,11 +2527,11 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 |---|---|
 | **Agent** | A named, YAML-configured unit of intelligence that handles a specific domain. Each agent has a description, a set of tools, and an optional custom class. See [Agents](/concepts/agents). |
 | **Agentic loop** | The inner reasoning cycle where an LLM issues `tool_calls`, the framework executes them, and the results are fed back until the LLM produces a final answer. See [Agents](/concepts/agents). |
-| **AGENTS.md** | A per-package Markdown file containing AI-specific context: structure, rules, patterns, and pitfalls. Symlinked as `CLAUDE.md` so AI coding assistants read it automatically. |
+| **AGENTS.md** | A per-package Markdown file containing AI-specific context: structure, rules, patterns, and pitfalls. |
 | **Bearer token** | An HTTP `Authorization: Bearer <token>` credential. Orchid resolves it to an `OrchidAuthContext` at the API entry point via `OrchidIdentityResolver`. See [OAuth & Auth](/concepts/oauth). |
 | **Boilerplate** | The minimal code needed to wire a new consumer agent into Orchid — typically a YAML entry plus an optional Python subclass of `OrchidAgent`. |
 | **DCR (Dynamic Client Registration)** | RFC 7591 — the protocol Orchid uses in `oauth` MCP auth mode to register a new OAuth client with a server's authorisation server at runtime, without pre-provisioned credentials. See [OAuth & Auth](/concepts/oauth). |
-| **Embedding** | A fixed-length numeric vector that encodes the semantic meaning of a text chunk. Orchid uses embeddings to index and retrieve documents in Qdrant. See [Embeddings](/concepts/embeddings). |
+| **Embedding** | A fixed-length numeric vector that encodes the semantic meaning of a text chunk. Orchid uses embeddings to index and retrieve documents in the vector store (Qdrant or ChromaDB). See [Embeddings](/concepts/embeddings). |
 | **Hierarchical RAG** | Orchid's five-level scoping system (root → tenant → user → chat → agent) that controls which vector collections an agent can read from. See [Hierarchical RAG](/concepts/rag). |
 | **Bloom** | The execution layer of Pollen + Bloom. Triggers match incoming Signals and run them through the LangGraph supervisor as `JobRun`s. See [Pollen + Bloom](/concepts/pollen-bloom). |
 | **`LLMProvider`** | The abstract interface (`orchid_ai.core.llm`) for simple text completions. Injected by the graph builder; consumer agents call `self.summarise()` rather than depending on a concrete provider. |
@@ -3243,7 +2540,7 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 | **`OrchidAuthContext`** | A dataclass (`orchid_ai.core.state`) carrying `tenant_key`, `user_id`, and `bearer_header`. Resolved once at the API entry point and threaded through the graph. See [OAuth & Auth](/concepts/oauth). |
 | **`OrchidChatStorage`** | The ABC (`orchid_ai.persistence.base`) for chat session and message persistence. The library ships a PostgreSQL implementation; consumers can provide alternatives. See [Persistence](/concepts/persistence). |
 | **`OrchidMCPClient`** | The abstract MCP client (`orchid_ai.core.mcp`) combining `OrchidMCPToolCaller` and `OrchidMCPDiscoverable`. Handles capability discovery, caching, and tool invocation. See [MCP Integration](/concepts/mcp). |
-| **`OrchidRAGScope`** | A factory class (`orchid_ai.rag.scopes`) that constructs typed, hierarchical Qdrant filter objects. Always use this — never pass raw `tenant_id` strings. See [Hierarchical RAG](/concepts/rag). |
+| **`OrchidRAGScope`** | A frozen dataclass (`orchid_ai.rag.scopes`) that constructs typed, hierarchical filter objects for the vector store backend. Always use this — never pass raw `tenant_id` strings. See [Hierarchical RAG](/concepts/rag). |
 | **Parse-once** | The pattern of calling `extract_text()` exactly once per document and passing the result to both the prompt builder and `ingest_document(pre_extracted_text=...)`. Avoids double-parsing cost. See [Document Parsing](/concepts/document-parsing). |
 | **Pollen** | The event-ingestion substrate of Pollen + Bloom. Ingests, persists, and dispatches immutable `Signal`s from webhooks, schedulers, agents, or custom producers. See [Pollen + Bloom](/concepts/pollen-bloom). |
 | **Passthrough auth** | MCP auth mode where the user's bearer token is forwarded unchanged to the MCP server. The server must trust the same identity provider as the Orchid API. See [MCP Integration](/concepts/mcp). |
@@ -3251,7 +2548,7 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 | **Sliding-window summarization** | An opt-in supervisor feature that compresses older conversation turns into a summary, keeping only the most recent exchanges verbatim. Reduces token usage for long sessions. See [Supervisor](/concepts/supervisor). |
 | **Supervisor** | The LangGraph node that routes user messages to the correct agent, manages conversation history, and assembles the final response. Configurable via the `supervisor:` YAML section. See [Supervisor](/concepts/supervisor). |
 | **Tool strategy** | The algorithm used by `GenericAgent` to invoke tools during skill execution: `all` (parallel), `sequential`, or `llm_decides`. See [Tool Strategies](/concepts/tool-strategies). |
-| **Vector store** | A database optimised for approximate nearest-neighbour search over embedding vectors. Orchid uses Qdrant as its vector store backend. See [Hierarchical RAG](/concepts/rag). |
+| **Vector store** | A database optimised for approximate nearest-neighbour search over embedding vectors. Orchid supports Qdrant (full-featured, containerised) and ChromaDB (embedded, on-disk, zero-infra CLI default). See [Hierarchical RAG](/concepts/rag). |
 | **YAML-first** | Orchid's design principle that new agents, tool strategies, and parser registrations are added via YAML configuration rather than code changes, following the Open/Closed principle. See [Configuration](/configuration). |
 
 ---

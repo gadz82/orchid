@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 80
 tags: ["tool-strategies", "agents"]
+sources:
   - examples/tool-strategies/orchid.yml
   - examples/tool-strategies/agents.yaml
 related:
@@ -41,8 +42,8 @@ KB_MCP_URL=http://localhost:9001/mcp \
 
 `orchid.yml` registers the custom `priority` strategy via the startup hook:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/tool-strategies/agents.yaml
 
@@ -58,13 +59,29 @@ storage:
 
 startup:
   hook: examples.tool-strategies.hooks.startup.bootstrap_strategies
-  # registers the custom "priority" strategy
-```
+  # registers the custom "priority" strategy`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: gemini/gemini-flash-latest
 
-`agents.yaml` shows all four strategy modes plus `parallel_tools`:
+auth:
+  dev_bypass: true
 
-```yaml
-# agents.yaml (trimmed)
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/tool_strategies_chats.db
+
+startup:
+  hook: examples.tool-strategies.hooks.startup.bootstrap_strategies
+---`}
+  mdLabel="orchid.md"
+/>
+
+Agent configs show all four strategy modes plus `parallel_tools`:
+
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 defaults:
@@ -90,7 +107,7 @@ agents:
     description: "All tools run concurrently; results merged."
     mcp_servers:
       - name: knowledge_base
-        url: ${KB_MCP_URL}
+        url: \${KB_MCP_URL}
         tool_call_strategy: all
         tools:
           - { name: cache_lookup }
@@ -107,7 +124,7 @@ agents:
     description: "Tools run in order; each receives previous results."
     mcp_servers:
       - name: knowledge_base
-        url: ${KB_MCP_URL}
+        url: \${KB_MCP_URL}
         tool_call_strategy: sequential
         tools:
           - { name: cache_lookup }
@@ -118,7 +135,7 @@ agents:
     description: "LLM picks which tools to call."
     mcp_servers:
       - name: knowledge_base
-        url: ${KB_MCP_URL}
+        url: \${KB_MCP_URL}
         tool_call_strategy: llm_decides
         tools:
           - { name: cache_lookup }
@@ -129,7 +146,7 @@ agents:
     description: "Custom priority strategy: stop at first non-empty result."
     mcp_servers:
       - name: knowledge_base
-        url: ${KB_MCP_URL}
+        url: \${KB_MCP_URL}
         tool_call_strategy: priority   # registered by startup hook
         tools:
           - { name: cache_lookup }       # tried first
@@ -141,8 +158,31 @@ agents:
     parallel_tools: true              # parallel_safe tools run concurrently
     tools: [metric_a, metric_b, metric_c]
 
-# ...truncated
-```
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  llm:
+    model: "gemini/gemini-flash-latest"
+    temperature: 0.2
+  rag:
+    enabled: false
+
+tools:
+  metric_a:
+    handler: "examples.tool-strategies.tools.metrics.metric_a"
+    parallel_safe: true
+  metric_b:
+    handler: "examples.tool-strategies.tools.metrics.metric_b"
+    parallel_safe: true
+  metric_c:
+    handler: "examples.tool-strategies.tools.metrics.metric_c"
+    parallel_safe: true
+---`}
+  mdLabel="orchid.md (infra + shared)"
+/>
 
 ## What to look for
 

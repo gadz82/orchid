@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 90
 tags: ["supervisor", "agents", "rag"]
+sources:
   - examples/prompt-customization/orchid.yml
   - examples/prompt-customization/agents.yaml
 related:
@@ -38,8 +39,8 @@ orchid config validate examples/prompt-customization/agents.yaml
 
 `orchid.yml` is identical to other demos — only `agents.config_path` matters here:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/prompt-customization/agents.yaml
 
@@ -52,13 +53,27 @@ auth:
 rag:
   vector_backend: qdrant
   qdrant_url: http://qdrant:6333
+  embedding_model: ollama/nomic-embed-text`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: ollama/llama3.2
+
+auth:
+  dev_bypass: true
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
   embedding_model: ollama/nomic-embed-text
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
-`agents.yaml` shows all customization layers, trimmed to the key fields:
+Agent configs show all customization layers, trimmed to the key fields:
 
-```yaml
-# agents.yaml (trimmed)
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 defaults:
@@ -121,8 +136,34 @@ agents:
       aggregator_prompt: |
         Combine per-sub-issue outcomes into a single legal brief.
 
-# ...truncated
-```
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  rag:
+    retrieval:
+      strategy: multi_query
+      query_transformers: [reformulate]
+      transformer_prompts:
+        reformulate: |
+          Rewrite the user's latest message into a standalone legal
+          search query. Resolve pronouns, expand acronyms.
+          Return ONLY the rewritten query.
+
+supervisor:
+  assistant_name: "Legal Reference Desk"
+  routing_system_prompt: |
+    You coordinate the {assistant_name}'s specialist agents.
+    Available agents: {agent_descriptions}
+    Choose ONE agent for legal questions; otherwise answer directly.
+  synthesis_system_prompt: |
+    You are the {assistant_name}'s lead counsel. Synthesise findings
+    into a legal brief with section headings. Append a Disclaimer.
+---`}
+  mdLabel="orchid.md (infra + shared)"
+/>
 
 ## What to look for
 

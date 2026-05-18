@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 70
 tags: ["rag"]
+sources:
   - examples/rag-strategies/orchid.yml
   - examples/rag-strategies/agents.yaml
 related:
@@ -41,8 +42,8 @@ Replace `simple_searcher` with `multi_query_searcher`, `hyde_searcher`, or `rece
 
 `orchid.yml` sets Qdrant and Gemini embeddings (3072-d), plus the startup hook:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/rag-strategies/agents.yaml
 
@@ -60,13 +61,31 @@ storage:
 
 startup:
   hook: examples.rag-strategies.hooks.startup.bootstrap_rag_strategies
-  # seeds the release_notes corpus + registers recency_simple
-```
+  # seeds the release_notes corpus + registers recency_simple`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: gemini/gemini-flash-latest
 
-`agents.yaml` defines four agents with identical prompts but different `rag.retrieval.strategy`:
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
 
-```yaml
-# agents.yaml (trimmed)
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/rag_strategies_chats.db
+
+startup:
+  hook: examples.rag-strategies.hooks.startup.bootstrap_rag_strategies
+---`}
+  mdLabel="orchid.md"
+/>
+
+Agent configs define four agents with identical prompts but different `rag.retrieval.strategy`:
+
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 defaults:
@@ -123,8 +142,23 @@ agents:
       retrieval:
         strategy: recency_simple   # registered by startup hook
 
-# ...truncated
-```
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  llm:
+    model: "gemini/gemini-flash-latest"
+    temperature: 0.2
+  rag:
+    enabled: true
+    k: 5
+    retrieval:
+      strategy: simple
+---`}
+  mdLabel="orchid.md (infra + defaults)"
+/>
 
 ## What to look for
 

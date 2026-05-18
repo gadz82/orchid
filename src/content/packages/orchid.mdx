@@ -5,6 +5,7 @@ package: "orchid"
 section: "packages"
 order: 20
 tags: []
+sources:
   - "orchid/README.md"
   - "orchid/AGENTS.md"
   - "orchid/orchid_ai/core/agent.py"
@@ -114,16 +115,25 @@ class CatalogAgent(OrchidAgent):
         return {"messages": [response]}
 ```
 
-Wire it up in `agents.yaml`:
+Wire it up in config:
 
-```yaml
-agents:
+<CodePair
+  yaml={`agents:
   catalog:
     class: myproject.agents.catalog.CatalogAgent
     description: "Searches the product catalog and answers inventory questions."
     prompt: "You are a catalog specialist..."
-    rag_namespace: catalog
-```
+    rag_namespace: catalog`}
+  yamlLabel="agents.yaml"
+  md={`---
+class: myproject.agents.catalog.CatalogAgent
+description: "Searches the product catalog and answers inventory questions."
+rag_namespace: catalog
+---
+
+You are a catalog specialist...`}
+  mdLabel="agents/catalog.md"
+/>
 
 The framework resolves the class at startup via `importlib`. The agent inherits `summarise()`, `fetch_rag_context()`, `extract_user_query()`, and `extract_conversation_history()` from the base class — override only what you need.
 
@@ -133,15 +143,22 @@ The framework resolves the class at startup via `importlib`. The agent inherits 
 
 ## LLM configuration
 
-Orchid uses LangChain's `BaseChatModel` as its LLM abstraction. The `build_chat_model(model_string)` factory creates one from a LiteLLM-style model string, supporting OpenAI, Anthropic, Google Gemini, Groq, and Ollama out of the box. The model is configured per-agent in `agents.yaml`:
+Orchid uses LangChain's `BaseChatModel` as its LLM abstraction. The `build_chat_model(model_string)` factory creates one from a LiteLLM-style model string, supporting OpenAI, Anthropic, Google Gemini, Groq, and Ollama out of the box. The model is configured per-agent:
 
-```yaml
-agents:
+<CodePair
+  yaml={`agents:
   search:
     llm:
       model: "openai/gpt-4o-mini"
-      temperature: 0.1
-```
+      temperature: 0.1`}
+  yamlLabel="agents.yaml"
+  md={`---
+llm:
+  model: "openai/gpt-4o-mini"
+  temperature: 0.1
+---`}
+  mdLabel="agents/search.md"
+/>
 
 See [Multi-LLM support](/concepts/multi-llm) for the full provider matrix.
 

@@ -5,6 +5,7 @@ package: "orchid"
 section: "concepts"
 order: 21
 tags: ["events", "scheduling", "webhooks", "async"]
+sources:
   - ".knowledge/adr/ADR-029-pollen-bloom.md"
   - ".knowledge/documentation/guides/extending-pollen.md"
   - ".knowledge/documentation/concepts/run-visibility.md"
@@ -55,9 +56,46 @@ Five objects, clear lifecycle:
 
 Scheduling is not a separate concept — `Schedule` rows produce synthetic `cron` signals on the same dispatch path as webhooks and internal emissions.
 
-## Configuring Pollen + Bloom in YAML
+## Configuring Pollen + Bloom
 
-```yaml
+<CodePair
+  yaml={`events:
+  enabled: true
+
+  store:
+    class: orchid_ai.events.backends.postgres.PostgresEventStore
+
+  queue:
+    class: orchid_ai.events.queues.postgres.PostgresSignalQueue
+
+  producers:
+    - class: orchid_ai.events.producers.http.HTTPIngestionProducer
+      mount: /signals
+    - class: orchid_ai.events.producers.scheduler.SchedulerProducer
+
+  processors:
+    - class: orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor
+      concurrency: 4
+
+  triggers:
+    - id: morning-digest
+      on: { signal: cron, cron: "0 7 * * 1-5" }
+      emits:
+        agent: notifications
+        prompt_template: "Build the morning digest for {{tenant_key}}"
+        identity: { mode: service_account, name: digest-bot }
+      retry: { max: 3, backoff: exponential }
+
+    - id: high-priority-ticket
+      on:
+        signal: support.ticket.created
+        when: "payload.priority == 'high'"
+      emits:
+        agent: helpdesk
+        prompt_template: "New high-priority ticket: {{payload.summary}}"
+        identity: { mode: act_as_user, user_id_from: signal.user_id }`}
+  yamlLabel="orchid.yml"
+  md={`---
 events:
   enabled: true
 
@@ -93,7 +131,9 @@ events:
         agent: helpdesk
         prompt_template: "New high-priority ticket: {{payload.summary}}"
         identity: { mode: act_as_user, user_id_from: signal.user_id }
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
 ## Signal sources
 

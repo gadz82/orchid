@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 10
 tags: ["agents", "persistence", "supervisor", "built-in-tools"]
+sources:
   - examples/basketball/orchid.yml
   - examples/basketball/agents.yaml
 related:
@@ -43,10 +44,10 @@ orchid chat interactive --config examples/basketball/orchid.yml
 
 ## Configuration walkthrough
 
-`orchid.yml` sets the runtime environment — LLM, storage backend, and pointer to `agents.yaml`:
+`orchid.yml` sets the runtime environment — LLM, storage backend, and pointer to agent configs:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/basketball/agents.yaml
 
@@ -61,13 +62,29 @@ storage:
   class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
   dsn: /data/chats.db       # custom SQLite backend plugged in via dotted import
 
-# ...truncated
-```
+# ...truncated`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: ollama/llama3.2
+  ollama_api_base: http://host.docker.internal:11434
 
-`agents.yaml` defines the agents, their tools, and two cross-agent skills:
+auth:
+  dev_bypass: true
 
-```yaml
-# agents.yaml (trimmed)
+storage:
+  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/chats.db
+---
+
+Basketball demo infrastructure config.`}
+  mdLabel="orchid.md"
+/>
+
+Agent configs define the agents, their tools, and two cross-agent skills:
+
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 defaults:
@@ -112,7 +129,51 @@ agents:
       You are a Sports Psychologist specialized in basketball performance.
     tools: [assess_motivation, suggest_mental_strategy, analyze_team_dynamics]
 
-# ...truncated
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+  rag:
+    enabled: false
+
+tools:
+  get_player_stats:
+    handler: "examples.basketball.tools.basketball.get_player_stats"
+    description: "Get stats for an NBA player"
+  compare_players:
+    handler: "examples.basketball.tools.basketball.compare_players"
+    description: "Side-by-side comparison of two NBA players"
+  assess_motivation:
+    handler: "examples.basketball.tools.psychology.assess_motivation"
+    description: "Assess a player's motivation level"
+
+skills:
+  player_performance_review:
+    description: "Get a player's stats then assess their motivation"
+    steps:
+      - agent: basketball
+        instruction: "Look up the player's current stats"
+      - agent: psychologist
+        instruction: "Assess their motivation and suggest mental strategies"
+---`}
+  mdLabel="orchid.md (infra + shared)"
+/>
+
+The `basketball` agent lives in `agents/basketball.md`:
+
+```markdown
+---
+description: "NBA basketball expert with player stats and roster tools."
+tools: [get_player_stats, compare_players, get_team_roster]
+---
+
+You are a Basketball Expert AI assistant. Provide insightful
+basketball analysis using the stats from your tools.
 ```
 
 ## What to look for

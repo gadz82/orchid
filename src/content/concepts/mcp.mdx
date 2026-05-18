@@ -5,6 +5,7 @@ package: "orchid"
 section: "concepts"
 order: 13
 tags: []
+sources:
   - "orchid/orchid_ai/mcp/client.py"
   - "orchid/orchid_ai/mcp/AGENTS.md"
   - "orchid/orchid_ai/config/schema_mcp.py"
@@ -38,9 +39,25 @@ Orchid agents can call any MCP server over Streamable HTTP or SSE transport. The
 
 ## Three auth modes
 
-Each MCP server declaration carries exactly one field under `auth:` — the `mode`. No credentials, no endpoints, no client IDs live in YAML.
+Each MCP server declaration carries exactly one field under `auth:` — the `mode`. No credentials, no endpoints, no client IDs live in config.
 
-```yaml
+<CodePair
+  yaml={`mcp_servers:
+  - name: public-weather
+    url: https://weather.example.com/mcp
+    # auth defaults to: mode: none
+
+  - name: tenant-catalog
+    url: https://catalog.example.com/mcp
+    auth:
+      mode: passthrough
+
+  - name: external-crm
+    url: https://crm.example.com/mcp
+    auth:
+      mode: oauth`}
+  yamlLabel="agents.yaml"
+  md={`---
 mcp_servers:
   - name: public-weather
     url: https://weather.example.com/mcp
@@ -55,7 +72,9 @@ mcp_servers:
     url: https://crm.example.com/mcp
     auth:
       mode: oauth
-```
+---`}
+  mdLabel="orchid.md"
+/>
 
 | Mode | Behaviour |
 |------|-----------|

@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 20
 tags: ["agents", "tool-strategies", "supervisor", "events"]
+sources:
   - examples/helpdesk/config/orchid.yml
   - examples/helpdesk/config/agents.yaml
 related:
@@ -37,8 +38,8 @@ orchid chat interactive --config examples/helpdesk/config/orchid.yml
 
 `orchid.yml` points to the agents config and configures the LLM and storage:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/helpdesk/config/agents.yaml
 
@@ -53,13 +54,27 @@ rag:
   qdrant_url: http://qdrant:6333
   embedding_model: gemini/gemini-embedding-001
 
-# ...truncated
-```
+# ...truncated`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: gemini/gemini-flash-latest
 
-`agents.yaml` defines a three-agent pipeline with a cross-agent skill and event-driven triage:
+auth:
+  dev_bypass: true
 
-```yaml
-# agents.yaml (trimmed)
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
+---`}
+  mdLabel="orchid.md"
+/>
+
+Agent configs define a three-agent pipeline with a cross-agent skill and event-driven triage:
+
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 supervisor:
@@ -122,7 +137,48 @@ events:
         identity: { mode: act_as_user, user_id_from: signal.user_id }
         proactive_chat: true
 
-# ...truncated
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+supervisor:
+  assistant_name: "Helpdesk AI"
+  routing_system_prompt: |
+    Route new issues to triage first, then support.
+    Route escalation requests to the escalation agent.
+
+skills:
+  auto_resolve:
+    description: "Full ticket resolution: triage → support → escalation"
+    steps:
+      - agent: triage
+        instruction: "Classify this issue by priority and category"
+      - agent: support
+        instruction: "Search the KB and provide a detailed resolution"
+      - agent: escalation
+        instruction: "Confirm closure or create an escalation plan"
+---`}
+  mdLabel="orchid.md (infra + shared)"
+/>
+
+The `support` agent lives in `agents/support.md` with its own frontmatter and Markdown body:
+
+```markdown
+---
+class: examples.helpdesk.agents.support.SupportAgent
+description: "Technical support agent with KB search and ticket status."
+tools: [classify_ticket, search_kb, get_ticket_status]
+mini_agent:
+  enabled: true
+  max_count: 3
+parallel_tools: true
+rag:
+  namespace: knowledge_base
+  k: 5
+---
+
+Technical support agent with KB search and ticket status.
 ```
 
 ## What to look for

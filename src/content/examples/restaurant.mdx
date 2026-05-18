@@ -5,6 +5,7 @@ package: "cross-cutting"
 section: "examples"
 order: 30
 tags: ["rag", "tool-strategies", "supervisor", "events"]
+sources:
   - examples/restaurant/config/orchid.yml
   - examples/restaurant/config/agents.yaml
 related:
@@ -37,8 +38,8 @@ orchid chat interactive --config examples/restaurant/config/orchid.yml
 
 `orchid.yml` connects the LLM, Qdrant, and the custom SQLite storage backend:
 
-```yaml
-# orchid.yml (trimmed)
+<CodePair
+  yaml={`# orchid.yml (trimmed)
 agents:
   config_path: examples/restaurant/config/agents.yaml
 
@@ -57,13 +58,31 @@ storage:
   class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
   dsn: /data/restaurant_chats.db
 
-# ...truncated
-```
+# ...truncated`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: gemini/gemini-flash-latest
 
-`agents.yaml` shows the three agents, their skills, and the event trigger:
+auth:
+  dev_bypass: true
 
-```yaml
-# agents.yaml (trimmed)
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
+
+storage:
+  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/restaurant_chats.db
+---`}
+  mdLabel="orchid.md"
+/>
+
+Agent configs show the three agents, their skills, and the event trigger:
+
+<CodePair
+  yaml={`# agents.yaml (trimmed)
 version: "1"
 
 supervisor:
@@ -133,8 +152,36 @@ events:
         identity: { mode: act_as_user, user_id_from: signal.user_id }
         respect_chat_binding: true   # Bloom reply lands in the originating chat
 
-# ...truncated
-```
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+supervisor:
+  assistant_name: "Restaurant AI"
+
+defaults:
+  llm:
+    model: "gemini/gemini-flash-latest"
+    temperature: 0.3
+  rag:
+    retrieval:
+      strategy: multi_query
+      query_transformers: [reformulate]
+
+skills:
+  full_dining_experience:
+    description: "Browse menu → place order → collect review"
+    steps:
+      - agent: menu
+        instruction: "Search menu for items matching the customer's preferences"
+      - agent: orders
+        instruction: "Place an order for the recommended items"
+      - agent: reviews
+        instruction: "Analyze the customer's review"
+---`}
+  mdLabel="orchid.md (infra + shared)"
+/>
 
 ## What to look for
 
