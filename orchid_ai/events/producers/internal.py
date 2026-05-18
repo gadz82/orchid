@@ -7,16 +7,16 @@ Two roles:
   :class:`OrchidSignalEmitter` that forwards :meth:`emit` to
   :meth:`OrchidSignalDispatcher.ingest`.  This is what
   ``AppContext.signal_emitter`` exposes.
-- (future, lands in the agent-binding phase) ``InternalEmissionProducer``
-  — a thin lifecycle-managed wrapper that registers itself with the
-  framework so the same component model applies to internal emissions
-  as to external producers.  Phase 1 only needs the emitter.
+- :class:`InternalEmissionProducer` — a thin lifecycle-managed wrapper
+  so YAML can enable internal emissions through the same producer list
+  used for external sources.
 """
 
 from __future__ import annotations
 
 from ...core.events.dispatcher import OrchidSignalDispatcher
 from ...core.events.emitter import OrchidSignalEmitter
+from ...core.events.producer import OrchidSignalProducer
 from ...core.events.signal import SignalEnvelope, SignalIngestResult
 
 
@@ -28,3 +28,25 @@ class DispatcherSignalEmitter(OrchidSignalEmitter):
 
     async def emit(self, envelope: SignalEnvelope) -> SignalIngestResult:
         return await self._dispatcher.ingest(envelope)
+
+
+class InternalEmissionProducer(OrchidSignalProducer):
+    """Lifecycle wrapper for dispatcher-backed internal emissions.
+
+    The events runtime exposes its own ``DispatcherSignalEmitter`` for
+    agents and API code.  This producer keeps the documented YAML
+    component path importable and startable, with no background task.
+    """
+
+    def __init__(self) -> None:
+        self._emitter: DispatcherSignalEmitter | None = None
+
+    @property
+    def emitter(self) -> DispatcherSignalEmitter | None:
+        return self._emitter
+
+    async def start(self, dispatcher: OrchidSignalDispatcher) -> None:
+        self._emitter = DispatcherSignalEmitter(dispatcher)
+
+    async def stop(self) -> None:
+        self._emitter = None

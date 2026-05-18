@@ -36,7 +36,6 @@ from qdrant_client.models import (
     MatchAny,
     MatchValue,
     NamedSparseVector,
-    NamedVector,
     PointStruct,
     Range,
     SparseVector,
@@ -363,7 +362,8 @@ class QdrantRepository(OrchidVectorStoreRepository):
         async with asyncio.timeout(QDRANT_TIMEOUT):
             response = await self._client.query_points(
                 collection_name=namespace,
-                query=NamedVector(name=_DENSE_NAME, vector=query_vector),
+                query=query_vector,
+                using=_DENSE_NAME,
                 query_filter=query_filter,
                 limit=k,
             )

@@ -3,7 +3,7 @@
 Mirrors :class:`orchid_ai.persistence.mcp_token_postgres.OrchidPostgresMCPTokenStore`
 but for per-server registration metadata — one row per MCP server,
 keyed by ``server_name`` alone.  The underlying table is created by
-the shared v002 migration.
+the shared v001 initial schema.
 
 Optional dependency — install via ``pip install orchid-ai[postgres]``.
 

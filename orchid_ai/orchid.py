@@ -27,9 +27,12 @@ and checkpointer connections.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, AsyncIterator, TYPE_CHECKING
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -38,6 +41,7 @@ from langgraph.types import Command
 
 from .bootstrap import _build_runtime
 from .config.schema import OrchidAgentsConfig
+from .config.watcher import OrchidConfigWatcherBase
 from .core.state import OrchidAuthContext
 from .graph.graph import build_graph
 from .mcp.inventory import OrchidMCPServerInventory
@@ -147,6 +151,7 @@ class Orchid:
         chat_repo: OrchidChatStorage | None = None,
         mcp_token_store: "OrchidMCPTokenStore | None" = None,
         _owns_resources: bool = False,
+        _config_file_hashes: dict[str, str] | None = None,
     ) -> None:
         """Low-level constructor — prefer :meth:`from_config_path` for most uses.
 
@@ -165,6 +170,11 @@ class Orchid:
             Internal flag — ``True`` means :meth:`close` should shut down
             chat_repo / mcp_token_store / checkpointer.  Set by the
             :meth:`from_config_path` factory.
+        _config_file_hashes : dict[str, str] | None
+            File path → SHA-256 mapping for hot-reload change detection.
+            Set by the MD config loader; ``None`` when using YAML config.
+        _config_watcher : OrchidConfigWatcherBase | None
+            The config watcher, or ``None`` when no watcher is active.
         """
         self._config = config
         self._runtime = runtime
@@ -176,6 +186,9 @@ class Orchid:
         self._graph = build_graph(config=config, runtime=runtime, agents_out=self._agents)
         self._inventory = OrchidMCPServerInventory.from_config(config)
         self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)
+        self._config_file_hashes = _config_file_hashes
+        self._config_watcher: OrchidConfigWatcherBase | None = None
+        self._rebuild_lock = asyncio.Lock()
 
     # ── Construction helpers ─────────────────────────────────
 
@@ -213,6 +226,10 @@ class Orchid:
         ``orchid-api`` and ``orchid-cli`` can route through this same
         method and stay in lock-step with in-process integrators.
 
+        Auto-detection: if ``config_path`` ends in ``.md`` or is a
+        directory containing ``orchid.md``, the call delegates to
+        :meth:`from_md_config`.
+
         All string parameters fall back first to environment variables
         (``LITELLM_MODEL``, ``VECTOR_BACKEND``, ``QDRANT_URL``, …) and
         then to sensible hardcoded defaults (arg > env > hardcoded).
@@ -220,17 +237,20 @@ class Orchid:
         Parameters
         ----------
         config_path : str
-            Path to ``orchid.yml``.  When non-empty and ``apply_yaml=True``,
-            values are flattened into env vars (existing env wins) and
-            ``ORCHID_CONFIG`` is exported so downstream components can
-            find the file.  Pass ``""`` when the caller has already
-            applied YAML to the environment (e.g. ``orchid-api``).
+            Path to ``orchid.yml`` (YAML) or ``orchid.md`` (Markdown).
+            Auto-detected by file extension.  When non-empty and
+            ``apply_yaml=True``, values are flattened into env vars
+            (existing env wins) and ``ORCHID_CONFIG`` is exported so
+            downstream components can find the file.  Pass ``""`` when
+            the caller has already applied YAML to the environment
+            (e.g. ``orchid-api``).
         apply_yaml : bool
             Skip the YAML → env step.  Useful when pydantic-settings (or
             the caller) already populated env vars at import time.
         agents_config_path : str
             Path to ``agents.yaml``.  Falls back to ``AGENTS_CONFIG_PATH``
-            env / ``"agents.yaml"`` default.
+            env / ``"agents.yaml"`` default.  Ignored when auto-detection
+            selects Markdown config.
         model, vector_backend, qdrant_url, embedding_model : str
             Overrides for LLM + RAG settings.
         chat_storage_class, chat_db_dsn : str
@@ -267,29 +287,115 @@ class Orchid:
             and must call :meth:`close` (or use ``async with``) to
             release resources.
         """
+        # ── Auto-detect Markdown config ──────────────────
+        config_path_obj = Path(config_path) if config_path else None
+        if config_path_obj is not None:
+            if config_path_obj.suffix == ".md":
+                return await cls.from_md_config(
+                    config_path,
+                    model=model,
+                    vector_backend=vector_backend,
+                    qdrant_url=qdrant_url,
+                    embedding_model=embedding_model,
+                    chat_storage_class=chat_storage_class,
+                    chat_db_dsn=chat_db_dsn,
+                    chat_extra_migrations_package=chat_extra_migrations_package,
+                    mcp_token_store_class=mcp_token_store_class,
+                    mcp_token_store_dsn=mcp_token_store_dsn,
+                    mcp_client_registration_store_class=mcp_client_registration_store_class,
+                    mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+                    mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+                    mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
+                    checkpointer_type=checkpointer_type,
+                    checkpointer_dsn=checkpointer_dsn,
+                    startup_hook=startup_hook,
+                    startup_hook_kwargs=startup_hook_kwargs,
+                    runtime_overrides=runtime_overrides,
+                    skip_yaml_sections=skip_yaml_sections,
+                )
+            if config_path_obj.is_dir():
+                md_candidate = config_path_obj / "orchid.md"
+                if md_candidate.exists():
+                    return await cls.from_md_config(
+                        str(md_candidate),
+                        model=model,
+                        vector_backend=vector_backend,
+                        qdrant_url=qdrant_url,
+                        embedding_model=embedding_model,
+                        chat_storage_class=chat_storage_class,
+                        chat_db_dsn=chat_db_dsn,
+                        chat_extra_migrations_package=chat_extra_migrations_package,
+                        mcp_token_store_class=mcp_token_store_class,
+                        mcp_token_store_dsn=mcp_token_store_dsn,
+                        mcp_client_registration_store_class=mcp_client_registration_store_class,
+                        mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+                        mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+                        mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
+                        checkpointer_type=checkpointer_type,
+                        checkpointer_dsn=checkpointer_dsn,
+                        startup_hook=startup_hook,
+                        startup_hook_kwargs=startup_hook_kwargs,
+                        runtime_overrides=runtime_overrides,
+                        skip_yaml_sections=skip_yaml_sections,
+                    )
+
+            # ── Hybrid: YAML root + MD agents ──────────────────
+            if config_path_obj.suffix in (".yml", ".yaml") and config_path_obj.exists():
+                agents_dir = Path(agents_config_path or os.environ.get("AGENTS_CONFIG_PATH", "agents"))
+                if not agents_dir.is_absolute():
+                    agents_dir = config_path_obj.parent / agents_dir
+                if agents_dir.is_dir() and any(agents_dir.glob("*.md")):
+                    return await _build_hybrid_config(
+                        orchid_yml_path=config_path_obj,
+                        agents_dir=agents_dir,
+                        apply_yaml=apply_yaml,
+                        skip_yaml_sections=skip_yaml_sections,
+                        model=model,
+                        vector_backend=vector_backend,
+                        qdrant_url=qdrant_url,
+                        embedding_model=embedding_model,
+                        chat_storage_class=chat_storage_class,
+                        chat_db_dsn=chat_db_dsn,
+                        chat_extra_migrations_package=chat_extra_migrations_package,
+                        mcp_token_store_class=mcp_token_store_class,
+                        mcp_token_store_dsn=mcp_token_store_dsn,
+                        mcp_client_registration_store_class=mcp_client_registration_store_class,
+                        mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+                        mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+                        mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
+                        checkpointer_type=checkpointer_type,
+                        checkpointer_dsn=checkpointer_dsn,
+                        startup_hook=startup_hook,
+                        startup_hook_kwargs=startup_hook_kwargs,
+                        runtime_overrides=runtime_overrides,
+                    )
+
         result = await _build_runtime(
-            config_path=config_path,
-            apply_yaml=apply_yaml,
-            agents_config_path=agents_config_path,
-            model=model,
-            vector_backend=vector_backend,
-            qdrant_url=qdrant_url,
-            embedding_model=embedding_model,
-            chat_storage_class=chat_storage_class,
-            chat_db_dsn=chat_db_dsn,
-            chat_extra_migrations_package=chat_extra_migrations_package,
-            mcp_token_store_class=mcp_token_store_class,
-            mcp_token_store_dsn=mcp_token_store_dsn,
-            mcp_client_registration_store_class=mcp_client_registration_store_class,
-            mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
-            mcp_gateway_state_store_class=mcp_gateway_state_store_class,
-            mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
-            checkpointer_type=checkpointer_type,
-            checkpointer_dsn=checkpointer_dsn,
-            startup_hook=startup_hook,
-            startup_hook_kwargs=startup_hook_kwargs,
-            runtime_overrides=runtime_overrides,
-            skip_yaml_sections=skip_yaml_sections,
+            **_build_runtime_kwargs(
+                config_path=config_path,
+                apply_yaml=apply_yaml,
+                config=None,
+                agents_config_path=agents_config_path,
+                model=model,
+                vector_backend=vector_backend,
+                qdrant_url=qdrant_url,
+                embedding_model=embedding_model,
+                chat_storage_class=chat_storage_class,
+                chat_db_dsn=chat_db_dsn,
+                chat_extra_migrations_package=chat_extra_migrations_package,
+                mcp_token_store_class=mcp_token_store_class,
+                mcp_token_store_dsn=mcp_token_store_dsn,
+                mcp_client_registration_store_class=mcp_client_registration_store_class,
+                mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+                mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+                mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
+                checkpointer_type=checkpointer_type,
+                checkpointer_dsn=checkpointer_dsn,
+                startup_hook=startup_hook,
+                startup_hook_kwargs=startup_hook_kwargs,
+                runtime_overrides=runtime_overrides,
+                skip_yaml_sections=skip_yaml_sections,
+            )
         )
         return cls(
             config=result.config,
@@ -298,6 +404,145 @@ class Orchid:
             mcp_token_store=result.mcp_token_store,
             _owns_resources=True,
         )
+
+    @classmethod
+    async def from_md_config(
+        cls,
+        root_path: str,
+        *,
+        watch: bool = True,
+        agents_dir: str = "",
+        model: str = "",
+        vector_backend: str = "",
+        qdrant_url: str = "",
+        embedding_model: str = "",
+        chat_storage_class: str = "",
+        chat_db_dsn: str = "",
+        chat_extra_migrations_package: str | None = None,
+        mcp_token_store_class: str = "",
+        mcp_token_store_dsn: str = "",
+        mcp_client_registration_store_class: str = "",
+        mcp_client_registration_store_dsn: str = "",
+        mcp_gateway_state_store_class: str = "",
+        mcp_gateway_state_store_dsn: str = "",
+        checkpointer_type: str = "",
+        checkpointer_dsn: str = "",
+        startup_hook: str = "",
+        startup_hook_kwargs: dict[str, Any] | None = None,
+        runtime_overrides: dict[str, Any] | None = None,
+        skip_yaml_sections: set[str] | None = None,
+    ) -> "Orchid":
+        """Build a fully-initialised :class:`Orchid` from ``orchid.md`` + ``agents/*.md``.
+
+        The Markdown-equivalent of :meth:`from_config_path`.  Loads the
+        unified MD config, maps infrastructure keys to environment
+        variables, and wires the full runtime stack.
+
+        Parameters
+        ----------
+        root_path : str
+            Path to the root ``orchid.md`` file.
+        watch : bool
+            When ``True`` (default), stores file hashes for future
+            hot-reload change detection (Phase 2 watcher).
+        agents_dir : str
+            Directory containing per-agent ``.md`` files.  When empty,
+            resolved from the root frontmatter's ``agents.agents_dir``
+            field, then defaults to ``<root_dir>/agents``.
+        model, vector_backend, qdrant_url, embedding_model : str
+            Overrides for LLM + RAG settings.  Falls back to env vars
+            (which may have been populated by ``md_infrastructure_to_env``)
+            then to hardcoded defaults.
+        chat_storage_class, chat_db_dsn : str
+            Override chat persistence backend.
+        chat_extra_migrations_package : str | None
+            Integrator-supplied migrations package.
+        mcp_token_store_class, mcp_token_store_dsn : str
+            Override MCP per-server OAuth token store.
+        checkpointer_type, checkpointer_dsn : str
+            Enable LangGraph state checkpointing.
+        startup_hook : str
+            Optional dotted path to an ``async(**kwargs) -> None`` hook.
+        startup_hook_kwargs : dict | None
+            Extra kwargs forwarded to the startup hook.
+        runtime_overrides : dict | None
+            Extra keyword arguments forwarded to :class:`OrchidRuntime`.
+        skip_yaml_sections : set[str] | None
+            Sections to skip when mapping MD frontmatter keys to env
+            vars (e.g. ``{"storage"}`` for the CLI convention).
+
+        Returns
+        -------
+        Orchid
+            Ready-to-use facade.
+        """
+        import os
+
+        from .config.md_loader import load_md_config, md_infrastructure_to_env
+        from .config.frontmatter import load_markdown_file
+
+        root_path_as_path = Path(root_path)
+
+        # ── 1. Load MD config ──────────────────────────
+        agents_dir_override = Path(agents_dir) if agents_dir else None
+        config, file_hashes = load_md_config(root_path_as_path, agents_dir=agents_dir_override)
+
+        # ── 2. Apply infrastructure env vars ────────────
+        root_md = load_markdown_file(root_path_as_path)
+        env_vars = md_infrastructure_to_env(root_md.frontmatter, skip_sections=skip_yaml_sections)
+        for k, v in env_vars.items():
+            if k not in os.environ:
+                os.environ[k] = v
+        os.environ.setdefault("ORCHID_CONFIG", str(root_path_as_path))
+
+        # ── 3. Build runtime with the pre-loaded config ─
+        result = await _build_runtime(
+            **_build_runtime_kwargs(
+                config_path=str(root_path_as_path),
+                apply_yaml=False,
+                config=config,
+                model=model,
+                vector_backend=vector_backend,
+                qdrant_url=qdrant_url,
+                embedding_model=embedding_model,
+                chat_storage_class=chat_storage_class,
+                chat_db_dsn=chat_db_dsn,
+                chat_extra_migrations_package=chat_extra_migrations_package,
+                mcp_token_store_class=mcp_token_store_class,
+                mcp_token_store_dsn=mcp_token_store_dsn,
+                mcp_client_registration_store_class=mcp_client_registration_store_class,
+                mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+                mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+                mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
+                checkpointer_type=checkpointer_type,
+                checkpointer_dsn=checkpointer_dsn,
+                startup_hook=startup_hook,
+                startup_hook_kwargs=startup_hook_kwargs,
+                runtime_overrides=runtime_overrides,
+                skip_yaml_sections=skip_yaml_sections,
+            )
+        )
+        instance = cls(
+            config=result.config,
+            runtime=result.runtime,
+            chat_repo=result.chat_repo,
+            mcp_token_store=result.mcp_token_store,
+            _owns_resources=True,
+            _config_file_hashes=file_hashes if watch else None,
+        )
+        if watch:
+            from .config.watcher import OrchidConfigWatcher
+
+            agents_dir_resolved = _resolve_agents_dir_from_md(
+                root_path_as_path, root_md.frontmatter, agents_dir_override
+            )
+            instance._config_watcher = OrchidConfigWatcher(
+                root_path=root_path_as_path,
+                agents_dir=agents_dir_resolved,
+                initial_config=config,
+                initial_hashes=file_hashes,
+            )
+        return instance
 
     # ── Async context manager ───────────────────────────────
 
@@ -372,6 +617,44 @@ class Orchid:
         facade surface.
         """
         return self._mcp_token_store
+
+    # ── Hot-reload ─────────────────────────────────────────
+
+    async def reload_config(self) -> bool:
+        """Check for config changes and hot-reload if any are detected.
+
+        Requires a config watcher (set up by :meth:`from_md_config` with
+        ``watch=True``, or ``from_config_path`` with ``watch=True``).
+        Graph rebuild is serialised via an ``asyncio.Lock`` so concurrent
+        requests complete with the old config until the rebuild finishes.
+
+        Returns
+        -------
+        bool
+            ``True`` when a change was detected and the graph was rebuilt.
+            ``False`` when nothing changed or no watcher is active.
+        """
+        watcher = self._config_watcher
+        if watcher is None:
+            return False
+
+        new_snapshot = watcher.reload_if_changed()
+        if new_snapshot is None:
+            return False
+
+        async with self._rebuild_lock:
+            self._config = new_snapshot.config
+            self._agents.clear()
+            self._graph = build_graph(
+                config=new_snapshot.config,
+                runtime=self._runtime,
+                agents_out=self._agents,
+            )
+            self._inventory = OrchidMCPServerInventory.from_config(new_snapshot.config)
+            self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)
+
+        logger.info("[Orchid] Hot-reloaded graph with %d agent(s)", len(new_snapshot.config.agents))
+        return True
 
     # ── Core operations ─────────────────────────────────────
 
@@ -759,6 +1042,166 @@ class Orchid:
             interrupted=True,
             approvals_needed=approvals,
         )
+
+
+def _build_runtime_kwargs(
+    *,
+    config_path: str,
+    apply_yaml: bool,
+    config: Any,
+    agents_config_path: str = "",
+    model: str = "",
+    vector_backend: str = "",
+    qdrant_url: str = "",
+    embedding_model: str = "",
+    chat_storage_class: str = "",
+    chat_db_dsn: str = "",
+    chat_extra_migrations_package: str | None = None,
+    mcp_token_store_class: str = "",
+    mcp_token_store_dsn: str = "",
+    mcp_client_registration_store_class: str = "",
+    mcp_client_registration_store_dsn: str = "",
+    mcp_gateway_state_store_class: str = "",
+    mcp_gateway_state_store_dsn: str = "",
+    checkpointer_type: str = "",
+    checkpointer_dsn: str = "",
+    startup_hook: str = "",
+    startup_hook_kwargs: dict[str, Any] | None = None,
+    runtime_overrides: dict[str, Any] | None = None,
+    skip_yaml_sections: set[str] | None = None,
+) -> dict[str, Any]:
+    """Build a kwargs dict for ``_build_runtime`` to avoid parameter drift."""
+    return {
+        "config_path": config_path,
+        "apply_yaml": apply_yaml,
+        "config": config,
+        "agents_config_path": agents_config_path,
+        "model": model,
+        "vector_backend": vector_backend,
+        "qdrant_url": qdrant_url,
+        "embedding_model": embedding_model,
+        "chat_storage_class": chat_storage_class,
+        "chat_db_dsn": chat_db_dsn,
+        "chat_extra_migrations_package": chat_extra_migrations_package,
+        "mcp_token_store_class": mcp_token_store_class,
+        "mcp_token_store_dsn": mcp_token_store_dsn,
+        "mcp_client_registration_store_class": mcp_client_registration_store_class,
+        "mcp_client_registration_store_dsn": mcp_client_registration_store_dsn,
+        "mcp_gateway_state_store_class": mcp_gateway_state_store_class,
+        "mcp_gateway_state_store_dsn": mcp_gateway_state_store_dsn,
+        "checkpointer_type": checkpointer_type,
+        "checkpointer_dsn": checkpointer_dsn,
+        "startup_hook": startup_hook,
+        "startup_hook_kwargs": startup_hook_kwargs,
+        "runtime_overrides": runtime_overrides,
+        "skip_yaml_sections": skip_yaml_sections,
+    }
+
+
+def _resolve_agents_dir_from_md(
+    root_path: Path,
+    frontmatter: dict[str, Any],
+    agents_dir_override: Path | None,
+) -> Path:
+    from .config.md_loader import _resolve_agents_dir
+
+    return _resolve_agents_dir(root_path, frontmatter, agents_dir_override)
+
+
+# ── Hybrid config factory (YAML root + MD agents) ──────────
+
+
+async def _build_hybrid_config(
+    *,
+    orchid_yml_path: Path,
+    agents_dir: Path,
+    apply_yaml: bool,
+    skip_yaml_sections: set[str] | None = None,
+    model: str = "",
+    vector_backend: str = "",
+    qdrant_url: str = "",
+    embedding_model: str = "",
+    chat_storage_class: str = "",
+    chat_db_dsn: str = "",
+    chat_extra_migrations_package: str | None = None,
+    mcp_token_store_class: str = "",
+    mcp_token_store_dsn: str = "",
+    mcp_client_registration_store_class: str = "",
+    mcp_client_registration_store_dsn: str = "",
+    mcp_gateway_state_store_class: str = "",
+    mcp_gateway_state_store_dsn: str = "",
+    checkpointer_type: str = "",
+    checkpointer_dsn: str = "",
+    startup_hook: str = "",
+    startup_hook_kwargs: dict[str, Any] | None = None,
+    runtime_overrides: dict[str, Any] | None = None,
+) -> Orchid:
+    """Hybrid bootstrap: YAML root (``orchid.yml``) for infrastructure +
+    top-level config, ``agents_dir/*.md`` for per-agent configs."""
+    import yaml
+
+    from .config.md_loader import (
+        _AGENT_BEHAVIOUR_FIELDS,
+        _load_agents,
+        build_config_data_from_yaml,
+    )
+    from .config.schema import OrchidAgentsConfig
+    from .config.yaml_env import apply_yaml_to_env
+
+    # ── 1. Apply YAML infrastructure → env vars ─────────
+    if apply_yaml and str(orchid_yml_path):
+        os.environ.setdefault("ORCHID_CONFIG", str(orchid_yml_path))
+        apply_yaml_to_env(str(orchid_yml_path), skip_sections=skip_yaml_sections)
+
+    # ── 2. Read orchid.yml for top-level agent config ───
+    yaml_data: dict[str, Any] = {}
+    try:
+        with open(orchid_yml_path, encoding="utf-8") as f:
+            yaml_data = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        pass
+
+    # ── 3. Build top-level config data ───────────────────
+    agent_configs, _ = _load_agents(agents_dir)
+    config_data = build_config_data_from_yaml(yaml_data, agent_configs, _AGENT_BEHAVIOUR_FIELDS)
+
+    # ── 4. Validate ──────────────────────────────────────
+    config = OrchidAgentsConfig.model_validate(config_data)
+
+    # ── 5. Build runtime with the pre-loaded config ──────
+    result = await _build_runtime(
+        **_build_runtime_kwargs(
+            config_path=str(orchid_yml_path),
+            apply_yaml=False,
+            config=config,
+            model=model,
+            vector_backend=vector_backend,
+            qdrant_url=qdrant_url,
+            embedding_model=embedding_model,
+            chat_storage_class=chat_storage_class,
+            chat_db_dsn=chat_db_dsn,
+            chat_extra_migrations_package=chat_extra_migrations_package,
+            mcp_token_store_class=mcp_token_store_class,
+            mcp_token_store_dsn=mcp_token_store_dsn,
+            mcp_client_registration_store_class=mcp_client_registration_store_class,
+            mcp_client_registration_store_dsn=mcp_client_registration_store_dsn,
+            mcp_gateway_state_store_class=mcp_gateway_state_store_class,
+            mcp_gateway_state_store_dsn=mcp_gateway_state_store_dsn,
+            checkpointer_type=checkpointer_type,
+            checkpointer_dsn=checkpointer_dsn,
+            startup_hook=startup_hook,
+            startup_hook_kwargs=startup_hook_kwargs,
+            runtime_overrides=runtime_overrides,
+            skip_yaml_sections=skip_yaml_sections,
+        )
+    )
+    return Orchid(
+        config=result.config,
+        runtime=result.runtime,
+        chat_repo=result.chat_repo,
+        mcp_token_store=result.mcp_token_store,
+        _owns_resources=True,
+    )
 
 
 @dataclass(frozen=True)

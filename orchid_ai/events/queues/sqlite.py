@@ -1,7 +1,7 @@
 """SQLite-backed signal queue.
 
 Implements :class:`OrchidSignalQueue` against the ``signal_queue`` and
-``signal_queue_dead_letter`` tables created by migration ``v002``.
+``signal_queue_dead_letter`` tables created by the unified ``v001`` migration.
 
 Two construction modes:
 
@@ -15,7 +15,7 @@ Two construction modes:
 Either way ``init_db()`` runs the framework's migration runner against
 the connection so the events tables exist before the first ``enqueue``.
 The runner is idempotent — it's safe to call ``init_db`` on a DB that
-already has v001 + v002 applied (e.g. because the chat storage went
+already has v001 applied (e.g. because the chat storage went
 first).
 
 SQLite is a single-writer engine, so the queue uses a per-instance
