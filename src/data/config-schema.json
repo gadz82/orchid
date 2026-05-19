@@ -319,13 +319,12 @@
     "type": "string",
     "required": false,
     "default": "qdrant",
-    "description": "Vector database backend — 'qdrant' (full-featured, containerised) or 'chroma' (embedded, on-disk, CLI default).",
+    "description": "Vector database backend \u2014 'qdrant' is the only supported backend.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
       "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/recipes"
+      "/examples/helpdesk"
     ]
   },
   {
@@ -830,7 +829,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override prompt for the multi-query query transformer.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -842,7 +841,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "HyDE prompt for a single hypothetical answer (n_hypothetical=1).",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -854,7 +853,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "HyDE prompt for multiple hypothetical answers (uses {n} placeholder).",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -866,7 +865,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override prompt for the decompose query transformer.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -878,7 +877,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override prompt for the reformulate query transformer.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -890,7 +889,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Activate a global in-memory LLM response cache (LangChain InMemoryCache). Identical prompts return cached results.",
     "deprecated": false,
     "examples": []
   },
@@ -942,7 +941,7 @@
     "type": "dict[string, object]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Parameter declarations for this tool (auto-extracted from Python signature when omitted).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -956,7 +955,7 @@
     "type": "string",
     "required": false,
     "default": "string",
-    "description": "",
+    "description": "Parameter type: 'string', 'int', 'float', or 'bool'.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -970,7 +969,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Human-readable parameter description.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -984,7 +983,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Whether this parameter must be provided.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -998,7 +997,7 @@
     "type": "any",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Default value when the parameter is not provided.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1060,7 +1059,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Qdrant namespace for this tool's RAG data.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -1074,7 +1073,7 @@
     "type": "int",
     "required": false,
     "default": 5,
-    "description": "",
+    "description": "Number of chunks retrieved for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -1088,7 +1087,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Enable RAG for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1102,7 +1101,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "",
+    "description": "RAG cache TTL for this tool in seconds.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -1114,7 +1113,7 @@
     "type": "int",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Max RAG context characters for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -1124,7 +1123,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Chunking strategy for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -1138,7 +1137,7 @@
     "type": "int",
     "required": false,
     "default": 1000,
-    "description": "",
+    "description": "Chunk size for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/wiki",
@@ -1152,7 +1151,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Chunk overlap for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/wiki",
@@ -1166,7 +1165,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "",
+    "description": "Parent chunk size for hierarchical chunking.",
     "deprecated": false,
     "examples": []
   },
@@ -1176,7 +1175,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Parent chunk overlap.",
     "deprecated": false,
     "examples": []
   },
@@ -1186,7 +1185,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Post-processors applied after chunking.",
     "deprecated": false,
     "examples": []
   },
@@ -1196,7 +1195,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Retrieval strategy for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -1210,7 +1209,7 @@
     "type": "list[string]",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Query transformer chain for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk",
@@ -1224,7 +1223,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Metadata filter expressions for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -1234,7 +1233,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Exclude dynamically-injected output from retrieval.",
     "deprecated": false,
     "examples": []
   },
@@ -1244,7 +1243,7 @@
     "type": "int",
     "required": false,
     "default": 1,
-    "description": "",
+    "description": "Number of hypothetical answers for HyDE queries.",
     "deprecated": false,
     "examples": [
       "/examples/rag-strategies"
@@ -1256,7 +1255,7 @@
     "type": "string",
     "required": false,
     "default": "bm25",
-    "description": "",
+    "description": "Sparse encoder for hybrid retrieval.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -1268,7 +1267,7 @@
     "type": "float",
     "required": false,
     "default": 0.4,
-    "description": "",
+    "description": "Weight of sparse score in linear fusion.",
     "deprecated": false,
     "examples": []
   },
@@ -1278,7 +1277,7 @@
     "type": "\"rrf\" | \"linear\"",
     "required": false,
     "default": "rrf",
-    "description": "",
+    "description": "Fusion method for hybrid retrieval.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -1290,7 +1289,7 @@
     "type": "int",
     "required": false,
     "default": 60,
-    "description": "",
+    "description": "RRF constant k.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -1302,7 +1301,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Enable graph-based retrieval.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1316,7 +1315,7 @@
     "type": "int",
     "required": false,
     "default": 2,
-    "description": "",
+    "description": "Maximum BFS depth for graph traversal.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb"
@@ -1328,7 +1327,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Merge graph context with vector hits.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb"
@@ -1340,7 +1339,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Restrict graph traversal to these edge labels.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb"
@@ -1352,7 +1351,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override multi-query prompt for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -1364,7 +1363,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "HyDE single-answer prompt for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -1376,7 +1375,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "HyDE multi-answer prompt for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -1388,7 +1387,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override decompose prompt for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -1400,7 +1399,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override reformulate prompt for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -1412,7 +1411,7 @@
     "type": "dict[string, string]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Explicit Qdrant payload index declarations for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -1464,7 +1463,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Agent name to invoke in this step.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1478,7 +1477,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Hint passed to the invoked agent.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1645,7 +1644,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Guardrail type name (e.g. 'content_safety', 'pii_detection', 'prompt_injection').",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1659,7 +1658,7 @@
     "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
     "required": false,
     "default": "block",
-    "description": "",
+    "description": "Action on guardrail failure: 'block', 'warn', 'redact', or 'log'.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1673,7 +1672,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Keyword arguments passed to the guardrail constructor.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1701,7 +1700,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1715,7 +1714,7 @@
     "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
     "required": false,
     "default": "block",
-    "description": "",
+    "description": "Action on guardrail failure.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1729,7 +1728,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Keyword arguments passed to the guardrail constructor.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1743,7 +1742,7 @@
     "type": "dict[string, object]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Tool title/description overrides keyed by MCP tool name.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1757,9 +1756,10 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override title for the MCP tool shown to host LLMs.",
     "deprecated": false,
     "examples": [
+      "/examples/basketball",
       "/examples/restaurant"
     ]
   },
@@ -1769,7 +1769,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override description for the MCP tool shown to host LLMs.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1783,7 +1783,7 @@
     "type": "list[object]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Pre-canned MCP Prompt templates exposed by the gateway.",
     "deprecated": false,
     "examples": [
       "/examples/mcp-auth",
@@ -1796,7 +1796,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Unique prompt handle (must match ^[a-zA-Z_][a-zA-Z0-9_-]*$).",
     "deprecated": false,
     "examples": []
   },
@@ -1806,9 +1806,10 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Display title for the prompt.",
     "deprecated": false,
     "examples": [
+      "/examples/basketball",
       "/examples/restaurant"
     ]
   },
@@ -1818,7 +1819,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Description of what this prompt does.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1832,7 +1833,7 @@
     "type": "list[object]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Arguments accepted by this prompt template.",
     "deprecated": false,
     "examples": [
       "/examples/restaurant"
@@ -1844,7 +1845,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Argument name (must match ^[a-zA-Z_][a-zA-Z0-9_-]*$).",
     "deprecated": false,
     "examples": []
   },
@@ -1854,7 +1855,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Description of this argument.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1868,7 +1869,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Whether this argument must be provided.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -1882,7 +1883,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Prompt body with {{arg_name}} placeholders.",
     "deprecated": false,
     "examples": [
       "/examples/restaurant"
@@ -2252,7 +2253,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override prompt for the multi-query transformer for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -2264,7 +2265,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "HyDE single-answer prompt for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -2276,7 +2277,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "HyDE multi-answer prompt for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -2288,7 +2289,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override prompt for the decompose transformer for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -2300,7 +2301,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override prompt for the reformulate transformer for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -2479,7 +2480,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Qdrant namespace for this tool's RAG data.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -2493,7 +2494,7 @@
     "type": "int",
     "required": false,
     "default": 5,
-    "description": "",
+    "description": "Number of chunks retrieved for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -2507,7 +2508,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Enable RAG for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -2521,7 +2522,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "",
+    "description": "RAG cache TTL for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -2533,7 +2534,7 @@
     "type": "int",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Max RAG context characters for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -2543,7 +2544,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Chunking strategy for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -2557,7 +2558,7 @@
     "type": "int",
     "required": false,
     "default": 1000,
-    "description": "",
+    "description": "Chunk size for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/wiki",
@@ -2571,7 +2572,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Chunk overlap for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/wiki",
@@ -2585,7 +2586,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "",
+    "description": "Parent chunk size for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -2595,7 +2596,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Parent chunk overlap for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -2605,7 +2606,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Post-processors for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -2615,7 +2616,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Retrieval strategy for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -2629,7 +2630,7 @@
     "type": "list[string]",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Query transformers for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk",
@@ -2643,7 +2644,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Metadata filters for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -2653,7 +2654,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Exclude dynamic output from retrieval.",
     "deprecated": false,
     "examples": []
   },
@@ -2663,7 +2664,7 @@
     "type": "int",
     "required": false,
     "default": 1,
-    "description": "",
+    "description": "HyDE hypothetical answer count.",
     "deprecated": false,
     "examples": [
       "/examples/rag-strategies"
@@ -2675,7 +2676,7 @@
     "type": "string",
     "required": false,
     "default": "bm25",
-    "description": "",
+    "description": "Sparse encoder for hybrid retrieval.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -2687,7 +2688,7 @@
     "type": "float",
     "required": false,
     "default": 0.4,
-    "description": "",
+    "description": "Sparse weight for linear fusion.",
     "deprecated": false,
     "examples": []
   },
@@ -2697,7 +2698,7 @@
     "type": "\"rrf\" | \"linear\"",
     "required": false,
     "default": "rrf",
-    "description": "",
+    "description": "Fusion method.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -2709,7 +2710,7 @@
     "type": "int",
     "required": false,
     "default": 60,
-    "description": "",
+    "description": "RRF constant k.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -2721,7 +2722,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Enable graph retrieval.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -2735,7 +2736,7 @@
     "type": "int",
     "required": false,
     "default": 2,
-    "description": "",
+    "description": "Graph traversal depth.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb"
@@ -2747,7 +2748,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Merge graph with vector hits.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb"
@@ -2759,7 +2760,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Edge label filter.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb"
@@ -2771,7 +2772,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override multi-query prompt.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -2783,7 +2784,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override decompose prompt.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -2795,7 +2796,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override reformulate prompt.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -2807,7 +2808,7 @@
     "type": "dict[string, string]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Qdrant payload index declarations.",
     "deprecated": false,
     "examples": []
   },
@@ -2944,7 +2945,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Built-in tool names available to this agent (must match keys in top-level tools:).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3000,7 +3001,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Tool name (MCP tool or built-in) for this step.",
     "deprecated": false,
     "examples": []
   },
@@ -3010,7 +3011,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "MCP server name, 'builtin', or None (= builtin).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3024,7 +3025,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Static arguments for this tool call.",
     "deprecated": false,
     "examples": [
       "/examples/restaurant"
@@ -3036,7 +3037,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Agent name to invoke directly (bypasses supervisor).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3050,7 +3051,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Query/instruction sent to the invoked agent.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3078,7 +3079,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3092,7 +3093,7 @@
     "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
     "required": false,
     "default": "block",
-    "description": "",
+    "description": "Action on guardrail failure.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3106,7 +3107,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Guardrail constructor kwargs.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3134,7 +3135,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3148,7 +3149,7 @@
     "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
     "required": false,
     "default": "block",
-    "description": "",
+    "description": "Action on guardrail failure.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3162,7 +3163,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Guardrail constructor kwargs.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3186,7 +3187,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Agent name (set automatically from the YAML dict key).",
     "deprecated": false,
     "examples": []
   },
@@ -3196,7 +3197,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Human-readable purpose shown to the supervisor for routing.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3210,7 +3211,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "System prompt injected into the agent's agentic loop.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3224,7 +3225,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Dotted import path to a custom OrchidAgent subclass.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3238,7 +3239,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Qdrant collection namespace for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -3252,7 +3253,7 @@
     "type": "int",
     "required": false,
     "default": 5,
-    "description": "",
+    "description": "Number of chunks retrieved per RAG query for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -3266,7 +3267,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Enable RAG for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3280,7 +3281,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "",
+    "description": "RAG cache TTL for this agent in seconds.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -3292,7 +3293,7 @@
     "type": "int",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Maximum RAG context characters for this agent.",
     "deprecated": false,
     "examples": []
   },
@@ -3302,7 +3303,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Chunking strategy for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -3316,7 +3317,7 @@
     "type": "int",
     "required": false,
     "default": 1000,
-    "description": "",
+    "description": "Chunk size for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/wiki",
@@ -3330,7 +3331,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Chunk overlap for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/wiki",
@@ -3344,7 +3345,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "",
+    "description": "Parent chunk size for hierarchical chunking (0 = disabled).",
     "deprecated": false,
     "examples": []
   },
@@ -3354,7 +3355,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Overlap for parent chunks.",
     "deprecated": false,
     "examples": []
   },
@@ -3364,7 +3365,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Post-processors applied after chunking.",
     "deprecated": false,
     "examples": []
   },
@@ -3374,7 +3375,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Retrieval strategy for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -3388,7 +3389,7 @@
     "type": "list[string]",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Query transformer chain for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk",
@@ -3402,7 +3403,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Metadata filter expressions for this agent's retrievals.",
     "deprecated": false,
     "examples": []
   },
@@ -3412,7 +3413,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Exclude dynamically-injected tool output from retrieval.",
     "deprecated": false,
     "examples": []
   },
@@ -3422,7 +3423,7 @@
     "type": "int",
     "required": false,
     "default": 1,
-    "description": "",
+    "description": "Number of hypothetical answers for HyDE queries.",
     "deprecated": false,
     "examples": [
       "/examples/rag-strategies"
@@ -3434,7 +3435,7 @@
     "type": "string",
     "required": false,
     "default": "bm25",
-    "description": "",
+    "description": "Sparse encoder: 'bm25' or 'splade'.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -3446,7 +3447,7 @@
     "type": "float",
     "required": false,
     "default": 0.4,
-    "description": "",
+    "description": "Weight of sparse score in linear fusion.",
     "deprecated": false,
     "examples": []
   },
@@ -3456,7 +3457,7 @@
     "type": "\"rrf\" | \"linear\"",
     "required": false,
     "default": "rrf",
-    "description": "",
+    "description": "Fusion strategy: 'rrf' or 'linear'.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -3468,7 +3469,7 @@
     "type": "int",
     "required": false,
     "default": 60,
-    "description": "",
+    "description": "RRF constant k.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -3480,7 +3481,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Enable graph-based retrieval.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3494,7 +3495,7 @@
     "type": "int",
     "required": false,
     "default": 2,
-    "description": "",
+    "description": "Maximum BFS depth for graph traversal.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb"
@@ -3506,7 +3507,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Merge graph context with vector hits.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb"
@@ -3518,7 +3519,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Restrict graph traversal to these edge labels.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb"
@@ -3530,7 +3531,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override prompt for the multi-query transformer for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -3542,7 +3543,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "HyDE single-answer prompt for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -3554,7 +3555,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "HyDE multi-answer prompt for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -3566,7 +3567,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override prompt for the decompose transformer for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -3578,7 +3579,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override prompt for the reformulate transformer for this agent.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -3590,7 +3591,7 @@
     "type": "dict[string, string]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Explicit Qdrant payload index declarations (field \u2192 schema type).",
     "deprecated": false,
     "examples": []
   },
@@ -3600,7 +3601,7 @@
     "type": "list[object]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "MCP servers this agent can call tools on.",
     "deprecated": false,
     "examples": [
       "/examples/mcp-auth",
@@ -3613,7 +3614,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Unique identifier for the MCP server.",
     "deprecated": false,
     "examples": []
   },
@@ -3623,7 +3624,7 @@
     "type": "\"local\" | \"remote\"",
     "required": false,
     "default": "local",
-    "description": "",
+    "description": "Server type: 'local' (same host) or 'remote'.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3637,7 +3638,7 @@
     "type": "\"streamable_http\" | \"sse\"",
     "required": false,
     "default": "streamable_http",
-    "description": "",
+    "description": "Transport protocol: 'streamable_http' or 'sse'.",
     "deprecated": false,
     "examples": []
   },
@@ -3647,7 +3648,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "MCP server URL. Supports ${ENV_VAR} interpolation.",
     "deprecated": false,
     "examples": [
       "/examples/mcp-auth",
@@ -3660,7 +3661,7 @@
     "type": "\"none\" | \"passthrough\" | \"oauth\"",
     "required": false,
     "default": "none",
-    "description": "",
+    "description": "Auth mode: 'none', 'passthrough', or 'oauth'.",
     "deprecated": false,
     "examples": [
       "/examples/learning",
@@ -3673,7 +3674,7 @@
     "type": "list[object]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "MCP tools this agent is allowed to call on this server.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3687,7 +3688,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "MCP tool name to allow.",
     "deprecated": false,
     "examples": []
   },
@@ -3697,7 +3698,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Default arguments passed to this tool.",
     "deprecated": false,
     "examples": [
       "/examples/restaurant"
@@ -3709,7 +3710,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Store this tool's results in the RAG context store.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -3721,7 +3722,7 @@
     "type": "int",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Per-tool RAG cache TTL (None = agent default).",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -3733,7 +3734,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Require human approval before this tool executes (HITL).",
     "deprecated": false,
     "examples": []
   },
@@ -3743,7 +3744,7 @@
     "type": "boolean",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Override parallel-safety for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3757,7 +3758,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Qdrant namespace for this tool's RAG data.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -3771,7 +3772,7 @@
     "type": "int",
     "required": false,
     "default": 5,
-    "description": "",
+    "description": "Number of chunks retrieved for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -3785,7 +3786,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Enable RAG for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -3799,7 +3800,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "",
+    "description": "RAG cache TTL for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/wiki"
@@ -3811,7 +3812,7 @@
     "type": "int",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Max RAG context characters for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -3821,7 +3822,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Chunking strategy for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -3835,7 +3836,7 @@
     "type": "int",
     "required": false,
     "default": 1000,
-    "description": "",
+    "description": "Chunk size for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/wiki",
@@ -3849,7 +3850,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Chunk overlap for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/wiki",
@@ -3863,7 +3864,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "",
+    "description": "Parent chunk size for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -3873,7 +3874,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Parent chunk overlap for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -3883,7 +3884,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Post-processors for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -3893,7 +3894,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Retrieval strategy for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/graph-kb",
@@ -3907,7 +3908,7 @@
     "type": "list[string]",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Query transformers for this tool.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk",
@@ -3921,7 +3922,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Metadata filters for this tool.",
     "deprecated": false,
     "examples": []
   },
@@ -3931,7 +3932,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Exclude dynamic output from retrieval.",
     "deprecated": false,
     "examples": []
   },
@@ -3941,7 +3942,7 @@
     "type": "dict[string, string]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Qdrant payload index declarations.",
     "deprecated": false,
     "examples": []
   },
@@ -3951,7 +3952,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "MCP prompt names to load ('*' = discover all).",
     "deprecated": false,
     "examples": [
       "/examples/mcp-auth",
@@ -3964,7 +3965,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "MCP resource URIs to load ('*' = discover all).",
     "deprecated": false,
     "examples": []
   },
@@ -3974,7 +3975,7 @@
     "type": "string",
     "required": false,
     "default": "all",
-    "description": "",
+    "description": "How tools are dispatched: 'all', 'sequential', 'llm_decides'.",
     "deprecated": false,
     "examples": [
       "/examples/tool-strategies"
@@ -3986,7 +3987,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Discover all tools from the server at runtime.",
     "deprecated": false,
     "examples": []
   },
@@ -3996,7 +3997,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Discover all prompts from the server at runtime.",
     "deprecated": false,
     "examples": []
   },
@@ -4006,7 +4007,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Discover all resources from the server at runtime.",
     "deprecated": false,
     "examples": []
   },
@@ -4016,7 +4017,7 @@
     "type": "string",
     "required": false,
     "default": "gemini/gemini-2.5-flash",
-    "description": "",
+    "description": "Per-agent LLM model override.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4030,7 +4031,7 @@
     "type": "float",
     "required": false,
     "default": 0.2,
-    "description": "",
+    "description": "Per-agent sampling temperature.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4044,7 +4045,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Per-agent fallback model.",
     "deprecated": false,
     "examples": []
   },
@@ -4054,7 +4055,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "",
+    "description": "Per-agent retry count on transient errors.",
     "deprecated": false,
     "examples": []
   },
@@ -4064,7 +4065,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Mark this agent safe to run in parallel with other agents.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4078,7 +4079,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Built-in tool names available to this agent (must match keys in top-level tools:).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4092,7 +4093,7 @@
     "type": "dict[string, object]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Per-agent skill definitions (multi-step workflows within this agent).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4106,7 +4107,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Human-readable skill description.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4120,7 +4121,7 @@
     "type": "list[object]",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Ordered steps: tool calls or agent invocations.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4134,7 +4135,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Tool name (MCP tool or built-in) for this step.",
     "deprecated": false,
     "examples": []
   },
@@ -4144,7 +4145,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "MCP server name, 'builtin', or None (= builtin).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4158,7 +4159,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Static arguments for this tool call.",
     "deprecated": false,
     "examples": [
       "/examples/restaurant"
@@ -4170,7 +4171,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Agent name to invoke directly (bypasses supervisor).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4184,7 +4185,7 @@
     "type": "string",
     "required": false,
     "default": "",
-    "description": "",
+    "description": "Query/instruction sent to the invoked agent.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4198,7 +4199,7 @@
     "type": "list[object]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Per-agent input guardrail rules.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4212,7 +4213,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4226,7 +4227,7 @@
     "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
     "required": false,
     "default": "block",
-    "description": "",
+    "description": "Action on guardrail failure.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4240,7 +4241,7 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Guardrail constructor kwargs.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4254,7 +4255,7 @@
     "type": "list[object]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Per-agent output guardrail rules.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4268,7 +4269,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4282,7 +4283,7 @@
     "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
     "required": false,
     "default": "block",
-    "description": "",
+    "description": "Action on guardrail failure.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -4296,3155 +4297,12 @@
     "type": "dict[string, any]",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Guardrail constructor kwargs.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
       "/examples/helpdesk",
       "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children",
-    "type": "dict[string, object]",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].name",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].description",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].class",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.namespace",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.k",
-    "type": "int",
-    "required": false,
-    "default": 5,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.enabled",
-    "type": "boolean",
-    "required": false,
-    "default": true,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.rag_ttl",
-    "type": "int",
-    "required": false,
-    "default": 0,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.max_context_chars",
-    "type": "int",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.ingestion.strategy",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.ingestion.chunk_size",
-    "type": "int",
-    "required": false,
-    "default": 1000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.ingestion.chunk_overlap",
-    "type": "int",
-    "required": false,
-    "default": 200,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.ingestion.parent_chunk_size",
-    "type": "int",
-    "required": false,
-    "default": 0,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.ingestion.parent_chunk_overlap",
-    "type": "int",
-    "required": false,
-    "default": 200,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.ingestion.post_processors",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.strategy",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.query_transformers",
-    "type": "list[string]",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.metadata_filters",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.exclude_dynamic",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.hyde.n_hypothetical",
-    "type": "int",
-    "required": false,
-    "default": 1,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/rag-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.hybrid.sparse_encoder",
-    "type": "string",
-    "required": false,
-    "default": "bm25",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.hybrid.sparse_weight",
-    "type": "float",
-    "required": false,
-    "default": 0.4,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.hybrid.fusion",
-    "type": "\"rrf\" | \"linear\"",
-    "required": false,
-    "default": "rrf",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.hybrid.rrf_k",
-    "type": "int",
-    "required": false,
-    "default": 60,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.graph.enabled",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.graph.max_hops",
-    "type": "int",
-    "required": false,
-    "default": 2,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.graph.fuse_with_vectors",
-    "type": "boolean",
-    "required": false,
-    "default": true,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.graph.relation_filter",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.transformer_prompts.multi_query",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.transformer_prompts.decompose",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.retrieval.transformer_prompts.reformulate",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].rag.payload_indexes",
-    "type": "dict[string, string]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].name",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].type",
-    "type": "\"local\" | \"remote\"",
-    "required": false,
-    "default": "local",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].transport",
-    "type": "\"streamable_http\" | \"sse\"",
-    "required": false,
-    "default": "streamable_http",
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].url",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].auth.mode",
-    "type": "\"none\" | \"passthrough\" | \"oauth\"",
-    "required": false,
-    "default": "none",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/learning",
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].name",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].arguments",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].inject_to_rag",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].rag_ttl",
-    "type": "int",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].requires_approval",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].parallel_safe",
-    "type": "boolean",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].rag.namespace",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].rag.k",
-    "type": "int",
-    "required": false,
-    "default": 5,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].rag.enabled",
-    "type": "boolean",
-    "required": false,
-    "default": true,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].rag.rag_ttl",
-    "type": "int",
-    "required": false,
-    "default": 0,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].rag.max_context_chars",
-    "type": "int",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tools[].rag.payload_indexes",
-    "type": "dict[string, string]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].prompts",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].resources",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].tool_call_strategy",
-    "type": "string",
-    "required": false,
-    "default": "all",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].discover_all_tools",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].discover_all_prompts",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mcp_servers[].discover_all_resources",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].llm.model",
-    "type": "string",
-    "required": false,
-    "default": "gemini/gemini-2.5-flash",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].llm.temperature",
-    "type": "float",
-    "required": false,
-    "default": 0.2,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].llm.fallback_model",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].llm.retry_attempts",
-    "type": "int",
-    "required": false,
-    "default": 0,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].execution_hints.parallel_safe",
-    "type": "boolean",
-    "required": false,
-    "default": true,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].tools",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].skills",
-    "type": "dict[string, object]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].skills[].description",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].skills[].steps",
-    "type": "list[object]",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].skills[].steps[].tool",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].skills[].steps[].source",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].skills[].steps[].arguments",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].skills[].steps[].agent",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].skills[].steps[].instruction",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].guardrails.input",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].guardrails.input[].type",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].guardrails.input[].fail_action",
-    "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
-    "required": false,
-    "default": "block",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].guardrails.input[].config",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].guardrails.output",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].guardrails.output[].type",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].guardrails.output[].fail_action",
-    "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
-    "required": false,
-    "default": "block",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].guardrails.output[].config",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children",
-    "type": "dict[string, object]",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].name",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].description",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].class",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.namespace",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.k",
-    "type": "int",
-    "required": false,
-    "default": 5,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.enabled",
-    "type": "boolean",
-    "required": false,
-    "default": true,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.rag_ttl",
-    "type": "int",
-    "required": false,
-    "default": 0,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.max_context_chars",
-    "type": "int",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.ingestion.strategy",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.ingestion.chunk_size",
-    "type": "int",
-    "required": false,
-    "default": 1000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.ingestion.chunk_overlap",
-    "type": "int",
-    "required": false,
-    "default": 200,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.ingestion.parent_chunk_size",
-    "type": "int",
-    "required": false,
-    "default": 0,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.ingestion.parent_chunk_overlap",
-    "type": "int",
-    "required": false,
-    "default": 200,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.ingestion.post_processors",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.retrieval.strategy",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.retrieval.query_transformers",
-    "type": "list[string]",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.retrieval.metadata_filters",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.retrieval.exclude_dynamic",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].rag.payload_indexes",
-    "type": "dict[string, string]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].name",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].type",
-    "type": "\"local\" | \"remote\"",
-    "required": false,
-    "default": "local",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].transport",
-    "type": "\"streamable_http\" | \"sse\"",
-    "required": false,
-    "default": "streamable_http",
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].url",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].auth.mode",
-    "type": "\"none\" | \"passthrough\" | \"oauth\"",
-    "required": false,
-    "default": "none",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/learning",
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].tools",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].tools[].name",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].tools[].arguments",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].tools[].inject_to_rag",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].tools[].rag_ttl",
-    "type": "int",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].tools[].requires_approval",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].tools[].parallel_safe",
-    "type": "boolean",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].prompts",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].resources",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].tool_call_strategy",
-    "type": "string",
-    "required": false,
-    "default": "all",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].discover_all_tools",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].discover_all_prompts",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mcp_servers[].discover_all_resources",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].llm.model",
-    "type": "string",
-    "required": false,
-    "default": "gemini/gemini-2.5-flash",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].llm.temperature",
-    "type": "float",
-    "required": false,
-    "default": 0.2,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].llm.fallback_model",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].llm.retry_attempts",
-    "type": "int",
-    "required": false,
-    "default": 0,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].execution_hints.parallel_safe",
-    "type": "boolean",
-    "required": false,
-    "default": true,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].tools",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].skills",
-    "type": "dict[string, object]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].skills[].description",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].skills[].steps",
-    "type": "list[object]",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].skills[].steps[].tool",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].skills[].steps[].source",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].skills[].steps[].arguments",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].skills[].steps[].agent",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].skills[].steps[].instruction",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].guardrails.input",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].guardrails.input[].type",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].guardrails.input[].fail_action",
-    "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
-    "required": false,
-    "default": "block",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].guardrails.input[].config",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].guardrails.output",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].guardrails.output[].type",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].guardrails.output[].fail_action",
-    "type": "\"block\" | \"warn\" | \"redact\" | \"log\"",
-    "required": false,
-    "default": "block",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].guardrails.output[].config",
-    "type": "dict[string, any]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children",
-    "type": "dict[string, object]",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].name",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].description",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].class",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].rag.namespace",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].rag.k",
-    "type": "int",
-    "required": false,
-    "default": 5,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].rag.enabled",
-    "type": "boolean",
-    "required": false,
-    "default": true,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].rag.rag_ttl",
-    "type": "int",
-    "required": false,
-    "default": 0,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].rag.max_context_chars",
-    "type": "int",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].rag.payload_indexes",
-    "type": "dict[string, string]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].name",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].type",
-    "type": "\"local\" | \"remote\"",
-    "required": false,
-    "default": "local",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].transport",
-    "type": "\"streamable_http\" | \"sse\"",
-    "required": false,
-    "default": "streamable_http",
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].url",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].tools",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].prompts",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].resources",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].tool_call_strategy",
-    "type": "string",
-    "required": false,
-    "default": "all",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].discover_all_tools",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].discover_all_prompts",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mcp_servers[].discover_all_resources",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].llm.model",
-    "type": "string",
-    "required": false,
-    "default": "gemini/gemini-2.5-flash",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].llm.temperature",
-    "type": "float",
-    "required": false,
-    "default": 0.2,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].llm.fallback_model",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].llm.retry_attempts",
-    "type": "int",
-    "required": false,
-    "default": 0,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].execution_hints.parallel_safe",
-    "type": "boolean",
-    "required": false,
-    "default": true,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].tools",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].skills",
-    "type": "dict[string, object]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].skills[].description",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].skills[].steps",
-    "type": "list[object]",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].guardrails.input",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].guardrails.output",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children",
-    "type": "dict[string, object]",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children[].name",
-    "type": "string",
-    "required": false,
-    "default": "",
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children[].description",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children[].prompt",
-    "type": "string",
-    "required": true,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children[].class",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children[].mcp_servers",
-    "type": "list[object]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children[].tools",
-    "type": "list[string]",
-    "required": false,
-    "default": [],
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children[].skills",
-    "type": "dict[string, object]",
-    "required": false,
-    "default": {},
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children[].children",
-    "type": "dict[string, object]",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].children[].parallel_tools",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].parallel_tools",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mini_agent.enabled",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mini_agent.max_count",
-    "type": "int",
-    "required": false,
-    "default": 3,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mini_agent.decomposer_model",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mini_agent.timeout_seconds",
-    "type": "int",
-    "required": false,
-    "default": 60,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mini_agent.tool_allowlist_mode",
-    "type": "\"strict\" | \"parent_full\" | \"inferred\"",
-    "required": false,
-    "default": "strict",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mini_agent.stream_inner_tokens",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mini_agent.decomposer_prompt",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mini_agent.aggregator_prompt",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].mini_agent.system_prompt_template",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.prior_results_header",
-    "type": "string",
-    "required": false,
-    "default": "\n--- Previous Tool Results (from prior turns) ---",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.mcp_prompt_template",
-    "type": "string",
-    "required": false,
-    "default": "\n--- MCP Prompt: {name} ---\n{text}",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.skipped_prompt_template",
-    "type": "string",
-    "required": false,
-    "default": "\n[Available prompt: {name}] {description} (requires: {required_args})",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.resources_header",
-    "type": "string",
-    "required": false,
-    "default": "\n--- Available Resources ---",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.resource_template",
-    "type": "string",
-    "required": false,
-    "default": "\n[{name}]\n{content}",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.rag_header",
-    "type": "string",
-    "required": false,
-    "default": "\n--- Background Knowledge (RAG) ---",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.prior_results_max_chars",
-    "type": "int",
-    "required": false,
-    "default": 4000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.resource_max_chars",
-    "type": "int",
-    "required": false,
-    "default": 2000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.summarise_history_reminder",
-    "type": "string",
-    "required": false,
-    "default": "\n\nIMPORTANT: The conversation history below shows prior exchanges. Always focus on the user's LATEST message and its relationship to the most recent topic. Do NOT change topic or introduce unrelated content unless the user explicitly asks for something new.",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.summarise_prior_results_header",
-    "type": "string",
-    "required": false,
-    "default": "\n\n--- Previous Tool Results (from prior turns) ---\n",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.summarise_rag_section_header",
-    "type": "string",
-    "required": false,
-    "default": "Background knowledge (from RAG):\n",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.summarise_user_template",
-    "type": "string",
-    "required": false,
-    "default": "User query: {query}\n\n{rag_section}Live data (from API):\n{mcp_data}",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].children[].prompt_sections.summarise_prior_results_max_chars",
-    "type": "int",
-    "required": false,
-    "default": 4000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].parallel_tools",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mini_agent.enabled",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mini_agent.max_count",
-    "type": "int",
-    "required": false,
-    "default": 3,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mini_agent.decomposer_model",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mini_agent.timeout_seconds",
-    "type": "int",
-    "required": false,
-    "default": 60,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mini_agent.tool_allowlist_mode",
-    "type": "\"strict\" | \"parent_full\" | \"inferred\"",
-    "required": false,
-    "default": "strict",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mini_agent.stream_inner_tokens",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mini_agent.decomposer_prompt",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mini_agent.aggregator_prompt",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].mini_agent.system_prompt_template",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.prior_results_header",
-    "type": "string",
-    "required": false,
-    "default": "\n--- Previous Tool Results (from prior turns) ---",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.mcp_prompt_template",
-    "type": "string",
-    "required": false,
-    "default": "\n--- MCP Prompt: {name} ---\n{text}",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.skipped_prompt_template",
-    "type": "string",
-    "required": false,
-    "default": "\n[Available prompt: {name}] {description} (requires: {required_args})",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.resources_header",
-    "type": "string",
-    "required": false,
-    "default": "\n--- Available Resources ---",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.resource_template",
-    "type": "string",
-    "required": false,
-    "default": "\n[{name}]\n{content}",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.rag_header",
-    "type": "string",
-    "required": false,
-    "default": "\n--- Background Knowledge (RAG) ---",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.prior_results_max_chars",
-    "type": "int",
-    "required": false,
-    "default": 4000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.resource_max_chars",
-    "type": "int",
-    "required": false,
-    "default": 2000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.summarise_history_reminder",
-    "type": "string",
-    "required": false,
-    "default": "\n\nIMPORTANT: The conversation history below shows prior exchanges. Always focus on the user's LATEST message and its relationship to the most recent topic. Do NOT change topic or introduce unrelated content unless the user explicitly asks for something new.",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.summarise_prior_results_header",
-    "type": "string",
-    "required": false,
-    "default": "\n\n--- Previous Tool Results (from prior turns) ---\n",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.summarise_rag_section_header",
-    "type": "string",
-    "required": false,
-    "default": "Background knowledge (from RAG):\n",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.summarise_user_template",
-    "type": "string",
-    "required": false,
-    "default": "User query: {query}\n\n{rag_section}Live data (from API):\n{mcp_data}",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].children[].prompt_sections.summarise_prior_results_max_chars",
-    "type": "int",
-    "required": false,
-    "default": 4000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].parallel_tools",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/tool-strategies"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mini_agent.enabled",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mini_agent.max_count",
-    "type": "int",
-    "required": false,
-    "default": 3,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mini_agent.decomposer_model",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mini_agent.timeout_seconds",
-    "type": "int",
-    "required": false,
-    "default": 60,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mini_agent.tool_allowlist_mode",
-    "type": "\"strict\" | \"parent_full\" | \"inferred\"",
-    "required": false,
-    "default": "strict",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mini_agent.stream_inner_tokens",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mini_agent.decomposer_prompt",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mini_agent.aggregator_prompt",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].mini_agent.system_prompt_template",
-    "type": "string",
-    "required": false,
-    "default": null,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.prior_results_header",
-    "type": "string",
-    "required": false,
-    "default": "\n--- Previous Tool Results (from prior turns) ---",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.mcp_prompt_template",
-    "type": "string",
-    "required": false,
-    "default": "\n--- MCP Prompt: {name} ---\n{text}",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.skipped_prompt_template",
-    "type": "string",
-    "required": false,
-    "default": "\n[Available prompt: {name}] {description} (requires: {required_args})",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.resources_header",
-    "type": "string",
-    "required": false,
-    "default": "\n--- Available Resources ---",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.resource_template",
-    "type": "string",
-    "required": false,
-    "default": "\n[{name}]\n{content}",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.rag_header",
-    "type": "string",
-    "required": false,
-    "default": "\n--- Background Knowledge (RAG) ---",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.prior_results_max_chars",
-    "type": "int",
-    "required": false,
-    "default": 4000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.resource_max_chars",
-    "type": "int",
-    "required": false,
-    "default": 2000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.summarise_history_reminder",
-    "type": "string",
-    "required": false,
-    "default": "\n\nIMPORTANT: The conversation history below shows prior exchanges. Always focus on the user's LATEST message and its relationship to the most recent topic. Do NOT change topic or introduce unrelated content unless the user explicitly asks for something new.",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.summarise_prior_results_header",
-    "type": "string",
-    "required": false,
-    "default": "\n\n--- Previous Tool Results (from prior turns) ---\n",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.summarise_rag_section_header",
-    "type": "string",
-    "required": false,
-    "default": "Background knowledge (from RAG):\n",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.summarise_user_template",
-    "type": "string",
-    "required": false,
-    "default": "User query: {query}\n\n{rag_section}Live data (from API):\n{mcp_data}",
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
-  },
-  {
-    "file": "agents.yaml",
-    "path": "agents[].children[].children[].prompt_sections.summarise_prior_results_max_chars",
-    "type": "int",
-    "required": false,
-    "default": 4000,
-    "description": "",
-    "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
     ]
   },
   {
@@ -7453,7 +4311,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Dispatch independent read-only tool calls in parallel within one turn.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk",
@@ -7466,7 +4324,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Enable the mini-agent (self-clone) decomposition pattern.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -7480,7 +4338,7 @@
     "type": "int",
     "required": false,
     "default": 3,
-    "description": "",
+    "description": "Maximum number of parallel mini-agents (2\u20138).",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk",
@@ -7493,7 +4351,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "LLM model for the mini-agent decomposer (None = agent model).",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk"
@@ -7505,7 +4363,7 @@
     "type": "int",
     "required": false,
     "default": 60,
-    "description": "",
+    "description": "Per-mini-agent timeout in seconds.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk"
@@ -7517,7 +4375,7 @@
     "type": "\"strict\" | \"parent_full\" | \"inferred\"",
     "required": false,
     "default": "strict",
-    "description": "",
+    "description": "Tool exposure mode: 'strict', 'parent_full', or 'inferred'.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk"
@@ -7529,7 +4387,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Stream individual mini-agent tokens to the SSE endpoint.",
     "deprecated": false,
     "examples": []
   },
@@ -7539,7 +4397,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Custom prompt for the decomposer step.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7551,7 +4409,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Custom prompt for the aggregator step.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7563,7 +4421,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Template for each mini's system prompt ({parent_prompt}, {instruction}, {tool_list}).",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7575,7 +4433,7 @@
     "type": "string",
     "required": false,
     "default": "\n--- Previous Tool Results (from prior turns) ---",
-    "description": "",
+    "description": "Header shown before the prior tool-results JSON block.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7587,7 +4445,7 @@
     "type": "string",
     "required": false,
     "default": "\n--- MCP Prompt: {name} ---\n{text}",
-    "description": "",
+    "description": "Template for rendered MCP prompts.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7599,7 +4457,7 @@
     "type": "string",
     "required": false,
     "default": "\n[Available prompt: {name}] {description} (requires: {required_args})",
-    "description": "",
+    "description": "Template for MCP prompts that require arguments (shown as available, not rendered).",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7611,7 +4469,7 @@
     "type": "string",
     "required": false,
     "default": "\n--- Available Resources ---",
-    "description": "",
+    "description": "Header shown before the MCP resources block.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7623,7 +4481,7 @@
     "type": "string",
     "required": false,
     "default": "\n[{name}]\n{content}",
-    "description": "",
+    "description": "Template for each MCP resource body.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7635,7 +4493,7 @@
     "type": "string",
     "required": false,
     "default": "\n--- Background Knowledge (RAG) ---",
-    "description": "",
+    "description": "Header shown before the RAG context block.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7647,7 +4505,7 @@
     "type": "int",
     "required": false,
     "default": 4000,
-    "description": "",
+    "description": "Character cap on the prior tool-results JSON block.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7659,7 +4517,7 @@
     "type": "int",
     "required": false,
     "default": 2000,
-    "description": "",
+    "description": "Character cap per MCP resource body.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7671,7 +4529,7 @@
     "type": "string",
     "required": false,
     "default": "\n\nIMPORTANT: The conversation history below shows prior exchanges. Always focus on the user's LATEST message and its relationship to the most recent topic. Do NOT change topic or introduce unrelated content unless the user explicitly asks for something new.",
-    "description": "",
+    "description": "Reminder block appended to the summarise system prompt when conversation history is present.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7683,7 +4541,7 @@
     "type": "string",
     "required": false,
     "default": "\n\n--- Previous Tool Results (from prior turns) ---\n",
-    "description": "",
+    "description": "Header for prior-turn tool results in the summarise system prompt.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7695,7 +4553,7 @@
     "type": "string",
     "required": false,
     "default": "Background knowledge (from RAG):\n",
-    "description": "",
+    "description": "Header for the RAG block in the summarise user message.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7707,7 +4565,7 @@
     "type": "string",
     "required": false,
     "default": "User query: {query}\n\n{rag_section}Live data (from API):\n{mcp_data}",
-    "description": "",
+    "description": "User-content template for the summarise call ({query}, {rag_section}, {mcp_data}).",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7719,7 +4577,7 @@
     "type": "int",
     "required": false,
     "default": 4000,
-    "description": "",
+    "description": "Max characters of prior-tool-results JSON in the summarise prompt.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7877,7 +4735,7 @@
     "type": "string",
     "required": false,
     "default": "\n[Available prompt: {name}] {description} (requires: {required_args})",
-    "description": "",
+    "description": "Template for MCP prompts that require arguments (shown as available, not rendered).",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7949,7 +4807,7 @@
     "type": "string",
     "required": false,
     "default": "\n\nIMPORTANT: The conversation history below shows prior exchanges. Always focus on the user's LATEST message and its relationship to the most recent topic. Do NOT change topic or introduce unrelated content unless the user explicitly asks for something new.",
-    "description": "",
+    "description": "Reminder block appended to the summarise system prompt when conversation history is present.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7961,7 +4819,7 @@
     "type": "string",
     "required": false,
     "default": "\n\n--- Previous Tool Results (from prior turns) ---\n",
-    "description": "",
+    "description": "Header for prior-turn tool results in the summarise system prompt.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7973,7 +4831,7 @@
     "type": "string",
     "required": false,
     "default": "Background knowledge (from RAG):\n",
-    "description": "",
+    "description": "Header for the RAG block in the summarise user message.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7985,7 +4843,7 @@
     "type": "string",
     "required": false,
     "default": "User query: {query}\n\n{rag_section}Live data (from API):\n{mcp_data}",
-    "description": "",
+    "description": "User-content template for the summarise call ({query}, {rag_section}, {mcp_data}).",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -7997,7 +4855,7 @@
     "type": "int",
     "required": false,
     "default": 4000,
-    "description": "",
+    "description": "Max characters of prior-tool-results JSON in the summarise prompt.",
     "deprecated": false,
     "examples": [
       "/examples/prompt-customization"
@@ -8023,7 +4881,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Dotted import path for the event store backend.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8037,7 +4895,7 @@
     "type": "dict",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Additional keyword arguments for the store constructor.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8051,7 +4909,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Dotted import path for the queue backend.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8065,7 +4923,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Enable queue notifications.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk"
@@ -8077,7 +4935,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Queue poll interval in milliseconds (min 10).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8091,7 +4949,7 @@
     "type": "int",
     "required": false,
     "default": 30,
-    "description": "",
+    "description": "Message lease duration in seconds (min 1).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8105,7 +4963,7 @@
     "type": "int",
     "required": false,
     "default": 5,
-    "description": "",
+    "description": "Maximum processing attempts per message (min 1).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8119,7 +4977,7 @@
     "type": "string",
     "required": false,
     "default": "signal_queue_dead_letter",
-    "description": "",
+    "description": "Database table name for dead-letter messages.",
     "deprecated": false,
     "examples": []
   },
@@ -8129,7 +4987,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Dotted import path for the scheduler backend.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8143,7 +5001,7 @@
     "type": "dict",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Additional keyword arguments for the scheduler constructor.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8171,7 +5029,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Dotted import path for the producer.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8185,7 +5043,7 @@
     "type": "dict",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Additional keyword arguments for the producer constructor.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8213,7 +5071,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Dotted import path for the processor.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8227,7 +5085,7 @@
     "type": "int",
     "required": false,
     "default": 4,
-    "description": "",
+    "description": "Number of concurrent worker tasks (min 1).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8241,7 +5099,7 @@
     "type": "int",
     "required": false,
     "default": 200,
-    "description": "",
+    "description": "Processor poll interval in milliseconds (min 10).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8255,7 +5113,7 @@
     "type": "int",
     "required": false,
     "default": 30,
-    "description": "",
+    "description": "Message lease duration in seconds (min 1).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8269,7 +5127,7 @@
     "type": "int",
     "required": false,
     "default": 5,
-    "description": "",
+    "description": "Maximum processing attempts (min 1).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8283,7 +5141,7 @@
     "type": "float",
     "required": false,
     "default": 10.0,
-    "description": "",
+    "description": "Seconds to wait for in-flight messages during shutdown.",
     "deprecated": false,
     "examples": []
   },
@@ -8293,7 +5151,7 @@
     "type": "list[object]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Processing middleware applied to signals.",
     "deprecated": false,
     "examples": []
   },
@@ -8303,7 +5161,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Dotted import path for the middleware.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8317,7 +5175,7 @@
     "type": "dict",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Additional keyword arguments for the middleware constructor.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8331,7 +5189,7 @@
     "type": "list[object]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Registered webhook sources.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk"
@@ -8343,7 +5201,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Unique source identifier.",
     "deprecated": false,
     "examples": []
   },
@@ -8353,7 +5211,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Dotted import path for the validator class (HMAC, bearer, mTLS, etc.).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8367,7 +5225,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Secret reference for the validator (e.g. HMAC key).",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk"
@@ -8379,7 +5237,7 @@
     "type": "dict",
     "required": false,
     "default": {},
-    "description": "",
+    "description": "Additional keyword arguments for the validator.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8393,7 +5251,7 @@
     "type": "list[string]",
     "required": false,
     "default": [],
-    "description": "",
+    "description": "Signal types accepted from this source.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk"
@@ -8405,7 +5263,7 @@
     "type": "list[object]",
     "required": false,
     "default": [],
-    "description": "Cron schedule definitions.",
+    "description": "Cron/interval schedule definitions.",
     "deprecated": false,
     "examples": [
       "/examples/basketball"
@@ -8427,7 +5285,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "Cron expression (e.g. '0 7 * * 1-5' for weekday 07:00 UTC).",
+    "description": "Cron expression (e.g. '0 7 * * 1-5' for weekday 07:00 UTC). Mutually exclusive with interval_seconds.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8440,7 +5298,7 @@
     "type": "int",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Interval between runs in seconds. Mutually exclusive with cron.",
     "deprecated": false,
     "examples": []
   },
@@ -8450,7 +5308,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "ID of the trigger this schedule fires.",
+    "description": "ID of the trigger this schedule fires (must reference a trigger with signal: cron).",
     "deprecated": false,
     "examples": [
       "/examples/basketball"
@@ -8462,7 +5320,7 @@
     "type": "object | object | object",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Identity claim for the scheduled run.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8476,7 +5334,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Whether this schedule is active.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8514,7 +5372,7 @@
     "type": "string",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Signal name to match ('cron' reserved for time-driven triggers).",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk",
@@ -8527,7 +5385,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Cron expression (required when signal='cron', rejected otherwise).",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8540,7 +5398,7 @@
     "type": "string",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "JMESPath boolean expression for conditional matching.",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk"
@@ -8580,7 +5438,7 @@
     "type": "object | object | object",
     "required": true,
     "default": null,
-    "description": "",
+    "description": "Identity claim for the triggered run.",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
@@ -8594,7 +5452,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Respect chat_binding from the signal envelope (requires non-service-account identity).",
     "deprecated": false,
     "examples": [
       "/examples/restaurant"
@@ -8606,7 +5464,7 @@
     "type": "boolean",
     "required": false,
     "default": false,
-    "description": "",
+    "description": "Create a new chat for the resolved user (requires non-service-account identity).",
     "deprecated": false,
     "examples": [
       "/examples/helpdesk"
@@ -8618,7 +5476,7 @@
     "type": "\"actor\" | \"addressed\" | \"tenant\" | \"admin\"",
     "required": false,
     "default": null,
-    "description": "",
+    "description": "Visibility override: 'actor', 'addressed', 'tenant', 'admin'.",
     "deprecated": false,
     "examples": [
       "/examples/basketball"
@@ -8630,7 +5488,7 @@
     "type": "int",
     "required": false,
     "default": 0,
-    "description": "Maximum retry attempts for failed trigger runs.",
+    "description": "Maximum retry attempts (0 = no retry).",
     "deprecated": false,
     "examples": []
   },
@@ -8650,7 +5508,7 @@
     "type": "boolean",
     "required": false,
     "default": true,
-    "description": "",
+    "description": "Add jitter to backoff timing.",
     "deprecated": false,
     "examples": []
   },
@@ -8660,7 +5518,7 @@
     "type": "float",
     "required": false,
     "default": 1.0,
-    "description": "",
+    "description": "Initial delay before first retry (seconds).",
     "deprecated": false,
     "examples": []
   },
@@ -8670,7 +5528,7 @@
     "type": "float",
     "required": false,
     "default": 300.0,
-    "description": "",
+    "description": "Maximum delay between retries (seconds).",
     "deprecated": false,
     "examples": []
   },

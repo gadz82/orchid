@@ -35,6 +35,13 @@ export function anchorId(file: 'orchid.yml' | 'agents.yaml', path: string): stri
   return `${prefix}__${path}`;
 }
 
+/** Deep-link URL to the detailed reference sub-page. */
+function refUrl(file: 'orchid.yml' | 'agents.yaml', path: string): string {
+  const slug = file === 'orchid.yml' ? 'infrastructure' : 'agents';
+  const hash = anchorId(file, path);
+  return `/configuration-reference/${slug}#${hash}`;
+}
+
 /** Map example file path to /examples/* website route. */
 function exampleRoute(path: string): string | null {
   const ROUTES: Record<string, string> = {
@@ -141,9 +148,12 @@ export default function ConfigTable({ file }: Props) {
                   >
                     {/* Key */}
                     <td className="px-3 py-2 align-top font-mono text-xs text-orchid-accent-glow break-all">
-                      <a href={`#${id}`} className="hover:underline">
+                      <Link
+                        href={refUrl(file, row.path)}
+                        className="hover:underline"
+                      >
                         {row.deprecated ? <s>{row.path}</s> : row.path}
-                      </a>
+                      </Link>
                     </td>
 
                     {/* Type */}

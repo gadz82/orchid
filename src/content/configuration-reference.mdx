@@ -1,0 +1,66 @@
+---
+title: "Configuration Reference"
+description: "Detailed reference for every configuration property in orchid.yml and agents.yaml — split by file with searchable indexes and deep-links."
+package: "cross-cutting"
+section: "configuration"
+order: 31
+tags: ["configuration", "yaml", "markdown", "reference", "properties"]
+sources:
+  - "orchid/orchid_ai/config/schema.py"
+  - "orchid/orchid_ai/config/schema_agent.py"
+  - "orchid/orchid_ai/config/schema_llm.py"
+  - "orchid/orchid_ai/config/schema_rag.py"
+  - "orchid/orchid_ai/config/schema_mcp.py"
+  - "orchid/orchid_ai/config/schema_skills.py"
+  - "orchid/orchid_ai/config/schema_supervisor.py"
+  - "orchid/orchid_ai/config/schema_mini_agent.py"
+  - "orchid/orchid_ai/config/schema_guardrails.py"
+  - "orchid/orchid_ai/config/schema_prompts.py"
+  - "orchid/orchid_ai/config/schema_events.py"
+  - "orchid/orchid_ai/config/mcp_gateway.py"
+  - "orchid-api/orchid_api/settings.py"
+  - "orchid/orchid_ai/config/yaml_env.py"
+related: ["/configuration", "/concepts/agents", "/concepts/rag", "/concepts/mcp", "/concepts/supervisor", "/best-practices"]
+example: ""
+external: []
+---
+
+Orchid's configuration splits into two files. Each has its own dedicated reference page with a top-of-page index and per-property anchors.
+
+---
+
+## Infrastructure — `orchid.yml`
+
+Runtime keys: LLM providers, auth, vector DB, storage, tracing, API behaviour. Every key maps to an environment variable via `YAML_TO_ENV`.
+
+- **40 properties** documented
+- Top-of-page index with quick-links
+- Per-property anchors for deep-linking from the Atlas
+
+<a href="/configuration-reference/infrastructure" class="inline-flex items-center gap-2 rounded-lg border border-orchid-border bg-orchid-card px-4 py-2 text-sm font-medium text-orchid-accent hover:bg-orchid-accent/10 transition-colors">
+  Open Infrastructure Reference →
+</a>
+
+---
+
+## Agents — `agents.yaml`
+
+Agent behaviour: defaults, supervisor, agent definitions, tools, skills, guardrails, MCP gateway, events.
+
+- **600+ properties** documented
+- Top-of-page index with quick-links
+- Per-property anchors for deep-linking from the Atlas
+
+<a href="/configuration-reference/agents" class="inline-flex items-center gap-2 rounded-lg border border-orchid-border bg-orchid-card px-4 py-2 text-sm font-medium text-orchid-accent hover:bg-orchid-accent/10 transition-colors">
+  Open Agents Reference →
+</a>
+
+---
+
+## Quick Reference
+
+| File | Page | What it covers |
+|------|------|----------------|
+| `orchid.yml` | [Infrastructure](/configuration-reference/infrastructure) | LLM, auth, RAG, storage, API, tracing |
+| `agents.yaml` | [Agents](/configuration-reference/agents) | Defaults, supervisor, agents, tools, skills, events |
+| Both | [Configuration Atlas](/configuration) | Searchable table of all keys |

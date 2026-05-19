@@ -1,0 +1,655 @@
+---
+title: "Infrastructure Configuration"
+description: "Detailed reference for every orchid.yml property — runtime, auth, LLM, RAG, storage, MCP, tracing."
+package: "cross-cutting"
+section: "configuration"
+order: 31
+tags: ["configuration", "yaml", "markdown", "reference", "properties"]
+sources: []
+related: ["/configuration", "/configuration-reference"]
+example: ""
+external: []
+---
+
+## Index
+
+**agents**
+  - [`agents.config_path`](#orchid-yml__agents.config_path)
+
+**llm**
+  - [`llm.model`](#orchid-yml__llm.model)
+  - [`llm.ollama_api_base`](#orchid-yml__llm.ollama_api_base)
+  - [`llm.openai_api_key`](#orchid-yml__llm.openai_api_key)
+  - [`llm.anthropic_api_key`](#orchid-yml__llm.anthropic_api_key)
+  - [`llm.gemini_api_key`](#orchid-yml__llm.gemini_api_key)
+  - [`llm.groq_api_key`](#orchid-yml__llm.groq_api_key)
+
+**auth**
+  - [`auth.dev_bypass`](#orchid-yml__auth.dev_bypass)
+  - [`auth.identity_resolver_class`](#orchid-yml__auth.identity_resolver_class)
+  - [`auth.auth_config_provider_class`](#orchid-yml__auth.auth_config_provider_class)
+  - [`auth.auth_exchange_client_class`](#orchid-yml__auth.auth_exchange_client_class)
+  - [`auth.domain`](#orchid-yml__auth.domain)
+  - [`auth.oauth_client_id_env`](#orchid-yml__auth.oauth_client_id_env)
+  - [`auth.oauth_scope`](#orchid-yml__auth.oauth_scope)
+
+**startup**
+  - [`startup.hook`](#orchid-yml__startup.hook)
+
+**rag**
+  - [`rag.vector_backend`](#orchid-yml__rag.vector_backend)
+  - [`rag.qdrant_url`](#orchid-yml__rag.qdrant_url)
+  - [`rag.embedding_model`](#orchid-yml__rag.embedding_model)
+  - [`rag.openai_api_key`](#orchid-yml__rag.openai_api_key)
+  - [`rag.gemini_api_key`](#orchid-yml__rag.gemini_api_key)
+
+**upload**
+  - [`upload.vision_model`](#orchid-yml__upload.vision_model)
+  - [`upload.namespace`](#orchid-yml__upload.namespace)
+  - [`upload.max_size_mb`](#orchid-yml__upload.max_size_mb)
+  - [`upload.chunk_size`](#orchid-yml__upload.chunk_size)
+  - [`upload.chunk_overlap`](#orchid-yml__upload.chunk_overlap)
+
+**storage**
+  - [`storage.class`](#orchid-yml__storage.class)
+  - [`storage.dsn`](#orchid-yml__storage.dsn)
+  - [`storage.extra_migrations_package`](#orchid-yml__storage.extra_migrations_package)
+
+**mcp_auth**
+  - [`mcp_auth.token_store_class`](#orchid-yml__mcp_auth.token_store_class)
+  - [`mcp_auth.token_store_dsn`](#orchid-yml__mcp_auth.token_store_dsn)
+  - [`mcp_auth.client_registration_store_class`](#orchid-yml__mcp_auth.client_registration_store_class)
+  - [`mcp_auth.client_registration_store_dsn`](#orchid-yml__mcp_auth.client_registration_store_dsn)
+
+**checkpointer**
+  - [`checkpointer.type`](#orchid-yml__checkpointer.type)
+  - [`checkpointer.dsn`](#orchid-yml__checkpointer.dsn)
+
+**api**
+  - [`api.base_url`](#orchid-yml__api.base_url)
+  - [`api.cors_allowed_origins`](#orchid-yml__api.cors_allowed_origins)
+  - [`api.allow_index_endpoint`](#orchid-yml__api.allow_index_endpoint)
+
+**tracing**
+  - [`tracing.langsmith_tracing`](#orchid-yml__tracing.langsmith_tracing)
+  - [`tracing.langsmith_api_key`](#orchid-yml__tracing.langsmith_api_key)
+  - [`tracing.langsmith_project`](#orchid-yml__tracing.langsmith_project)
+
+---
+
+
+This page documents every configuration property in depth. For a quick, searchable table of all keys, see the [Configuration Atlas](/configuration).
+
+Each section below covers one config domain. Properties are grouped by file — `orchid.yml` for infrastructure, `agents.yaml` for agent behavior. Every entry includes a short description, a detailed explanation, the default value, available values where applicable, caveats that affect performance or security, and examples in both YAML and Markdown formats.
+
+---
+
+## orchid.yml — Infrastructure Configuration
+
+Runtime and infrastructure keys live in `orchid.yml`. In Markdown mode these are the frontmatter of `orchid.md`. Every key maps to a flat environment variable via `YAML_TO_ENV`. When the same variable is set in both the config file and the environment, the environment wins.
+
+<a id="orchid-yml__agents.config_path"></a>
+### `agents.config_path`
+
+| | |
+|---|---|
+| **Short** | Path to the agents configuration file or directory. |
+| **Detailed** | Controls where Orchid loads agent definitions from. In YAML mode this is `agents.yaml`. In hybrid mode (YAML infrastructure + Markdown agents) this points to a directory like `agents/` containing `*.md` files. |
+| **Default** | `agents.yaml` |
+| **Available values** | Any file path (`agents.yaml`, `agents.yml`) or directory path (`agents/`) |
+| **Env var** | `AGENTS_CONFIG_PATH` |
+
+```yaml
+# orchid.yml
+agents:
+  config_path: agents.yaml
+```
+
+```md
+---
+# orchid.md frontmatter
+agents:
+  config_path: agents/
+---
+```
+
+<a id="orchid-yml__llm.model"></a>
+### `llm.model`
+
+| | |
+|---|---|
+| **Short** | Default LLM model for all completions. |
+| **Detailed** | The model string in LiteLLM `provider/model-name` format. This is the primary model used for agent reasoning, summarisation, and routing when no per-agent or per-supervisor override is set. |
+| **Default** | `ollama/llama3.2` |
+| **Available values** | Any LiteLLM-compatible string: `gemini/gemini-2.5-flash`, `openai/gpt-4o`, `anthropic/claude-sonnet-4-20250514`, `groq/llama-3.3-70b-versatile`, `ollama/llama3.2` |
+| **Env var** | `LITELLM_MODEL` |
+
+<Callout variant="warning" title="Production deployments">
+Always pair a cloud-hosted primary with a `fallback_model` so outages degrade gracefully instead of surfacing errors to users.
+</Callout>
+
+```yaml
+llm:
+  model: gemini/gemini-2.5-flash
+```
+
+```md
+---
+llm:
+  model: openai/gpt-4o
+---
+```
+
+<a id="orchid-yml__llm.ollama_api_base"></a>
+### `llm.ollama_api_base`
+
+| | |
+|---|---|
+| **Short** | Base URL for the local Ollama server. |
+| **Detailed** | The HTTP endpoint where Ollama serves models. Only consulted when the model string starts with `ollama/`. |
+| **Default** | `null` (uses Ollama default `http://localhost:11434`) |
+| **Available values** | Any HTTP URL |
+| **Env var** | `OLLAMA_API_BASE` |
+
+```yaml
+llm:
+  ollama_api_base: http://host.docker.internal:11434
+```
+
+```md
+---
+llm:
+  ollama_api_base: http://ollama:11434
+---
+```
+
+<a id="orchid-yml__llm.openai_api_key"></a>
+### `llm.openai_api_key`
+
+| | |
+|---|---|
+| **Short** | API key for OpenAI models. |
+| **Detailed** | Required when using OpenAI-hosted models or OpenAI embedding models. Injected via environment variable — never store in config files. |
+| **Default** | `null` |
+| **Env var** | `OPENAI_API_KEY` |
+
+```yaml
+llm:
+  openai_api_key: "${OPENAI_API_KEY}"
+```
+
+<a id="orchid-yml__llm.anthropic_api_key"></a>
+### `llm.anthropic_api_key`
+
+| | |
+|---|---|
+| **Short** | API key for Anthropic Claude models. |
+| **Detailed** | Required when using Claude models via LiteLLM. |
+| **Default** | `null` |
+| **Env var** | `ANTHROPIC_API_KEY` |
+
+<a id="orchid-yml__llm.gemini_api_key"></a>
+### `llm.gemini_api_key`
+
+| | |
+|---|---|
+| **Short** | API key for Google Gemini models. |
+| **Detailed** | Required when using Gemini models or Gemini embeddings. |
+| **Default** | `null` |
+| **Env var** | `GEMINI_API_KEY` |
+
+<a id="orchid-yml__llm.groq_api_key"></a>
+### `llm.groq_api_key`
+
+| | |
+|---|---|
+| **Short** | API key for Groq-hosted models. |
+| **Detailed** | Required when routing through Groq's inference API. |
+| **Default** | `null` |
+| **Env var** | `GROQ_API_KEY` |
+
+---
+
+<a id="orchid-yml__auth.dev_bypass"></a>
+### `auth.dev_bypass`
+
+| | |
+|---|---|
+| **Short** | Skip all authentication — for local development only. |
+| **Detailed** | When enabled, the identity resolver is bypassed entirely. Every request is treated as authenticated with a default identity. This removes all authorization checks. |
+| **Default** | `false` |
+| **Available values** | `true`, `false` |
+| **Env var** | `DEV_AUTH_BYPASS` |
+
+<Callout variant="warning" title="Security">
+Never set this in production, staging, or any deployed environment. Any caller can impersonate any user. Only use on a trusted local development machine.
+</Callout>
+
+```yaml
+auth:
+  dev_bypass: false
+```
+
+<a id="orchid-yml__auth.identity_resolver_class"></a>
+### `auth.identity_resolver_class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to an `OrchidIdentityResolver` subclass. |
+| **Detailed** | The resolver extracts `OrchidAuthContext` (tenant key, user ID, bearer token) from incoming requests. The default resolver validates JWTs against the configured `auth.domain`. Custom implementations can integrate with any identity provider. |
+| **Default** | `null` |
+| **Available values** | Any dotted Python path to an `OrchidIdentityResolver` subclass |
+| **Env var** | `IDENTITY_RESOLVER_CLASS` |
+
+```yaml
+auth:
+  identity_resolver_class: myapp.auth.CustomIdentityResolver
+```
+
+```md
+---
+auth:
+  identity_resolver_class: myapp.auth.CustomIdentityResolver
+---
+```
+
+<a id="orchid-yml__auth.auth_config_provider_class"></a>
+### `auth.auth_config_provider_class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to an `OrchidAuthConfigProvider` subclass. |
+| **Detailed** | Enables the `GET /auth-info` endpoint which exposes OAuth client metadata, scopes, and endpoints to the frontend. The provider generates the JSON payload dynamically from runtime configuration. |
+| **Default** | `null` |
+| **Env var** | `AUTH_CONFIG_PROVIDER_CLASS` |
+
+<a id="orchid-yml__auth.auth_exchange_client_class"></a>
+### `auth.auth_exchange_client_class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to an `OrchidAuthExchangeClient` subclass. |
+| **Detailed** | Enables the `POST /auth/exchange-code` endpoint for OAuth authorization-code exchange. Used when the frontend needs to trade an auth code for tokens via the Orchid API rather than directly against the IdP. |
+| **Default** | `null` |
+| **Env var** | `AUTH_EXCHANGE_CLIENT_CLASS` |
+
+<a id="orchid-yml__auth.domain"></a>
+### `auth.domain`
+
+| | |
+|---|---|
+| **Short** | Default domain used for identity resolution. |
+| **Detailed** | The OAuth or identity-provider domain. Used by the default identity resolver to construct authorization URLs and validate tokens. |
+| **Default** | `null` |
+| **Env var** | `AUTH_DOMAIN` |
+
+<a id="orchid-yml__auth.oauth_client_id_env"></a>
+### `auth.oauth_client_id_env`
+
+| | |
+|---|---|
+| **Short** | Name of the environment variable holding the public OAuth `client_id`. |
+| **Detailed** | Rather than hardcoding the client ID, the config references an env var name. This keeps the client ID out of version control while still making it discoverable via `GET /auth-info`. |
+| **Default** | `null` |
+| **Env var** | `AUTH_OAUTH_CLIENT_ID_ENV` |
+
+<a id="orchid-yml__auth.oauth_scope"></a>
+### `auth.oauth_scope`
+
+| | |
+|---|---|
+| **Short** | Advertised OAuth scope for downstream clients. |
+| **Detailed** | The scope string returned by `GET /auth-info` so the frontend knows what permissions to request during the OAuth flow. |
+| **Default** | `null` |
+| **Env var** | `AUTH_OAUTH_SCOPE` |
+
+---
+
+<a id="orchid-yml__startup.hook"></a>
+### `startup.hook`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to a startup hook function. |
+| **Detailed** | Called once after the LangGraph is initialised and before the API starts serving requests. Use this for one-time setup: warming caches, registering custom tools, or running database migrations. The function signature must be `async def hook(app_context) -> None`. |
+| **Default** | `null` |
+| **Available values** | Any dotted Python path to an async callable |
+| **Env var** | `STARTUP_HOOK` |
+
+```yaml
+startup:
+  hook: myapp.bootstrap.on_startup
+```
+
+---
+
+<a id="orchid-yml__rag.vector_backend"></a>
+### `rag.vector_backend`
+
+| | |
+|---|---|
+| **Short** | Vector database backend type. |
+| **Detailed** | The persistence layer for embeddings and vector search. Currently only Qdrant is supported. Setting this to `null` disables vector storage entirely. |
+| **Default** | `qdrant` |
+| **Available values** | `qdrant`, `null` |
+| **Env var** | `VECTOR_BACKEND` |
+
+```yaml
+rag:
+  vector_backend: qdrant
+```
+
+<a id="orchid-yml__rag.qdrant_url"></a>
+### `rag.qdrant_url`
+
+| | |
+|---|---|
+| **Short** | Qdrant server URL. |
+| **Detailed** | The HTTP/gRPC endpoint for the Qdrant vector database. The default assumes a Docker Compose network where Qdrant runs in a service named `qdrant`. |
+| **Default** | `http://qdrant:6333` |
+| **Env var** | `QDRANT_URL` |
+
+<a id="orchid-yml__rag.embedding_model"></a>
+### `rag.embedding_model`
+
+| | |
+|---|---|
+| **Short** | Embedding model for document vectorisation. |
+| **Detailed** | The model string in LiteLLM format. Determines the vector dimensionality and quality of semantic search. Changing this model requires re-indexing all documents because dimensions differ. |
+| **Default** | `text-embedding-3-small` |
+| **Available values** | `text-embedding-3-small` (1536-d), `nomic-embed-text` (768-d), `gemini-embedding-001` (3072-d), any LiteLLM embedding model |
+| **Env var** | `EMBEDDING_MODEL` |
+
+<Callout variant="warning" title="Switching embedding models">
+Changing the embedding model changes the vector dimensionality. Existing Qdrant collections must be dropped and all documents re-ingested. Do not change this on a live production instance without planning a migration window.
+</Callout>
+
+```yaml
+rag:
+  embedding_model: nomic-embed-text
+```
+
+<a id="orchid-yml__rag.openai_api_key"></a>
+### `rag.openai_api_key`
+
+| | |
+|---|---|
+| **Short** | OpenAI API key used by the embedding model. |
+| **Detailed** | Required when `embedding_model` is an OpenAI model (e.g. `text-embedding-3-small`). Can be the same as `llm.openai_api_key`. |
+| **Default** | `null` |
+| **Env var** | `OPENAI_API_KEY` |
+
+<a id="orchid-yml__rag.gemini_api_key"></a>
+### `rag.gemini_api_key`
+
+| | |
+|---|---|
+| **Short** | Google AI API key used by the embedding model. |
+| **Detailed** | Required when `embedding_model` is a Gemini embedding model. |
+| **Default** | `null` |
+| **Env var** | `GEMINI_API_KEY` |
+
+---
+
+<a id="orchid-yml__upload.vision_model"></a>
+### `upload.vision_model`
+
+| | |
+|---|---|
+| **Short** | Vision model for image and PDF OCR. |
+| **Detailed** | The model used to extract text from images and PDF pages. If unset, image uploads are rejected. Must be a vision-capable model in LiteLLM format. |
+| **Default** | `null` |
+| **Available values** | Any vision-capable LiteLLM model: `ollama/minicpm-v`, `gemini/gemini-2.5-flash`, `openai/gpt-4o` |
+| **Env var** | `VISION_MODEL` |
+
+```yaml
+upload:
+  vision_model: ollama/minicpm-v
+```
+
+<a id="orchid-yml__upload.namespace"></a>
+### `upload.namespace`
+
+| | |
+|---|---|
+| **Short** | Qdrant namespace for uploaded documents. |
+| **Detailed** | The collection or namespace where uploaded files are indexed. Kept separate from agent-specific RAG namespaces so uploads do not collide with programmatic ingestion. |
+| **Default** | `uploads` |
+| **Env var** | `UPLOAD_NAMESPACE` |
+
+<a id="orchid-yml__upload.max_size_mb"></a>
+### `upload.max_size_mb`
+
+| | |
+|---|---|
+| **Short** | Maximum upload file size in megabytes. |
+| **Detailed** | Files larger than this are rejected at the API layer before parsing begins. |
+| **Default** | `20` |
+| **Env var** | `UPLOAD_MAX_SIZE_MB` |
+
+<a id="orchid-yml__upload.chunk_size"></a>
+### `upload.chunk_size`
+
+| | |
+|---|---|
+| **Short** | Default text chunk size in characters. |
+| **Detailed** | Documents are split into chunks of this size before embedding. Larger chunks preserve more context per chunk but reduce granularity in retrieval. |
+| **Default** | `1000` |
+| **Env var** | `CHUNK_SIZE` |
+
+<a id="orchid-yml__upload.chunk_overlap"></a>
+### `upload.chunk_overlap`
+
+| | |
+|---|---|
+| **Short** | Character overlap between consecutive chunks. |
+| **Detailed** | Overlap ensures that sentences or concepts at chunk boundaries are not split. A good rule of thumb is 10–20% of chunk size. |
+| **Default** | `200` |
+| **Env var** | `CHUNK_OVERLAP` |
+
+<Callout variant="warning" title="Chunk sizing">
+Larger `chunk_size` (2000–4000) improves retrieval coherence for long-form documents but increases embedding cost and storage. Smaller sizes (500–1000) improve precision for keyword-sparse queries but may fragment related concepts. Always pair chunk size with `chunk_overlap` of 10–20%.
+</Callout>
+
+---
+
+<a id="orchid-yml__storage.class"></a>
+### `storage.class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to an `OrchidChatStorage` subclass. |
+| **Detailed** | The persistence backend for chat sessions and messages. The built-in SQLite backend is sufficient for single-process deployments. For multi-replica API deployments, switch to PostgreSQL or a custom backend so all instances share state. |
+| **Default** | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` |
+| **Available values** | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage`, `orchid_ai.persistence.postgres.OrchidPostgresChatStorage`, or any dotted path to a custom subclass |
+| **Env var** | `CHAT_STORAGE_CLASS` |
+
+<Callout variant="warning" title="Single-process vs multi-replica">
+SQLite works for demos and CLI tools where only one process accesses the database. PostgreSQL (or any shared backend) is mandatory for horizontally-scaled API deployments. Mixing SQLite across multiple API replicas will cause data inconsistency and lost messages.
+</Callout>
+
+```yaml
+storage:
+  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  dsn: postgresql://orchid:orchid@postgres:5432/orchid
+```
+
+```md
+---
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: ~/.orchid/chats.db
+---
+```
+
+<a id="orchid-yml__storage.dsn"></a>
+### `storage.dsn`
+
+| | |
+|---|---|
+| **Short** | Database connection string or file path. |
+| **Detailed** | For SQLite this is a file path (supports `~` expansion). For PostgreSQL this is a `postgresql://` URI. |
+| **Default** | `~/.orchid/chats.db` |
+| **Env var** | `CHAT_DB_DSN` |
+
+<a id="orchid-yml__storage.extra_migrations_package"></a>
+### `storage.extra_migrations_package`
+
+| | |
+|---|---|
+| **Short** | Dotted package path for consumer-supplied migrations. |
+| **Detailed** | If your custom storage backend has its own Alembic migrations, reference the package here so they run alongside Orchid's built-in migrations on startup. |
+| **Default** | `null` |
+| **Env var** | `CHAT_EXTRA_MIGRATIONS_PACKAGE` |
+
+---
+
+<a id="orchid-yml__mcp_auth.token_store_class"></a>
+### `mcp_auth.token_store_class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to an `OrchidMCPTokenStore` subclass. |
+| **Detailed** | Stores per-user OAuth tokens for MCP servers configured with `auth.mode: oauth`. The SQLite backend shares the same database file as chat storage by default. |
+| **Default** | `orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore` |
+| **Env var** | `MCP_TOKEN_STORE_CLASS` |
+
+<a id="orchid-yml__mcp_auth.token_store_dsn"></a>
+### `mcp_auth.token_store_dsn`
+
+| | |
+|---|---|
+| **Short** | Database DSN for per-user MCP OAuth tokens. |
+| **Detailed** | Can share the same SQLite file as chat storage or use a separate connection. |
+| **Default** | `~/.orchid/chats.db` |
+| **Env var** | `MCP_TOKEN_STORE_DSN` |
+
+<a id="orchid-yml__mcp_auth.client_registration_store_class"></a>
+### `mcp_auth.client_registration_store_class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to an `OrchidMCPClientRegistrationStore` subclass. |
+| **Detailed** | Stores per-server OAuth endpoint metadata and dynamic client registration (DCR) credentials. Required when using MCP servers with `auth.mode: oauth`. |
+| **Default** | `orchid_ai.persistence.mcp_client_registration_sqlite.OrchidSQLiteMCPClientRegistrationStore` |
+| **Env var** | `MCP_CLIENT_REGISTRATION_STORE_CLASS` |
+
+<a id="orchid-yml__mcp_auth.client_registration_store_dsn"></a>
+### `mcp_auth.client_registration_store_dsn`
+
+| | |
+|---|---|
+| **Short** | Database DSN for MCP client registration data. |
+| **Default** | `~/.orchid/chats.db` |
+| **Env var** | `MCP_CLIENT_REGISTRATION_STORE_DSN` |
+
+---
+
+<a id="orchid-yml__checkpointer.type"></a>
+### `checkpointer.type`
+
+| | |
+|---|---|
+| **Short** | LangGraph state persistence backend. |
+| **Detailed** | Persists the LangGraph state machine across restarts. Without a checkpointer, in-flight conversations lose their graph state on process restart. `memory` stores state in RAM (lost on restart). `sqlite` and `postgres` provide durable persistence. A dotted class path enables custom backends. |
+| **Default** | `null` (disabled) |
+| **Available values** | `memory`, `sqlite`, `postgres`, or any dotted Python path to a `BaseCheckpointSaver` subclass |
+| **Env var** | `CHECKPOINTER_TYPE` |
+
+```yaml
+checkpointer:
+  type: sqlite
+  dsn: ~/.orchid/checkpoints.db
+```
+
+<a id="orchid-yml__checkpointer.dsn"></a>
+### `checkpointer.dsn`
+
+| | |
+|---|---|
+| **Short** | Connection string or file path for the checkpointer. |
+| **Detailed** | For `sqlite` this is a file path. For `postgres` this is a `postgresql://` URI. |
+| **Default** | `null` |
+| **Env var** | `CHECKPOINTER_DSN` |
+
+<Callout variant="warning" title="State loss without checkpointer">
+If `checkpointer.type` is null and the API process restarts, all in-progress conversations lose their graph state. Users will see errors or stale responses. Always configure a durable checkpointer (`sqlite` minimum) for production deployments.
+</Callout>
+
+---
+
+<a id="orchid-yml__api.base_url"></a>
+### `api.base_url`
+
+| | |
+|---|---|
+| **Short** | Public API URL used for OAuth callback construction. |
+| **Detailed** | The canonical URL of the Orchid API as seen by clients. Used when building OAuth redirect URIs and constructing absolute links in MCP gateway responses. |
+| **Default** | `http://localhost:8000` |
+| **Env var** | `API_BASE_URL` |
+
+```yaml
+api:
+  base_url: https://api.acme.example.com
+```
+
+<a id="orchid-yml__api.cors_allowed_origins"></a>
+### `api.cors_allowed_origins`
+
+| | |
+|---|---|
+| **Short** | Comma-separated list of allowed CORS browser origins. |
+| **Detailed** | Controls which frontend origins may call the API from a browser. The default allows the standard Next.js dev server on both `localhost` and Docker network hostnames. |
+| **Default** | `http://localhost:3000,http://frontend:3000` |
+| **Env var** | `CORS_ALLOWED_ORIGINS` |
+
+<a id="orchid-yml__api.allow_index_endpoint"></a>
+### `api.allow_index_endpoint`
+
+| | |
+|---|---|
+| **Short** | Enable the `POST /index` admin endpoint. |
+| **Detailed** | When enabled, the API exposes an endpoint that triggers full reindexing of all RAG documents. Disabled by default to prevent accidental or malicious denial-of-service via expensive indexing operations. |
+| **Default** | `false` |
+| **Available values** | `true`, `false` |
+| **Env var** | `ALLOW_INDEX_ENDPOINT` |
+
+<Callout variant="warning" title="Security">
+Enable only in dev or behind admin authentication. Full reindexing can be expensive (many LLM calls for embedding generation) and should not be exposed to untrusted callers.
+</Callout>
+
+---
+
+<a id="orchid-yml__tracing.langsmith_tracing"></a>
+### `tracing.langsmith_tracing`
+
+| | |
+|---|---|
+| **Short** | Enable LangSmith tracing. |
+| **Detailed** | Sends LangGraph execution traces to LangSmith for debugging, latency analysis, and prompt inspection. |
+| **Default** | `false` |
+| **Available values** | `true`, `false` |
+| **Env var** | `LANGSMITH_TRACING` |
+
+<a id="orchid-yml__tracing.langsmith_api_key"></a>
+### `tracing.langsmith_api_key`
+
+| | |
+|---|---|
+| **Short** | LangSmith API key. |
+| **Detailed** | Required when `langsmith_tracing` is enabled. Injected via environment variable. |
+| **Default** | `null` |
+| **Env var** | `LANGSMITH_API_KEY` |
+
+<a id="orchid-yml__tracing.langsmith_project"></a>
+### `tracing.langsmith_project`
+
+| | |
+|---|---|
+| **Short** | LangSmith project name. |
+| **Detailed** | Groups traces under a named project in the LangSmith dashboard. |
+| **Default** | `agents` |
+| **Env var** | `LANGSMITH_PROJECT` |
+
+---
+

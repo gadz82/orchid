@@ -29,7 +29,10 @@ export const navNodes: NavNode[] = [
   { href: '/packages/orchid-mcp', label: 'orchid-mcp', group: 'packages', order: 23 },
   { href: '/packages/orchid-frontend', label: 'orchid-frontend', group: 'packages', order: 24 },
 
-  { href: '/configuration', label: 'Configuration', group: 'configuration', order: 30 },
+  { href: '/configuration', label: 'Configuration Atlas', group: 'configuration', order: 30 },
+  { href: '/configuration-reference', label: 'Configuration Reference', group: 'configuration', order: 31 },
+  { href: '/configuration-reference/infrastructure', label: 'Infrastructure', group: 'configuration', order: 32 },
+  { href: '/configuration-reference/agents', label: 'Agents', group: 'configuration', order: 33 },
 
   { href: '/examples', label: 'Examples', group: 'examples', order: 40 },
   { href: '/examples/basketball', label: 'Basketball', group: 'examples', order: 41 },

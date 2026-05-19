@@ -431,25 +431,190 @@ DESCRIPTIONS: dict[str, str] = {
     "agents[].prompt_sections.resource_max_chars": "Character cap per MCP resource body.",
     # ── mcp_gateway ───────────────────────────────────────────
     "mcp_gateway": "MCP gateway exposure config — tool title/description overrides and MCP Prompts.",
-    "mcp_gateway[].tools": "Tool title/description overrides keyed by MCP tool name.",
-    "mcp_gateway[].prompts": "Pre-canned MCP Prompt templates exposed by the gateway.",
-    # ── events ────────────────────────────────────────────────
+    "mcp_gateway.tools": "Tool title/description overrides keyed by MCP tool name.",
+    "mcp_gateway.tools[].title": "Override title for the MCP tool shown to host LLMs.",
+    "mcp_gateway.tools[].description": "Override description for the MCP tool shown to host LLMs.",
+    "mcp_gateway.prompts": "Pre-canned MCP Prompt templates exposed by the gateway.",
+    "mcp_gateway.prompts[].name": "Unique prompt handle (must match ^[a-zA-Z_][a-zA-Z0-9_-]*$).",
+    "mcp_gateway.prompts[].title": "Display title for the prompt.",
+    "mcp_gateway.prompts[].description": "Description of what this prompt does.",
+    "mcp_gateway.prompts[].arguments": "Arguments accepted by this prompt template.",
+    "mcp_gateway.prompts[].arguments[].name": "Argument name (must match ^[a-zA-Z_][a-zA-Z0-9_-]*$).",
+    "mcp_gateway.prompts[].arguments[].description": "Description of this argument.",
+    "mcp_gateway.prompts[].arguments[].required": "Whether this argument must be provided.",
+    "mcp_gateway.prompts[].template": "Prompt body with {{arg_name}} placeholders.",
+    # ── defaults.cache_enabled ────────────────────────────────
+    "defaults.cache_enabled": "Activate a global in-memory LLM response cache (LangChain InMemoryCache). Identical prompts return cached results.",
+    # ── defaults.rag.retrieval.transformer_prompts ────────────
+    "defaults.rag.retrieval.transformer_prompts.multi_query": "Override prompt for the multi-query query transformer.",
+    "defaults.rag.retrieval.transformer_prompts.hyde.single": "HyDE prompt for a single hypothetical answer (n_hypothetical=1).",
+    "defaults.rag.retrieval.transformer_prompts.hyde.multi": "HyDE prompt for multiple hypothetical answers (uses {n} placeholder).",
+    "defaults.rag.retrieval.transformer_prompts.decompose": "Override prompt for the decompose query transformer.",
+    "defaults.rag.retrieval.transformer_prompts.reformulate": "Override prompt for the reformulate query transformer.",
+    # ── agents[].rag.retrieval.transformer_prompts ────────────
+    "agents[].rag.retrieval.transformer_prompts.multi_query": "Override prompt for the multi-query transformer for this agent.",
+    "agents[].rag.retrieval.transformer_prompts.hyde.single": "HyDE single-answer prompt for this agent.",
+    "agents[].rag.retrieval.transformer_prompts.hyde.multi": "HyDE multi-answer prompt for this agent.",
+    "agents[].rag.retrieval.transformer_prompts.decompose": "Override prompt for the decompose transformer for this agent.",
+    "agents[].rag.retrieval.transformer_prompts.reformulate": "Override prompt for the reformulate transformer for this agent.",
+    # ── agents[].prompt_sections (continued) ──────────────────
+    "agents[].prompt_sections.skipped_prompt_template": "Template for MCP prompts that require arguments (shown as available, not rendered).",
+    "agents[].prompt_sections.summarise_history_reminder": "Reminder block appended to the summarise system prompt when conversation history is present.",
+    "agents[].prompt_sections.summarise_prior_results_header": "Header for prior-turn tool results in the summarise system prompt.",
+    "agents[].prompt_sections.summarise_rag_section_header": "Header for the RAG block in the summarise user message.",
+    "agents[].prompt_sections.summarise_user_template": "User-content template for the summarise call ({query}, {rag_section}, {mcp_data}).",
+    "agents[].prompt_sections.summarise_prior_results_max_chars": "Max characters of prior-tool-results JSON in the summarise prompt.",
+    # ── tools[] (continued) ───────────────────────────────────
+    "tools[].parameters": "Parameter declarations for this tool (auto-extracted from Python signature when omitted).",
+    "tools[].parameters[].type": "Parameter type: 'string', 'int', 'float', or 'bool'.",
+    "tools[].parameters[].description": "Human-readable parameter description.",
+    "tools[].parameters[].required": "Whether this parameter must be provided.",
+    "tools[].parameters[].default": "Default value when the parameter is not provided.",
+    "tools[].rag.namespace": "Qdrant namespace for this tool's RAG data.",
+    "tools[].rag.k": "Number of chunks retrieved for this tool.",
+    "tools[].rag.enabled": "Enable RAG for this tool.",
+    "tools[].rag.rag_ttl": "RAG cache TTL for this tool in seconds.",
+    "tools[].rag.max_context_chars": "Max RAG context characters for this tool.",
+    "tools[].rag.ingestion.strategy": "Chunking strategy for this tool.",
+    "tools[].rag.ingestion.chunk_size": "Chunk size for this tool.",
+    "tools[].rag.ingestion.chunk_overlap": "Chunk overlap for this tool.",
+    "tools[].rag.ingestion.parent_chunk_size": "Parent chunk size for hierarchical chunking.",
+    "tools[].rag.ingestion.parent_chunk_overlap": "Parent chunk overlap.",
+    "tools[].rag.ingestion.post_processors": "Post-processors applied after chunking.",
+    "tools[].rag.retrieval.strategy": "Retrieval strategy for this tool.",
+    "tools[].rag.retrieval.query_transformers": "Query transformer chain for this tool.",
+    "tools[].rag.retrieval.metadata_filters": "Metadata filter expressions for this tool.",
+    "tools[].rag.retrieval.exclude_dynamic": "Exclude dynamically-injected output from retrieval.",
+    "tools[].rag.retrieval.hyde.n_hypothetical": "Number of hypothetical answers for HyDE queries.",
+    "tools[].rag.retrieval.hybrid.sparse_encoder": "Sparse encoder for hybrid retrieval.",
+    "tools[].rag.retrieval.hybrid.sparse_weight": "Weight of sparse score in linear fusion.",
+    "tools[].rag.retrieval.hybrid.fusion": "Fusion method for hybrid retrieval.",
+    "tools[].rag.retrieval.hybrid.rrf_k": "RRF constant k.",
+    "tools[].rag.retrieval.graph.enabled": "Enable graph-based retrieval.",
+    "tools[].rag.retrieval.graph.max_hops": "Maximum BFS depth for graph traversal.",
+    "tools[].rag.retrieval.graph.fuse_with_vectors": "Merge graph context with vector hits.",
+    "tools[].rag.retrieval.graph.relation_filter": "Restrict graph traversal to these edge labels.",
+    "tools[].rag.retrieval.transformer_prompts.multi_query": "Override multi-query prompt for this tool.",
+    "tools[].rag.retrieval.transformer_prompts.hyde.single": "HyDE single-answer prompt for this tool.",
+    "tools[].rag.retrieval.transformer_prompts.hyde.multi": "HyDE multi-answer prompt for this tool.",
+    "tools[].rag.retrieval.transformer_prompts.decompose": "Override decompose prompt for this tool.",
+    "tools[].rag.retrieval.transformer_prompts.reformulate": "Override reformulate prompt for this tool.",
+    "tools[].rag.payload_indexes": "Explicit Qdrant payload index declarations for this tool.",
+    # ── skills[] (continued) ──────────────────────────────────
+    "skills[].steps[].agent": "Agent name to invoke in this step.",
+    "skills[].steps[].instruction": "Hint passed to the invoked agent.",
+    # ── guardrails (continued) ────────────────────────────────
+    "guardrails.input[].type": "Guardrail type name (e.g. 'content_safety', 'pii_detection', 'prompt_injection').",
+    "guardrails.input[].fail_action": "Action on guardrail failure: 'block', 'warn', 'redact', or 'log'.",
+    "guardrails.input[].config": "Keyword arguments passed to the guardrail constructor.",
+    "guardrails.output[].type": "Guardrail type name.",
+    "guardrails.output[].fail_action": "Action on guardrail failure.",
+    "guardrails.output[].config": "Keyword arguments passed to the guardrail constructor.",
+    # ── agents[] (continued) ──────────────────────────────────
+    "agents[].tools": "Built-in tool names available to this agent (must match keys in top-level tools:).",
+    "agents[].skills[].steps[].tool": "Tool name (MCP tool or built-in) for this step.",
+    "agents[].skills[].steps[].source": "MCP server name, 'builtin', or None (= builtin).",
+    "agents[].skills[].steps[].arguments": "Static arguments for this tool call.",
+    "agents[].skills[].steps[].agent": "Agent name to invoke directly (bypasses supervisor).",
+    "agents[].skills[].steps[].instruction": "Query/instruction sent to the invoked agent.",
+    "agents[].guardrails.input[].type": "Guardrail type name.",
+    "agents[].guardrails.input[].fail_action": "Action on guardrail failure.",
+    "agents[].guardrails.input[].config": "Guardrail constructor kwargs.",
+    "agents[].guardrails.output[].type": "Guardrail type name.",
+    "agents[].guardrails.output[].fail_action": "Action on guardrail failure.",
+    "agents[].guardrails.output[].config": "Guardrail constructor kwargs.",
+    # ── agents[].children[] — propagated via _resolve_desc ────
+    # ── agents[].mcp_servers[].tools[].rag ────────────────────
+    "agents[].mcp_servers[].tools[].rag.namespace": "Qdrant namespace for this tool's RAG data.",
+    "agents[].mcp_servers[].tools[].rag.k": "Number of chunks retrieved for this tool.",
+    "agents[].mcp_servers[].tools[].rag.enabled": "Enable RAG for this tool.",
+    "agents[].mcp_servers[].tools[].rag.rag_ttl": "RAG cache TTL for this tool.",
+    "agents[].mcp_servers[].tools[].rag.max_context_chars": "Max RAG context characters for this tool.",
+    "agents[].mcp_servers[].tools[].rag.ingestion.strategy": "Chunking strategy for this tool.",
+    "agents[].mcp_servers[].tools[].rag.ingestion.chunk_size": "Chunk size for this tool.",
+    "agents[].mcp_servers[].tools[].rag.ingestion.chunk_overlap": "Chunk overlap for this tool.",
+    "agents[].mcp_servers[].tools[].rag.ingestion.parent_chunk_size": "Parent chunk size for this tool.",
+    "agents[].mcp_servers[].tools[].rag.ingestion.parent_chunk_overlap": "Parent chunk overlap for this tool.",
+    "agents[].mcp_servers[].tools[].rag.ingestion.post_processors": "Post-processors for this tool.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.strategy": "Retrieval strategy for this tool.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.query_transformers": "Query transformers for this tool.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.metadata_filters": "Metadata filters for this tool.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.exclude_dynamic": "Exclude dynamic output from retrieval.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.hyde.n_hypothetical": "HyDE hypothetical answer count.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.hybrid.sparse_encoder": "Sparse encoder for hybrid retrieval.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.hybrid.sparse_weight": "Sparse weight for linear fusion.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.hybrid.fusion": "Fusion method.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.hybrid.rrf_k": "RRF constant k.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.graph.enabled": "Enable graph retrieval.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.graph.max_hops": "Graph traversal depth.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.graph.fuse_with_vectors": "Merge graph with vector hits.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.graph.relation_filter": "Edge label filter.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.transformer_prompts.multi_query": "Override multi-query prompt.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.transformer_prompts.decompose": "Override decompose prompt.",
+    "agents[].mcp_servers[].tools[].rag.retrieval.transformer_prompts.reformulate": "Override reformulate prompt.",
+    "agents[].mcp_servers[].tools[].rag.payload_indexes": "Qdrant payload index declarations.",
+    # ── events (continued) ────────────────────────────────────
     "events.enabled": "Enable the Pollen + Bloom event-driven activation layer.",
     "events.store": "Event storage backend configuration.",
+    "events.store.class": "Dotted import path for the event store backend.",
+    "events.store.extra_args": "Additional keyword arguments for the store constructor.",
     "events.queue": "Signal queue backend configuration.",
+    "events.queue.class": "Dotted import path for the queue backend.",
+    "events.queue.notify_enabled": "Enable queue notifications.",
+    "events.queue.poll_interval_ms": "Queue poll interval in milliseconds (min 10).",
+    "events.queue.lease_seconds": "Message lease duration in seconds (min 1).",
+    "events.queue.max_attempts": "Maximum processing attempts per message (min 1).",
+    "events.queue.dead_letter_table": "Database table name for dead-letter messages.",
     "events.scheduler": "Scheduler backend (e.g. APScheduler) for cron-based triggers.",
+    "events.scheduler.class": "Dotted import path for the scheduler backend.",
+    "events.scheduler.extra_args": "Additional keyword arguments for the scheduler constructor.",
     "events.producers": "List of signal producer configurations.",
+    "events.producers[].class": "Dotted import path for the producer.",
+    "events.producers[].extra_args": "Additional keyword arguments for the producer constructor.",
     "events.processors": "List of signal processor / worker-pool configurations.",
-    "events.schedules": "Cron schedule definitions.",
-    "events.triggers": "Trigger definitions that map signals to agent activations.",
+    "events.processors[].class": "Dotted import path for the processor.",
+    "events.processors[].concurrency": "Number of concurrent worker tasks (min 1).",
+    "events.processors[].poll_interval_ms": "Processor poll interval in milliseconds (min 10).",
+    "events.processors[].lease_seconds": "Message lease duration in seconds (min 1).",
+    "events.processors[].max_attempts": "Maximum processing attempts (min 1).",
+    "events.processors[].drain_timeout_seconds": "Seconds to wait for in-flight messages during shutdown.",
+    "events.middleware": "Processing middleware applied to signals.",
+    "events.middleware[].class": "Dotted import path for the middleware.",
+    "events.middleware[].extra_args": "Additional keyword arguments for the middleware constructor.",
+    "events.ingestion": "Webhook source registry for inbound signals.",
+    "events.ingestion.sources": "Registered webhook sources.",
+    "events.ingestion.sources[].id": "Unique source identifier.",
+    "events.ingestion.sources[].validator": "Validator configuration for inbound webhooks.",
+    "events.ingestion.sources[].validator.class": "Dotted import path for the validator class (HMAC, bearer, mTLS, etc.).",
+    "events.ingestion.sources[].validator.secret_ref": "Secret reference for the validator (e.g. HMAC key).",
+    "events.ingestion.sources[].validator.extra_args": "Additional keyword arguments for the validator.",
+    "events.ingestion.sources[].allowed_types": "Signal types accepted from this source.",
+    "events.schedules": "Cron/interval schedule definitions.",
     "events.schedules[].id": "Unique schedule identifier.",
-    "events.schedules[].cron": "Cron expression (e.g. '0 7 * * 1-5' for weekday 07:00 UTC).",
-    "events.schedules[].trigger_id": "ID of the trigger this schedule fires.",
+    "events.schedules[].cron": "Cron expression (e.g. '0 7 * * 1-5' for weekday 07:00 UTC). Mutually exclusive with interval_seconds.",
+    "events.schedules[].interval_seconds": "Interval between runs in seconds. Mutually exclusive with cron.",
+    "events.schedules[].trigger_id": "ID of the trigger this schedule fires (must reference a trigger with signal: cron).",
+    "events.schedules[].identity": "Identity claim for the scheduled run.",
+    "events.schedules[].enabled": "Whether this schedule is active.",
+    "events.triggers": "Trigger definitions that map signals to agent activations.",
     "events.triggers[].id": "Unique trigger identifier.",
+    "events.triggers[].on": "Match conditions for this trigger.",
+    "events.triggers[].on.signal": "Signal name to match ('cron' reserved for time-driven triggers).",
+    "events.triggers[].on.cron": "Cron expression (required when signal='cron', rejected otherwise).",
+    "events.triggers[].on.when": "JMESPath boolean expression for conditional matching.",
+    "events.triggers[].emits": "Emission configuration when trigger fires.",
     "events.triggers[].emits.agent": "Agent to activate when this trigger fires.",
     "events.triggers[].emits.prompt_template": "Prompt template sent to the agent at activation.",
-    "events.triggers[].retry.max": "Maximum retry attempts for failed trigger runs.",
+    "events.triggers[].emits.identity": "Identity claim for the triggered run.",
+    "events.triggers[].emits.respect_chat_binding": "Respect chat_binding from the signal envelope (requires non-service-account identity).",
+    "events.triggers[].emits.proactive_chat": "Create a new chat for the resolved user (requires non-service-account identity).",
+    "events.triggers[].emits.visibility": "Visibility override: 'actor', 'addressed', 'tenant', 'admin'.",
+    "events.triggers[].retry": "Retry policy for failed trigger runs.",
+    "events.triggers[].retry.max": "Maximum retry attempts (0 = no retry).",
     "events.triggers[].retry.backoff": "Retry backoff strategy: 'fixed', 'linear', or 'exponential'.",
+    "events.triggers[].retry.jitter": "Add jitter to backoff timing.",
+    "events.triggers[].retry.initial_delay_seconds": "Initial delay before first retry (seconds).",
+    "events.triggers[].retry.max_delay_seconds": "Maximum delay between retries (seconds).",
     "events.triggers[].parallelism": "Parallelism mode: 'per_user', 'per_tenant', or 'unbounded'.",
 }
 
@@ -504,6 +669,28 @@ ORCHID_YML_DEFAULTS: dict[str, Any] = {
 }
 
 
+# ── Description propagation ──────────────────────────────────────────────────
+# When a nested path (e.g. agents[].children[].rag.k) has no explicit
+# description, strip the "children[]" prefix and look up the canonical path
+# (e.g. agents[].rag.k).  This avoids duplicating hundreds of entries for
+# recursively-nested agent children.
+
+def _resolve_description(path: str) -> str:
+    """Look up a description, stripping children[] nesting if needed."""
+    desc = DESCRIPTIONS.get(path)
+    if desc:
+        return desc
+    # Strip all children[] segments to find the canonical path
+    # e.g. "agents[].children[].children[].rag.k" → "agents[].rag.k"
+    canonical = path
+    while ".children[]" in canonical:
+        canonical = canonical.replace(".children[]", "", 1)
+    desc = DESCRIPTIONS.get(canonical)
+    if desc:
+        return desc
+    return ""
+
+
 # ── Schema builders ──────────────────────────────────────────────────────────
 
 def _build_orchid_yml_entries(yaml_files: dict[str, str]) -> list[dict[str, Any]]:
@@ -543,6 +730,7 @@ def _walk_model(
     visited: frozenset[str],
     depth: int = 0,
     max_depth: int = 6,
+    children_depth: int = 0,
 ) -> list[dict[str, Any]]:
     """Recursively walk a Pydantic model, emitting one entry per field."""
     if depth > max_depth:
@@ -570,10 +758,18 @@ def _walk_model(
 
         # -- Decide how to handle the field --
 
+        # Cap children recursion at depth 1 — runtime only handles agents[].children[]
+        is_children_field = yaml_key == "children"
+        next_children_depth = children_depth + (1 if is_children_field else 0)
+        if next_children_depth > 1:
+            # Skip entirely: graph builder, MCP inventory, and auth registry do not
+            # handle grandchildren. Do not emit the field nor recurse into it.
+            continue
+
         # Direct Pydantic model → recurse silently (model acts as a namespace)
         if _is_pydantic_model(effective):
             entries.extend(
-                _walk_model(effective, path, file, yaml_files, visited, depth + 1, max_depth)
+                _walk_model(effective, path, file, yaml_files, visited, depth + 1, max_depth, next_children_depth)
             )
             continue
 
@@ -582,7 +778,7 @@ def _walk_model(
         if list_inner is not None and _is_pydantic_model(list_inner):
             entries.append(_make_entry(field_name, field_info, path, file, yaml_files, f"list[object]"))
             entries.extend(
-                _walk_model(list_inner, f"{path}[]", file, yaml_files, visited, depth + 1, max_depth)
+                _walk_model(list_inner, f"{path}[]", file, yaml_files, visited, depth + 1, max_depth, next_children_depth)
             )
             continue
 
@@ -591,7 +787,7 @@ def _walk_model(
         if dict_inner is not None and _is_pydantic_model(dict_inner):
             entries.append(_make_entry(field_name, field_info, path, file, yaml_files, f"dict[string, object]"))
             entries.extend(
-                _walk_model(dict_inner, f"{path}[]", file, yaml_files, visited, depth + 1, max_depth)
+                _walk_model(dict_inner, f"{path}[]", file, yaml_files, visited, depth + 1, max_depth, next_children_depth)
             )
             continue
 
@@ -625,7 +821,7 @@ def _make_entry(
         "type": type_,
         "required": required,
         "default": default,
-        "description": DESCRIPTIONS.get(path, ""),
+        "description": _resolve_description(path),
         "deprecated": False,
         "examples": examples,
     }

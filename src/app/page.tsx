@@ -68,6 +68,17 @@ agents:
       - assess_motivation
       - suggest_mental_strategy`;
 
+const AGENTS_MD = `---
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+---
+
+Orchid infrastructure config.`;
+
 const RUNTIME_TABS = [
   {
     language: 'bash' as const,
@@ -207,16 +218,19 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── One YAML, three runtimes ────────────────────────── */}
+        {/* ── One config, two formats, three runtimes ─────────── */}
         <section className="mb-16">
-          <h2 className="text-2xl font-bold text-orchid-text mb-2">One config. Three runtimes.</h2>
+          <h2 className="text-2xl font-bold text-orchid-text mb-2">One config. Two formats. Three runtimes.</h2>
           <p className="text-orchid-muted mb-6 text-sm">
-            The same agents.yaml works with the API, CLI, and MCP gateway.
+            The same agent definition works in YAML or Markdown — with the API, CLI, and MCP gateway.
           </p>
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1 min-w-0">
               <CodeBlock
-                tabs={[{ language: 'yaml', label: 'agents.yaml', code: AGENTS_YAML }]}
+                tabs={[
+                  { language: 'yaml', label: 'agents.yaml', code: AGENTS_YAML },
+                  { language: 'yaml', label: 'orchid.md', code: AGENTS_MD },
+                ]}
               />
             </div>
             <div className="flex-1 min-w-0">

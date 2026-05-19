@@ -1,0 +1,2200 @@
+---
+title: "Agents Configuration"
+description: "Detailed reference for every agents.yaml property — defaults, supervisor, agents, tools, skills, guardrails, events."
+package: "cross-cutting"
+section: "configuration"
+order: 32
+tags: ["configuration", "yaml", "markdown", "reference", "properties"]
+sources: []
+related: ["/configuration", "/configuration-reference"]
+example: ""
+external: []
+---
+
+## Index
+
+**version**
+- [`version`](#agents-yaml__version)
+
+**defaults**
+- [`defaults`](#agents-yaml__defaults)
+  - [`defaults.llm`](#agents-yaml__defaults.llm)
+  - [`defaults.rag`](#agents-yaml__defaults.rag)
+    - [`defaults.rag.ingestion`](#agents-yaml__defaults.rag.ingestion)
+    - [`defaults.rag.retrieval`](#agents-yaml__defaults.rag.retrieval)
+      - [`defaults.rag.retrieval.hyde`](#agents-yaml__defaults.rag.retrieval.hyde)
+      - [`defaults.rag.retrieval.hybrid`](#agents-yaml__defaults.rag.retrieval.hybrid)
+      - [`defaults.rag.retrieval.graph`](#agents-yaml__defaults.rag.retrieval.graph)
+      - [`defaults.rag.retrieval.transformer_prompts`](#agents-yaml__defaults.rag.retrieval.transformer_prompts)
+  - [`defaults.cache_enabled`](#agents-yaml__defaults.cache_enabled)
+
+**supervisor**
+- [`supervisor`](#agents-yaml__supervisor)
+  - [`supervisor.assistant_name`](#agents-yaml__supervisor.assistant_name)
+  - [`supervisor.fallback_model`](#agents-yaml__supervisor.fallback_model)
+  - [`supervisor.streaming_enabled`](#agents-yaml__supervisor.streaming_enabled)
+  - [`supervisor.routing_system_prompt`](#agents-yaml__supervisor.routing_system_prompt)
+  - [`supervisor.synthesis_system_prompt`](#agents-yaml__supervisor.synthesis_system_prompt)
+  - [`supervisor.sequential_advance_prompt`](#agents-yaml__supervisor.sequential_advance_prompt)
+  - [`supervisor.history_max_turns`](#agents-yaml__supervisor.history_max_turns)
+  - [`supervisor.history_max_chars`](#agents-yaml__supervisor.history_max_chars)
+  - [`supervisor.routing_model`](#agents-yaml__supervisor.routing_model)
+  - [`supervisor.history_summary_enabled`](#agents-yaml__supervisor.history_summary_enabled)
+  - [`supervisor.history_summary_model`](#agents-yaml__supervisor.history_summary_model)
+  - [`supervisor.history_summary_recent_turns`](#agents-yaml__supervisor.history_summary_recent_turns)
+  - [`supervisor.skip_synthesis_when_single_agent`](#agents-yaml__supervisor.skip_synthesis_when_single_agent)
+
+**agents[]**
+- [`agents[]`](#agents-yaml__agents[])
+  - [`agents[].name`](#agents-yaml__agents[].name)
+  - [`agents[].description`](#agents-yaml__agents[].description)
+  - [`agents[].prompt`](#agents-yaml__agents[].prompt)
+  - [`agents[].class`](#agents-yaml__agents[].class)
+  - [`agents[].parallel_tools`](#agents-yaml__agents[].parallel_tools)
+  - [`agents[].llm`](#agents-yaml__agents[].llm)
+  - [`agents[].rag`](#agents-yaml__agents[].rag)
+  - [`agents[].mcp_servers[]`](#agents-yaml__agents[].mcp_servers[])
+  - [`agents[].execution_hints`](#agents-yaml__agents[].execution_hints)
+  - [`agents[].tools`](#agents-yaml__agents[].tools)
+  - [`agents[].skills`](#agents-yaml__agents[].skills)
+  - [`agents[].guardrails`](#agents-yaml__agents[].guardrails)
+  - [`agents[].children`](#agents-yaml__agents[].children)
+  - [`agents[].mini_agent`](#agents-yaml__agents[].mini_agent)
+  - [`agents[].prompt_sections`](#agents-yaml__agents[].prompt_sections)
+
+**tools[]**
+- [`tools[]`](#agents-yaml__tools[])
+  - [`tools[].handler`](#agents-yaml__tools[].handler)
+  - [`tools[].description`](#agents-yaml__tools[].description)
+  - [`tools[].parameters`](#agents-yaml__tools[].parameters)
+  - [`tools[].inject_to_rag`](#agents-yaml__tools[].inject_to_rag)
+  - [`tools[].rag_ttl`](#agents-yaml__tools[].rag_ttl)
+  - [`tools[].requires_approval`](#agents-yaml__tools[].requires_approval)
+  - [`tools[].parallel_safe`](#agents-yaml__tools[].parallel_safe)
+
+**skills[]**
+- [`skills[]`](#agents-yaml__skills[])
+  - [`skills[].description`](#agents-yaml__skills[].description)
+  - [`skills[].steps`](#agents-yaml__skills[].steps)
+
+**guardrails**
+- [`guardrails`](#agents-yaml__guardrails)
+  - [`guardrails.input`](#agents-yaml__guardrails.input)
+  - [`guardrails.output`](#agents-yaml__guardrails.output)
+
+**mcp_gateway**
+- [`mcp_gateway`](#agents-yaml__mcp_gateway)
+  - [`mcp_gateway.tools`](#agents-yaml__mcp_gateway.tools)
+  - [`mcp_gateway.prompts`](#agents-yaml__mcp_gateway.prompts)
+
+**events**
+- [`events`](#agents-yaml__events)
+  - [`events.enabled`](#agents-yaml__events.enabled)
+  - [`events.store`](#agents-yaml__events.store)
+  - [`events.queue`](#agents-yaml__events.queue)
+  - [`events.scheduler`](#agents-yaml__events.scheduler)
+  - [`events.producers`](#agents-yaml__events.producers)
+  - [`events.processors`](#agents-yaml__events.processors)
+  - [`events.middleware`](#agents-yaml__events.middleware)
+  - [`events.ingestion`](#agents-yaml__events.ingestion)
+  - [`events.schedules`](#agents-yaml__events.schedules)
+  - [`events.triggers`](#agents-yaml__events.triggers)
+
+---
+
+---
+
+<a id="agents-yaml__defaults"></a>
+### `defaults`
+
+Top-level defaults inherited by every agent unless explicitly overridden per-agent. Think of this as the global agent template.
+
+<a id="agents-yaml__defaults.llm"></a>
+#### `defaults.llm`
+
+| | |
+|---|---|
+| **Short** | Default LLM settings for all agents. |
+| **Detailed** | Every agent that does not specify its own `llm` block inherits these values. This is the most common place to set the primary model and fallback. |
+
+##### `defaults.llm.model`
+
+| | |
+|---|---|
+| **Short** | Default LLM model for all agents. |
+| **Detailed** | LiteLLM `provider/model-name` format. Used for agent reasoning, tool calling, and summarisation when no per-agent override exists. |
+| **Default** | `gemini/gemini-2.5-flash` |
+| **Available values** | Any LiteLLM-compatible model string |
+
+##### `defaults.llm.temperature`
+
+| | |
+|---|---|
+| **Short** | Sampling temperature. |
+| **Detailed** | Controls randomness. Lower values (0.0–0.3) produce more deterministic, repeatable outputs. Higher values (0.7–1.0) increase creativity and variation. For tool-calling agents, keep this low to ensure consistent JSON formatting. |
+| **Default** | `0.2` |
+| **Available values** | `0.0` to `2.0` (provider-dependent) |
+
+<Callout variant="warning" title="Tool-calling temperature">
+High temperatures cause malformed tool-call JSON and hallucinated function names. Keep `temperature` `<=` 0.3 for agents that rely on structured tool calls.
+</Callout>
+
+##### `defaults.llm.fallback_model`
+
+| | |
+|---|---|
+| **Short** | Fallback model when the primary fails. |
+| **Detailed** | When the primary model returns a 503, rate-limit error, or timeout, Orchid automatically retries with this fallback model. The fallback is tried once per request. |
+| **Default** | `null` |
+| **Available values** | Any LiteLLM-compatible model string, or `null` to disable |
+
+<Callout variant="warning" title="Always set in production">
+Always configure a fallback model in production. Pair a cloud-hosted primary with a local Ollama model so the service degrades gracefully during provider outages rather than returning errors to users.
+</Callout>
+
+##### `defaults.llm.retry_attempts`
+
+| | |
+|---|---|
+| **Short** | Retry count on transient LLM errors. |
+| **Detailed** | When > 0, transient errors (network timeouts, 5xx responses) are retried with exponential backoff. 0 means no automatic retry — the error surfaces to the user immediately. |
+| **Default** | `0` |
+| **Available values** | `0` or any positive integer |
+
+```yaml
+defaults:
+  llm:
+    model: gemini/gemini-2.5-flash
+    temperature: 0.2
+    fallback_model: ollama/llama3.2
+    retry_attempts: 2
+```
+
+```md
+---
+defaults:
+  llm:
+    model: openai/gpt-4o
+    temperature: 0.1
+    fallback_model: groq/llama-3.3-70b-versatile
+---
+```
+
+---
+
+<a id="agents-yaml__defaults.rag"></a>
+#### `defaults.rag`
+
+| | |
+|---|---|
+| **Short** | Default RAG settings for all agents. |
+| **Detailed** | Retrieval-Augmented Generation configuration that applies globally unless overridden per-agent. |
+
+##### `defaults.rag.k`
+
+| | |
+|---|---|
+| **Short** | Number of chunks retrieved per query. |
+| **Detailed** | The top-k chunks returned by vector similarity search. Higher values surface more documents but increase prompt size and cost. Lower values improve precision but may miss relevant context. |
+| **Default** | `5` |
+
+<Callout variant="warning" title="Tuning retrieval count">
+Raise `k` for knowledge-base agents that must surface multiple relevant documents per query (e.g. catalog search, document Q&A). Lower it for precision-focused agents to keep prompts concise and reduce hallucination from noisy context.
+</Callout>
+
+##### `defaults.rag.enabled`
+
+| | |
+|---|---|
+| **Short** | Enable RAG context retrieval. |
+| **Detailed** | Master switch. When disabled, no vector retrieval runs and no RAG context is injected into prompts. Useful for agents that rely purely on tools or static prompts. |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+##### `defaults.rag.rag_ttl`
+
+| | |
+|---|---|
+| **Short** | Cache TTL for RAG results in seconds. |
+| **Detailed** | When > 0, repeated queries within the TTL window reuse the previous retrieval result without hitting the vector database. 0 disables caching — every query triggers a fresh retrieval. |
+| **Default** | `0` |
+
+<Callout variant="warning" title="Cache freshness vs cost">
+Set a non-zero TTL (e.g. 300–600 seconds) for agents with stable knowledge bases to reduce Qdrant load and latency. Set to 0 for real-time data agents where documents change frequently.
+</Callout>
+
+##### `defaults.rag.max_context_chars`
+
+| | |
+|---|---|
+| **Short** | Maximum characters of RAG context injected into prompts. |
+| **Detailed** | A hard cap on the RAG context block size. Even if `k` retrieves 10 chunks, the total injected text is truncated to this limit. Prevents oversized prompts from consuming the LLM's context window. |
+| **Default** | `3000` |
+
+---
+
+<a id="agents-yaml__defaults.rag.ingestion"></a>
+#### `defaults.rag.ingestion`
+
+Document ingestion settings that control how documents are split and processed before embedding.
+
+##### `defaults.rag.ingestion.strategy`
+
+| | |
+|---|---|
+| **Short** | Chunking strategy name. |
+| **Detailed** | The algorithm used to split documents into chunks before embedding. Each strategy balances semantic coherence with retrieval granularity differently. |
+| **Default** | `recursive` (inherited when `null`) |
+| **Available values** | `recursive`, `semantic`, `hierarchical`, `headered` |
+
+- **`recursive`** — Splits text recursively by separators (paragraphs, sentences, words) until chunks fit `chunk_size`. Best general-purpose choice.
+- **`semantic`** — Uses an embedding model to detect semantic boundaries and split at natural topic transitions. Higher quality but slower and more expensive.
+- **`hierarchical`** — Creates parent-child chunk relationships. Parent chunks provide broad context; child chunks enable precise retrieval. Requires `parent_chunk_size` > 0.
+- **`headered`** — Splits at Markdown/HTML headers, preserving document structure. Ideal for well-structured documentation.
+
+##### `defaults.rag.ingestion.chunk_size`
+
+| | |
+|---|---|
+| **Short** | Text chunk size in characters. |
+| **Default** | `1000` |
+
+##### `defaults.rag.ingestion.chunk_overlap`
+
+| | |
+|---|---|
+| **Short** | Character overlap between consecutive chunks. |
+| **Default** | `200` |
+
+##### `defaults.rag.ingestion.parent_chunk_size`
+
+| | |
+|---|---|
+| **Short** | Parent chunk size for hierarchical chunking. |
+| **Detailed** | When > 0, enables hierarchical parent-child layout. Parent chunks are embedded separately and stored in chunk metadata. Child chunks are used for precise retrieval; parent chunks provide broader context. |
+| **Default** | `0` (disabled) |
+
+##### `defaults.rag.ingestion.parent_chunk_overlap`
+
+| | |
+|---|---|
+| **Short** | Overlap for parent chunks. |
+| **Default** | `200` |
+
+##### `defaults.rag.ingestion.post_processors`
+
+| | |
+|---|---|
+| **Short** | Post-processing pipeline applied after chunking. |
+| **Detailed** | Ordered list of post-processor names that transform chunks after initial splitting. |
+| **Default** | `[]` |
+| **Available values** | `contextual_headers`, `entity_extraction` |
+
+- **`contextual_headers`** — Prepends a contextually-aware header to each chunk describing what document it came from.
+- **`entity_extraction`** — Extracts named entities and relationships for GraphRAG. Requires `retrieval.graph.enabled: true`.
+
+```yaml
+defaults:
+  rag:
+    ingestion:
+      strategy: hierarchical
+      chunk_size: 1000
+      chunk_overlap: 200
+      parent_chunk_size: 4000
+      parent_chunk_overlap: 400
+      post_processors:
+        - contextual_headers
+```
+
+---
+
+<a id="agents-yaml__defaults.rag.retrieval"></a>
+#### `defaults.rag.retrieval`
+
+Query retrieval settings that control how user queries are transformed and matched against the vector store.
+
+##### `defaults.rag.retrieval.strategy`
+
+| | |
+|---|---|
+| **Short** | Retrieval strategy name. |
+| **Detailed** | The algorithm used to match queries against embedded chunks. Different strategies optimise for different query types and content characteristics. |
+| **Default** | `simple` (inherited when `null`) |
+| **Available values** | `simple`, `multi_query`, `hyde`, `hybrid`, `graph_rag` |
+
+- **`simple`** — Cosine similarity between query embedding and chunk embeddings. Fast, baseline quality.
+- **`multi_query`** — Generates multiple paraphrased versions of the query and retrieves for each, then deduplicates. Improves recall for ambiguous or paraphrased questions.
+- **`hyde`** — Generates a hypothetical answer to the query, embeds that answer, and retrieves chunks similar to the hypothetical answer. Excellent for dense technical knowledge where exact keyword matches are unreliable.
+- **`hybrid`** — Combines dense vector similarity with sparse keyword matching (BM25 or SPLADE). Best when exact keyword matches matter alongside semantic similarity.
+- **`graph_rag`** — Traverses an entity-relationship graph extracted during ingestion. Requires `entity_extraction` post-processor and `graph.enabled: true`.
+
+<Callout variant="warning" title="Strategy selection">
+Start with `simple`. Switch to `multi_query` when single-query retrieval misses paraphrased or ambiguous questions. Use `hyde` for domains where hypothetical answers improve recall (dense technical knowledge). Use `hybrid` when exact keyword matches matter alongside semantic similarity.
+</Callout>
+
+##### `defaults.rag.retrieval.query_transformers`
+
+| | |
+|---|---|
+| **Short** | Ordered list of query transformer names. |
+| **Detailed** | Pre-strategy and strategy-level transformers that rewrite or expand queries before retrieval. Pre-strategy transformers (e.g. `reformulate`) run at turn entry. Strategy-level transformers (e.g. `multi_query`, `hyde`, `decompose`) are forwarded to the active strategy. |
+| **Default** | `null` (inherits from defaults, effectively `[]`) |
+| **Available values** | `reformulate`, `multi_query`, `hyde`, `decompose` |
+
+##### `defaults.rag.retrieval.metadata_filters`
+
+| | |
+|---|---|
+| **Short** | Metadata filter expressions applied to all retrievals. |
+| **Detailed** | An operator mini-language for filtering retrieved chunks by metadata fields. Supports equality, range, and boolean operators. |
+| **Default** | `{}` |
+
+##### `defaults.rag.retrieval.exclude_dynamic`
+
+| | |
+|---|---|
+| **Short** | Exclude dynamically-injected tool output from retrieval. |
+| **Detailed** | When `true`, adds a `dynamic: {"not": true}` clause to prevent re-retrieving chunks that were dynamically injected by tool calls in previous turns. Prevents circular retrieval of tool-generated content. |
+| **Default** | `false` |
+
+---
+
+<a id="agents-yaml__defaults.rag.retrieval.hyde"></a>
+#### `defaults.rag.retrieval.hyde`
+
+HyDE-specific retrieval knobs.
+
+##### `defaults.rag.retrieval.hyde.n_hypothetical`
+
+| | |
+|---|---|
+| **Short** | Number of hypothetical answers generated per query. |
+| **Detailed** | Classic HyDE uses 1 hypothetical answer. Increasing this grows recall at the cost of additional LLM calls (one per hypothetical answer). Each hypothetical answer is embedded separately and retrieval results are merged. |
+| **Default** | `1` |
+
+```yaml
+defaults:
+  rag:
+    retrieval:
+      strategy: hyde
+      hyde:
+        n_hypothetical: 3
+```
+
+---
+
+<a id="agents-yaml__defaults.rag.retrieval.hybrid"></a>
+#### `defaults.rag.retrieval.hybrid`
+
+Hybrid retrieval knobs (sparse + dense).
+
+##### `defaults.rag.retrieval.hybrid.sparse_encoder`
+
+| | |
+|---|---|
+| **Short** | Sparse encoder type for keyword matching. |
+| **Default** | `bm25` |
+| **Available values** | `bm25`, `splade` |
+
+##### `defaults.rag.retrieval.hybrid.sparse_weight`
+
+| | |
+|---|---|
+| **Short** | Weight of the sparse signal in linear fusion. |
+| **Detailed** | Only used when `fusion` is `linear`. 0.0 = pure dense vectors. 1.0 = pure sparse keywords. 0.4–0.5 is a good starting point for most domains. |
+| **Default** | `0.4` |
+
+##### `defaults.rag.retrieval.hybrid.fusion`
+
+| | |
+|---|---|
+| **Short** | Fusion method for combining sparse and dense rankings. |
+| **Default** | `rrf` |
+| **Available values** | `rrf`, `linear` |
+
+- **`rrf`** — Reciprocal Rank Fusion. Parameter-free. Ranks are combined as `1 / (k + rank)` where k defaults to 60. Good default choice.
+- **`linear`** — Weighted linear combination using `sparse_weight`. More tunable but requires calibration.
+
+##### `defaults.rag.retrieval.hybrid.rrf_k`
+
+| | |
+|---|---|
+| **Short** | RRF constant k. |
+| **Detailed** | The constant used in the Reciprocal Rank Fusion formula. Default 60 follows Cormack et al. Lower values emphasise top-ranked documents more heavily. |
+| **Default** | `60` |
+
+---
+
+<a id="agents-yaml__defaults.rag.retrieval.graph"></a>
+#### `defaults.rag.retrieval.graph`
+
+GraphRAG-specific retrieval knobs.
+
+##### `defaults.rag.retrieval.graph.enabled`
+
+| | |
+|---|---|
+| **Short** | Enable graph entity extraction during ingestion. |
+| **Detailed** | When enabled, the `entity_extraction` post-processor extracts entities and relationships from chunks and builds a knowledge graph. This graph is then traversed at retrieval time. |
+| **Default** | `false` |
+
+##### `defaults.rag.retrieval.graph.max_hops`
+
+| | |
+|---|---|
+| **Short** | Maximum BFS depth from seed entities. |
+| **Detailed** | How many relationship hops to traverse from each seed entity found in the query. Higher values surface more connected context but increase retrieval time and noise. |
+| **Default** | `2` |
+
+##### `defaults.rag.retrieval.graph.fuse_with_vectors`
+
+| | |
+|---|---|
+| **Short** | Merge graph context with vector hits. |
+| **Detailed** | When `true`, the retrieved subgraph is serialised and appended alongside standard vector retrieval results. When `false`, only graph context is returned (no vector hits). |
+| **Default** | `true` |
+
+##### `defaults.rag.retrieval.graph.relation_filter`
+
+| | |
+|---|---|
+| **Short** | Restrict graph traversal to specific edge labels. |
+| **Detailed** | When non-empty, only traverse edges with these relationship types. Useful for domain-specific graphs where only certain relation types are relevant. |
+| **Default** | `[]` |
+
+```yaml
+defaults:
+  rag:
+    retrieval:
+      strategy: graph_rag
+      graph:
+        enabled: true
+        max_hops: 3
+        relation_filter:
+          - works_for
+          - manages
+```
+
+---
+
+<a id="agents-yaml__defaults.rag.retrieval.transformer_prompts"></a>
+#### `defaults.rag.retrieval.transformer_prompts`
+
+Override prompts for the built-in query transformers.
+
+##### `defaults.rag.retrieval.transformer_prompts.multi_query`
+
+| | |
+|---|---|
+| **Short** | Override prompt for the multi-query transformer. |
+| **Detailed** | Replaces the default prompt that asks the LLM to generate paraphrased query variants. Use this to tailor paraphrasing style to your domain. |
+| **Default** | `null` (module-level default) |
+
+##### `defaults.rag.retrieval.transformer_prompts.hyde`
+
+###### `defaults.rag.retrieval.transformer_prompts.hyde.single`
+
+| | |
+|---|---|
+| **Short** | HyDE prompt for a single hypothetical answer. |
+| **Default** | `null` (module-level default) |
+
+###### `defaults.rag.retrieval.transformer_prompts.hyde.multi`
+
+| | |
+|---|---|
+| **Short** | HyDE prompt for multiple hypothetical answers. |
+| **Detailed** | Uses a `{'{n}'}` placeholder that is replaced with the value of `n_hypothetical`. |
+| **Default** | `null` (module-level default) |
+
+##### `defaults.rag.retrieval.transformer_prompts.decompose`
+
+| | |
+|---|---|
+| **Short** | Override prompt for the decompose transformer. |
+| **Detailed** | Replaces the default prompt that breaks complex queries into sub-queries. |
+| **Default** | `null` (module-level default) |
+
+##### `defaults.rag.retrieval.transformer_prompts.reformulate`
+
+| | |
+|---|---|
+| **Short** | Override prompt for the reformulate transformer. |
+| **Detailed** | Replaces the default prompt that reformulates the query for better retrieval. |
+| **Default** | `null` (module-level default) |
+
+---
+
+<a id="agents-yaml__defaults.cache_enabled"></a>
+#### `defaults.cache_enabled`
+
+| | |
+|---|---|
+| **Short** | Enable global in-memory LLM response cache. |
+| **Detailed** | Activates LangChain's `InMemoryCache` via `set_llm_cache()`. Identical prompts (same model, messages, temperature) return cached results without an LLM call. Cache lives for the process lifetime and is lost on restart. |
+| **Default** | `false` |
+| **Available values** | `true`, `false` |
+
+<Callout variant="warning" title="Cache scope and invalidation">
+The cache key includes the full prompt text, model string, and temperature. Changing any of these invalidates the cache entry. There is no explicit cache invalidation API — restart the process to clear. Do not enable if your agents produce time-sensitive or user-specific outputs that must vary per call.
+</Callout>
+
+```yaml
+defaults:
+  cache_enabled: true
+```
+
+---
+
+<a id="agents-yaml__supervisor"></a>
+### `supervisor`
+
+The supervisor is the central orchestrator that routes queries to agents, manages multi-turn conversation state, and synthesises final responses.
+
+<a id="agents-yaml__supervisor.assistant_name"></a>
+#### `supervisor.assistant_name`
+
+| | |
+|---|---|
+| **Short** | Display name for the AI assistant. |
+| **Detailed** | Used in supervisor prompts and shown in the UI. Customise to match your product branding. |
+| **Default** | `"AI assistant"` |
+
+```yaml
+supervisor:
+  assistant_name: "Orchid Helpdesk"
+```
+
+```md
+---
+supervisor:
+  assistant_name: "Acme Support Bot"
+---
+```
+
+<a id="agents-yaml__supervisor.fallback_model"></a>
+#### `supervisor.fallback_model`
+
+| | |
+|---|---|
+| **Short** | Fallback LLM for the supervisor. |
+| **Detailed** | Overrides `defaults.llm.fallback_model` specifically for supervisor operations (routing, synthesis, sequential advance). Useful when the supervisor needs a different fallback than agents. |
+| **Default** | `null` (inherits `defaults.llm.fallback_model`) |
+
+<a id="agents-yaml__supervisor.streaming_enabled"></a>
+#### `supervisor.streaming_enabled`
+
+| | |
+|---|---|
+| **Short** | Enable SSE streaming for responses. |
+| **Detailed** | When enabled, the API returns `text/event-stream` responses with tokens arriving as they are generated. When disabled, responses are buffered and returned as complete JSON. |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+<a id="agents-yaml__supervisor.routing_system_prompt"></a>
+#### `supervisor.routing_system_prompt`
+
+| | |
+|---|---|
+| **Short** | Custom system prompt for the routing phase. |
+| **Detailed** | Replaces the default template that tells the supervisor how to classify queries and select agents. Use this to inject domain-specific routing instructions. |
+| **Default** | `null` (built-in template) |
+
+<a id="agents-yaml__supervisor.synthesis_system_prompt"></a>
+#### `supervisor.synthesis_system_prompt`
+
+| | |
+|---|---|
+| **Short** | Custom system prompt for the synthesis phase. |
+| **Detailed** | Replaces the default template that tells the supervisor how to combine agent outputs into a coherent final response. |
+| **Default** | `null` (built-in template) |
+
+<a id="agents-yaml__supervisor.sequential_advance_prompt"></a>
+#### `supervisor.sequential_advance_prompt`
+
+| | |
+|---|---|
+| **Short** | Custom handoff prompt for sequential multi-agent flows. |
+| **Detailed** | Used when agents are chained sequentially (one after another). Replaces the default template that tells the supervisor how to pass state between agents. |
+| **Default** | `null` (built-in template) |
+
+<a id="agents-yaml__supervisor.history_max_turns"></a>
+#### `supervisor.history_max_turns`
+
+| | |
+|---|---|
+| **Short** | Maximum conversation exchange pairs retained. |
+| **Detailed** | The supervisor keeps the most recent N user/assistant exchange pairs in context (up to 2xN messages). Older turns are dropped or summarised depending on `history_summary_enabled`. |
+| **Default** | `20` |
+
+<a id="agents-yaml__supervisor.history_max_chars"></a>
+#### `supervisor.history_max_chars`
+
+| | |
+|---|---|
+| **Short** | Maximum characters per message before truncation. |
+| **Detailed** | Individual messages longer than this are truncated with a `...` suffix. Prevents a single oversized message from consuming the entire context window. |
+| **Default** | `1000` |
+
+<a id="agents-yaml__supervisor.routing_model"></a>
+#### `supervisor.routing_model`
+
+| | |
+|---|---|
+| **Short** | Cheaper/faster LLM for routing and advance phases. |
+| **Detailed** | When set, the supervisor uses this model for routing decisions and sequential handoffs instead of the primary model. Saves cost and latency because routing requires less reasoning power than synthesis. |
+| **Default** | `null` (uses supervisor's main model) |
+
+<a id="agents-yaml__supervisor.history_summary_enabled"></a>
+#### `supervisor.history_summary_enabled`
+
+| | |
+|---|---|
+| **Short** | Enable sliding-window summarization. |
+| **Detailed** | When enabled, conversation history beyond `history_summary_recent_turns` is compressed via a cheap LLM call into a summary. The summary plus the recent verbatim turns are sent to the model. Dramatically reduces token usage for long-running conversations. |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+<Callout variant="warning" title="When to enable">
+Enable for long-running chats with token-priced LLMs where context accumulates over many turns. Disable for short-form workflows where keeping the full verbatim history is cheaper than the summarization LLM call.
+</Callout>
+
+<a id="agents-yaml__supervisor.history_summary_model"></a>
+#### `supervisor.history_summary_model`
+
+| | |
+|---|---|
+| **Short** | Model used for history summarization. |
+| **Detailed** | A cheap, fast model is recommended for summarization (e.g. `gemini/gemini-2.5-flash` or an Ollama model). Falls back to the supervisor's main model when not set. |
+| **Default** | `null` |
+
+<a id="agents-yaml__supervisor.history_summary_recent_turns"></a>
+#### `supervisor.history_summary_recent_turns`
+
+| | |
+|---|---|
+| **Short** | Number of recent turns kept verbatim. |
+| **Detailed** | The most recent N exchange pairs are kept in full text. Everything older is summarised. Set this high enough to preserve the immediate conversation context. |
+| **Default** | `10` |
+
+<a id="agents-yaml__supervisor.skip_synthesis_when_single_agent"></a>
+#### `supervisor.skip_synthesis_when_single_agent`
+
+| | |
+|---|---|
+| **Short** | Skip synthesis when only one agent ran. |
+| **Detailed** | When enabled (default), if exactly one agent produced a substantive text response, that text is returned directly without running the supervisor synthesis LLM call. Saves 5–15 seconds and one LLM call per single-agent turn. |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+<Callout variant="warning" title="When to disable">
+Leave enabled to save 5–15 s and one LLM call on every single-agent turn. Disable only if the supervisor must always rewrite or augment the agent's raw output regardless of routing.
+</Callout>
+
+```yaml
+supervisor:
+  assistant_name: "Helpdesk Bot"
+  history_max_turns: 30
+  history_summary_enabled: true
+  history_summary_model: ollama/llama3.2
+  history_summary_recent_turns: 15
+  skip_synthesis_when_single_agent: true
+```
+
+---
+
+<a id="agents-yaml__agents[]"></a>
+### `agents[]`
+
+Agent definitions. Each key becomes an agent name. The name is used for routing, logging, and namespace addressing.
+
+<a id="agents-yaml__agents[].name"></a>
+#### `agents[].name`
+
+| | |
+|---|---|
+| **Short** | Agent name (set automatically). |
+| **Detailed** | The dictionary key in YAML or the filename stem in Markdown mode. Read-only — set by the loader, not by the user. |
+| **Default** | `""` |
+
+<a id="agents-yaml__agents[].description"></a>
+#### `agents[].description`
+
+| | |
+|---|---|
+| **Short** | Human-readable purpose for supervisor routing. |
+| **Detailed** | The supervisor uses this description to decide whether to route a query to this agent. Be concise and specific: describe what the agent does and what types of queries it handles. |
+| **Default** | Required |
+
+```yaml
+agents:
+  basketball:
+    description: "Answers questions about NBA players, teams, and statistics."
+```
+
+```md
+---
+description: "Answers questions about NBA players, teams, and statistics."
+---
+```
+
+<a id="agents-yaml__agents[].prompt"></a>
+#### `agents[].prompt`
+
+| | |
+|---|---|
+| **Short** | System prompt for the agent. |
+| **Detailed** | The core instructions injected into the agent's agentic loop. In YAML this is a string (use `|` block scalars for multi-line). In Markdown mode, the entire body of the `agents/`{'{name}'}`.md` file becomes the prompt. |
+| **Default** | Required |
+
+```yaml
+agents:
+  basketball:
+    prompt: |
+      You are a basketball expert. Use the provided tools to look up
+      player stats, team rosters, and game schedules. Be concise.
+```
+
+```md
+---
+# frontmatter goes here
+---
+
+You are a basketball expert. Use the provided tools to look up
+player stats, team rosters, and game schedules. Be concise.
+```
+
+<a id="agents-yaml__agents[].class"></a>
+#### `agents[].class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to a custom `OrchidAgent` subclass. |
+| **Detailed** | When omitted, the agent uses `GenericAgent`. Custom subclasses can override `run()`, `summarise()`, or add bespoke tool-call logic. The class is resolved at runtime via `importlib`. |
+| **Default** | `null` (uses `GenericAgent`) |
+| **Available values** | Any dotted Python path to an `OrchidAgent` subclass |
+
+```yaml
+agents:
+  support:
+    class: myapp.agents.support.SupportAgent
+```
+
+<a id="agents-yaml__agents[].parallel_tools"></a>
+#### `agents[].parallel_tools`
+
+| | |
+|---|---|
+| **Short** | Dispatch independent tool calls in parallel. |
+| **Detailed** | When enabled, the agent partitions its `tool_calls` into a parallel batch (dispatched via `asyncio.gather`) and a sequential tail. Per-tool safety is resolved from `parallel_safe` on the tool config, MCP `readOnlyHint`, or the built-in tool registry. |
+| **Default** | `false` |
+| **Available values** | `true`, `false` |
+
+<Callout variant="warning" title="Parallel safety">
+Enable when an agent consistently makes multiple independent read-only tool calls per turn. Keep disabled for write operations or any tool chain where order guarantees matter — parallel dispatch removes sequencing. Read-only tools with `parallel_safe: true` (or MCP `readOnlyHint: true`) run in parallel; all others run sequentially.
+</Callout>
+
+<a id="agents-yaml__agents[].llm"></a>
+#### `agents[].llm`
+
+Per-agent LLM override. Same structure as `defaults.llm`. When any field is set, it overrides the corresponding default.
+
+```yaml
+agents:
+  creative:
+    llm:
+      model: anthropic/claude-sonnet-4-20250514
+      temperature: 0.8
+```
+
+<a id="agents-yaml__agents[].rag"></a>
+#### `agents[].rag`
+
+Per-agent RAG override. Same structure as `defaults.rag`. All fields cascade: unset fields inherit from `defaults.rag`.
+
+```yaml
+agents:
+  knowledge:
+    rag:
+      namespace: docs
+      k: 10
+      enabled: true
+```
+
+##### `agents[].rag.namespace`
+
+| | |
+|---|---|
+| **Short** | Qdrant collection namespace for this agent. |
+| **Detailed** | Documents indexed for this agent are stored in this namespace. Different agents can share a namespace (common knowledge base) or use separate ones (isolated domains). |
+| **Default** | `""` (uses agent name as namespace) |
+
+##### `agents[].rag.payload_indexes`
+
+| | |
+|---|---|
+| **Short** | Explicit Qdrant payload index declarations. |
+| **Detailed** | Map of `field_name -> qdrant_schema_type` for metadata fields you want to filter on. Types: `keyword`, `integer`, `float`, `bool`, `datetime`, `text`, `geo`. |
+| **Default** | `{}` |
+
+```yaml
+agents:
+  catalog:
+    rag:
+      payload_indexes:
+        category: keyword
+        price: float
+        in_stock: bool
+```
+
+<a id="agents-yaml__agents[].mcp_servers[]"></a>
+#### `agents[].mcp_servers[]`
+
+MCP server connections for this agent. Each entry defines a remote tool provider.
+
+##### `agents[].mcp_servers[].name`
+
+| | |
+|---|---|
+| **Short** | Unique identifier for this MCP server. |
+| **Default** | Required |
+
+##### `agents[].mcp_servers[].type`
+
+| | |
+|---|---|
+| **Short** | Server type. |
+| **Default** | `local` |
+| **Available values** | `local`, `remote` |
+
+##### `agents[].mcp_servers[].transport`
+
+| | |
+|---|---|
+| **Short** | Transport protocol. |
+| **Default** | `streamable_http` |
+| **Available values** | `streamable_http`, `sse` |
+
+##### `agents[].mcp_servers[].url`
+
+| | |
+|---|---|
+| **Short** | MCP server URL. |
+| **Detailed** | Supports `${ENV_VAR}` interpolation for runtime configuration. |
+| **Default** | Required |
+
+```yaml
+agents:
+  sales:
+    mcp_servers:
+      - name: crm
+        type: remote
+        transport: streamable_http
+        url: "${CRM_MCP_URL}"
+```
+
+##### `agents[].mcp_servers[].auth`
+
+###### `agents[].mcp_servers[].auth.mode`
+
+| | |
+|---|---|
+| **Short** | Authentication mode for this MCP server. |
+| **Detailed** | Determines how the agent authenticates to the MCP server. |
+| **Default** | `none` |
+| **Available values** | `none`, `passthrough`, `oauth` |
+
+- **`none`** — No authentication headers are sent. Use for local servers on private networks.
+- **`passthrough`** — Forwards the graph's `OrchidAuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider.
+- **`oauth`** — Per-user OAuth 2.0 via MCP 2025-03-26 spec. On the first 401, Orchid discovers the server's OAuth metadata (RFC 9728), fetches the authorization server metadata (RFC 8414), and performs dynamic client registration (RFC 7591). No `client_id` or `client_secret` lives in config — everything is discovered at runtime.
+
+<Callout variant="warning" title="OAuth mode">
+Use `none` for local MCP servers that need no credentials. Use `passthrough` when the MCP server shares the same identity provider. Use `oauth` when each user must independently authorize the MCP server; Orchid discovers everything from the server's 401 response automatically.
+</Callout>
+
+##### `agents[].mcp_servers[].tools`
+
+| | |
+|---|---|
+| **Short** | Tool allow-list or wildcard. |
+| **Detailed** | List of `OrchidToolConfig` entries defining which tools this agent may call. Use `"*"` or `["*"]` to discover all tools at runtime. Individual tools can override `parallel_safe`, `inject_to_rag`, `requires_approval`, and `rag` settings. |
+| **Default** | `[]` |
+
+```yaml
+agents:
+  sales:
+    mcp_servers:
+      - name: crm
+        url: https://crm.example.com/mcp
+        tools:
+          - name: search_contacts
+            inject_to_rag: true
+            rag_ttl: 300
+            requires_approval: false
+            parallel_safe: true
+          - name: delete_contact
+            requires_approval: true
+```
+
+##### `agents[].mcp_servers[].prompts`
+
+| | |
+|---|---|
+| **Short** | MCP prompt names to load. |
+| **Detailed** | Pre-configured prompts exposed by the MCP server that the agent can reference. Use `"*"` to discover all prompts at runtime. |
+| **Default** | `[]` |
+
+##### `agents[].mcp_servers[].resources`
+
+| | |
+|---|---|
+| **Short** | MCP resource URIs to load. |
+| **Detailed** | Static resources (documents, schemas, etc.) exposed by the MCP server. Use `"*"` to discover all resources at runtime. |
+| **Default** | `[]` |
+
+##### `agents[].mcp_servers[].tool_call_strategy`
+
+| | |
+|---|---|
+| **Short** | How tools from this server are dispatched. |
+| **Detailed** | Strategy name registered in the `OrchidToolCallStrategy` registry. |
+| **Default** | `all` |
+| **Available values** | `all`, `sequential`, `llm_decides`, or any custom registered strategy |
+
+- **`all`** — Call every tool concurrently, collect all results.
+- **`sequential`** — Call tools in order, chaining `previous_results` forward.
+- **`llm_decides`** — Ask the LLM which tools to call and with what arguments. Falls back to `all` on failure.
+
+##### `agents[].mcp_servers[].discover_all_tools`
+
+| | |
+|---|---|
+| **Short** | Auto-discovered flag for tools. |
+| **Detailed** | Set automatically by the wildcard validator when `tools: "*"` or `tools: ["*"]`. Do not set manually. |
+| **Default** | `false` |
+
+##### `agents[].mcp_servers[].discover_all_prompts`
+
+| | |
+|---|---|
+| **Short** | Auto-discovered flag for prompts. |
+| **Default** | `false` |
+
+##### `agents[].mcp_servers[].discover_all_resources`
+
+| | |
+|---|---|
+| **Short** | Auto-discovered flag for resources. |
+| **Default** | `false` |
+
+<a id="agents-yaml__agents[].execution_hints"></a>
+#### `agents[].execution_hints`
+
+Hints for the supervisor when routing.
+
+##### `agents[].execution_hints.parallel_safe`
+
+| | |
+|---|---|
+| **Short** | Mark this agent safe to run in parallel. |
+| **Detailed** | Hint to the supervisor that this agent has no side effects and can be dispatched concurrently with other agents in multi-agent flows. |
+| **Default** | `true` |
+
+<a id="agents-yaml__agents[].tools"></a>
+#### `agents[].tools`
+
+| | |
+|---|---|
+| **Short** | Built-in tool names available to this agent. |
+| **Detailed** | Must match keys in the top-level `tools:` section or the built-in tool registry. These are Python functions invoked directly in-process (not via MCP). |
+| **Default** | `[]` |
+
+<a id="agents-yaml__agents[].skills"></a>
+#### `agents[].skills`
+
+| | |
+|---|---|
+| **Short** | Per-agent skill definitions. |
+| **Detailed** | Multi-step workflows that this agent can execute. Each skill is a named sequence of tool calls or agent invocations. Unlike orchestrator-level skills (top-level `skills:`), these run within a single agent and do not involve the supervisor. |
+| **Default** | `{}` |
+
+```yaml
+agents:
+  support:
+    skills:
+      escalate:
+        description: "Escalate a ticket through the support hierarchy"
+        steps:
+          - tool: create_ticket
+            arguments:
+              priority: high
+          - agent: manager
+            instruction: "A high-priority ticket needs your attention"
+```
+
+<a id="agents-yaml__agents[].guardrails"></a>
+#### `agents[].guardrails`
+
+| | |
+|---|---|
+| **Short** | Per-agent guardrail chains. |
+| **Detailed** | Input and output guardrails that apply only to this agent. In addition to any global guardrails defined at the top level. |
+| **Default** | `{}` (no guardrails) |
+
+<a id="agents-yaml__agents[].children"></a>
+#### `agents[].children`
+
+| | |
+|---|---|
+| **Short** | Sub-agent configurations nested under this agent. |
+| **Detailed** | Creates a hierarchical agent tree with one level of nesting. The parent agent can route to its children. Children inherit defaults from the parent and can define their own overrides. The graph builder, MCP inventory, and auth registry only handle `agents[].children[]` — deeper nesting is not supported. Mini-agents are forbidden on child agents. |
+| **Default** | `null` |
+
+```yaml
+agents:
+  support:
+    description: "Top-level support router"
+    children:
+      billing:
+        description: "Handles billing questions"
+        prompt: "You are a billing specialist..."
+      technical:
+        description: "Handles technical issues"
+        prompt: "You are a technical support engineer..."
+```
+
+---
+
+<a id="agents-yaml__agents[].mini_agent"></a>
+#### `agents[].mini_agent`
+
+Opt-in mini-agent (self-clone) configuration. Only allowed on top-level agents.
+
+##### `agents[].mini_agent.enabled`
+
+| | |
+|---|---|
+| **Short** | Enable mini-agent decomposition. |
+| **Detailed** | When enabled, complex requests are decomposed into independent sub-tasks, each handled by a cloned mini-agent running in parallel. The results are then aggregated into a final response. Adds one extra LLM call (decomposer) per turn. |
+| **Default** | `false` |
+| **Available values** | `true`, `false` |
+
+<Callout variant="warning" title="Cost vs speed trade-off">
+Enable when a single complex user request can be decomposed into independent sub-tasks that do not share state. The decomposer adds one extra LLM call per turn; only opt in when the parallelism speedup outweighs that cost. Nesting is not supported — only top-level agents can enable mini-agents.
+</Callout>
+
+##### `agents[].mini_agent.max_count`
+
+| | |
+|---|---|
+| **Short** | Maximum number of parallel mini-agents. |
+| **Detailed** | The decomposer produces at most this many sub-tasks. Range is enforced by Pydantic validation. |
+| **Default** | `3` |
+| **Available values** | `2` to `8` |
+
+##### `agents[].mini_agent.decomposer_model`
+
+| | |
+|---|---|
+| **Short** | LLM model for the decomposer step. |
+| **Detailed** | A cheap, fast model is recommended. Falls back to the parent agent's `llm.model` when not set. |
+| **Default** | `null` |
+
+##### `agents[].mini_agent.timeout_seconds`
+
+| | |
+|---|---|
+| **Short** | Hard timeout per mini-agent. |
+| **Detailed** | If a mini-agent does not complete within this time, it is cancelled and its result is omitted from aggregation. |
+| **Default** | `60` |
+| **Available values** | `5` to `600` |
+
+##### `agents[].mini_agent.tool_allowlist_mode`
+
+| | |
+|---|---|
+| **Short** | Tool exposure mode for mini-agents. |
+| **Detailed** | Controls which tools cloned mini-agents may access. |
+| **Default** | `strict` |
+| **Available values** | `strict`, `parent_full`, `inferred` |
+
+- **`strict`** — Every tool name in `allowed_tools` must exist in the parent's inventory. Fails validation if a name is unknown.
+- **`parent_full`** — Ignores `allowed_tools` entirely. Mini-agents get access to the parent's full tool set.
+- **`inferred`** — `strict` behaviour, but an empty `allowed_tools` falls back to the parent's full inventory with a warning.
+
+##### `agents[].mini_agent.stream_inner_tokens`
+
+| | |
+|---|---|
+| **Short** | Stream mini-agent tokens to SSE. |
+| **Detailed** | When enabled, tokens generated by inner mini-agents propagate to the SSE stream. When disabled, only lifecycle events (start, complete, error) surface. |
+| **Default** | `false` |
+
+##### `agents[].mini_agent.decomposer_prompt`
+
+| | |
+|---|---|
+| **Short** | Custom decomposer prompt. |
+| **Detailed** | Replaces the built-in template that instructs the LLM how to break a query into sub-tasks. |
+| **Default** | `null` |
+
+##### `agents[].mini_agent.aggregator_prompt`
+
+| | |
+|---|---|
+| **Short** | Custom aggregator prompt. |
+| **Detailed** | Replaces the built-in template that instructs the LLM how to combine mini-agent results into a final response. |
+| **Default** | `null` |
+
+##### `agents[].mini_agent.system_prompt_template`
+
+| | |
+|---|---|
+| **Short** | Template for each mini-agent's system prompt. |
+| **Detailed** | Supports placeholders: `{parent_prompt}` (the parent agent's prompt), `{instruction}` (the decomposed sub-task), `{tool_list}` (available tools). |
+| **Default** | `null` |
+
+```yaml
+agents:
+  research:
+    mini_agent:
+      enabled: true
+      max_count: 5
+      timeout_seconds: 45
+      tool_allowlist_mode: parent_full
+      stream_inner_tokens: true
+```
+
+---
+
+<a id="agents-yaml__agents[].prompt_sections"></a>
+#### `agents[].prompt_sections`
+
+Customisable templates for the agentic-loop system prompt assembly.
+
+##### `agents[].prompt_sections.prior_results_header`
+
+| | |
+|---|---|
+| **Short** | Header for prior-turn tool results. |
+| **Default** | `"
+--- Previous Tool Results (from prior turns) ---"` |
+
+##### `agents[].prompt_sections.mcp_prompt_template`
+
+| | |
+|---|---|
+| **Short** | Template for rendered MCP prompts. |
+| **Detailed** | Placeholders: `{name}`, `{text}`. |
+| **Default** | `"
+--- MCP Prompt: {'{name}'} ---
+{'{text}'}"` |
+
+##### `agents[].prompt_sections.skipped_prompt_template`
+
+| | |
+|---|---|
+| **Short** | Template for MCP prompts requiring arguments. |
+| **Detailed** | Shown when a prompt requires arguments that were not provided. Placeholders: `{name}`, `{description}`, `{required_args}`. |
+| **Default** | `"
+[Available prompt: {'{name}'}] {'{description}'} (requires: {'{required_args}'})"` |
+
+##### `agents[].prompt_sections.resources_header`
+
+| | |
+|---|---|
+| **Short** | Header for MCP resources block. |
+| **Default** | `"
+--- Available Resources ---"` |
+
+##### `agents[].prompt_sections.resource_template`
+
+| | |
+|---|---|
+| **Short** | Template for each MCP resource. |
+| **Detailed** | Placeholders: `{name}`, `{content}`. |
+| **Default** | `"
+[{'{name}'}]
+{'{content}'}"` |
+
+##### `agents[].prompt_sections.rag_header`
+
+| | |
+|---|---|
+| **Short** | Header for RAG context block. |
+| **Default** | `"
+--- Background Knowledge (RAG) ---"` |
+
+##### `agents[].prompt_sections.prior_results_max_chars`
+
+| | |
+|---|---|
+| **Short** | Character cap on prior tool-results JSON. |
+| **Default** | `4000` |
+
+##### `agents[].prompt_sections.resource_max_chars`
+
+| | |
+|---|---|
+| **Short** | Character cap per MCP resource body. |
+| **Default** | `2000` |
+
+##### `agents[].prompt_sections.summarise_history_reminder`
+
+| | |
+|---|---|
+| **Short** | Reminder block for summarise prompt when history is present. |
+| **Default** | Built-in reminder text |
+
+##### `agents[].prompt_sections.summarise_prior_results_header`
+
+| | |
+|---|---|
+| **Short** | Header for prior results in summarise prompt. |
+| **Default** | `"
+
+--- Previous Tool Results (from prior turns) ---
+"` |
+
+##### `agents[].prompt_sections.summarise_rag_section_header`
+
+| | |
+|---|---|
+| **Short** | Header for RAG block in summarise user message. |
+| **Default** | `"Background knowledge (from RAG):
+"` |
+
+##### `agents[].prompt_sections.summarise_user_template`
+
+| | |
+|---|---|
+| **Short** | User-content template for summarise call. |
+| **Detailed** | Placeholders: `{query}`, `{rag_section}`, `{mcp_data}`. |
+| **Default** | `"User query: {'{query}'}
+
+{'{rag_section}'}Live data (from API):
+{'{mcp_data}'}"` |
+
+##### `agents[].prompt_sections.summarise_prior_results_max_chars`
+
+| | |
+|---|---|
+| **Short** | Max characters of prior results in summarise prompt. |
+| **Default** | `4000` |
+
+---
+
+<a id="agents-yaml__tools[]"></a>
+### `tools[]`
+
+Global built-in tool declarations. Each key is a tool name; the value defines its handler and metadata.
+
+<a id="agents-yaml__tools[].handler"></a>
+#### `tools[].handler`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to the Python function. |
+| **Detailed** | The function implementing this tool. Auto-extracted signature is used for parameter schema unless `parameters` is explicitly defined. Sync handlers are automatically wrapped with `asyncio.to_thread`. |
+| **Default** | Required |
+
+<a id="agents-yaml__tools[].description"></a>
+#### `tools[].description`
+
+| | |
+|---|---|
+| **Short** | Tool description for LLM invocation. |
+| **Detailed** | Shown to the LLM in the tool schema. Be specific about what the tool does, what inputs it expects, and what it returns. |
+| **Default** | `""` |
+
+<a id="agents-yaml__tools[].parameters"></a>
+#### `tools[].parameters`
+
+| | |
+|---|---|
+| **Short** | Parameter declarations. |
+| **Detailed** | When omitted, parameters are auto-extracted from the Python function signature. Framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out. YAML declarations take precedence over auto-extraction. |
+| **Default** | `{}` |
+
+##### `tools[].parameters[].type`
+
+| | |
+|---|---|
+| **Short** | Parameter type. |
+| **Default** | `string` |
+| **Available values** | `string`, `int`, `float`, `bool` |
+
+##### `tools[].parameters[].description`
+
+| | |
+|---|---|
+| **Short** | Parameter description. |
+| **Default** | `""` |
+
+##### `tools[].parameters[].required`
+
+| | |
+|---|---|
+| **Short** | Whether the parameter is required. |
+| **Default** | `true` |
+
+##### `tools[].parameters[].default`
+
+| | |
+|---|---|
+| **Short** | Default value when not provided. |
+| **Default** | `null` |
+
+<a id="agents-yaml__tools[].inject_to_rag"></a>
+#### `tools[].inject_to_rag`
+
+| | |
+|---|---|
+| **Short** | Store this tool's results in RAG. |
+| **Detailed** | When enabled, the tool's output is embedded and stored in the agent's RAG namespace. Subsequent queries can retrieve this output as context. |
+| **Default** | `false` |
+
+<a id="agents-yaml__tools[].rag_ttl"></a>
+#### `tools[].rag_ttl`
+
+| | |
+|---|---|
+| **Short** | Cache TTL for RAG-stored tool results. |
+| **Detailed** | How long (in seconds) the tool's RAG-injected output remains retrievable. `null` uses the agent's default `rag_ttl`. |
+| **Default** | `null` |
+
+<a id="agents-yaml__tools[].requires_approval"></a>
+#### `tools[].requires_approval`
+
+| | |
+|---|---|
+| **Short** | Require human approval before execution. |
+| **Detailed** | When enabled, the tool call is paused and a HITL (human-in-the-loop) request is sent to the frontend. The user must approve before the tool executes. |
+| **Default** | `false` |
+
+<a id="agents-yaml__tools[].parallel_safe"></a>
+#### `tools[].parallel_safe`
+
+| | |
+|---|---|
+| **Short** | Declare the tool safe for parallel dispatch. |
+| **Detailed** | For built-in tools, `null` resolves to `false` (sequential). Set `true` for pure read-only, side-effect-free handlers. Only consulted when the agent has `parallel_tools: true`. |
+| **Default** | `null` |
+
+```yaml
+tools:
+  format_date:
+    handler: myapp.tools.dates.format_date
+    description: "Format a date string into a human-readable form"
+    parameters:
+      date_str:
+        type: string
+        description: "ISO 8601 date string"
+        required: true
+      format:
+        type: string
+        description: "Output format (e.g. 'long', 'short')"
+        required: false
+        default: long
+    inject_to_rag: false
+    requires_approval: false
+    parallel_safe: true
+```
+
+---
+
+<a id="agents-yaml__skills[]"></a>
+### `skills[]`
+
+Orchestrator-level (cross-agent) skill definitions. These are multi-step workflows that can invoke multiple agents in sequence.
+
+<a id="agents-yaml__skills[].description"></a>
+#### `skills[].description`
+
+| | |
+|---|---|
+| **Short** | Human-readable skill purpose. |
+| **Default** | `""` |
+
+<a id="agents-yaml__skills[].steps"></a>
+#### `skills[].steps`
+
+| | |
+|---|---|
+| **Short** | Ordered list of agent invocations. |
+| **Detailed** | Each step names an agent and provides an instruction. The supervisor routes each step through the named agent, passing the instruction as the query. |
+| **Default** | Required |
+
+##### `skills[].steps[].agent`
+
+| | |
+|---|---|
+| **Short** | Agent name to invoke. |
+| **Default** | Required |
+
+##### `skills[].steps[].instruction`
+
+| | |
+|---|---|
+| **Short** | Hint passed to the agent. |
+| **Detailed** | The instruction is sent to the agent as the user query for that step. Can reference prior step results via template variables in future versions. |
+| **Default** | `""` |
+
+```yaml
+skills:
+  onboarding:
+    description: "Walk a new user through account setup"
+    steps:
+      - agent: greeter
+        instruction: "Welcome the user and explain what we do"
+      - agent: account_setup
+        instruction: "Guide the user through creating their profile"
+      - agent: preferences
+        instruction: "Ask about notification and privacy preferences"
+```
+
+---
+
+<a id="agents-yaml__guardrails"></a>
+### `guardrails`
+
+Global guardrail chains applied to every request. Per-agent guardrails can augment or override these.
+
+<a id="agents-yaml__guardrails.input"></a>
+#### `guardrails.input`
+
+| | |
+|---|---|
+| **Short** | Input guardrail rules. |
+| **Detailed** | Applied to the user's raw query before any agent processes it. Chains are evaluated in order; the first failing rule triggers its `fail_action`. |
+| **Default** | `[]` |
+
+<a id="agents-yaml__guardrails.output"></a>
+#### `guardrails.output`
+
+| | |
+|---|---|
+| **Short** | Output guardrail rules. |
+| **Detailed** | Applied to agent responses before delivery to the user. |
+| **Default** | `[]` |
+
+##### `guardrails.input[].type` / `guardrails.output[].type`
+
+| | |
+|---|---|
+| **Short** | Guardrail type name. |
+| **Detailed** | Must match a registered guardrail implementation. Built-ins include `content_safety`, `pii_detection`, `prompt_injection`, `max_length`, `topic_restriction`. |
+| **Default** | Required |
+
+##### `guardrails.input[].fail_action` / `guardrails.output[].fail_action`
+
+| | |
+|---|---|
+| **Short** | Action on guardrail failure. |
+| **Default** | `block` |
+| **Available values** | `block`, `warn`, `redact`, `log` |
+
+- **`block`** — Reject the message entirely.
+- **`warn`** — Allow but append a warning.
+- **`redact`** — Mask sensitive content.
+- **`log`** — Record the violation but take no action.
+
+##### `guardrails.input[].config` / `guardrails.output[].config`
+
+| | |
+|---|---|
+| **Short** | Guardrail constructor kwargs. |
+| **Detailed** | Passed as keyword arguments to the guardrail class constructor. Schema depends on the guardrail type. |
+| **Default** | `{}` |
+
+```yaml
+guardrails:
+  input:
+    - type: content_safety
+      fail_action: block
+      config:
+        threshold: 0.8
+    - type: prompt_injection
+      fail_action: block
+  output:
+    - type: pii_detection
+      fail_action: redact
+```
+
+---
+
+<a id="agents-yaml__mcp_gateway"></a>
+### `mcp_gateway`
+
+MCP gateway exposure configuration. Controls how Orchid exposes its own capabilities to upstream MCP hosts.
+
+<a id="agents-yaml__mcp_gateway.tools"></a>
+#### `mcp_gateway.tools`
+
+| | |
+|---|---|
+| **Short** | Tool title/description overrides. |
+| **Detailed** | Map of canonical tool name -> override config. Used to customise how tools appear to upstream MCP hosts without changing the underlying tool implementation. |
+| **Default** | `{}` |
+
+##### `mcp_gateway.tools[].title`
+
+| | |
+|---|---|
+| **Short** | Override title for the tool. |
+| **Default** | `null` (keeps gateway default) |
+
+##### `mcp_gateway.tools[].description`
+
+| | |
+|---|---|
+| **Short** | Override description for the tool. |
+| **Default** | `null` (keeps gateway default) |
+
+<a id="agents-yaml__mcp_gateway.prompts"></a>
+#### `mcp_gateway.prompts`
+
+| | |
+|---|---|
+| **Short** | MCP prompt templates exposed by the gateway. |
+| **Detailed** | Pre-canned prompts that upstream hosts can request. Each prompt has a handle, optional arguments, and a template body. |
+| **Default** | `[]` |
+
+##### `mcp_gateway.prompts[].name`
+
+| | |
+|---|---|
+| **Short** | Unique prompt handle. |
+| **Detailed** | Must match `^[a-zA-Z_][a-zA-Z0-9_-]*$`. Used by upstream hosts to reference the prompt. |
+| **Default** | Required |
+
+##### `mcp_gateway.prompts[].title`
+
+| | |
+|---|---|
+| **Short** | Display title. |
+| **Default** | `null` |
+
+##### `mcp_gateway.prompts[].description`
+
+| | |
+|---|---|
+| **Short** | Prompt description. |
+| **Default** | `null` |
+
+##### `mcp_gateway.prompts[].arguments`
+
+| | |
+|---|---|
+| **Short** | Arguments accepted by the prompt. |
+| **Default** | `[]` |
+
+###### `mcp_gateway.prompts[].arguments[].name`
+
+| | |
+|---|---|
+| **Short** | Argument name. |
+| **Detailed** | Must match `^[a-zA-Z_][a-zA-Z0-9_-]*$`. |
+| **Default** | Required |
+
+###### `mcp_gateway.prompts[].arguments[].description`
+
+| | |
+|---|---|
+| **Short** | Argument description. |
+| **Default** | `null` |
+
+###### `mcp_gateway.prompts[].arguments[].required`
+
+| | |
+|---|---|
+| **Short** | Whether the argument is required. |
+| **Default** | `false` |
+
+##### `mcp_gateway.prompts[].template`
+
+| | |
+|---|---|
+| **Short** | Prompt body template. |
+| **Detailed** | Uses `{{arg_name}}` syntax for argument substitution. Rendered at request time with the provided arguments. |
+| **Default** | Required |
+
+```yaml
+mcp_gateway:
+  tools:
+    orchid_ask:
+      title: "Ask Orchid"
+      description: "Send a question to the Orchid multi-agent system"
+  prompts:
+    - name: summarise_thread
+      title: "Summarise Conversation"
+      description: "Produces a bullet-point summary of the current chat thread"
+      arguments:
+        - name: max_points
+          description: "Maximum bullet points"
+          required: false
+      template: |
+        Summarise the following conversation in at most {{max_points}} bullet points.
+        Focus on decisions made and action items.
+```
+
+---
+
+<a id="agents-yaml__events"></a>
+### `events`
+
+Pollen + Bloom event-driven activation layer. `null` or absent = disabled (zero overhead).
+
+<a id="agents-yaml__events.enabled"></a>
+#### `events.enabled`
+
+| | |
+|---|---|
+| **Short** | Master switch for the event layer. |
+| **Detailed** | When `false`, no producers, processors, queues, or schedulers are started. The event system has zero runtime cost when disabled. |
+| **Default** | `false` |
+| **Available values** | `true`, `false` |
+
+<Callout variant="warning" title="Zero-cost when disabled">
+When `events.enabled` is `false` (or the `events` key is absent), no background tasks, threads, or connections are created. There is absolutely no runtime overhead from the event system when it is not in use.
+</Callout>
+
+<a id="agents-yaml__events.store"></a>
+#### `events.store`
+
+| | |
+|---|---|
+| **Short** | Event storage backend. |
+| **Detailed** | Required when `enabled: true`. Stores event state, trigger history, and schedule metadata. |
+| **Default** | `null` |
+
+##### `events.store.class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path for the event store. |
+| **Default** | Required when `enabled: true` |
+
+##### `events.store.extra_args`
+
+| | |
+|---|---|
+| **Short** | Additional constructor kwargs. |
+| **Default** | `{}` |
+
+<a id="agents-yaml__events.queue"></a>
+#### `events.queue`
+
+| | |
+|---|---|
+| **Short** | Signal queue backend configuration. |
+| **Detailed** | Required when `enabled: true`. Buffers signals between producers and processors. |
+| **Default** | `null` |
+
+##### `events.queue.class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path for the queue backend. |
+| **Default** | Required when `enabled: true` |
+
+##### `events.queue.notify_enabled`
+
+| | |
+|---|---|
+| **Short** | Enable queue notifications. |
+| **Default** | `true` |
+
+##### `events.queue.poll_interval_ms`
+
+| | |
+|---|---|
+| **Short** | Poll interval in milliseconds. |
+| **Default** | `200` |
+| **Minimum** | `10` |
+
+##### `events.queue.lease_seconds`
+
+| | |
+|---|---|
+| **Short** | Message lease duration. |
+| **Detailed** | How long a processor has exclusive access to a message before it becomes available for re-processing. |
+| **Default** | `30` |
+| **Minimum** | `1` |
+
+##### `events.queue.max_attempts`
+
+| | |
+|---|---|
+| **Short** | Maximum processing attempts. |
+| **Default** | `5` |
+| **Minimum** | `1` |
+
+##### `events.queue.dead_letter_table`
+
+| | |
+|---|---|
+| **Short** | Dead letter table name. |
+| **Detailed** | Messages that exceed `max_attempts` are moved to this table for later inspection. |
+| **Default** | `signal_queue_dead_letter` |
+
+<a id="agents-yaml__events.scheduler"></a>
+#### `events.scheduler`
+
+| | |
+|---|---|
+| **Short** | Scheduler backend for cron-based triggers. |
+| **Detailed** | Optional. Required only if you use cron schedules. Typically an APScheduler wrapper. |
+| **Default** | `null` |
+
+##### `events.scheduler.class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path for the scheduler. |
+| **Default** | Required when schedules are used |
+
+##### `events.scheduler.extra_args`
+
+| | |
+|---|---|
+| **Short** | Additional constructor kwargs. |
+| **Default** | `{}` |
+
+<a id="agents-yaml__events.producers"></a>
+#### `events.producers`
+
+| | |
+|---|---|
+| **Short** | Signal producer configurations. |
+| **Detailed** | Producers emit signals into the queue. Each producer runs independently and may poll external systems (webhooks, message buses, file watchers). |
+| **Default** | `[]` |
+
+##### `events.producers[].class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path for the producer. |
+| **Default** | Required |
+
+##### `events.producers[].extra_args`
+
+| | |
+|---|---|
+| **Short** | Additional constructor kwargs. |
+| **Default** | `{}` |
+
+<a id="agents-yaml__events.processors"></a>
+#### `events.processors`
+
+| | |
+|---|---|
+| **Short** | Signal processor configurations. |
+| **Detailed** | Required when `enabled: true`. Workers that consume signals from the queue and execute triggers. |
+| **Default** | `[]` |
+
+##### `events.processors[].class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path for the processor. |
+| **Default** | Required |
+
+##### `events.processors[].concurrency`
+
+| | |
+|---|---|
+| **Short** | Worker concurrency. |
+| **Default** | `4` |
+| **Minimum** | `1` |
+
+##### `events.processors[].poll_interval_ms`
+
+| | |
+|---|---|
+| **Short** | Processor poll interval. |
+| **Default** | `200` |
+| **Minimum** | `10` |
+
+##### `events.processors[].lease_seconds`
+
+| | |
+|---|---|
+| **Short** | Message lease duration. |
+| **Default** | `30` |
+| **Minimum** | `1` |
+
+##### `events.processors[].max_attempts`
+
+| | |
+|---|---|
+| **Short** | Maximum processing attempts. |
+| **Default** | `5` |
+| **Minimum** | `1` |
+
+##### `events.processors[].drain_timeout_seconds`
+
+| | |
+|---|---|
+| **Short** | Drain timeout on shutdown. |
+| **Detailed** | How long to wait for in-flight messages to complete before force-stopping. |
+| **Default** | `10.0` |
+| **Minimum** | `> 0` |
+
+<a id="agents-yaml__events.middleware"></a>
+#### `events.middleware`
+
+| | |
+|---|---|
+| **Short** | Processing middleware. |
+| **Detailed** | Applied to signals before they reach processors. Can transform, filter, or enrich signals. |
+| **Default** | `[]` |
+
+##### `events.middleware[].class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path for the middleware. |
+| **Default** | Required |
+
+##### `events.middleware[].extra_args`
+
+| | |
+|---|---|
+| **Short** | Additional constructor kwargs. |
+| **Default** | `{}` |
+
+<a id="agents-yaml__events.ingestion"></a>
+#### `events.ingestion`
+
+| | |
+|---|---|
+| **Short** | Webhook source registry. |
+| **Detailed** | Defines valid inbound webhook sources with validation rules. |
+| **Default** | `{}` |
+
+##### `events.ingestion.sources`
+
+| | |
+|---|---|
+| **Short** | Registered webhook sources. |
+| **Default** | `[]` |
+
+###### `events.ingestion.sources[].id`
+
+| | |
+|---|---|
+| **Short** | Unique source identifier. |
+| **Default** | Required |
+
+###### `events.ingestion.sources[].validator`
+
+| | |
+|---|---|
+| **Short** | Validator configuration. |
+| **Detailed** | Validates incoming webhook signatures (HMAC, bearer token, mTLS). |
+| **Default** | Required |
+
+####### `events.ingestion.sources[].validator.class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path for the validator. |
+| **Default** | Required |
+
+####### `events.ingestion.sources[].validator.secret_ref`
+
+| | |
+|---|---|
+| **Short** | Secret reference. |
+| **Detailed** | e.g. An HMAC key name or certificate thumbprint. |
+| **Default** | `null` |
+
+####### `events.ingestion.sources[].validator.extra_args`
+
+| | |
+|---|---|
+| **Short** | Additional constructor kwargs. |
+| **Default** | `{}` |
+
+###### `events.ingestion.sources[].allowed_types`
+
+| | |
+|---|---|
+| **Short** | Signal types accepted from this source. |
+| **Detailed** | Empty list means all types are accepted. |
+| **Default** | `[]` |
+
+<a id="agents-yaml__events.schedules"></a>
+#### `events.schedules`
+
+| | |
+|---|---|
+| **Short** | Cron/interval schedule definitions. |
+| **Default** | `[]` |
+
+##### `events.schedules[].id`
+
+| | |
+|---|---|
+| **Short** | Unique schedule identifier. |
+| **Default** | Required |
+
+##### `events.schedules[].cron`
+
+| | |
+|---|---|
+| **Short** | Cron expression. |
+| **Detailed** | Standard 5-field cron: `min hour day month dow`. Mutually exclusive with `interval_seconds`. |
+| **Default** | `null` |
+
+##### `events.schedules[].interval_seconds`
+
+| | |
+|---|---|
+| **Short** | Interval between runs in seconds. |
+| **Detailed** | Mutually exclusive with `cron`. Must be > 0. |
+| **Default** | `null` |
+| **Minimum** | `> 0` |
+
+##### `events.schedules[].trigger_id`
+
+| | |
+|---|---|
+| **Short** | Target trigger ID. |
+| **Detailed** | Must reference a trigger defined in `events.triggers` with `signal: cron`. |
+| **Default** | Required |
+
+##### `events.schedules[].identity`
+
+| | |
+|---|---|
+| **Short** | Identity claim for scheduled runs. |
+| **Detailed** | Discriminated union on `mode`: `service_account`, `addressed_to_user`, or `act_as_user`. |
+| **Default** | Required |
+
+##### `events.schedules[].enabled`
+
+| | |
+|---|---|
+| **Short** | Whether this schedule is active. |
+| **Default** | `true` |
+
+<a id="agents-yaml__events.triggers"></a>
+#### `events.triggers`
+
+| | |
+|---|---|
+| **Short** | Trigger definitions. |
+| **Detailed** | Map signals to agent activations. Each trigger has match conditions, emission configuration, and a retry policy. |
+| **Default** | `[]` |
+
+##### `events.triggers[].id`
+
+| | |
+|---|---|
+| **Short** | Unique trigger identifier. |
+| **Default** | Required |
+
+##### `events.triggers[].on`
+
+| | |
+|---|---|
+| **Short** | Match conditions. |
+| **Default** | Required |
+
+###### `events.triggers[].on.signal`
+
+| | |
+|---|---|
+| **Short** | Signal name to match. |
+| **Detailed** | `"cron"` is reserved for time-driven triggers fired by schedules. |
+| **Default** | Required |
+
+###### `events.triggers[].on.cron`
+
+| | |
+|---|---|
+| **Short** | Cron expression for time-driven triggers. |
+| **Detailed** | Required when `signal == "cron"`. Rejected for non-cron signals. |
+| **Default** | `null` |
+
+###### `events.triggers[].on.when`
+
+| | |
+|---|---|
+| **Short** | JMESPath boolean expression. |
+| **Detailed** | Evaluated against the signal envelope. Only matches when the expression returns `true`. |
+| **Default** | `null` |
+
+##### `events.triggers[].emits`
+
+| | |
+|---|---|
+| **Short** | Emission configuration. |
+| **Default** | Required |
+
+###### `events.triggers[].emits.agent`
+
+| | |
+|---|---|
+| **Short** | Agent to activate. |
+| **Default** | Required |
+
+###### `events.triggers[].emits.prompt_template`
+
+| | |
+|---|---|
+| **Short** | Prompt template for the agent. |
+| **Detailed** | Sent to the agent as the user query when the trigger fires. Can use template variables from the signal envelope. |
+| **Default** | Required |
+
+###### `events.triggers[].emits.identity`
+
+| | |
+|---|---|
+| **Short** | Identity claim. |
+| **Detailed** | Determines who the trigger runs as. `service_account` runs as a system identity. `addressed_to_user` and `act_as_user` resolve a real user from the signal envelope. |
+| **Default** | Required |
+
+###### `events.triggers[].emits.respect_chat_binding`
+
+| | |
+|---|---|
+| **Short** | Respect chat binding from signal. |
+| **Detailed** | When `true`, the trigger's output is appended to the chat specified in the signal envelope. Requires a non-service-account identity. |
+| **Default** | `false` |
+
+###### `events.triggers[].emits.proactive_chat`
+
+| | |
+|---|---|
+| **Short** | Create a new chat for the user. |
+| **Detailed** | When `true`, a new chat session is created for the resolved user. Requires a non-service-account identity. |
+| **Default** | `false` |
+
+###### `events.triggers[].emits.visibility`
+
+| | |
+|---|---|
+| **Short** | Visibility override. |
+| **Detailed** | `actor` = visible to the triggering user only. `addressed` = visible to addressed users. `tenant` = visible to all users in the tenant. `admin` = admin-only. `null` = computed from identity mode. |
+| **Default** | `null` |
+
+##### `events.triggers[].retry`
+
+| | |
+|---|---|
+| **Short** | Retry policy. |
+| **Default** | `{}` |
+
+###### `events.triggers[].retry.max`
+
+| | |
+|---|---|
+| **Short** | Maximum retry attempts. |
+| **Default** | `0` |
+| **Minimum** | `0` |
+
+###### `events.triggers[].retry.backoff`
+
+| | |
+|---|---|
+| **Short** | Backoff strategy. |
+| **Default** | `exponential` |
+| **Available values** | `fixed`, `linear`, `exponential` |
+
+###### `events.triggers[].retry.jitter`
+
+| | |
+|---|---|
+| **Short** | Add jitter to backoff. |
+| **Default** | `true` |
+
+###### `events.triggers[].retry.initial_delay_seconds`
+
+| | |
+|---|---|
+| **Short** | Initial delay before first retry. |
+| **Default** | `1.0` |
+| **Minimum** | `> 0` |
+
+###### `events.triggers[].retry.max_delay_seconds`
+
+| | |
+|---|---|
+| **Short** | Maximum delay between retries. |
+| **Default** | `300.0` |
+| **Minimum** | `> 0`, must be `>=` `initial_delay_seconds` |
+
+##### `events.triggers[].parallelism`
+
+| | |
+|---|---|
+| **Short** | Concurrency scope. |
+| **Detailed** | Controls how many concurrent executions of this trigger are allowed. |
+| **Default** | `per_user` |
+| **Available values** | `per_user`, `per_tenant`, `unbounded` |
+
+- **`per_user`** — One concurrent execution per user.
+- **`per_tenant`** — One concurrent execution per tenant.
+- **`unbounded`** — No concurrency limit.
+
+```yaml
+events:
+  enabled: true
+  store:
+    class: orchid_ai.events.stores.sqlite.SQLiteEventStore
+  queue:
+    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
+  processors:
+    - class: orchid_ai.events.processors.default.DefaultProcessor
+      concurrency: 4
+  schedules:
+    - id: daily_digest
+      cron: "0 7 * * 1-5"
+      trigger_id: morning_briefing
+      identity:
+        mode: service_account
+        name: scheduler
+  triggers:
+    - id: morning_briefing
+      on:
+        signal: cron
+      emits:
+        agent: digest
+        prompt_template: "Generate the morning briefing for {{user.name}}"
+        identity:
+          mode: addressed_to_user
+          service_account: scheduler
+          user_id_from: signal.user_id
+      retry:
+        max: 3
+        backoff: exponential
+```
+
+---
+
+## Load Modes Summary
+
+| Mode | Root File | Agent Configs | Detection |
+|------|-----------|---------------|-----------|
+| YAML | `orchid.yml` | `agents.yaml` | `.yml` or `.yaml` extension |
+| MD | `orchid.md` | `agents/*.md` | `.md` extension |
+| Hybrid | `orchid.yml` | `agents/*.md` | `AGENTS_CONFIG_PATH` points to a directory |
+
+---
+
+## Hot-Reload (MD Only)
+
+The on-demand config watcher detects file changes via SHA-256 hashing — no background threads, no fs-notify libraries.
+
+- `OrchidConfigWatcher` tracks `orchid.md` + `agents/*.md` by hash.
+- `Orchid.reload_config()` calls `watcher.reload_if_changed()` and rebuilds the graph.
+- Graph rebuild is serialised via `asyncio.Lock` — existing requests complete with the old config.
+- The API middleware polls at most every `ORCHID_RELOAD_INTERVAL` seconds (default 30, set to 0 to disable).
+
+```bash
+# Enable hot-reload with 10-second polling:
+ORCHID_RELOAD_INTERVAL=10
+```

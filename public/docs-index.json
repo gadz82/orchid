@@ -190,17 +190,63 @@
   },
   {
     "route": "/configuration",
-    "title": "Configuration Reference",
-    "description": "Complete reference for orchid.yml + orchid.md and agents.yaml + agents/*.md: all sections, keys, defaults, and best practices.",
+    "title": "Configuration Atlas",
+    "description": "Searchable table of every configuration key across orchid.yml and agents.yaml — filter by name, type, or description.",
     "package": "cross-cutting",
     "section": "configuration",
     "tags": [
       "configuration",
       "yaml",
       "markdown",
-      "reference"
+      "reference",
+      "atlas"
     ],
     "sources": ""
+  },
+  {
+    "route": "/configuration-reference",
+    "title": "Configuration Reference",
+    "description": "Detailed reference for every configuration property in orchid.yml and agents.yaml — split by file with searchable indexes and deep-links.",
+    "package": "cross-cutting",
+    "section": "configuration",
+    "tags": [
+      "configuration",
+      "yaml",
+      "markdown",
+      "reference",
+      "properties"
+    ],
+    "sources": ""
+  },
+  {
+    "route": "/configuration-reference/infrastructure",
+    "title": "Infrastructure Configuration",
+    "description": "Detailed reference for every orchid.yml property — runtime, auth, LLM, RAG, storage, MCP, tracing.",
+    "package": "cross-cutting",
+    "section": "configuration",
+    "tags": [
+      "configuration",
+      "yaml",
+      "markdown",
+      "reference",
+      "properties"
+    ],
+    "sources": []
+  },
+  {
+    "route": "/configuration-reference/agents",
+    "title": "Agents Configuration",
+    "description": "Detailed reference for every agents.yaml property — defaults, supervisor, agents, tools, skills, guardrails, events.",
+    "package": "cross-cutting",
+    "section": "configuration",
+    "tags": [
+      "configuration",
+      "yaml",
+      "markdown",
+      "reference",
+      "properties"
+    ],
+    "sources": []
   },
   {
     "route": "/examples",
