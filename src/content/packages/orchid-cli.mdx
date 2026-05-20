@@ -95,6 +95,22 @@ Use this in CI pipelines to catch schema errors before deployment.
 | `orchid skill generate <agents.yaml> --include agent1,agent2` | Filter by agent name |
 | `orchid skill generate <agents.yaml> --zip` | Create a zip archive |
 
+### `orchid generate-flower` — Project scaffolding wizard
+
+Interactive wizard that guides you through creating a complete Orchid project skeleton — `orchid.yml`, `agents.yaml`, and Python scaffold files — packaged as a zip or written directly to a directory.
+
+| Command | Purpose |
+|---------|---------|
+| `orchid generate-flower` | Start the interactive wizard |
+| `orchid generate-flower --no-zip --output ./my-project` | Write directly to a directory |
+| `orchid generate-flower --ai --ai-model openai/gpt-4o` | Enable AI-assisted question answering |
+| `orchid generate-flower --from-seed answers.json` | Reproduce from a seed file |
+| `orchid generate-flower --verbose` | Show all questions including defaults |
+
+The wizard walks through nine phases: project identity, infrastructure (LLM, auth, vector backend, storage), supervisor configuration, agent definitions (repeatable loop), global tools, cross-agent skills, guardrails, events (Pollen + Bloom), and MCP gateway customization. Before generating, a review phase validates all answers against the Pydantic schema and lets you edit any value.
+
+Generated projects include valid `orchid.yml` and `agents.yaml`, Python scaffold files for custom agents/tools/identity/hooks/storage, `__init__.py` files for proper packaging, and a basic test suite. All code follows project SOLID conventions.
+
 ### `orchid mcp` — MCP server OAuth
 
 | Command | Purpose |
