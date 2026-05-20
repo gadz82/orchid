@@ -47,6 +47,7 @@ export const navNodes: NavNode[] = [
   { href: '/examples/prompt-customization', label: 'Prompt Customization', group: 'examples', order: 50 },
   { href: '/examples/graph-kb', label: 'Graph KB', group: 'examples', order: 51 },
   { href: '/examples/wiki', label: 'Wiki', group: 'examples', order: 52 },
+  { href: '/examples/orchid-experts', label: 'Orchid Experts', group: 'examples', order: 53 },
 
   { href: '/best-practices', label: 'Best Practices', group: 'meta', order: 60 },
   { href: '/glossary', label: 'Glossary', group: 'meta', order: 61 },
