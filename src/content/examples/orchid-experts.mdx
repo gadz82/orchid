@@ -1,0 +1,206 @@
+---
+title: "Orchid Experts"
+description: "Fleet of ten RAG-powered GenericAgent experts covering every Orchid concept — pure YAML + Markdown, zero custom agent code."
+package: "cross-cutting"
+section: "examples"
+order: 53
+tags: ["rag", "agents", "supervisor", "skills", "guardrails"]
+sources:
+  - examples/orchid_experts/orchid.yml
+  - examples/orchid_experts/agents.yaml
+  - examples/orchid_experts/knowledge/
+related:
+  - /concepts/agents
+  - /concepts/rag
+  - /concepts/supervisor
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The Orchid Experts example deploys a **fleet of ten RAG-powered GenericAgent experts**, each the chief of knowledge for one orchid-* package or cross-cutting concept. This is the canonical "ask our docs" demo — every agent is a `GenericAgent` (zero custom Python code), and all domain knowledge lives in 86 markdown files ingested into Qdrant at startup.
+
+No MCP servers. No auth. Just pure YAML + MD + RAG.
+
+## Agents
+
+| Agent | Domain | RAG Namespace |
+|-------|--------|---------------|
+| `orchid` | Core framework: ABCs, config, GenericAgent, supervisor, persistence | `orchid-framework` |
+| `rag` | RAG system: scopes, ingestion, retrieval, backends, hybrid search | `rag-system` |
+| `tools-skills` | Tools & skills: decorators, strategies, skill execution | `tools-skills` |
+| `mcp` | MCP protocol: servers, auth modes, discovery, gateway | `mcp-system` |
+| `auth` | Authorization: OAuth, OIDC, DCR, identity resolution | `auth-system` |
+| `bloom` | Pollen+Bloom events: signals, triggers, schedules, jobs | `bloom-events` |
+| `orchid-api` | FastAPI server: routers, streaming, endpoints, plugins | `orchid-api-pkg` |
+| `orchid-cli` | CLI: commands, interactive mode, ChromaDB, indexing | `orchid-cli-pkg` |
+| `orchid-frontend` | Next.js UI: components, NextAuth, SSE proxy, theming | `orchid-frontend-pkg` |
+| `ai-integration` | Production deployment: LLM selection, scaling, observability | `ai-integration` |
+
+## Run it
+
+Start with Docker (includes Qdrant, Ollama, and the API):
+
+```bash
+bash script/start_orchid_experts.sh
+```
+
+Or run the API directly (Ollama must be running on the host with `llama3.2` and `nomic-embed-text`):
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/orchid_experts/orchid.yml uvicorn orchid_api.main:app --port 8000
+```
+
+Or use the CLI for a quick one-off chat:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/orchid_experts/orchid.yml
+```
+
+The startup hook automatically seeds all 86 knowledge files into Qdrant.
+
+## Configuration walkthrough
+
+`orchid.yml` wires the runtime environment and points to the agent configs:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/orchid_experts/agents.yaml
+
+llm:
+  model: ollama/llama3.2
+  ollama_api_base: http://host.docker.internal:11434
+
+auth:
+  dev_bypass: false
+  identity_resolver_class: examples.orchid_experts.identity.ExpertsIdentityResolver
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: ollama/nomic-embed-text
+
+storage:
+  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/experts_chats.db
+
+startup:
+  hook: examples.orchid_experts.hooks.startup.seed_experts_knowledge
+```
+
+`agents.yaml` defines 10 agents, 9 cross-agent skills, supervisor routing, and guardrails:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+  rag:
+    enabled: true
+
+supervisor:
+  assistant_name: "Orchid Knowledge Assistant"
+
+guardrails:
+  input:
+    - type: prompt_injection
+      fail_action: block
+    - type: content_safety
+      fail_action: block
+    - type: max_length
+      fail_action: block
+      config:
+        max_characters: 5000
+  output:
+    - type: pii_detection
+      fail_action: redact
+      config:
+        entities: [email, phone, credit_card]
+
+skills:
+  secure-deployment:
+    description: "Combine guardrails configuration with OAuth security and production hardening"
+    steps:
+      - agent: orchid
+        instruction: "Explain guardrails configuration in agents.yaml"
+      - agent: auth
+        instruction: "Explain OAuth/OIDC setup and identity resolution"
+      - agent: ai-integration
+        instruction: "Explain production hardening and observability setup"
+
+  # ...8 more skills
+
+agents:
+  orchid:
+    description: >
+      Master of the orchid core framework. Explains ABCs, configuration schema,
+      GenericAgent pipeline, supervisor, LangGraph, persistence, guardrails,
+      multi-LLM support, embeddings, document parsing, mini-agents, and runtime.
+    prompt: |
+      You are the Orchid Framework Expert...
+      Always provide:
+      1. A clear explanation of the concept or configuration
+      2. The relevant YAML snippet when applicable
+      3. Links to the specific configuration keys and their defaults
+    rag:
+      namespace: orchid-framework
+      k: 5
+    guardrails:
+      input:
+        - type: topic_restriction
+          fail_action: warn
+          config:
+            allowed_topics: [framework, agent, supervisor, config, ...]
+    execution_hints:
+      parallel_safe: true
+
+  # ...9 more agents
+```
+
+## Knowledge structure
+
+86 markdown files across 10 namespaces. Each file covers one sub-topic (300–1500 words), with H2/H3 headings that act as natural chunk boundaries for the recursive splitter:
+
+```
+knowledge/
+├── orchid-framework/       12 files   Core framework: ABCs, pipeline, config, guardrails
+├── rag-system/             9 files    RAG: scopes, strategies, backends, hybrid search
+├── tools-skills/           6 files    Built-in tools, skill definition, strategies
+├── mcp-system/             7 files    MCP protocol, auth modes, gateway, warming
+├── auth-system/            9 files    OAuth, OIDC, DCR, identity, token stores
+├── bloom-events/           8 files    Pollen+Bloom: signals, triggers, scheduling
+├── orchid-api-pkg/         8 files    FastAPI server: routers, streaming, deployment
+├── orchid-cli-pkg/         9 files    CLI: commands, interactive mode, indexing
+├── orchid-frontend-pkg/    8 files    Next.js UI: components, NextAuth, theming
+└── ai-integration/        10 files    Production: LLM selection, scaling, observability
+```
+
+## What to look for
+
+- **All 10 agents use `GenericAgent`** — no `class:` field anywhere in `agents.yaml`. Every agent is defined purely in YAML with a system prompt and RAG namespace.
+- **Startup hook seeds knowledge** — `seed_experts_knowledge()` iterates the `knowledge/` directory, reads each `.md` file, and calls `ingest_document(pre_extracted_text=content)` with `RecursiveIngestion`. The parse-once pattern is followed: text is read once, passed to both the prompt builder and the ingestion pipeline.
+- **9 cross-agent skills** — The supervisor chains agents sequentially for multi-domain questions (e.g., "How do I secure my Orchid deployment?" triggers `secure-deployment`: `orchid` → `auth` → `ai-integration`).
+- **Per-agent topic restrictions** — Each agent has `topic_restriction` in `warn` mode with 10–15 allowed keyword terms, keeping answers within the agent's domain without blocking edge-case queries.
+- **Zero MCP dependencies** — This example is pure RAG. No `mcp_servers:` in any agent config. The startup hook alone populates the knowledge base.
+
+## Related concepts
+
+- [Agents](/concepts/agents)
+- [Hierarchical RAG](/concepts/rag)
+- [Supervisor](/concepts/supervisor)
+- [Tool Strategies](/concepts/tool-strategies)
+
+## Sources
+
+- examples/orchid_experts/orchid.yml
+- examples/orchid_experts/agents.yaml
+- examples/orchid_experts/identity.py
+- examples/orchid_experts/hooks/startup.py
+- examples/orchid_experts/knowledge/ (86 files)
