@@ -22,6 +22,9 @@ orchid/
                             (inbound gateway DCR clients + auth codes + tokens)
       repository.py       OrchidVectorReader / OrchidVectorWriter / OrchidVectorStoreAdmin ABCs
     config/               YAML config loader + schema + tool registry (parameter metadata)
+      storage.py            OrchidConfigStorage ABC
+      storage_factory.py    build_config_storage() factory
+      schema_storage.py     OrchidConfigStorageConfig Pydantic model
     agents/               GenericAgent + strategies (SkillDetector, MCPDispatcher, SkillExecutor)
     graph/                LangGraph wiring: supervisor.py, graph.py, state.py
     rag/                  Scopes, indexer, embeddings, factory, backends/qdrant.py
@@ -29,6 +32,7 @@ orchid/
     persistence/          OrchidChatStorage + OrchidMCPTokenStore + gateway-state stores + shared migrations:
       sqlite.py                       OrchidSQLiteChatStorage (default, aiosqlite — core dep)
       postgres.py                     OrchidPostgresChatStorage (optional, asyncpg)
+      config_postgres.py              OrchidPostgresConfigStorage (agent config CRUD)
       mcp_token_sqlite.py             OrchidSQLiteMCPTokenStore (outbound MCP OAuth tokens)
       mcp_token_postgres.py           OrchidPostgresMCPTokenStore
       mcp_token_factory.py            build_mcp_token_store()
@@ -265,6 +269,29 @@ implementations live in consumer projects.
 - `OrchidAuthExchangeClient` holds the upstream `client_secret` and performs the authorization-code (`exchange_code`) and refresh-token (`refresh_token`) grants on behalf of downstream public PKCE clients. Default `refresh_token` raises `NotImplementedError` — exchange-only consumers don't break, and the `/auth-info` flag gating `refresh_via_api` checks the method override identity.
 - Three `OrchidMCPGatewayClient/AuthCode/Token Store` ABCs back the inbound MCP gateway's OAuth state. One concrete class implements all three against the shared chat DB (SQLite / Postgres). `OrchidMCPGatewayToken` carries `idp_access_token` + `idp_refresh_token` + `idp_expires_at` so the refresh path has the upstream pair to swap.
 - `OrchidIdentityResolver` (already pre-existing) does double-duty: per-request bearer validation AND the upstream-token → identity bridge exposed at `/auth/resolve-identity`.
+
+## Database-Backed Agent Configuration
+
+`OrchidConfigStorage` ABC + `OrchidPostgresConfigStorage` implementation let
+integrators manage agent configurations via PostgreSQL instead of (or alongside)
+YAML files. Configuration is declarative — controlled by the `config_storage:`
+block in `agents.yaml`:
+
+```yaml
+config_storage:
+  enabled: true
+  class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+  dsn: postgresql://user:pass@host:5432/db
+```
+
+At bootstrap, `Orchid.from_config_path()` builds the store, runs `init_db()`,
+lists all DB configs, and merges them into `OrchidAgentsConfig` via
+`merge_from_db(strict=True)`. YAML/DB name collisions cause a startup error
+by default; set `strict=False` for deep-merge semantics.
+
+The `Orchid.config_storage` property exposes the store for runtime CRUD
+(e.g. from an API router). Seven abstract methods: `init_db`, `close`,
+`list_configs`, `get_config`, `upsert_config`, `patch_config`, `delete_config`.
 
 ## Common Pitfalls
 

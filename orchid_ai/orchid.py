@@ -50,6 +50,7 @@ from .persistence.base import OrchidChatStorage
 from .runtime import OrchidRuntime
 
 if TYPE_CHECKING:
+    from .config.storage import OrchidConfigStorage
     from .core.agent import OrchidAgent  # noqa: F401
     from .core.mcp import OrchidMCPTokenStore
 
@@ -152,6 +153,7 @@ class Orchid:
         mcp_token_store: "OrchidMCPTokenStore | None" = None,
         _owns_resources: bool = False,
         _config_file_hashes: dict[str, str] | None = None,
+        _config_storage: "OrchidConfigStorage | None" = None,
     ) -> None:
         """Low-level constructor — prefer :meth:`from_config_path` for most uses.
 
@@ -173,8 +175,9 @@ class Orchid:
         _config_file_hashes : dict[str, str] | None
             File path → SHA-256 mapping for hot-reload change detection.
             Set by the MD config loader; ``None`` when using YAML config.
-        _config_watcher : OrchidConfigWatcherBase | None
-            The config watcher, or ``None`` when no watcher is active.
+        _config_storage : OrchidConfigStorage | None
+            Optional config storage backend (e.g. database-backed agent
+            configs).  When set, the facade closes it on :meth:`close`.
         """
         self._config = config
         self._runtime = runtime
@@ -188,6 +191,7 @@ class Orchid:
         self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)
         self._config_file_hashes = _config_file_hashes
         self._config_watcher: OrchidConfigWatcherBase | None = None
+        self._config_storage = _config_storage
         self._rebuild_lock = asyncio.Lock()
 
     # ── Construction helpers ─────────────────────────────────
@@ -397,13 +401,28 @@ class Orchid:
                 skip_yaml_sections=skip_yaml_sections,
             )
         )
-        return cls(
+
+        # Merge DB-sourced configs if config storage is enabled in the config
+        config_store_instance = None
+        if result.config.config_storage.enabled:
+            from orchid_ai.config.storage_factory import build_config_storage
+
+            cfg = result.config.config_storage
+            config_store_instance = build_config_storage(cfg.class_path, cfg.dsn)
+            await config_store_instance.init_db()
+            db_configs = await config_store_instance.list_configs()
+            if db_configs:
+                result.config.merge_from_db(db_configs, strict=True)
+
+        instance = cls(
             config=result.config,
             runtime=result.runtime,
             chat_repo=result.chat_repo,
             mcp_token_store=result.mcp_token_store,
             _owns_resources=True,
+            _config_storage=config_store_instance,
         )
+        return instance
 
     @classmethod
     async def from_md_config(
@@ -617,6 +636,19 @@ class Orchid:
         facade surface.
         """
         return self._mcp_token_store
+
+    @property
+    def config_storage(self) -> "OrchidConfigStorage | None":
+        """Database-backed config storage, or ``None`` when not configured.
+
+        Set automatically by :meth:`from_config_path` when
+        ``config_storage_class`` and ``config_storage_dsn`` are provided.
+        Exposes the store so integrators can call
+        ``config_storage.upsert_config()``, ``config_storage.patch_config()``,
+        etc. from outside the Orchid facade — for example from an API
+        router that manages configs at runtime.
+        """
+        return self._config_storage
 
     # ── Hot-reload ─────────────────────────────────────────
 
@@ -887,6 +919,8 @@ class Orchid:
         )
         self._mcp_token_store = None
         self._chat_repo = None
+        if self._config_storage is not None:
+            await self._config_storage.close()
         if self._runtime is not None:
             self._runtime.mcp_client_registration_store = None
             self._runtime.mcp_gateway_client_store = None

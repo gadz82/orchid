@@ -42,6 +42,7 @@ from .schema_events import (
 from .schema_guardrails import OrchidGuardrailRuleConfig, OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPAuthConfig, OrchidMCPServerConfig, OrchidToolConfig
+from .schema_storage import OrchidConfigStorageConfig
 from .schema_mini_agent import OrchidMiniAgentConfig
 from .schema_prompts import (
     OrchidAgentPromptConfig,
@@ -75,6 +76,7 @@ __all__ = [
     "OrchidAgentSkillStepConfig",
     "OrchidAgentsConfig",
     "OrchidBuiltinToolConfig",
+    "OrchidConfigStorageConfig",
     "OrchidDefaultsConfig",
     "OrchidEventsConfig",
     "OrchidEventsIngestionConfig",
