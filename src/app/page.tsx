@@ -68,16 +68,26 @@ agents:
       - assess_motivation
       - suggest_mental_strategy`;
 
-const AGENTS_MD = `---
-version: "1"
+const ORCHID_YAML = `# orchid.yml — Runtime configuration
 
-defaults:
-  llm:
-    model: "ollama/llama3.2"
-    temperature: 0.2
----
+agents:
+  config_path: examples/basketball/agents.yaml
 
-Orchid infrastructure config.`;
+llm:
+  model: ollama/llama3.2
+  ollama_api_base: http://localhost:11434
+
+auth:
+  dev_bypass: true
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://localhost:6333
+  embedding_model: ollama/nomic-embed-text
+
+storage:
+  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  dsn: ./chats.db`;
 
 const RUNTIME_TABS = [
   {
@@ -218,18 +228,20 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── One config, two formats, three runtimes ─────────── */}
+        {/* ── Two files, three runtimes ─────────── */}
         <section className="mb-16">
-          <h2 className="text-2xl font-bold text-orchid-text mb-2">One config. Two formats. Three runtimes.</h2>
+          <h2 className="text-2xl font-bold text-orchid-text mb-2">Two files. Three runtimes.</h2>
           <p className="text-orchid-muted mb-6 text-sm">
-            The same agent definition works in YAML or Markdown — with the API, CLI, and MCP gateway.
+            <code className="text-orchid-text">orchid.yml</code> defines runtime settings (LLM, RAG, storage).
+            <code className="text-orchid-text ml-1">agents.yaml</code> defines agents, tools, and skills.
+            Together they power the API, CLI, and MCP gateway.
           </p>
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1 min-w-0">
               <CodeBlock
                 tabs={[
                   { language: 'yaml', label: 'agents.yaml', code: AGENTS_YAML },
-                  { language: 'yaml', label: 'orchid.md', code: AGENTS_MD },
+                  { language: 'yaml', label: 'orchid.yml', code: ORCHID_YAML },
                 ]}
               />
             </div>
