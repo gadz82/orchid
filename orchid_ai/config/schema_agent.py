@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from .mcp_gateway import OrchidMCPGatewayConfig
 from .schema_events import OrchidEventsConfig
+from .schema_storage import OrchidConfigStorageConfig
 from .schema_guardrails import OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPServerConfig, OrchidToolConfig
@@ -209,12 +210,64 @@ class OrchidAgentsConfig(BaseModel):
     # explicit ``events:`` block opts in.
     events: OrchidEventsConfig | None = None
 
+    # Database-backed agent config store.  ``enabled=False`` (default)
+    # skips the store entirely.  When ``enabled=True``, the store is
+    # initialised at bootstrap and its configs are merged into
+    # ``agents`` before the graph is built (strict=True).
+    config_storage: OrchidConfigStorageConfig = Field(default_factory=OrchidConfigStorageConfig)
+
     @model_validator(mode="after")
     def _apply_defaults_and_names(self) -> OrchidAgentsConfig:
         """Merge defaults into each agent and set names recursively."""
         for agent_name, agent in self.agents.items():
             _apply_defaults(agent, agent_name, self.defaults, self.tools)
         return self
+
+    def merge_from_db(self, db_configs: list[dict], *, strict: bool = True) -> None:
+        """Merge DB-sourced agent configs into ``self.agents``.
+
+        Used by integrators who load agent configurations from a database
+        store (e.g. ``OrchidPostgresConfigStorage``) and want to layer
+        them on top of — or alongside — YAML-loaded configs.
+
+        Parameters
+        ----------
+        db_configs : list[dict]
+            Rows from ``OrchidConfigStorage.list_configs()`` — each dict
+            must have ``"name"`` and ``"config"`` keys. The ``config``
+            value is a Python dict (deserialized JSON).
+        strict : bool
+            If ``True`` (the default), raises ``ValueError`` when a DB
+            agent name already exists in ``self.agents`` (YAML duplicate
+            conflict). If ``False``, DB entries **deep-merge** over the
+            existing ``OrchidAgentConfig`` fields, then validate.
+
+        Raises
+        ------
+        ValueError
+            If ``strict=True`` and any name in ``db_configs`` is already
+            in ``self.agents``.
+        pydantic.ValidationError
+            If a DB config fails validation against ``OrchidAgentConfig``.
+        """
+        if strict:
+            yaml_names = set(self.agents.keys())
+            db_names = {r["name"] for r in db_configs}
+            overlap = yaml_names & db_names
+            if overlap:
+                raise ValueError(
+                    f"Agent(s) defined in both YAML and DB: {sorted(overlap)}. Remove from YAML or DB to proceed."
+                )
+        for row in db_configs:
+            name = row["name"]
+            cfg_dict = row["config"]
+            if name in self.agents:
+                merged = _deep_merge(self.agents[name].model_dump(), cfg_dict)
+                cfg = OrchidAgentConfig.model_validate(merged)
+                self.agents[name] = cfg
+            else:
+                cfg = OrchidAgentConfig.model_validate(cfg_dict)
+                self.agents[name] = cfg
 
 
 def _inherit_field(agent_obj: Any, defaults_obj: Any, field_name: str) -> None:

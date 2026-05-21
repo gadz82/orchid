@@ -270,6 +270,15 @@ PG_UP = [
         enabled          BOOLEAN NOT NULL DEFAULT TRUE
     )
     """,
+    # ── Agent config storage (database-backed) ──────────
+    """
+    CREATE TABLE IF NOT EXISTS agent_configs (
+        name         TEXT PRIMARY KEY,
+        config       JSONB NOT NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+    """,
 ]
 
 # ── SQLite DDL ──────────────────────────────────────────────
@@ -530,6 +539,15 @@ SQLITE_UP = [
         validator_config TEXT NOT NULL,
         allowed_types    TEXT NOT NULL,
         enabled          INTEGER NOT NULL DEFAULT 1
+    )
+    """,
+    # ── Agent config storage (database-backed) ───────
+    """
+    CREATE TABLE IF NOT EXISTS agent_configs (
+        name         TEXT PRIMARY KEY,
+        config       TEXT NOT NULL,
+        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
     )
     """,
 ]

@@ -106,10 +106,14 @@ from .observability.callbacks import OrchidMetricsHandler
 from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
 from .persistence.base import OrchidChatStorage
 from .persistence.factory import build_chat_storage
+from .config.storage import OrchidConfigStorage
+from .config.storage_factory import build_config_storage
+from .config.schema_storage import OrchidConfigStorageConfig
 from .persistence.mcp_client_registration_factory import build_mcp_client_registration_store
 from .persistence.mcp_client_registration_sqlite import OrchidSQLiteMCPClientRegistrationStore
 from .persistence.mcp_token_factory import build_mcp_token_store
 from .persistence.mcp_token_sqlite import OrchidSQLiteMCPTokenStore
+from .persistence.config_postgres import OrchidPostgresConfigStorage
 from .persistence.sqlite import OrchidSQLiteChatStorage
 from .plugins import iter_entry_point_plugins
 from .documents.post_processors import (
@@ -244,6 +248,9 @@ __all__ = [
     "build_guardrail_chain",
     "register_guardrail",
     # ── Built-in backends ─────────────────────────────
+    "OrchidConfigStorage",
+    "OrchidConfigStorageConfig",
+    "OrchidPostgresConfigStorage",
     "OrchidSQLiteChatStorage",
     "OrchidSQLiteMCPClientRegistrationStore",
     "OrchidSQLiteMCPTokenStore",
@@ -279,6 +286,7 @@ __all__ = [
     "build_chat_model",
     "build_chat_storage",
     "build_checkpointer",
+    "build_config_storage",
     "build_doc_store",
     "build_graph",
     "build_graph_store",

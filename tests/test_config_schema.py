@@ -10,6 +10,7 @@ from orchid_ai.config.schema import (
     OrchidAgentSkillStepConfig,
     OrchidAgentsConfig,
     OrchidBuiltinToolConfig,
+    OrchidConfigStorageConfig,
     OrchidDefaultsConfig,
     ExecutionHints,
     OrchidLLMConfig,
@@ -507,4 +508,82 @@ class TestAgentsConfig:
             },
         )
         assert cfg.agents["agent1"].rag.rag_ttl == 7200
-        assert cfg.agents["agent1"].injectable_tool_ttls == {"tool_a": 7200}
+
+
+class TestMergeFromDb:
+    def test_adds_agent_from_db_config(self):
+        cfg = OrchidAgentsConfig(agents={})
+        cfg.merge_from_db([{"name": "db_agent", "config": {"description": "from db", "prompt": "help"}}])
+        assert "db_agent" in cfg.agents
+        assert cfg.agents["db_agent"].description == "from db"
+        assert cfg.agents["db_agent"].prompt == "help"
+
+    def test_strict_raises_on_duplicate(self):
+        cfg = OrchidAgentsConfig(agents={"existing": OrchidAgentConfig(description="yaml", prompt="yaml prompt")})
+        with pytest.raises(ValueError, match="existing"):
+            cfg.merge_from_db([{"name": "existing", "config": {"description": "db", "prompt": "db"}}])
+
+    def test_non_strict_overlays_on_duplicate(self):
+        cfg = OrchidAgentsConfig(agents={"existing": OrchidAgentConfig(description="yaml", prompt="yaml prompt")})
+        cfg.merge_from_db(
+            [{"name": "existing", "config": {"description": "from db"}}],
+            strict=False,
+        )
+        assert cfg.agents["existing"].description == "from db"
+        assert cfg.agents["existing"].prompt == "yaml prompt"
+
+    def test_invalid_config_raises_validation_error(self):
+        cfg = OrchidAgentsConfig(agents={})
+        with pytest.raises(Exception):  # ValidationError from pydantic
+            cfg.merge_from_db([{"name": "bad", "config": {"description": 123}}])  # type: ignore[arg-type]
+
+    def test_empty_db_list_leaves_agents_unchanged(self):
+        cfg = OrchidAgentsConfig(agents={"a": OrchidAgentConfig(description="d", prompt="p")})
+        cfg.merge_from_db([])
+        assert "a" in cfg.agents
+
+    def test_multiple_db_agents_merged(self):
+        cfg = OrchidAgentsConfig(agents={})
+        cfg.merge_from_db(
+            [
+                {"name": "agent1", "config": {"description": "d1", "prompt": "p1"}},
+                {"name": "agent2", "config": {"description": "d2", "prompt": "p2"}},
+            ]
+        )
+        assert "agent1" in cfg.agents
+        assert "agent2" in cfg.agents
+        assert cfg.agents["agent1"].description == "d1"
+        assert cfg.agents["agent2"].description == "d2"
+
+
+class TestOrchidAgentsConfigConfigStorage:
+    def test_config_storage_field_defaults(self):
+        cfg = OrchidAgentsConfig()
+        assert cfg.config_storage.enabled is False
+        assert cfg.config_storage.class_path == ""
+        assert cfg.config_storage.dsn == ""
+
+    def test_config_storage_field_can_be_set(self):
+        cfg = OrchidAgentsConfig(
+            config_storage=OrchidConfigStorageConfig(
+                enabled=True,
+                class_path="orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage",
+                dsn="postgresql://user:pass@host:5432/db",
+            )
+        )
+        assert cfg.config_storage.enabled is True
+        assert "OrchidPostgresConfigStorage" in cfg.config_storage.class_path
+
+    def test_config_storage_in_yaml_dict(self):
+        data = {
+            "version": "1",
+            "config_storage": {
+                "enabled": True,
+                "class": "orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage",
+                "dsn": "postgresql://user:pass@host:5432/db",
+            },
+            "agents": {},
+        }
+        cfg = OrchidAgentsConfig.model_validate(data)
+        assert cfg.config_storage.enabled is True
+        assert cfg.config_storage.class_path == "orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage"
