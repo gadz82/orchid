@@ -48,7 +48,7 @@ LangGraph wiring: `build_graph()` factory, the supervisor node, and state defini
 
 ### `config/`
 
-YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`) validated by Pydantic, plus the tool-parameter registry. Use `load_config(path)` to load and validate `agents.yaml`.
+YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`) validated by Pydantic, plus the tool-parameter registry. Use `load_config(path)` to load and validate `agents.yaml`. Also contains `OrchidConfigStorage` (ABC for database-backed agent configs), `build_config_storage()` factory, and `OrchidConfigStorageConfig` schema.
 
 ### `rag/`
 
@@ -56,7 +56,7 @@ Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding fact
 
 ### `persistence/`
 
-`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) and PostgreSQL (`OrchidPostgresChatStorage`) implementations. Also contains the outbound MCP OAuth token stores and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
+`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) and PostgreSQL (`OrchidPostgresChatStorage`) implementations. Also contains `OrchidPostgresConfigStorage` for database-backed agent configuration management, the outbound MCP OAuth token stores, and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
 
 ### `documents/`
 
@@ -78,6 +78,7 @@ File parsing pipeline: PDF (PyMuPDF), DOCX, XLSX, CSV, and image (via vision LLM
 | `OrchidVectorWriter` | `core.repository` | Vector store indexing (indexers depend on this only) |
 | `OrchidVectorStoreAdmin` | `core.repository` | Collection management (admin operations only) |
 | `OrchidChatStorage` | `persistence.base` | Chat session + message CRUD |
+| `OrchidConfigStorage` | `config.storage` | Database-backed agent config CRUD |
 
 ## Writing a custom agent
 

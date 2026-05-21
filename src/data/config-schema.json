@@ -5545,5 +5545,47 @@
       "/examples/helpdesk",
       "/examples/learning"
     ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "config_storage.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": false,
+    "description": "Enable database-backed agent configuration store (PostgreSQL CRUD for agent definitions).",
+    "deprecated": false,
+    "examples": [
+      "/examples/basketball",
+      "/examples/custom-storage",
+      "/examples/graph-kb"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "config_storage.class",
+    "type": "string",
+    "required": false,
+    "default": "",
+    "description": "Dotted import path to an OrchidConfigStorage subclass for agent config persistence.",
+    "deprecated": false,
+    "examples": [
+      "/examples/basketball",
+      "/examples/helpdesk",
+      "/examples/learning"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "config_storage.dsn",
+    "type": "string",
+    "required": false,
+    "default": "",
+    "description": "Database connection string for agent config storage (PostgreSQL URL).",
+    "deprecated": false,
+    "examples": [
+      "/examples/basketball",
+      "/examples/helpdesk",
+      "/examples/learning"
+    ]
   }
 ]

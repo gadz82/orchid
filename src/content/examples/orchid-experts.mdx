@@ -88,6 +88,11 @@ storage:
   class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
   dsn: /data/experts_chats.db
 
+# config_storage:          # optional — manage agents via PostgreSQL
+#   enabled: true
+#   class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+#   dsn: postgresql://...
+
 startup:
   hook: examples.orchid_experts.hooks.startup.seed_experts_knowledge
 ```

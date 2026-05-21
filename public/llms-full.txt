@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-05-19
+Last generated: 2026-05-21
 
 ## Overview
 
@@ -906,7 +906,7 @@ LangGraph wiring: `build_graph()` factory, the supervisor node, and state defini
 
 ### `config/`
 
-YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`) validated by Pydantic, plus the tool-parameter registry. Use `load_config(path)` to load and validate `agents.yaml`.
+YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`) validated by Pydantic, plus the tool-parameter registry. Use `load_config(path)` to load and validate `agents.yaml`. Also contains `OrchidConfigStorage` (ABC for database-backed agent configs), `build_config_storage()` factory, and `OrchidConfigStorageConfig` schema.
 
 ### `rag/`
 
@@ -914,7 +914,7 @@ Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding fact
 
 ### `persistence/`
 
-`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) and PostgreSQL (`OrchidPostgresChatStorage`) implementations. Also contains the outbound MCP OAuth token stores and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
+`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) and PostgreSQL (`OrchidPostgresChatStorage`) implementations. Also contains `OrchidPostgresConfigStorage` for database-backed agent configuration management, the outbound MCP OAuth token stores, and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
 
 ### `documents/`
 
@@ -936,6 +936,7 @@ File parsing pipeline: PDF (PyMuPDF), DOCX, XLSX, CSV, and image (via vision LLM
 | `OrchidVectorWriter` | `core.repository` | Vector store indexing (indexers depend on this only) |
 | `OrchidVectorStoreAdmin` | `core.repository` | Collection management (admin operations only) |
 | `OrchidChatStorage` | `persistence.base` | Chat session + message CRUD |
+| `OrchidConfigStorage` | `config.storage` | Database-backed agent config CRUD |
 
 ## Writing a custom agent
 
@@ -1177,6 +1178,22 @@ Use this in CI pipelines to catch schema errors before deployment.
 | `orchid skill generate <agents.yaml> -o ./out` | Write to a custom output directory |
 | `orchid skill generate <agents.yaml> --include agent1,agent2` | Filter by agent name |
 | `orchid skill generate <agents.yaml> --zip` | Create a zip archive |
+
+### `orchid generate-flower` — Project scaffolding wizard
+
+Interactive wizard that guides you through creating a complete Orchid project skeleton — `orchid.yml`, `agents.yaml`, and Python scaffold files — packaged as a zip or written directly to a directory.
+
+| Command | Purpose |
+|---------|---------|
+| `orchid generate-flower` | Start the interactive wizard |
+| `orchid generate-flower --no-zip --output ./my-project` | Write directly to a directory |
+| `orchid generate-flower --ai --ai-model openai/gpt-4o` | Enable AI-assisted question answering |
+| `orchid generate-flower --from-seed answers.json` | Reproduce from a seed file |
+| `orchid generate-flower --verbose` | Show all questions including defaults |
+
+The wizard walks through nine phases: project identity, infrastructure (LLM, auth, vector backend, storage), supervisor configuration, agent definitions (repeatable loop), global tools, cross-agent skills, guardrails, events (Pollen + Bloom), and MCP gateway customization. Before generating, a review phase validates all answers against the Pydantic schema and lets you edit any value.
+
+Generated projects include valid `orchid.yml` and `agents.yaml`, Python scaffold files for custom agents/tools/identity/hooks/storage, `__init__.py` files for proper packaging, and a basic test suite. All code follows project SOLID conventions.
 
 ### `orchid mcp` — MCP server OAuth
 
@@ -1580,6 +1597,11 @@ Description: Detailed reference for every orchid.yml property — runtime, auth,
   - [`storage.class`](#orchid-yml__storage.class)
   - [`storage.dsn`](#orchid-yml__storage.dsn)
   - [`storage.extra_migrations_package`](#orchid-yml__storage.extra_migrations_package)
+
+**config_storage**
+  - [`config_storage.enabled`](#orchid-yml__config_storage.enabled)
+  - [`config_storage.class`](#orchid-yml__config_storage.class)
+  - [`config_storage.dsn`](#orchid-yml__config_storage.dsn)
 
 **mcp_auth**
   - [`mcp_auth.token_store_class`](#orchid-yml__mcp_auth.token_store_class)
@@ -2006,6 +2028,44 @@ storage:
 | **Detailed** | If your custom storage backend has its own Alembic migrations, reference the package here so they run alongside Orchid's built-in migrations on startup. |
 | **Default** | `null` |
 | **Env var** | `CHAT_EXTRA_MIGRATIONS_PACKAGE` |
+
+---
+
+<a id="orchid-yml__config_storage.enabled"></a>
+### `config_storage.enabled`
+
+| | |
+|---|---|
+| **Short** | Enable database-backed agent configuration store. |
+| **Detailed** | When enabled, Orchid loads agent configurations from a PostgreSQL database at startup and merges them into the YAML-loaded config. This allows runtime CRUD management of agent definitions without editing YAML files. The store is controlled declaratively — no constructor parameters needed. |
+| **Default** | `false` |
+| **Available values** | `true`, `false` |
+
+```yaml
+config_storage:
+  enabled: true
+  class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+  dsn: postgresql://orchid:orchid@postgres:5432/orchid
+```
+
+<a id="orchid-yml__config_storage.class"></a>
+### `config_storage.class`
+
+| | |
+|---|---|
+| **Short** | Dotted import path to an `OrchidConfigStorage` subclass. |
+| **Detailed** | The persistence backend for agent configurations. The built-in PostgreSQL implementation (`OrchidPostgresConfigStorage`) provides full CRUD: `list_configs`, `get_config`, `upsert_config`, `patch_config`, `delete_config`. Custom implementations can target any database by subclassing `OrchidConfigStorage`. |
+| **Default** | `""` (empty — ignored when `enabled: false`) |
+| **Available values** | `orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage`, or any dotted path to a custom subclass |
+
+<a id="orchid-yml__config_storage.dsn"></a>
+### `config_storage.dsn`
+
+| | |
+|---|---|
+| **Short** | Database connection string for agent config storage. |
+| **Detailed** | For PostgreSQL this is a `postgresql://` URI. The `agent_configs` table is created automatically via the shared migration system when `init_db()` runs. |
+| **Default** | `""` (empty — ignored when `enabled: false`) |
 
 ---
 
@@ -4820,6 +4880,205 @@ Agent configs show all three auth modes:
 
 - examples/mcp-auth/orchid.yml
 - examples/mcp-auth/agents.yaml
+
+---
+
+### Orchid Experts
+URL: https://gadz82.github.io/orchid/examples/orchid-experts
+Description: Fleet of ten RAG-powered GenericAgent experts covering every Orchid concept — pure YAML + Markdown, zero custom agent code.
+
+## What this demonstrates
+
+The Orchid Experts example deploys a **fleet of ten RAG-powered GenericAgent experts**, each the chief of knowledge for one orchid-* package or cross-cutting concept. This is the canonical "ask our docs" demo — every agent is a `GenericAgent` (zero custom Python code), and all domain knowledge lives in 86 markdown files ingested into Qdrant at startup.
+
+No MCP servers. No auth. Just pure YAML + MD + RAG.
+
+## Agents
+
+| Agent | Domain | RAG Namespace |
+|-------|--------|---------------|
+| `orchid` | Core framework: ABCs, config, GenericAgent, supervisor, persistence | `orchid-framework` |
+| `rag` | RAG system: scopes, ingestion, retrieval, backends, hybrid search | `rag-system` |
+| `tools-skills` | Tools & skills: decorators, strategies, skill execution | `tools-skills` |
+| `mcp` | MCP protocol: servers, auth modes, discovery, gateway | `mcp-system` |
+| `auth` | Authorization: OAuth, OIDC, DCR, identity resolution | `auth-system` |
+| `bloom` | Pollen+Bloom events: signals, triggers, schedules, jobs | `bloom-events` |
+| `orchid-api` | FastAPI server: routers, streaming, endpoints, plugins | `orchid-api-pkg` |
+| `orchid-cli` | CLI: commands, interactive mode, ChromaDB, indexing | `orchid-cli-pkg` |
+| `orchid-frontend` | Next.js UI: components, NextAuth, SSE proxy, theming | `orchid-frontend-pkg` |
+| `ai-integration` | Production deployment: LLM selection, scaling, observability | `ai-integration` |
+
+## Run it
+
+Start with Docker (includes Qdrant, Ollama, and the API):
+
+```bash
+bash script/start_orchid_experts.sh
+```
+
+Or run the API directly (Ollama must be running on the host with `llama3.2` and `nomic-embed-text`):
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/orchid_experts/orchid.yml uvicorn orchid_api.main:app --port 8000
+```
+
+Or use the CLI for a quick one-off chat:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/orchid_experts/orchid.yml
+```
+
+The startup hook automatically seeds all 86 knowledge files into Qdrant.
+
+## Configuration walkthrough
+
+`orchid.yml` wires the runtime environment and points to the agent configs:
+
+```yaml
+# orchid.yml (trimmed)
+agents:
+  config_path: examples/orchid_experts/agents.yaml
+
+llm:
+  model: ollama/llama3.2
+  ollama_api_base: http://host.docker.internal:11434
+
+auth:
+  dev_bypass: false
+  identity_resolver_class: examples.orchid_experts.identity.ExpertsIdentityResolver
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: ollama/nomic-embed-text
+
+storage:
+  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  dsn: /data/experts_chats.db
+
+# config_storage:          # optional — manage agents via PostgreSQL
+#   enabled: true
+#   class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+#   dsn: postgresql://...
+
+startup:
+  hook: examples.orchid_experts.hooks.startup.seed_experts_knowledge
+```
+
+`agents.yaml` defines 10 agents, 9 cross-agent skills, supervisor routing, and guardrails:
+
+```yaml
+# agents.yaml (trimmed)
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+  rag:
+    enabled: true
+
+supervisor:
+  assistant_name: "Orchid Knowledge Assistant"
+
+guardrails:
+  input:
+    - type: prompt_injection
+      fail_action: block
+    - type: content_safety
+      fail_action: block
+    - type: max_length
+      fail_action: block
+      config:
+        max_characters: 5000
+  output:
+    - type: pii_detection
+      fail_action: redact
+      config:
+        entities: [email, phone, credit_card]
+
+skills:
+  secure-deployment:
+    description: "Combine guardrails configuration with OAuth security and production hardening"
+    steps:
+      - agent: orchid
+        instruction: "Explain guardrails configuration in agents.yaml"
+      - agent: auth
+        instruction: "Explain OAuth/OIDC setup and identity resolution"
+      - agent: ai-integration
+        instruction: "Explain production hardening and observability setup"
+
+  # ...8 more skills
+
+agents:
+  orchid:
+    description: >
+      Master of the orchid core framework. Explains ABCs, configuration schema,
+      GenericAgent pipeline, supervisor, LangGraph, persistence, guardrails,
+      multi-LLM support, embeddings, document parsing, mini-agents, and runtime.
+    prompt: |
+      You are the Orchid Framework Expert...
+      Always provide:
+      1. A clear explanation of the concept or configuration
+      2. The relevant YAML snippet when applicable
+      3. Links to the specific configuration keys and their defaults
+    rag:
+      namespace: orchid-framework
+      k: 5
+    guardrails:
+      input:
+        - type: topic_restriction
+          fail_action: warn
+          config:
+            allowed_topics: [framework, agent, supervisor, config, ...]
+    execution_hints:
+      parallel_safe: true
+
+  # ...9 more agents
+```
+
+## Knowledge structure
+
+86 markdown files across 10 namespaces. Each file covers one sub-topic (300–1500 words), with H2/H3 headings that act as natural chunk boundaries for the recursive splitter:
+
+```
+knowledge/
+├── orchid-framework/       12 files   Core framework: ABCs, pipeline, config, guardrails
+├── rag-system/             9 files    RAG: scopes, strategies, backends, hybrid search
+├── tools-skills/           6 files    Built-in tools, skill definition, strategies
+├── mcp-system/             7 files    MCP protocol, auth modes, gateway, warming
+├── auth-system/            9 files    OAuth, OIDC, DCR, identity, token stores
+├── bloom-events/           8 files    Pollen+Bloom: signals, triggers, scheduling
+├── orchid-api-pkg/         8 files    FastAPI server: routers, streaming, deployment
+├── orchid-cli-pkg/         9 files    CLI: commands, interactive mode, indexing
+├── orchid-frontend-pkg/    8 files    Next.js UI: components, NextAuth, theming
+└── ai-integration/        10 files    Production: LLM selection, scaling, observability
+```
+
+## What to look for
+
+- **All 10 agents use `GenericAgent`** — no `class:` field anywhere in `agents.yaml`. Every agent is defined purely in YAML with a system prompt and RAG namespace.
+- **Startup hook seeds knowledge** — `seed_experts_knowledge()` iterates the `knowledge/` directory, reads each `.md` file, and calls `ingest_document(pre_extracted_text=content)` with `RecursiveIngestion`. The parse-once pattern is followed: text is read once, passed to both the prompt builder and the ingestion pipeline.
+- **9 cross-agent skills** — The supervisor chains agents sequentially for multi-domain questions (e.g., "How do I secure my Orchid deployment?" triggers `secure-deployment`: `orchid` → `auth` → `ai-integration`).
+- **Per-agent topic restrictions** — Each agent has `topic_restriction` in `warn` mode with 10–15 allowed keyword terms, keeping answers within the agent's domain without blocking edge-case queries.
+- **Zero MCP dependencies** — This example is pure RAG. No `mcp_servers:` in any agent config. The startup hook alone populates the knowledge base.
+
+## Related concepts
+
+- [Agents](/concepts/agents)
+- [Hierarchical RAG](/concepts/rag)
+- [Supervisor](/concepts/supervisor)
+- [Tool Strategies](/concepts/tool-strategies)
+
+## Sources
+
+- examples/orchid_experts/orchid.yml
+- examples/orchid_experts/agents.yaml
+- examples/orchid_experts/identity.py
+- examples/orchid_experts/hooks/startup.py
+- examples/orchid_experts/knowledge/ (86 files)
 
 ---
 

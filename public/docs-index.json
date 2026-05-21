@@ -408,6 +408,21 @@
     "sources": ""
   },
   {
+    "route": "/examples/orchid-experts",
+    "title": "Orchid Experts",
+    "description": "Fleet of ten RAG-powered GenericAgent experts covering every Orchid concept — pure YAML + Markdown, zero custom agent code.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "rag",
+      "agents",
+      "supervisor",
+      "skills",
+      "guardrails"
+    ],
+    "sources": ""
+  },
+  {
     "route": "/best-practices",
     "title": "Best Practices",
     "description": "Recommended patterns for production-grade Orchid deployments.",
