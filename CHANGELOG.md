@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.8.0 (2026-05-21)
+
+### Features
+
+- Agents configuration management in builtin database documentation, agents files.
+  ([`b3d7113`](https://github.com/gadz82/orchid/commit/b3d7113487020e499d0a7f007979e6625805c4a3))
+
+
 ## v1.7.4 (2026-05-18)
 
 ### Bug Fixes
