@@ -17,7 +17,10 @@ import json
 import logging
 from typing import Any
 
-import asyncpg
+try:
+    import asyncpg
+except ImportError:
+    asyncpg = None  # type: ignore[assignment]
 
 from orchid_ai.config.storage import OrchidConfigStorage
 from orchid_ai.config.schema_agent import OrchidAgentConfig, _deep_merge
@@ -75,7 +78,16 @@ class OrchidPostgresConfigStorage(OrchidConfigStorage):
         dsn : str
             PostgreSQL connection string
             (e.g. ``"postgresql://user:pass@host:5432/db"``).
+
+        Raises
+        ------
+        ImportError
+            If ``asyncpg`` is not installed (required for PostgreSQL storage).
         """
+        if asyncpg is None:
+            raise ImportError(
+                "asyncpg is required for PostgreSQL storage. Install with: pip install orchid-ai[postgres]"
+            )
         self._dsn = dsn
         self._pool: asyncpg.Pool | None = None
         self._migrator = OrchidPostgresMigrationRunner()

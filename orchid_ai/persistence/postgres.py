@@ -17,7 +17,10 @@ import logging
 import uuid
 from typing import Any
 
-import asyncpg
+try:
+    import asyncpg
+except ImportError:
+    asyncpg = None  # type: ignore[assignment]
 
 from .base import OrchidChatStorage
 from .migrations.runner import OrchidMigrationRunner
@@ -70,6 +73,10 @@ class OrchidPostgresChatStorage(OrchidChatStorage):
     """
 
     def __init__(self, *, dsn: str, extra_migrations_package: str | None = None):
+        if asyncpg is None:
+            raise ImportError(
+                "asyncpg is required for PostgreSQL storage. Install with: pip install orchid-ai[postgres]"
+            )
         self._dsn = dsn
         self._pool: asyncpg.Pool | None = None
         self._migrator = OrchidPostgresMigrationRunner(
