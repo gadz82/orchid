@@ -285,6 +285,7 @@ def _instantiate_agent(
     mcp_client_factory: MCPClientFactory | None = None,
     summary_config: dict[str, Any] | None = None,
     graph_store: Any | None = None,
+    content_sources: Any | None = None,
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -337,10 +338,10 @@ def _instantiate_agent(
         kwargs["chat_model"] = agent_chat_model
     if summary_config:
         kwargs["summary_config"] = summary_config
-    # graph store flows through so ``graph_rag`` retrieval
-    # can traverse entities/edges.
     if graph_store is not None:
         kwargs["graph_store"] = graph_store
+    if content_sources:
+        kwargs["content_sources"] = content_sources
 
     return cls(**kwargs)
 
@@ -355,6 +356,7 @@ def _build_subgraph(
     default_retry: int = 0,
     mcp_client_factory: MCPClientFactory | None = None,
     graph_store: Any | None = None,
+    content_sources: Any | None = None,
 ) -> Any:
     """
     Build a sub-graph for an agent with children.
@@ -374,6 +376,7 @@ def _build_subgraph(
             default_retry,
             mcp_client_factory,
             graph_store=graph_store,
+            content_sources=content_sources,
         )
         children_agents.append(child_agent)
 
@@ -650,6 +653,76 @@ def build_graph(
             "recent_turns": sup.history_summary_recent_turns,
         }
 
+    # ── Build conversation memory instance ──────────────────
+    memory: Any = None
+    memory_strategy = sup.memory.strategy
+    if memory_strategy in ("running_summary", "rag_augmented") and runtime.chat_storage is not None:
+        from ..agents.memory import OrchidInMemoryConversationMemory
+        from ..core.memory import NullConversationMemory
+
+        # Build a cheap chat model for summary extension calls
+        memory_model = sup.memory.summary_model or sup.history_summary_model or default_model
+        memory_chat_model: BaseChatModel = _build_chat_model(
+            memory_model,
+            fallback_model=default_fallback,
+            retry_attempts=0,
+        )
+        try:
+            if memory_strategy == "rag_augmented":
+                from ..agents.memory_rag import OrchidRAGConversationMemory
+
+                memory = OrchidRAGConversationMemory(
+                    chat_storage=runtime.chat_storage,
+                    chat_model=memory_chat_model,
+                    reader=runtime.get_reader(),
+                    writer=runtime.get_writer(),
+                    structured_output=sup.memory.structured_output,
+                )
+                logger.info(
+                    "[Graph] memory strategy=rag_augmented model=%s namespace=%s k=%d",
+                    memory_model,
+                    sup.memory.rag_namespace,
+                    sup.memory.rag_k,
+                )
+            else:
+                memory = OrchidInMemoryConversationMemory(
+                    chat_storage=runtime.chat_storage,
+                    chat_model=memory_chat_model,
+                    structured_output=sup.memory.structured_output,
+                )
+                logger.info(
+                    "[Graph] memory strategy=running_summary model=%s persist=%s structured=%s",
+                    memory_model,
+                    sup.memory.persist_summary,
+                    sup.memory.structured_output,
+                )
+            if summary_cfg is not None:
+                summary_cfg["memory"] = memory
+                summary_cfg["structured_output"] = sup.memory.structured_output
+            else:
+                summary_cfg = {
+                    "model": sup.history_summary_model or default_model,
+                    "recent_turns": sup.history_summary_recent_turns,
+                    "memory": memory,
+                    "structured_output": sup.memory.structured_output,
+                }
+        except Exception as exc:
+            logger.warning("[Graph] Failed to initialise memory: %s", exc)
+            memory = NullConversationMemory()
+    elif memory_strategy in ("running_summary", "rag_augmented") and runtime.chat_storage is None:
+        logger.warning(
+            "[Graph] memory.strategy=%s configured but no chat_storage in runtime — memory disabled",
+            memory_strategy,
+        )
+    if memory is None:
+        from ..core.memory import NullConversationMemory
+
+        memory = NullConversationMemory()
+
+    if summary_cfg is not None:
+        summary_cfg["truncation_strategy"] = sup.memory.truncation_strategy
+        summary_cfg["truncation_max_chars"] = sup.memory.truncation_max_chars
+
     for agent_name, agent_config in config.agents.items():
         if agent_config.children:
             # Agent with children → build a sub-graph
@@ -663,6 +736,7 @@ def build_graph(
                 default_retry,
                 mcp_factory,
                 graph_store=graph_store,
+                content_sources=runtime.content_sources,
             )
             subgraph_nodes[agent_name] = subgraph
         else:
@@ -677,6 +751,7 @@ def build_graph(
                 mcp_factory,
                 summary_config=summary_cfg,
                 graph_store=graph_store,
+                content_sources=runtime.content_sources,
             )
             agents.append(agent)
 
@@ -742,6 +817,7 @@ def build_graph(
         orchestrator_skills=config.skills or None,
         supervisor_config=config.supervisor,
         routing_chat_model=routing_chat_model,
+        memory=memory,
     )
 
     # ── Build graph ──

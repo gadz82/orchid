@@ -25,11 +25,13 @@ class SkillExecutor:
         mcp_dispatcher: Any,
         builtin_tool_caller: Callable[..., Awaitable[Any]],
         agent_peers: dict[str, Any] | None = None,
+        content_sources: Any = None,
     ):
         self._agent_name = agent_name
         self._mcp_dispatcher = mcp_dispatcher
         self._builtin_tool_caller = builtin_tool_caller
         self._agent_peers = agent_peers or {}
+        self._content_sources = content_sources
         self._skill_depth: int = 0
 
     async def run_skill(
@@ -83,6 +85,7 @@ class SkillExecutor:
                     auth,
                     step.arguments,
                     previous_results,
+                    content_sources=self._content_sources,
                 )
         except (ValueError, TypeError, KeyError, RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
             logger.error("[%s] Skill step '%s' failed: %s", self._agent_name, step_name, exc)
@@ -95,6 +98,7 @@ class SkillExecutor:
         auth: OrchidAuthContext,
         step_arguments: dict[str, Any],
         previous_results: dict[str, Any],
+        content_sources: Any = None,
     ) -> Any:
         """Execute a built-in tool skill step.
 
@@ -117,6 +121,7 @@ class SkillExecutor:
         available: dict[str, Any] = {
             "query": query,
             "auth_context": auth,
+            "content_sources": content_sources,
             **step_arguments,
         }
         if previous_results:

@@ -22,6 +22,8 @@ from langchain_core.messages import AIMessage
 
 from ..config.schema import OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
+from ..core.helpers import _filter_summary_messages
+from ..core.memory import OrchidConversationMemory
 from ._supervisor_helpers import _llm_complete
 from .state import GraphState
 
@@ -62,11 +64,13 @@ class SequentialAdvancer:
         agent_descriptions: dict[str, str],
         supervisor_config: OrchidSupervisorConfig,
         chat_model: BaseChatModel | None,
+        memory: OrchidConversationMemory | None = None,
     ) -> None:
         self._model = model
         self._agent_descriptions = agent_descriptions
         self._supervisor_config = supervisor_config
         self._chat_model = chat_model
+        self._memory = memory
 
     async def advance(self, state: GraphState, pending: list[str]) -> GraphState:
         """Activate the next agent in *pending* and emit a handoff message."""
@@ -94,14 +98,38 @@ class SequentialAdvancer:
             state,
             max_turns=sup.history_max_turns,
             max_chars=sup.history_max_chars,
+            truncation_strategy=sup.memory.truncation_strategy,
         )
 
         if history and sup.history_summary_enabled and self._chat_model:
+            running_summary: str | None = None
+            if self._memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
+                chat_id = state.get("chat_id", "")
+                if chat_id:
+                    try:
+                        running_summary = await self._memory.get_running_summary(chat_id)
+                    except Exception:
+                        pass
             history = await OrchidAgent.compress_conversation_history(
                 history,
                 chat_model=self._chat_model,
                 recent_turns=sup.history_summary_recent_turns,
+                running_summary=running_summary,
+                structured_output=sup.memory.structured_output,
             )
+            # Persist the updated summary
+            if self._memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
+                chat_id = state.get("chat_id", "")
+                if chat_id:
+                    try:
+                        delta = _filter_summary_messages(history)
+                        await self._memory.update_running_summary(
+                            chat_id,
+                            delta,
+                            running_summary,
+                        )
+                    except Exception:
+                        pass
 
         clean_history = (
             [m for m in history if not m.get("content", "").startswith("[Conversation summary]")] if history else []

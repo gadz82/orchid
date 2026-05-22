@@ -66,6 +66,7 @@ _DOWN = [
     "DROP TABLE IF EXISTS mcp_gateway_clients",
     "DROP TABLE IF EXISTS mcp_client_registrations",
     "DROP TABLE IF EXISTS mcp_oauth_tokens",
+    "DROP TABLE IF EXISTS conversation_summaries",
     "DROP TABLE IF EXISTS chat_messages",
     "DROP TABLE IF EXISTS chat_sessions",
 ]

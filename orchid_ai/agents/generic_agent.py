@@ -28,6 +28,7 @@ from langchain_core.messages import AIMessage
 from ..config.schema import OrchidAgentConfig
 from ..core.agent import OrchidAgent
 from ..core.graph_store import OrchidGraphStore
+from ..core.helpers import _filter_summary_messages
 from ..core.mcp import OrchidMCPClient
 from ..core.repository import OrchidVectorReader
 from ..core.retrieval import apply_pre_strategy
@@ -91,6 +92,7 @@ class GenericAgent(OrchidAgent):
             mcp_dispatcher=self._mcp_dispatcher,
             builtin_tool_caller=self.call_builtin_tool,
             agent_peers=self._agent_peers,
+            content_sources=self._content_sources,
         )
 
     def needs_peer_wiring(self) -> bool:
@@ -152,7 +154,12 @@ class GenericAgent(OrchidAgent):
                 pre_transformers,
                 raw_query,
                 chat_model=self._chat_model,
-                history=self.extract_conversation_history(state, max_turns=5, max_chars=500),
+                history=self.extract_conversation_history(
+                    state,
+                    max_turns=5,
+                    max_chars=500,
+                    truncation_strategy=self._get_truncation_strategy(),
+                ),
             )
             transform_elapsed = (time.perf_counter() - transform_start) * 1000
             perf_logger.info(
@@ -224,6 +231,7 @@ class GenericAgent(OrchidAgent):
                 state,
                 rag_data,
                 skip_tools=set(cached_tools.keys()),
+                content_sources=self._content_sources,
             )
             loop_elapsed = (time.perf_counter() - loop_start) * 1000
             perf_logger.info(
@@ -261,6 +269,8 @@ class GenericAgent(OrchidAgent):
                 len(summary),
             )
 
+        await self._store_agent_turn(state, summary)
+
         return {
             "messages": [AIMessage(content=f"[{self.name.title()} Agent]\n{summary}")],
             "mcp_context": {self.name: mcp_data},
@@ -268,6 +278,52 @@ class GenericAgent(OrchidAgent):
         }
 
     # ── Pipeline steps ──────────────────────────────────────────
+
+    def _get_truncation_strategy(self) -> str:
+        if self._summary_config:
+            return self._summary_config.get("truncation_strategy", "hard")
+        return "hard"
+
+    async def _store_agent_turn(
+        self,
+        state: OrchidAgentState | None,
+        response: str,
+    ) -> None:
+        if state is None or self._summary_config is None:
+            return
+        memory = self._summary_config.get("memory")
+        if memory is None:
+            return
+        from .memory_rag import OrchidRAGConversationMemory
+
+        if not isinstance(memory, OrchidRAGConversationMemory):
+            return
+        try:
+            chat_id = state.get("chat_id", "")
+            if not chat_id:
+                return
+            auth = state.get("auth_context")
+            tenant_id = auth.tenant_key if auth else "default"
+            user_id = auth.user_id if auth else ""
+            query = self.extract_user_query(state)
+            if query:
+                await memory.store_conversation_turn(
+                    chat_id=chat_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    turn={"role": "user", "content": query},
+                    metadata={"turn_type": "agent", "agent": self.name},
+                )
+            if response:
+                await memory.store_conversation_turn(
+                    chat_id=chat_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    turn={"role": "assistant", "content": response},
+                    metadata={"turn_type": "agent", "agent": self.name},
+                )
+        except Exception:
+            pass
 
     def _build_scope(self, auth: OrchidAuthContext, state: OrchidAgentState) -> OrchidRAGScope:
         """Build hierarchical RAG scope from auth + state."""
@@ -411,6 +467,7 @@ class GenericAgent(OrchidAgent):
             self.extract_conversation_history(
                 state,
                 strip_prefixes=self._compute_agent_prefixes(),
+                truncation_strategy=self._get_truncation_strategy(),
             )
             if state
             else []
@@ -418,11 +475,35 @@ class GenericAgent(OrchidAgent):
 
         # Compress older history via sliding-window summarization when enabled.
         if history and self._summary_config and self._chat_model:
+            running_summary: str | None = None
+            memory = self._summary_config.get("memory")
+            if memory is not None and state:
+                chat_id = state.get("chat_id", "")
+                if chat_id:
+                    try:
+                        running_summary = await memory.get_running_summary(chat_id)
+                    except Exception:
+                        pass
             history = await self.compress_conversation_history(
                 history,
                 chat_model=self._chat_model,
                 recent_turns=self._summary_config.get("recent_turns", 3),
+                running_summary=running_summary,
+                structured_output=self._summary_config.get("structured_output", False),
             )
+            # Persist the updated summary
+            if memory is not None and running_summary is not None and state:
+                chat_id = state.get("chat_id", "")
+                if chat_id:
+                    try:
+                        delta = _filter_summary_messages(history)
+                        await memory.update_running_summary(
+                            chat_id,
+                            delta,
+                            running_summary,
+                        )
+                    except Exception:
+                        pass
 
         prior_ctx = (state.get("mcp_context") or {}).get(self.name) if state else None
 
@@ -469,6 +550,7 @@ class GenericAgent(OrchidAgent):
         rag_data: list[dict[str, Any]],
         *,
         skip_tools: set[str] | None = None,
+        content_sources: Any = None,
     ) -> tuple[str | None, dict[str, Any]]:
         """Unified MCP + built-in tool loop using native ``tool_calls``.
 
@@ -511,6 +593,7 @@ class GenericAgent(OrchidAgent):
             auth=auth,
             agent_name=self.name,
             approval_tools=self._config.approval_tools or None,
+            content_sources=content_sources,
         )
         tool_map: dict[str, Any] = {t.name: t for t in lc_tools}
 
@@ -522,6 +605,7 @@ class GenericAgent(OrchidAgent):
                 self.extract_conversation_history(
                     state,
                     strip_prefixes=self._compute_agent_prefixes(),
+                    truncation_strategy=self._get_truncation_strategy(),
                 )
             )
         messages.append({"role": "user", "content": query})

@@ -219,6 +219,26 @@ class OrchidSQLiteChatStorage(OrchidChatStorage):
         rows = await cursor.fetchall()
         return [_row_to_message(r) for r in rows]
 
+    # ── Conversation summaries (running-summary memory) ──────
+
+    async def get_conversation_summary(self, chat_id: str) -> str | None:
+        cursor = await self._conn.execute(
+            "SELECT summary_text FROM conversation_summaries WHERE chat_id = ?",
+            (chat_id,),
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else None
+
+    async def save_conversation_summary(self, chat_id: str, summary: str, turn_number: int) -> None:
+        now_iso = utcnow().isoformat()
+        await self._conn.execute(
+            "INSERT INTO conversation_summaries (chat_id, summary_text, turn_number, updated_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(chat_id) DO UPDATE SET summary_text = ?, turn_number = ?, updated_at = ?",
+            (chat_id, summary, turn_number, now_iso, summary, turn_number, now_iso),
+        )
+        await self._conn.commit()
+
 
 # ── Row mappers ──────────────────────────────────────────────
 

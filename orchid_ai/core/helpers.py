@@ -15,8 +15,15 @@ import json
 import logging
 from typing import Any
 
+from .memory_types import (
+    OrchidConversationSummary,
+    DEFAULT_NARRATIVE_FALLBACK_PROMPT,
+    DEFAULT_STRUCTURED_SUMMARY_SYSTEM_PROMPT,
+    DEFAULT_STRUCTURED_SUMMARY_USER_PROMPT,
+)
 from .scopes import OrchidRAGScope
 from .state import OrchidAgentState
+from .truncation import OrchidTruncationStrategy, truncate_content
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +51,19 @@ def extract_conversation_history(
     max_chars: int | None = None,
     skip_prefixes: tuple[str, ...] = ("[Supervisor",),
     strip_prefixes: tuple[str, ...] = (),
+    truncation_strategy: str = "hard",
 ) -> list[dict[str, str]]:
     """Extract clean user/assistant pairs from graph state messages.
 
     Filters out supervisor routing noise, strips agent name tags,
     excludes the current query (last HumanMessage), and caps output
     to ``max_turns`` exchange pairs.
+
+    When ``max_chars`` is set, individual messages longer than
+    ``max_chars`` are truncated using ``truncation_strategy``
+    (one of ``"hard"``, ``"middle"``, ``"llm"``, ``"semantic"``).
     """
+    strategy = OrchidTruncationStrategy(truncation_strategy)
     messages = state.get("messages", [])
     if not messages:
         return []
@@ -63,13 +76,12 @@ def extract_conversation_history(
         if not content.strip():
             continue
 
-        # Skip internal messages (e.g. supervisor routing)
         if any(content.startswith(prefix) for prefix in skip_prefixes):
             continue
 
         if msg_type in ("human", "humanmessage"):
             if max_chars is not None and len(content) > max_chars:
-                content = content[:max_chars] + "…"
+                content = truncate_content(content, max_chars, strategy)
             history.append({"role": "user", "content": content})
         elif msg_type in ("ai", "aimessage"):
             for prefix in strip_prefixes:
@@ -77,14 +89,12 @@ def extract_conversation_history(
                     content = content[len(prefix) :]
                     break
             if max_chars is not None and len(content) > max_chars:
-                content = content[:max_chars] + "…"
+                content = truncate_content(content, max_chars, strategy)
             history.append({"role": "assistant", "content": content})
 
-    # Drop the last user message — it will be added separately as the current query
     if history and history[-1]["role"] == "user":
         history = history[:-1]
 
-    # Keep only the most recent turns to avoid exceeding context limits
     max_messages = max_turns * 2
     if len(history) > max_messages:
         history = history[-max_messages:]
@@ -100,11 +110,27 @@ async def compress_conversation_history(
     *,
     chat_model: Any,
     recent_turns: int = 10,
+    running_summary: str | None = None,
+    structured_output: bool = False,
+    compression_system_prompt: str | None = None,
+    compression_user_prompt: str | None = None,
+    extension_user_prompt: str | None = None,
 ) -> list[dict[str, str]]:
     """Compress older history into a summary, keeping recent turns verbatim.
 
     When history fits within the window, returns it unchanged (no LLM call).
     On LLM failure, returns only the recent turns (no crash).
+
+    When ``running_summary`` is provided, older messages are used to
+    **extend** the existing summary incrementally rather than
+    summarizing them from scratch.  This is the stateful running-summary
+    pattern that avoids O(n^2) re-computation.
+
+    When ``structured_output`` is ``True``, the LLM is prompted to
+    produce a structured JSON summary with entity extraction.  On JSON
+    parse failure the system falls back to a narrative-only summary.
+
+    Prompt overrides (``*_prompt``) use ``None`` → module-level defaults.
     """
     max_recent = recent_turns * 2
     if len(history) <= max_recent:
@@ -114,15 +140,56 @@ async def compress_conversation_history(
     recent = history[-max_recent:]
 
     older_text = "\n".join(f"{m['role']}: {m['content']}" for m in older)
-    prompt = (
-        "Summarise the following conversation in one short paragraph. "
-        "Focus on: key topics discussed, entities mentioned, actions taken, "
-        "and any outstanding questions or requests.\n\n" + older_text
-    )
+
+    if running_summary:
+        if structured_output:
+            system_prompt = (
+                "You are a conversation summarizer that produces structured summaries. "
+                "You have an existing summary and new messages to incorporate. "
+                "Update the summary to reflect new information, remove contradicted "
+                "facts, and merge duplicate entities.\n\n"
+                "Output ONLY valid JSON."
+            )
+            user_prompt = (
+                extension_user_prompt
+                or (
+                    "Given the existing summary below and the new conversation messages, "
+                    "produce an updated summary that incorporates all new information.\n\n"
+                    "Existing summary:\n{existing_summary}\n\n"
+                    "New messages:\n{new_messages}"
+                )
+            ).format(existing_summary=running_summary, new_messages=older_text)
+        else:
+            system_prompt = compression_system_prompt or "You are a conversation summarizer. Output only the summary."
+            user_prompt = (
+                extension_user_prompt
+                or (
+                    "Given this existing summary and these new conversation messages, "
+                    "produce an updated summary that incorporates all new information.\n\n"
+                    "Existing summary:\n{existing_summary}\n\n"
+                    "New messages:\n{new_messages}"
+                )
+            ).format(existing_summary=running_summary, new_messages=older_text)
+    elif structured_output:
+        system_prompt = compression_system_prompt or DEFAULT_STRUCTURED_SUMMARY_SYSTEM_PROMPT
+        user_prompt = (compression_user_prompt or DEFAULT_STRUCTURED_SUMMARY_USER_PROMPT).format(transcript=older_text)
+    else:
+        system_prompt = compression_system_prompt or "You are a conversation summarizer. Output only the summary."
+        user_prompt = (
+            compression_user_prompt
+            or (
+                "Summarise the following conversation in one short paragraph. "
+                "Focus on: key topics discussed, entities mentioned, actions taken, "
+                "and any outstanding questions or requests.\n\n{transcript}"
+            )
+        ).format(transcript=older_text)
 
     try:
         result = await chat_model.ainvoke(
-            [{"role": "user", "content": prompt}],
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
             temperature=0.0,
         )
         summary_text = result.content or ""
@@ -130,11 +197,35 @@ async def compress_conversation_history(
         logger.warning("History compression failed (%s), falling back to truncation", exc)
         return recent
 
+    if structured_output:
+        structured = OrchidConversationSummary.from_json(summary_text)
+        if structured is not None:
+            context_string = structured.to_context_string()
+        else:
+            logger.warning("Structured summary JSON parse failed, falling back to narrative")
+            context_string = _narrative_fallback(older_text)
+    else:
+        context_string = summary_text.strip()
+
     compressed: list[dict[str, str]] = [
-        {"role": "assistant", "content": f"[Conversation summary]\n{summary_text.strip()}"},
+        {"role": "assistant", "content": f"[Conversation summary]\n{context_string}"},
     ]
     compressed.extend(recent)
     return compressed
+
+
+def _narrative_fallback(transcript: str) -> str:
+    return DEFAULT_NARRATIVE_FALLBACK_PROMPT.format(transcript=transcript)
+
+
+def _filter_summary_messages(history: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return only the non-summary messages from *history*.
+
+    The ``[Conversation summary]`` prefix is an internal compression
+    artefact — it should not be fed back into the summariser as if it
+    were a real conversation turn.
+    """
+    return [m for m in history if not m.get("content", "").startswith("[Conversation summary]")]
 
 
 # ── RAG retrieval ──────────────────────────────────────────────

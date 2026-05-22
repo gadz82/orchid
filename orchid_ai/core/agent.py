@@ -26,6 +26,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Literal
 
 from . import helpers as _helpers
+from .content import OrchidContentSource
 from .mcp import OrchidMCPClient
 from .repository import OrchidVectorReader
 from .scopes import OrchidRAGScope
@@ -65,6 +66,7 @@ class OrchidAgent(ABC):
         self.reader = reader
         self.mcp_clients = mcp_clients or []
         self._chat_model = chat_model  # BaseChatModel (duck-typed to avoid core/ deps)
+        self._content_sources: list[OrchidContentSource] = _kwargs.pop("content_sources", None) or []
 
         # ── Events-layer wiring (Pollen + Bloom — §15.1) ─────
         # The graph builder injects these when ``events.enabled:
@@ -112,6 +114,10 @@ class OrchidAgent(ABC):
         Override if the agent uses RAG.  Default: empty string (no RAG).
         """
         return ""
+
+    @property
+    def content_sources(self) -> list[OrchidContentSource]:
+        return self._content_sources
 
     # ── Execution ───────────────────────────────────────────
 
@@ -168,6 +174,7 @@ class OrchidAgent(ABC):
         max_chars: int | None = None,
         skip_prefixes: tuple[str, ...] = ("[Supervisor",),
         strip_prefixes: tuple[str, ...] = (),
+        truncation_strategy: str = "hard",
     ) -> list[dict[str, str]]:
         """Extract recent conversation history from graph state.
 
@@ -179,6 +186,7 @@ class OrchidAgent(ABC):
             max_chars=max_chars,
             skip_prefixes=skip_prefixes,
             strip_prefixes=strip_prefixes,
+            truncation_strategy=truncation_strategy,
         )
 
     @staticmethod
@@ -187,73 +195,27 @@ class OrchidAgent(ABC):
         *,
         chat_model: Any,
         recent_turns: int = 3,
+        running_summary: str | None = None,
+        structured_output: bool = False,
+        compression_system_prompt: str | None = None,
+        compression_user_prompt: str | None = None,
+        extension_user_prompt: str | None = None,
     ) -> list[dict[str, str]]:
         """Compress older conversation turns into a summary, keeping recent ones verbatim.
 
-        Implements the **sliding-window with summarization** pattern:
-        messages older than ``recent_turns`` are condensed into a single
-        system-style summary paragraph by calling the LLM, while the
-        most recent ``recent_turns`` exchanges are preserved as-is.
-
-        If the history fits within ``recent_turns * 2`` messages, it is
-        returned unchanged (no LLM call).
-
-        Parameters
-        ----------
-        history : list[dict[str, str]]
-            Full conversation history from ``extract_conversation_history()``.
-        chat_model : BaseChatModel
-            LangChain chat model for the summarization call (duck-typed).
-        recent_turns : int
-            Number of recent user/assistant exchange pairs to keep verbatim.
-            Default ``10`` (= 20 messages).
-
-        Returns
-        -------
-        list[dict[str, str]]
-            Compressed history: one ``{"role": "assistant", "content":
-            "Conversation summary: ..."}`` entry followed by the recent
-            verbatim messages.  If no compression was needed, returns the
-            original history unchanged.
+        Delegates to :func:`orchid_ai.core.helpers.compress_conversation_history`.
+        See that function for full documentation.
         """
-        recent_count = recent_turns * 2
-        if len(history) <= recent_count:
-            return history
-
-        older = history[:-recent_count]
-        recent = history[-recent_count:]
-
-        # Build a simple transcript for the LLM to summarize
-        transcript_lines = [f"{m['role'].upper()}: {m['content']}" for m in older]
-        transcript = "\n".join(transcript_lines)
-
-        summary_prompt = (
-            "Summarize the following conversation excerpt in 2-4 sentences. "
-            "Focus on: (1) the key topics discussed, (2) any entities or "
-            "names mentioned, (3) actions taken or decisions made, (4) any "
-            "outstanding questions. Be factual and concise.\n\n"
-            f"{transcript}"
+        return await _helpers.compress_conversation_history(
+            history,
+            chat_model=chat_model,
+            recent_turns=recent_turns,
+            running_summary=running_summary,
+            structured_output=structured_output,
+            compression_system_prompt=compression_system_prompt,
+            compression_user_prompt=compression_user_prompt,
+            extension_user_prompt=extension_user_prompt,
         )
-
-        try:
-            result = await chat_model.ainvoke(
-                [
-                    {"role": "system", "content": "You are a conversation summarizer. Output only the summary."},
-                    {"role": "user", "content": summary_prompt},
-                ],
-                temperature=0.0,
-            )
-            summary_text = result.content or ""
-        except Exception as exc:
-            logger.warning("History compression failed (%s), falling back to truncation", exc)
-            # Fallback: just keep the recent turns (no summary)
-            return recent
-
-        compressed: list[dict[str, str]] = [
-            {"role": "assistant", "content": f"[Conversation summary]\n{summary_text.strip()}"},
-        ]
-        compressed.extend(recent)
-        return compressed
 
     async def fetch_rag_context(
         self,

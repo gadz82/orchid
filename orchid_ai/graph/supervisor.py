@@ -32,6 +32,8 @@ from pydantic import BaseModel, Field
 
 from ..config.schema import OrchidOrchestratorSkillConfig, OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
+from ..core.helpers import _filter_summary_messages
+from ..core.memory import OrchidConversationMemory
 from .sequential_advancer import SequentialAdvancer
 from .state import GraphState
 from .synthesizer import ResponseSynthesizer
@@ -122,6 +124,7 @@ def create_supervisor_node(
     orchestrator_skills: dict[str, OrchidOrchestratorSkillConfig] | None = None,
     supervisor_config: OrchidSupervisorConfig | None = None,
     routing_chat_model: BaseChatModel | None = None,
+    memory: OrchidConversationMemory | None = None,
 ):
     """
     Return a LangGraph node function with *model*, *agent_descriptions*,
@@ -145,11 +148,13 @@ def create_supervisor_node(
         agent_descriptions=agent_descriptions,
         supervisor_config=sup_config,
         chat_model=route_chat_model,
+        memory=memory,
     )
     synthesizer = ResponseSynthesizer(
         model=model,
         supervisor_config=sup_config,
         chat_model=chat_model,
+        memory=memory,
     )
 
     async def supervisor_node(state: GraphState) -> GraphState:
@@ -182,7 +187,7 @@ def create_supervisor_node(
 
         # ── Case 3: First entry — analyse intent and route ──
         perf_logger.info("[PERF][supervisor] phase=route (initial intent analysis)")
-        result = await _route(state, model, agent_descriptions, skills, sup_config, route_chat_model)
+        result = await _route(state, model, agent_descriptions, skills, sup_config, route_chat_model, memory)
         elapsed = (time.perf_counter() - start) * 1000
         perf_logger.info(
             "[PERF][supervisor] phase=route took %.1f ms (active=%s pending=%s)",
@@ -266,19 +271,68 @@ async def _extract_and_compress_history(
     state: GraphState,
     sup: OrchidSupervisorConfig,
     chat_model: BaseChatModel | None = None,
+    memory: OrchidConversationMemory | None = None,
 ) -> list[dict[str, str]]:
     """Extract conversation history, optionally compressing older turns."""
     history = OrchidAgent.extract_conversation_history(
         state,
         max_turns=sup.history_max_turns,
         max_chars=sup.history_max_chars,
+        truncation_strategy=sup.memory.truncation_strategy,
     )
     if history and sup.history_summary_enabled and chat_model:
+        running_summary: str | None = None
+        if memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
+            chat_id = state.get("chat_id", "")
+            if chat_id:
+                try:
+                    running_summary = await memory.get_running_summary(chat_id)
+                except Exception:
+                    pass
         history = await OrchidAgent.compress_conversation_history(
             history,
             chat_model=chat_model,
             recent_turns=sup.history_summary_recent_turns,
+            running_summary=running_summary,
+            structured_output=sup.memory.structured_output,
         )
+        if memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
+            chat_id = state.get("chat_id", "")
+            if chat_id:
+                try:
+                    delta = _filter_summary_messages(history)
+                    await memory.update_running_summary(
+                        chat_id,
+                        delta,
+                        running_summary,
+                    )
+                except Exception:
+                    pass
+    # ── RAG-augmented retrieval (Phase 3) ──────────────────
+    if memory is not None and sup.memory.strategy == "rag_augmented":
+        chat_id = state.get("chat_id", "")
+        if chat_id:
+            user_query = OrchidAgent.extract_user_query(state)
+            if user_query:
+                try:
+                    auth = state.get("auth_context")
+                    tenant_id = auth.tenant_key if auth else "default"
+                    user_id = auth.user_id if auth else ""
+                    # Use the get_relevant_history_merged method on the RAG memory
+                    from ..agents.memory_rag import OrchidRAGConversationMemory
+
+                    if isinstance(memory, OrchidRAGConversationMemory):
+                        history = await memory.get_relevant_history_merged(
+                            query=user_query,
+                            chat_id=chat_id,
+                            recent_verbatim=history,
+                            tenant_id=tenant_id,
+                            user_id=user_id,
+                            k=sup.memory.rag_k,
+                            similarity_threshold=sup.memory.rag_similarity_threshold,
+                        )
+                except Exception:
+                    pass
     # Filter conversation summaries — internal compression artifacts
     return [m for m in history if not m.get("content", "").startswith("[Conversation summary]")] if history else []
 
@@ -356,6 +410,7 @@ async def _route(
     orchestrator_skills: dict[str, OrchidOrchestratorSkillConfig] | None = None,
     supervisor_config: OrchidSupervisorConfig | None = None,
     chat_model: BaseChatModel | None = None,
+    memory: OrchidConversationMemory | None = None,
 ) -> GraphState:
     """Analyse user intent, choose execution mode, and activate agents."""
     desc_text = "\n".join(f"- **{name}**: {desc}" for name, desc in agent_descriptions.items())
@@ -377,7 +432,7 @@ async def _route(
         skill_descriptions=skill_text,
     )
 
-    clean_history = await _extract_and_compress_history(state, sup, chat_model)
+    clean_history = await _extract_and_compress_history(state, sup, chat_model, memory)
 
     llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     if clean_history:

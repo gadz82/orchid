@@ -218,6 +218,29 @@ class OrchidPostgresChatStorage(OrchidChatStorage):
             )
             return [_row_to_message(r) for r in rows]
 
+    # ── Conversation summaries (running-summary memory) ──────
+
+    async def get_conversation_summary(self, chat_id: str) -> str | None:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT summary_text FROM conversation_summaries WHERE chat_id = $1",
+                chat_id,
+            )
+            return row["summary_text"] if row else None
+
+    async def save_conversation_summary(self, chat_id: str, summary: str, turn_number: int) -> None:
+        now = utcnow()
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO conversation_summaries (chat_id, summary_text, turn_number, updated_at) "
+                "VALUES ($1, $2, $3, $4) "
+                "ON CONFLICT (chat_id) DO UPDATE SET summary_text = $2, turn_number = $3, updated_at = $4",
+                chat_id,
+                summary,
+                turn_number,
+                now,
+            )
+
 
 # ── Row mappers ──────────────────────────────────────────────
 

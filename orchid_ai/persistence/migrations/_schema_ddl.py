@@ -279,6 +279,15 @@ PG_UP = [
         updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
     )
     """,
+    # ── Conversation summaries (running-summary memory) ──
+    """
+    CREATE TABLE IF NOT EXISTS conversation_summaries (
+        chat_id       TEXT PRIMARY KEY REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        summary_text  TEXT NOT NULL,
+        turn_number   INTEGER NOT NULL DEFAULT 0,
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+    """,
 ]
 
 # ── SQLite DDL ──────────────────────────────────────────────
@@ -548,6 +557,15 @@ SQLITE_UP = [
         config       TEXT NOT NULL,
         created_at   TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+    """,
+    # ── Conversation summaries (running-summary memory) ──
+    """
+    CREATE TABLE IF NOT EXISTS conversation_summaries (
+        chat_id       TEXT PRIMARY KEY REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        summary_text  TEXT NOT NULL,
+        turn_number   INTEGER NOT NULL DEFAULT 0,
+        updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
     )
     """,
 ]
