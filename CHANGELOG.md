@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.8.1 (2026-05-22)
+
+### Bug Fixes
+
+- Add content source support with schema, registry, and tools; implement tests and memory
+  persistence
+  ([`d971ec6`](https://github.com/gadz82/orchid/commit/d971ec6ed8a5079c5eb3e906416ecbda885135af))
+
+
 ## v1.8.0 (2026-05-21)
 
 ### Features
