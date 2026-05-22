@@ -1,0 +1,228 @@
+---
+title: "Chat Summarization"
+description: "Running summaries, structured entity extraction, RAG-augmented conversation memory, and configurable truncation strategies."
+package: "orchid"
+section: "concepts"
+order: 22
+tags: ["memory", "summarization", "rag", "truncation", "conversation"]
+sources:
+  - "orchid/orchid_ai/core/memory.py"
+  - "orchid/orchid_ai/core/memory_types.py"
+  - "orchid/orchid_ai/core/message_filter.py"
+  - "orchid/orchid_ai/core/truncation.py"
+  - "orchid/orchid_ai/core/helpers.py"
+  - "orchid/orchid_ai/agents/memory.py"
+  - "orchid/orchid_ai/agents/memory_rag.py"
+  - "orchid/orchid_ai/config/schema_memory.py"
+  - "orchid/orchid_ai/config/schema_prompts.py"
+  - "orchid/orchid_ai/config/schema_supervisor.py"
+  - "orchid/orchid_ai/graph/supervisor.py"
+  - "orchid/orchid_ai/graph/graph.py"
+related: ["/concepts/supervisor", "/concepts/rag", "/concepts/persistence", "/concepts/embeddings"]
+---
+
+Orchid replaces the naive O(n²) stateless re-summarization anti-pattern with a layered conversation memory system: **incremental running summaries**, **structured JSON entity extraction**, and **Qdrant-backed semantic retrieval** of past turns. All message filtering is consolidated into a single configurable pipeline.
+
+## Configuration
+
+Everything lives under `supervisor.memory:` in `agents.yaml`:
+
+```yaml
+supervisor:
+  memory:
+    strategy: "rag_augmented"           # none | running_summary | rag_augmented
+    summary_recent_turns: 10           # keep last N exchanges verbatim
+    summary_model: null                # null = supervisor model
+    structured_output: true            # JSON entity extraction
+    persist_summary: true              # store in chat storage
+    summary_prompt: null               # custom compression prompt (null = default)
+    # -- rag_augmented only --
+    rag_namespace: "__memory__"        # reserved Qdrant namespace
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    # -- truncation --
+    truncation_strategy: "hard"        # hard | middle | llm | semantic
+    truncation_max_chars: 1000
+```
+
+Compression prompts are overridable per-agent via `prompt_sections`:
+
+```yaml
+agents:
+  - name: my-agent
+    prompt_sections:
+      summary_compression_system_prompt: "..."
+      summary_compression_user_prompt: "Summarise: {transcript}"
+      summary_extension_user_prompt: "Extend: {existing_summary} with {new_messages}"
+```
+
+Compression is also controlled by legacy supervisor-level toggles:
+
+```yaml
+supervisor:
+  history_summary_enabled: true
+  history_summary_model: gemini/gemini-2.5-flash-lite
+  history_summary_recent_turns: 10
+  history_max_turns: 20
+  history_max_chars: 1000
+```
+
+## Strategy Phases
+
+### Phase 1 — Running Summary (stateful incremental compression)
+
+Every call to `compress_conversation_history()` used to re-process the **entire** older history from scratch — O(n²) LLM token waste. With `strategy: "running_summary"`, the summary is **incrementally extended**:
+
+1. On each turn, only the **new** older messages are sent to the LLM with an extension prompt:
+   *"Given this existing summary and these new conversation messages, produce an updated summary..."*.
+2. The summary is persisted in chat storage (`conversation_summaries` table) via `OrchidChatStorage`.
+3. On LLM failure, falls back to truncation (recent turns only, no crash).
+
+Memory implementation: `OrchidInMemoryConversationMemory` (`agents/memory.py`).
+
+### Phase 2 — Structured Summaries (JSON entity extraction)
+
+Flat paragraph summaries lose entities, topics, and structure. With `structured_output: true`, the LLM produces **structured JSON**:
+
+```json
+{
+  "topics": ["weather", "travel"],
+  "entities": [{"name": "John", "type": "person", "details": "user"}],
+  "actions_taken": ["looked up forecast"],
+  "decisions": ["postpone trip"],
+  "open_questions": ["what about hotel?"],
+  "user_preferences": ["prefers warm climate"],
+  "narrative": "User asked about weather and travel.",
+  "covered_turns": 5
+}
+```
+
+- Entities are **deduplicated** across turns (same entity `→` merged details).
+- On JSON parse failure, falls back to narrative-only.
+- Renders via `OrchidConversationSummary.to_context_string()` for LLM injection.
+
+Models: `OrchidConversationSummary`, `OrchidSummaryEntity` (`core/memory_types.py`).
+
+### Phase 3 — RAG-Augmented Memory (semantic retrieval)
+
+With `strategy: "rag_augmented"`, conversation turns are **embedded and stored in Qdrant** under the reserved `__memory__` namespace. On each new turn:
+
+1. The current query is embedded and used to retrieve the **k most relevant past turns** via semantic search.
+2. Results are **deduplicated** against the recent verbatim window (content hash check).
+3. The merged context flows into the compression step: `[RAG turns] + [summary] + [recent verbatim]`.
+4. Turns are stored in Qdrant after each synthesis and agent response, scoped by `OrchidRAGScope`.
+
+Graceful degradation: with `NullVectorReader`, `get_relevant_history()` returns `[]` and the system behaves like `running_summary` only — no crash.
+
+Memory implementation: `OrchidRAGConversationMemory` (`agents/memory_rag.py`).
+
+### Phase 4 — Configurable Prompts & Smarter Truncation
+
+All compression prompts are overridable per-agent. Message truncation strategies go beyond the basic hard cutoff:
+
+| Strategy | Behavior |
+|----------|----------|
+| `hard` (default) | `content[:max_chars] + "…"` |
+| `middle` | Keeps first 40% and last 40%, `…[truncated]…` in between |
+| `llm` | Asks LLM to summarize the message; falls back to `middle` on failure |
+| `semantic` | Reserved for embedding-based selection; falls back to `middle` |
+
+Implementation: `OrchidTruncationStrategy` enum, `truncate_content()` / `truncate_content_async()` in `core/truncation.py`.
+
+## Message Filtering Pipeline (Phase 5)
+
+Before Phase 5, message filtering was duplicated across 6+ call sites with slightly different logic. The `MessageFilterPipeline` consolidates all filtering:
+
+```python
+from orchid_ai.core.message_filter import MessageFilter, MessageFilterPipeline
+
+# Built-in presets
+from orchid_ai.core.message_filter import SUPERVISOR_PIPELINE
+# Skips: [Supervisor], [Conversation summary], tool types
+# Excludes last user message
+
+# Per-agent pipeline
+from orchid_ai.core.message_filter import agent_pipeline
+pipeline = agent_pipeline(("[MyAgent]\n",), max_chars=1000, max_turns=10)
+```
+
+`extract_conversation_history()` accepts an optional `pipeline=` parameter. When provided, it delegates to the pipeline. When `None`, it builds one from the legacy `skip_prefixes`/`strip_prefixes` parameters for backward compatibility.
+
+## Architecture
+
+```
+User message
+  │
+  ▼
+extract_conversation_history()          ── MessageFilterPipeline
+  │  ┌─ Skip [Supervisor] routing noise
+  │  ├─ Strip [Agent] prefixes
+  │  ├─ Truncate long messages (hard | middle | llm)
+  │  ├─ Exclude last user message (current query)
+  │  └─ Cap to max_turns
+  │
+  ▼
+compress_conversation_history()         ── Memory system
+  │  ┌─ Get running summary (from chat storage)
+  │  ├─ LLM: extend summary (only new older messages)
+  │  ├─ Store updated summary (to chat storage)
+  │  └─ Structured JSON + entity extraction (when enabled)
+  │
+  ▼
+RAG augmentation (when rag_augmented)
+  │  ┌─ Embed current query
+  │  ├─ Retrieve top-k relevant turns (Qdrant, __memory__ namespace)
+  │  ├─ Deduplicate against verbatim window
+  │  └─ Insert before summary + recent verbatim
+  │
+  ▼
+Final context: [RAG turns] [summary] [recent verbatim]
+  ▼
+Supervisor / Agent LLM call
+```
+
+## Storage
+
+The `conversation_summaries` table (in SQLite or PostgreSQL):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `chat_id` | TEXT PK, FK → chats | Chat session |
+| `summary_text` | TEXT | JSON (structured) or plain text (narrative) |
+| `turn_number` | INTEGER | Approximate turn count |
+| `updated_at` | TIMESTAMP | Last update |
+
+## Graceful Degradation
+
+Every component degrades gracefully:
+
+- **LLM failure** → fallback to recent-turns-only (no summary, no crash)
+- **JSON parse failure** → fallback to narrative-only summary
+- **Qdrant unavailable** (`NullVectorReader`) → returns `[]` from `get_relevant_history()`, degrades to `running_summary`
+- **No chat storage** → `NullConversationMemory` (no-op)
+- **No memory configured** (`strategy: "none"`) → identical to pre-Phase-1 behavior
+
+## Examples
+
+See the [Prompt Customization](/examples/prompt-customization) example for overriding compression prompts per-agent, and the [Basketball](/examples/basketball) example which uses the default `strategy: "none"`.
+
+```yaml
+# Full memory config example (rag_augmented with middle truncation)
+supervisor:
+  history_summary_enabled: true
+  history_summary_model: gemini/gemini-2.5-flash-lite
+  history_summary_recent_turns: 10
+  history_max_turns: 20
+  history_max_chars: 1000
+  memory:
+    strategy: "rag_augmented"
+    summary_recent_turns: 10
+    structured_output: true
+    persist_summary: true
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    truncation_strategy: "middle"
+    truncation_max_chars: 1000
+```

@@ -1,0 +1,144 @@
+---
+title: "Gallery Curator"
+description: "A multi-session art gallery curator that remembers artists, exhibitions, and decisions across sessions using Orchid's full conversation summarization pipeline."
+package: "cross-cutting"
+section: "examples"
+order: 98
+tags: ["memory", "summarization", "rag", "structured-output", "truncation", "persistence"]
+sources:
+  - examples/gallery-curator/orchid.yml
+  - examples/gallery-curator/agents.yaml
+related:
+  - /concepts/chat-summarization
+  - /concepts/supervisor
+  - /concepts/rag
+  - /concepts/persistence
+  - /configuration
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The **Gallery Curator** is a single `GenericAgent` that helps gallery directors plan exhibitions, research artists, track auction results, and record curatorial decisions. It's purpose-built to showcase every feature in Orchid's [conversation summarization](/concepts/chat-summarization) pipeline (Phases 1–5).
+
+| Feature | Where configured | What happens |
+|---|---|---|
+| **Incremental running summary** | `supervisor.memory.strategy: running_summary` | Each new turn extends the summary instead of re-summarizing from scratch |
+| **Structured JSON entity extraction** | `supervisor.memory.structured_output: true` | Artists, venues, exhibitions tracked as typed entities; deduplicated across turns |
+| **RAG-augmented semantic retrieval** | `supervisor.memory.strategy: rag_augmented` | Past turns retrieved from Qdrant via embedding similarity to the current query |
+| **Configurable compression prompts** | `agents[].prompt_sections` | Gallery-specific instructions for the compression LLM |
+| **Smart message truncation** | `supervisor.memory.truncation_strategy: middle` | Long auction listings truncated keeping start (which item?) and end (how much?) |
+| **SQLite persistence** | `storage.class` + `persist_summary: true` | Summaries survive restarts via `conversation_summaries` table |
+| **Graceful degradation** | Qdrant unavailable → NullVectorReader | `rag_augmented` silently degrades to `running_summary`-only |
+
+## Run it
+
+```bash
+# From the monorepo root
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/gallery-curator/orchid.yml \
+  uvicorn orchid_api.main:app --port 8000
+```
+
+Or validate the YAML:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid config validate examples/gallery-curator/agents.yaml
+```
+
+Or via the CLI (no API server needed):
+
+```bash
+orchid chat interactive --config examples/gallery-curator/orchid.yml
+```
+
+## Configuration walkthrough
+
+The key block of `agents.yaml` — the `supervisor.memory` section:
+
+```yaml
+supervisor:
+  history_summary_enabled: true
+  history_max_turns: 30
+  history_max_chars: 1200
+
+  memory:
+    strategy: "running_summary"
+    summary_recent_turns: 8
+    summary_model: ollama/llama3.2
+    structured_output: true
+    persist_summary: true
+    # -- RAG memory (active when strategy=rag_augmented) --
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    # -- Truncation --
+    truncation_strategy: "middle"
+    truncation_max_chars: 800
+```
+
+Per-agent compression prompt overrides in `prompt_sections`:
+
+```yaml
+agents:
+  gallery-curator:
+    prompt_sections:
+      summary_compression_system_prompt: >
+        You are a gallery curator conversation summarizer. Extract structured
+        information from exhibition planning discussions...
+
+      summary_compression_user_prompt: >
+        Summarise the following gallery planning conversation in structured JSON...
+        {transcript}
+
+      summary_extension_user_prompt: >
+        Given the existing summary below and the new gallery planning messages...
+        Existing summary: {existing_summary}
+        New messages: {new_messages}
+```
+
+## Strategy comparison
+
+| Strategy | Summary persistent? | Uses RAG? | Best for |
+|---|---|---|---|
+| `none` | No | No | Short-lived chats, backward compat |
+| `running_summary` | Yes (SQLite/Postgres) | No | Long sessions, O(n) cost |
+| `rag_augmented` | Yes | Yes | Multi-session with semantic recall |
+
+Switch to `rag_augmented` in one line:
+```yaml
+memory:
+  strategy: "rag_augmented"  # was "running_summary"
+```
+
+Everything else stays the same — the `OrchidRAGConversationMemory` class automatically adds Qdrant retrieval on top of the running summary.
+
+## Simulated conversation flow
+
+```
+Turn 1:  "I'm planning the spring exhibition..."
+         → No prior context. First summary created.
+
+Turn 5:  "What was the budget for Ruth Asawa's shipping?"
+         → Running summary covers turns 1–4.
+         → With rag_augmented: Qdrant retrieves past "budget" turns.
+
+Turn 15: "Remind me of all Venice decisions."
+         → Summary has been incrementally extended 10+ times (O(n) cost).
+         → Structured JSON tracks 8+ entities with deduplication.
+         → With rag_augmented: top-5 Venice turns retrieved from Qdrant.
+         → LLM receives: [RAG turns] + [incremental summary] + [last 8 verbatim].
+```
+
+## Files
+
+```text
+examples/gallery-curator/
+├── README.md       # Full documentation with entity examples
+├── orchid.yml      # Infrastructure: SQLite, Qdrant, Ollama
+└── agents.yaml     # Agent + supervisor + memory config
+```
+
+No custom Python agent classes — everything is `GenericAgent` driven by YAML.

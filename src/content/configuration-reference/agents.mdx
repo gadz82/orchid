@@ -43,6 +43,19 @@ external: []
   - [`supervisor.history_summary_model`](#agents-yaml__supervisor.history_summary_model)
   - [`supervisor.history_summary_recent_turns`](#agents-yaml__supervisor.history_summary_recent_turns)
   - [`supervisor.skip_synthesis_when_single_agent`](#agents-yaml__supervisor.skip_synthesis_when_single_agent)
+  - [`supervisor.memory`](#agents-yaml__supervisor.memory)
+    - [`supervisor.memory.strategy`](#agents-yaml__supervisor.memory.strategy)
+    - [`supervisor.memory.summary_recent_turns`](#agents-yaml__supervisor.memory.summary_recent_turns)
+    - [`supervisor.memory.summary_model`](#agents-yaml__supervisor.memory.summary_model)
+    - [`supervisor.memory.summary_prompt`](#agents-yaml__supervisor.memory.summary_prompt)
+    - [`supervisor.memory.persist_summary`](#agents-yaml__supervisor.memory.persist_summary)
+    - [`supervisor.memory.structured_output`](#agents-yaml__supervisor.memory.structured_output)
+    - [`supervisor.memory.rag_namespace`](#agents-yaml__supervisor.memory.rag_namespace)
+    - [`supervisor.memory.rag_k`](#agents-yaml__supervisor.memory.rag_k)
+    - [`supervisor.memory.rag_similarity_threshold`](#agents-yaml__supervisor.memory.rag_similarity_threshold)
+    - [`supervisor.memory.store_turns`](#agents-yaml__supervisor.memory.store_turns)
+    - [`supervisor.memory.truncation_strategy`](#agents-yaml__supervisor.memory.truncation_strategy)
+    - [`supervisor.memory.truncation_max_chars`](#agents-yaml__supervisor.memory.truncation_max_chars)
 
 **agents[]**
 - [`agents[]`](#agents-yaml__agents[])
@@ -699,6 +712,149 @@ supervisor:
   history_summary_model: ollama/llama3.2
   history_summary_recent_turns: 15
   skip_synthesis_when_single_agent: true
+```
+
+<a id="agents-yaml__supervisor.memory"></a>
+### `supervisor.memory`
+
+Conversation memory configuration — controls how past conversation context is summarized, persisted, and retrieved beyond the current LangGraph state. Three strategies available (see [Chat Summarization](/concepts/chat-summarization)).
+
+| | |
+|---|---|
+| **Short** | Conversation memory strategy and configuration. |
+| **Detailed** | A nested block that controls incremental running summaries, structured JSON entity extraction, and Qdrant-backed semantic retrieval of past turns. Default is `strategy: "none"` (no memory, backward-compatible). |
+| **Default** | `{strategy: "none", structured_output: true, ...}` |
+
+<a id="agents-yaml__supervisor.memory.strategy"></a>
+#### `supervisor.memory.strategy`
+
+| | |
+|---|---|
+| **Short** | Memory strategy selection. |
+| **Detailed** | `none` — no memory (backward-compatible). `running_summary` — stateful incremental compression (avoids O(n²) re-compute). `rag_augmented` — adds Qdrant semantic retrieval of past turns on top of running summary. |
+| **Default** | `"none"` |
+| **Available values** | `"none"`, `"running_summary"`, `"rag_augmented"` |
+
+<a id="agents-yaml__supervisor.memory.summary_recent_turns"></a>
+#### `supervisor.memory.summary_recent_turns`
+
+| | |
+|---|---|
+| **Short** | Recent turns kept verbatim when using memory-based summarization. |
+| **Detailed** | When memory is active, the most recent N exchange pairs are preserved in full text alongside the incremental summary. Independent of `supervisor.history_summary_recent_turns`. |
+| **Default** | `10` |
+
+<a id="agents-yaml__supervisor.memory.summary_model"></a>
+#### `supervisor.memory.summary_model`
+
+| | |
+|---|---|
+| **Short** | LLM model for summary extension calls in the memory pipeline. |
+| **Detailed** | A cheap, fast model recommended (e.g. `gemini/gemini-2.5-flash-lite`). Falls back to `supervisor.history_summary_model`, then the supervisor's main model. |
+| **Default** | `null` |
+
+<a id="agents-yaml__supervisor.memory.summary_prompt"></a>
+#### `supervisor.memory.summary_prompt`
+
+| | |
+|---|---|
+| **Short** | Custom compression prompt. |
+| **Detailed** | When set, overrides the default compression/extension prompt used by the memory system. `null` uses the built-in defaults (structured JSON extraction or narrative compression depending on `structured_output`). |
+| **Default** | `null` |
+
+<a id="agents-yaml__supervisor.memory.persist_summary"></a>
+#### `supervisor.memory.persist_summary`
+
+| | |
+|---|---|
+| **Short** | Persist running summaries to chat storage. |
+| **Detailed** | When `true`, summaries are stored in the `conversation_summaries` table (SQLite/PostgreSQL) for cross-invocation reuse. When `false`, summaries are computed fresh each turn (ephemeral, no disk write). |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+<a id="agents-yaml__supervisor.memory.structured_output"></a>
+#### `supervisor.memory.structured_output`
+
+| | |
+|---|---|
+| **Short** | Enable structured JSON entity extraction in summaries. |
+| **Detailed** | When `true`, the LLM produces JSON with topics, entities, actions, decisions, questions, and preferences. Falls back to narrative-only on JSON parse failure. When `false`, produces a flat paragraph summary. |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+<Callout variant="best-practice" title="Entity deduplication">
+  When `structured_output: true`, entities mentioned across multiple turns are automatically deduplicated by name. New details are appended to the existing entity record rather than creating duplicates.
+</Callout>
+
+<a id="agents-yaml__supervisor.memory.rag_namespace"></a>
+#### `supervisor.memory.rag_namespace`
+
+| | |
+|---|---|
+| **Short** | Qdrant namespace for conversation memory embeddings. |
+| **Detailed** | Reserved namespace in Qdrant where conversation turns are stored as embeddings. Uses `OrchidRAGScope` for hierarchical tenant isolation. Only relevant when `strategy: "rag_augmented"`. |
+| **Default** | `"__memory__"` |
+
+<a id="agents-yaml__supervisor.memory.rag_k"></a>
+#### `supervisor.memory.rag_k`
+
+| | |
+|---|---|
+| **Short** | Number of semantically relevant past turns to retrieve. |
+| **Detailed** | How many past conversation turns to retrieve from Qdrant via semantic search on each new user query. Higher values surface more context at the cost of token budget. Only relevant when `strategy: "rag_augmented"`. |
+| **Default** | `5` |
+
+<a id="agents-yaml__supervisor.memory.rag_similarity_threshold"></a>
+#### `supervisor.memory.rag_similarity_threshold`
+
+| | |
+|---|---|
+| **Short** | Minimum similarity score for RAG-retrieved turns. |
+| **Detailed** | Results below this score are discarded. Range 0.0–1.0. Lower values include more turns (potentially noisy). Higher values are stricter. Only relevant when `strategy: "rag_augmented"`. |
+| **Default** | `0.5` |
+
+<a id="agents-yaml__supervisor.memory.store_turns"></a>
+#### `supervisor.memory.store_turns`
+
+| | |
+|---|---|
+| **Short** | Automatically embed and store each conversation turn in Qdrant. |
+| **Detailed** | When `true`, each user message and assistant response is embedded and stored in the `__memory__` Qdrant namespace for future retrieval. Only relevant when `strategy: "rag_augmented"`. |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+<a id="agents-yaml__supervisor.memory.truncation_strategy"></a>
+#### `supervisor.memory.truncation_strategy`
+
+| | |
+|---|---|
+| **Short** | How messages exceeding max_chars are truncated. |
+| **Detailed** | `hard` — `content[:max_chars] + "…"` (current behavior). `middle` — keeps first 40% and last 40%, with `…[truncated]…` marker. `llm` — asks LLM to summarize; falls back to `middle` on failure. `semantic` — reserved for embedding-based selection; falls back to `middle`. |
+| **Default** | `"hard"` |
+| **Available values** | `"hard"`, `"middle"`, `"llm"`, `"semantic"` |
+
+<a id="agents-yaml__supervisor.memory.truncation_max_chars"></a>
+#### `supervisor.memory.truncation_max_chars`
+
+| | |
+|---|---|
+| **Short** | Character limit for message truncation. |
+| **Detailed** | Individual messages longer than this are truncated using `truncation_strategy`. Overrides `supervisor.history_max_chars` when memory is enabled. |
+| **Default** | `1000` |
+
+```yaml
+# Full memory config example
+supervisor:
+  memory:
+    strategy: "rag_augmented"
+    summary_recent_turns: 10
+    structured_output: true
+    persist_summary: true
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    truncation_strategy: "middle"
+    truncation_max_chars: 1000
 ```
 
 ---

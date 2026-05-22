@@ -1,0 +1,104 @@
+---
+title: "Festival Producer"
+description: "Multi-agent festival planning with artist booking, logistics, and marketing agents — backed by rag_augmented conversation memory, orchestrator skills, and structured entity extraction."
+package: "cross-cutting"
+section: "examples"
+order: 99
+tags: ["memory", "rag", "multi-agent", "skills", "summarization"]
+sources:
+  - examples/festival-producer/orchid.yml
+  - examples/festival-producer/agents.yaml
+  - examples/festival-producer/tools/booking.py
+  - examples/festival-producer/tools/logistics.py
+  - examples/festival-producer/tools/marketing.py
+related:
+  - /concepts/chat-summarization
+  - /concepts/supervisor
+  - /concepts/agents
+  - /examples/gallery-curator
+  - /examples/architecture-review
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+Three `GenericAgent` instances (artist booking, logistics, marketing) with
+cross-agent orchestrator skills, backed by **rag_augmented** conversation memory.
+Every feature of the summarization pipeline (Phases 1–5) is active.
+
+| Feature | How It's Used |
+|---|---|
+| **rag_augmented memory** | Past turns embedded in Qdrant; 5 most relevant retrieved per query |
+| **Orchestrator skills** | `full_production_review`, `budget_optimization`, `stage_planning` — sequential pipelines |
+| **Structured JSON entities** | Artists, venues, budgets tracked as typed entities |
+| **Middle truncation** | Rider specs and stage configs truncated preserving start+end |
+| **Per-agent prompts** | Each agent overrides `summary_compression_*` in `prompt_sections` |
+
+## Run it
+
+```bash
+ORCHID_CONFIG=examples/festival-producer/orchid.yml uvicorn orchid_api.main:app
+# or:
+orchid chat interactive --config examples/festival-producer/orchid.yml
+# or validate:
+orchid config validate examples/festival-producer/agents.yaml
+```
+
+## Agents and tools
+
+| Agent | Tools | Expertise |
+|---|---|---|
+| `artist-booking` | lookup, list, riders, compare | Artist availability, fees, lineup curation |
+| `logistics` | venues, schedule, power, crew | Stage specs, power grids, crew planning |
+| `marketing` | demographics, pricing, channels, attendance | Ticket pricing, promo channels, projections |
+
+## Orchestrator skills
+
+```yaml
+skills:
+  full_production_review:     # booking → logistics → marketing
+  budget_optimization:        # booking → marketing
+  stage_planning:             # booking → logistics
+```
+
+## Memory config
+
+```yaml
+supervisor:
+  memory:
+    strategy: "rag_augmented"
+    summary_recent_turns: 12
+    structured_output: true
+    persist_summary: true
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    truncation_strategy: "middle"
+    truncation_max_chars: 1000
+```
+
+## Simulated flow
+
+```
+"The Midnight Vibrations want $85K for Saturday. Can our budget handle it?"
+→ artist-booking: confirms availability Q2-Q3, 22K attendance draw
+→ marketing: projects $2.1M ticket revenue at $129 avg with this headliner
+→ budget_optimization skill fires: booking provides fee data, marketing projects revenue
+→ RAG retrieves past budget discussions from earlier planning sessions
+```
+
+## Files
+
+```text
+examples/festival-producer/
+├── README.md
+├── orchid.yml
+├── agents.yaml
+└── tools/
+    ├── booking.py      # 6 artists with static data
+    ├── logistics.py    # 5 venues with power/schedule
+    └── marketing.py    # demographics, pricing, channels
+```
+
+No custom agent classes — all three agents are `GenericAgent` driven by YAML.

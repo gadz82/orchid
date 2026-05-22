@@ -22,6 +22,7 @@ export const navNodes: NavNode[] = [
   { href: '/concepts/document-parsing', label: 'Document Parsing', group: 'concepts', order: 19 },
   { href: '/concepts/mini-agents', label: 'Mini-Agents', group: 'concepts', order: 20 },
   { href: '/concepts/pollen-bloom', label: 'Pollen + Bloom', group: 'concepts', order: 21 },
+  { href: '/concepts/chat-summarization', label: 'Chat Summarization', group: 'concepts', order: 22 },
 
   { href: '/packages/orchid', label: 'orchid', group: 'packages', order: 20 },
   { href: '/packages/orchid-api', label: 'orchid-api', group: 'packages', order: 21 },
@@ -48,6 +49,9 @@ export const navNodes: NavNode[] = [
   { href: '/examples/graph-kb', label: 'Graph KB', group: 'examples', order: 51 },
   { href: '/examples/wiki', label: 'Wiki', group: 'examples', order: 52 },
   { href: '/examples/orchid-experts', label: 'Orchid Experts', group: 'examples', order: 53 },
+  { href: '/examples/gallery-curator', label: 'Gallery Curator', group: 'examples', order: 54 },
+  { href: '/examples/festival-producer', label: 'Festival Producer', group: 'examples', order: 55 },
+  { href: '/examples/architecture-review', label: 'Architecture Review', group: 'examples', order: 56 },
 
   { href: '/best-practices', label: 'Best Practices', group: 'meta', order: 60 },
   { href: '/glossary', label: 'Glossary', group: 'meta', order: 61 },

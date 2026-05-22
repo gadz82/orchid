@@ -1,0 +1,103 @@
+---
+title: "Architecture Review Board"
+description: "Multi-agent design review with structural engineering, cost estimation, and sustainability consulting — orchestrator skills and rag_augmented memory across design iterations."
+package: "cross-cutting"
+section: "examples"
+order: 100
+tags: ["memory", "rag", "multi-agent", "skills", "sustainability", "summarization"]
+sources:
+  - examples/architecture-review/orchid.yml
+  - examples/architecture-review/agents.yaml
+  - examples/architecture-review/tools/structural.py
+  - examples/architecture-review/tools/cost.py
+  - examples/architecture-review/tools/sustainability.py
+related:
+  - /concepts/chat-summarization
+  - /concepts/supervisor
+  - /concepts/agents
+  - /examples/festival-producer
+  - /examples/gallery-curator
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+Three `GenericAgent` instances forming a virtual design review board:
+structural engineering, cost estimation, and sustainability consulting.
+Cross-agent orchestrator skills run sequential pipelines with each agent
+seeing prior output. Backed by **rag_augmented** memory with a lower
+similarity threshold (0.45) to catch terminology variants across disciplines.
+
+| Feature | How It's Used |
+|---|---|
+| **rag_augmented memory** | Design decisions and material comparisons retrieved from Qdrant |
+| **Orchestrator skills** | `full_design_review` (structural → cost → sustainability), `material_selection` |
+| **Lower similarity threshold** | 0.45 catches "CLT" ↔ "cross-laminated timber" ↔ "mass timber" variants |
+| **Structured JSON entities** | Materials, jurisdictions, certifications tracked with deduplication |
+| **Per-agent prompts** | Domain-specific `summary_compression_*` for engineering, cost, and sustainability |
+
+## Run it
+
+```bash
+ORCHID_CONFIG=examples/architecture-review/orchid.yml uvicorn orchid_api.main:app
+orchid chat interactive --config examples/architecture-review/orchid.yml
+orchid config validate examples/architecture-review/agents.yaml
+```
+
+## Agents and tools
+
+| Agent | Tools | Expertise |
+|---|---|---|
+| `structural` | analyze, code compliance, compare materials, fire strategy | Load paths, Eurocode/IBC/ASCE, fire safety |
+| `cost` | construction estimate, lifecycle costs, market rates | Budgets, LCC, regional labour/materials |
+| `sustainability` | certification, embodied carbon, strategies, carbon compare | BREEAM/LEED/DGNB, carbon accounting |
+
+## Orchestrator skills
+
+```yaml
+skills:
+  full_design_review:     # structural → cost → sustainability
+  material_selection:     # structural → sustainability
+```
+
+## Memory config
+
+```yaml
+supervisor:
+  memory:
+    strategy: "rag_augmented"
+    rag_k: 6
+    rag_similarity_threshold: 0.45   # lower: catches terminology variants
+    structured_output: true
+    truncation_strategy: "middle"
+```
+
+## Simulated flow
+
+```
+"Review a 6-story office in Berlin, 8000m², LEED Gold."
+→ full_design_review skill fires
+→ structural: steel + CLT recommended, Eurocode 3/5 compliant
+→ cost: €22.4M, CLT 30% cheaper lifecycle vs steel-concrete
+→ sustainability: LEED Gold achievable, 40% below baseline carbon
+
+"Switch to all-timber instead."
+→ material_selection skill fires
+→ structural: CLT+glulam viable to 12m with fire encapsulation
+→ sustainability: carbon-negative (-210 kgCO2/m³ net), BREEAM Outstanding possible
+→ RAG retrieves past cost discussion from earlier design iteration
+```
+
+## Files
+
+```text
+examples/architecture-review/
+├── README.md
+├── orchid.yml
+├── agents.yaml
+└── tools/
+    ├── structural.py       # 6 materials, 6 building codes
+    ├── cost.py              # 3 building types, 5 regions
+    └── sustainability.py    # 4 certifications, 7 strategies
+```
