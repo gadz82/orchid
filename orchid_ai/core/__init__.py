@@ -23,6 +23,7 @@ from .repository import (
 )
 from .scopes import OrchidRAGScope
 from .mcp import OrchidMCPClient, OrchidMCPDiscoverable, OrchidMCPToolCaller, OrchidMCPToolResult
+from .content import OrchidContentItem, OrchidContentSource
 
 __all__ = [
     "OrchidAgentState",
@@ -38,4 +39,6 @@ __all__ = [
     "OrchidMCPDiscoverable",
     "OrchidMCPToolCaller",
     "OrchidMCPToolResult",
+    "OrchidContentItem",
+    "OrchidContentSource",
 ]

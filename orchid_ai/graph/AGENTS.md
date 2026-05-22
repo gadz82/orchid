@@ -10,7 +10,10 @@ Assembles the LangGraph state machine: supervisor routing, graph state with anno
 |------|---------|
 | `state.py` | `GraphState` — extends `OrchidAgentState` with LangGraph annotations |
 | `supervisor.py` | Supervisor node — routing logic, synthesis, sequential/parallel |
-| `graph.py` | `build_graph()` — dynamically constructs graph from YAML config |
+| `synthesizer.py` | Response synthesis — merges sub-agent results into a final response |
+| `sequential_advancer.py` | Sequential pipeline advancer — activates next agent in chain |
+| `_supervisor_helpers.py` | Shared helpers: message filtering, LLM completion, single-agent detection |
+| `graph.py` | `build_graph()` — dynamically constructs graph from YAML config, wires memory strategies |
 
 ## GraphState
 
@@ -82,7 +85,7 @@ New agents are added by YAML config — `build_graph()` handles the wiring autom
 
 ## Conversation History in the Supervisor
 
-The supervisor uses `OrchidAgent.extract_conversation_history()` to build clean multi-turn context for routing, synthesis, and sequential advance steps. This filters out internal `[Supervisor` messages and truncates per-message content.
+The supervisor uses `OrchidAgent.extract_conversation_history()` to build clean multi-turn context for routing, synthesis, and sequential advance steps. This filters out internal `[Supervisor` messages and truncates per-message content. All filtering is consolidated through `MessageFilterPipeline` from `core/message_filter.py` — every call site uses the same pipeline presets.
 
 ### Configurable History Limits
 
@@ -93,6 +96,30 @@ supervisor:
   history_max_turns: 20    # max user-assistant pairs (default: 20)
   history_max_chars: 1000  # max chars per message before truncation (default: 1000)
 ```
+
+### Conversation Memory (Running Summary + RAG)
+
+The memory system replaces the stateless O(n²) re-summarization with stateful incremental compression. Configured via `supervisor.memory:`:
+
+```yaml
+supervisor:
+  memory:
+    strategy: "rag_augmented"           # none | running_summary | rag_augmented
+    summary_recent_turns: 10           # keep last N exchanges verbatim
+    summary_model: null                # null = supervisor model
+    structured_output: true            # JSON entity extraction
+    persist_summary: true              # store in chat storage
+    # -- rag_augmented only --
+    rag_k: 5                           # relevant turns to retrieve
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    truncation_strategy: "hard"        # hard | middle | llm | semantic
+    truncation_max_chars: 1000
+```
+
+**Strategy phases:**
+1. `running_summary` — incremental LLM-based summary extension (avoids re-compute)
+2. `rag_augmented` — adds Qdrant-backed semantic retrieval of past turns
 
 ### Sliding-Window Summarization (Context Compression)
 
@@ -107,9 +134,13 @@ supervisor:
 
 The supervisor calls `OrchidAgent.compress_conversation_history()` in both `_synthesise()` and `_advance_sequential()`. `GenericAgent` also compresses in `_step_summarise()` when the config is present. On LLM failure, the system falls back to using only the recent turns (no crash).
 
-### `_filter_internal_messages()`
+### Message Filtering Pipeline
 
-Helper that removes supervisor routing noise (`[Supervisor] Parallel dispatch:`, `[Supervisor → agent]` handoffs, etc.) from the current turn's messages before passing them to the LLM. Used in `_route()`, `_synthesise()`, and `_advance_sequential()`.
+All message filtering across the codebase is consolidated in `MessageFilterPipeline` (`core/message_filter.py`):
+- `SUPERVISOR_PIPELINE` — preset for routing/synthesis: skips `[Supervisor]`, `[Conversation summary]`, tool types, excludes last user message
+- `agent_pipeline(prefixes)` — factory for per-agent filtering with strip_prefix
+
+Previous ad-hoc filtering in 6+ locations (`_filter_internal_messages`, manual iteration in synthesizer/advancer) has been replaced.
 
 ### Prior Tool Context
 

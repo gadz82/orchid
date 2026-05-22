@@ -43,6 +43,7 @@ from .schema_guardrails import OrchidGuardrailRuleConfig, OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPAuthConfig, OrchidMCPServerConfig, OrchidToolConfig
 from .schema_storage import OrchidConfigStorageConfig
+from .schema_memory import OrchidMemoryConfig
 from .schema_mini_agent import OrchidMiniAgentConfig
 from .schema_prompts import (
     OrchidAgentPromptConfig,
@@ -88,6 +89,7 @@ __all__ = [
     "OrchidLLMConfig",
     "OrchidMCPAuthConfig",
     "OrchidMCPServerConfig",
+    "OrchidMemoryConfig",
     "OrchidMiniAgentConfig",
     "OrchidOrchestratorSkillConfig",
     "OrchidOrchestratorSkillStepConfig",

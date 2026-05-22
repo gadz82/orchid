@@ -54,6 +54,56 @@ OrchidVectorStoreRepository(OrchidVectorReader, OrchidVectorWriter)  # Combined.
 
 The `scope` parameter in `retrieve()` is a `OrchidRAGScope` — NOT a raw dict.  Raw `filters: dict` is not supported.
 
+### `memory.py` — OrchidConversationMemory ABC
+
+```python
+OrchidConversationMemory(ABC)     # Conversation memory strategies.
+  .get_running_summary(chat_id) → str | None
+  .update_running_summary(chat_id, new_messages, existing_summary) → str
+  .get_relevant_history(query, chat_id, k) → list[dict]
+  .store_conversation_turn(chat_id, tenant_id, user_id, turn, metadata) → None
+
+NullConversationMemory           # No-op when memory is disabled (strategy: "none").
+```
+
+### `memory_types.py` — Structured Summary Models
+
+```python
+OrchidConversationSummary       # Dataclass: topics, entities, actions, decisions, questions, preferences, narrative
+  .to_context_string() → str    # Render for LLM injection
+  .to_dict() / .from_dict()     # JSON round-trip
+  .from_json(json_str)          # Parse JSON → OrchidConversationSummary
+  .merge(existing, new_data)    # Merge with entity deduplication
+
+OrchidSummaryEntity             # Dataclass: name, type, details
+```
+
+### `message_filter.py` — Unified Filtering Pipeline
+
+```python
+MessageFilter                   # Single filter: skip_prefix | strip_prefix | max_chars | skip_type | exclude_last_user
+MessageFilterPipeline           # Applies a sequence of filters to LangGraph messages → clean dicts
+  .apply(messages, truncation_strategy) → list[dict]
+
+SUPERVISOR_PIPELINE             # Preset: skips [Supervisor], [Conversation summary], tool types, excludes last user
+agent_pipeline(prefixes, ...)   # Factory for per-agent pipelines with strip_prefix
+```
+
+All message filtering across the codebase (6+ call sites) now delegates to this single pipeline. See `extract_conversation_history()`.
+
+### `truncation.py` — Message Truncation Strategies
+
+```python
+OrchidTruncationStrategy(str, Enum)  # hard | middle | llm | semantic
+truncate_content(content, max_chars, strategy) → str           # synchronous
+truncate_content_async(content, max_chars, strategy, ...) → str  # async (LLM/SEMANTIC)
+```
+
+- `hard` — `content[:max_chars] + "…"` (current behavior)
+- `middle` — keeps first 40% and last 40%, `…[truncated]…` in between
+- `llm` — asks LLM to summarize; falls back to `middle` on failure
+- `semantic` — reserved for embedding-based selection; falls back to `middle`
+
 ### `agent.py` — OrchidAgent ABC
 
 ```python
@@ -79,7 +129,8 @@ Static method that extracts clean `[{"role": "user"|"assistant", "content": "...
 - **Strips agent prefixes** from AI messages (e.g. `"[MyAgent]\nActual content"` → `"Actual content"`)
 - **Excludes** the last `HumanMessage` (it's the current query, added separately)
 - **Caps** output to `max_turns * 2` messages (default `max_turns=10`)
-- **Truncates** individual messages to `max_chars` characters with `…` suffix (default `None` = no truncation)
+- **Truncates** individual messages using the configured `truncation_strategy` (default `"hard"` = `content[:max_chars] + "…"`; also `"middle"` which preserves start+end, `"llm"` for LLM summarization)
+- Accepts an optional `pipeline: MessageFilterPipeline` parameter for custom filter chains
 - Uses **duck-typing** for message type detection to maintain zero-dependency rule in `core/`
 
 #### `compress_conversation_history()` — Sliding-Window Summarization
@@ -89,9 +140,12 @@ Async static method that implements the **sliding-window with summarization** pa
 ```python
 compressed = await OrchidAgent.compress_conversation_history(
     history,
-    llm_service=llm_provider,
-    model="gemini/gemini-2.5-flash-lite",  # use a cheap/fast model
+    chat_model=llm_provider,
     recent_turns=10,                        # keep last 10 exchanges verbatim
+    running_summary=existing_summary,       # extend incrementally (Phase 1)
+    structured_output=True,                 # JSON with entities (Phase 2)
+    compression_system_prompt="...",        # custom system prompt (Phase 4)
+    extension_user_prompt="...",            # custom extension prompt (Phase 4)
 )
 # Result: [{"role": "assistant", "content": "[Conversation summary]\n..."}, ...recent messages]
 ```
@@ -99,7 +153,9 @@ compressed = await OrchidAgent.compress_conversation_history(
 - If history fits within the window, returns it **unchanged** (no LLM call)
 - On LLM failure, **falls back** to returning only the recent turns (no summary, no crash)
 - Uses `temperature=0.0` for deterministic summaries
-- The summary prompt asks the LLM to focus on: key topics, entities, actions taken, outstanding questions
+- When `running_summary` is provided, uses an **extension prompt** (incremental update) instead of summarizing from scratch — avoids O(n²) token waste
+- When `structured_output=True`, produces JSON with entity extraction; falls back to narrative on parse failure
+- All prompts overridable via `OrchidAgentPromptConfig` in `agents.yaml` (`summary_compression_*` fields)
 
 #### `summarise()` — Conversation-Aware Summarization
 

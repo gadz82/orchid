@@ -29,6 +29,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..core.memory_types import (
+    DEFAULT_NARRATIVE_FALLBACK_PROMPT,
+    DEFAULT_STRUCTURED_EXTENSION_SYSTEM_PROMPT,
+    DEFAULT_STRUCTURED_EXTENSION_USER_PROMPT,
+    DEFAULT_STRUCTURED_SUMMARY_SYSTEM_PROMPT,
+    DEFAULT_STRUCTURED_SUMMARY_USER_PROMPT,
+)
+
 # ── Default templates ──────────────────────────────────────────
 
 #: Header introducing the JSON dump of prior-turn tool results.
@@ -139,6 +147,28 @@ class OrchidAgentPromptConfig(BaseModel):
     #: Maximum characters of the prior-tool-results JSON dump kept in
     #: the summarise system prompt.
     summarise_prior_results_max_chars: int = Field(default=4000, ge=0)
+
+    # ── Compression / conversation summary prompts ──────────────────
+    #
+    # Expose the prompts used by ``compress_conversation_history()`` and
+    # ``OrchidInMemoryConversationMemory`` so integrators can customise
+    # structured-extraction behaviour per agent.
+
+    #: System prompt for structured summary extraction (flat → JSON).
+    summary_compression_system_prompt: str = DEFAULT_STRUCTURED_SUMMARY_SYSTEM_PROMPT
+
+    #: User prompt for structured summary extraction.
+    summary_compression_user_prompt: str = DEFAULT_STRUCTURED_SUMMARY_USER_PROMPT
+
+    #: System prompt when extending an existing structured summary.
+    summary_extension_system_prompt: str = DEFAULT_STRUCTURED_EXTENSION_SYSTEM_PROMPT
+
+    #: User prompt when extending an existing structured summary.
+    summary_extension_user_prompt: str = DEFAULT_STRUCTURED_EXTENSION_USER_PROMPT
+
+    #: Fallback prompt used when structured JSON extraction fails
+    #: — produces a simple narrative summary instead.
+    summary_narrative_fallback_prompt: str = DEFAULT_NARRATIVE_FALLBACK_PROMPT
 
 
 # ── RAG transformer prompts ─────────────────────────────────────

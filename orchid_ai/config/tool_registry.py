@@ -119,7 +119,9 @@ _ANNOTATION_TO_TYPE: dict[Any, str] = {
 
 # Parameters that GenericAgent injects automatically — skip these
 # when auto-extracting from function signatures.
-_FRAMEWORK_PARAMS = frozenset({"kwargs", "self", "cls", "query", "context", "auth_context", "_kwargs"})
+_FRAMEWORK_PARAMS = frozenset(
+    {"kwargs", "self", "cls", "query", "context", "auth_context", "_kwargs", "content_sources"}
+)
 
 
 def _extract_parameters_from_handler(handler: Callable[..., Any]) -> dict[str, ToolParameter]:

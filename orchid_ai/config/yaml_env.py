@@ -12,13 +12,17 @@ ignored — the mapping is strict and only processes known keys.
 from __future__ import annotations
 
 import logging
+import json
 import os
 
 import yaml
 
 logger = logging.getLogger(__name__)
 
-# ── Nested YAML path → flat env var mapping ────────────────────
+# Array-valued sections: the whole list is JSON-encoded to one env var.
+_ARRAY_SECTION_ENV: dict[str, str] = {
+    "content_sources": "CONTENT_SOURCES",
+}
 YAML_TO_ENV: dict[tuple[str, str], str] = {
     # ── agents ────────────────────────────────────────────────
     ("agents", "config_path"): "AGENTS_CONFIG_PATH",
@@ -105,7 +109,21 @@ def apply_yaml_to_env(
     applied = 0
 
     for section, body in data.items():
-        if not isinstance(body, dict) or section in _skip:
+        if section in _skip:
+            continue
+        # Array-valued sections (e.g. content_sources) → JSON → one env var
+        if isinstance(body, list) and section in _ARRAY_SECTION_ENV:
+            env_var = _ARRAY_SECTION_ENV[section]
+            if env_var not in os.environ:
+                os.environ[env_var] = json.dumps(body)
+                applied += 1
+                logger.info(
+                    "[Config] content_sources: %d entries → %s",
+                    len(body),
+                    env_var,
+                )
+            continue
+        if not isinstance(body, dict):
             continue
         for key, value in body.items():
             env_var = YAML_TO_ENV.get((section, key))

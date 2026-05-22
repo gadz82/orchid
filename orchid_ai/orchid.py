@@ -42,6 +42,7 @@ from langgraph.types import Command
 from .bootstrap import _build_runtime
 from .config.schema import OrchidAgentsConfig
 from .config.watcher import OrchidConfigWatcherBase
+from .core.content import OrchidContentSource
 from .core.state import OrchidAuthContext
 from .graph.graph import build_graph
 from .mcp.inventory import OrchidMCPServerInventory
@@ -220,6 +221,7 @@ class Orchid:
         checkpointer_dsn: str = "",
         startup_hook: str = "",
         startup_hook_kwargs: dict[str, Any] | None = None,
+        content_sources: list[OrchidContentSource] | None = None,
         runtime_overrides: dict[str, Any] | None = None,
         skip_yaml_sections: set[str] | None = None,
     ) -> "Orchid":
@@ -314,6 +316,7 @@ class Orchid:
                     checkpointer_dsn=checkpointer_dsn,
                     startup_hook=startup_hook,
                     startup_hook_kwargs=startup_hook_kwargs,
+                    content_sources=content_sources,
                     runtime_overrides=runtime_overrides,
                     skip_yaml_sections=skip_yaml_sections,
                 )
@@ -1101,6 +1104,7 @@ def _build_runtime_kwargs(
     checkpointer_dsn: str = "",
     startup_hook: str = "",
     startup_hook_kwargs: dict[str, Any] | None = None,
+    content_sources: Any = None,
     runtime_overrides: dict[str, Any] | None = None,
     skip_yaml_sections: set[str] | None = None,
 ) -> dict[str, Any]:
@@ -1127,6 +1131,7 @@ def _build_runtime_kwargs(
         "checkpointer_dsn": checkpointer_dsn,
         "startup_hook": startup_hook,
         "startup_hook_kwargs": startup_hook_kwargs,
+        "content_sources": content_sources,
         "runtime_overrides": runtime_overrides,
         "skip_yaml_sections": skip_yaml_sections,
     }

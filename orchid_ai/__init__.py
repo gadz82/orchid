@@ -114,6 +114,7 @@ from .persistence.mcp_client_registration_sqlite import OrchidSQLiteMCPClientReg
 from .persistence.mcp_token_factory import build_mcp_token_store
 from .persistence.mcp_token_sqlite import OrchidSQLiteMCPTokenStore
 from .persistence.config_postgres import OrchidPostgresConfigStorage
+from .persistence.config_sqlite import OrchidSQLiteConfigStorage
 from .persistence.sqlite import OrchidSQLiteChatStorage
 from .plugins import iter_entry_point_plugins
 from .documents.post_processors import (
@@ -252,6 +253,7 @@ __all__ = [
     "OrchidConfigStorageConfig",
     "OrchidPostgresConfigStorage",
     "OrchidSQLiteChatStorage",
+    "OrchidSQLiteConfigStorage",
     "OrchidSQLiteMCPClientRegistrationStore",
     "OrchidSQLiteMCPTokenStore",
     # ── Runtime + observability ───────────────────────

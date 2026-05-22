@@ -129,3 +129,21 @@ class OrchidChatStorage(ABC):
         if "admin" in getattr(auth, "roles", frozenset()):
             return True
         return False
+
+    # ── Conversation summaries (running-summary memory) ──────
+
+    async def get_conversation_summary(self, chat_id: str) -> str | None:
+        """Return the current running summary for a chat, or None.
+
+        Default: no-op for backward compat.  Concrete backends that
+        support running-summary persistence override this.
+        """
+        return None
+
+    async def save_conversation_summary(self, chat_id: str, summary: str, turn_number: int) -> None:
+        """Persist a running summary for a chat.
+
+        Default: no-op for backward compat.  Concrete backends that
+        support running-summary persistence override this.
+        """
+        pass

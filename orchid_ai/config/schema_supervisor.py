@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from .schema_memory import OrchidMemoryConfig
 
 
 class ExecutionHints(BaseModel):
@@ -61,3 +63,9 @@ class OrchidSupervisorConfig(BaseModel):
     #: turns and sequential pipelines still go through synthesis so
     #: their outputs can be merged.
     skip_synthesis_when_single_agent: bool = True
+
+    #: Conversation memory strategy for incremental summarization.
+    #: When ``strategy="running_summary"``, older conversation turns
+    #: are incrementally extended rather than re-summarized from
+    #: scratch on every turn (avoids O(n^2) LLM token waste).
+    memory: OrchidMemoryConfig = Field(default_factory=OrchidMemoryConfig)

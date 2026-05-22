@@ -36,6 +36,7 @@ from typing import Any
 from .config.loader import load_config
 from .config.schema import OrchidAgentsConfig
 from .config.yaml_env import apply_yaml_to_env
+from .core.content import OrchidContentSource
 from .core.mcp import OrchidMCPClientRegistrationStore, OrchidMCPTokenStore
 from .core.mcp_gateway_state import (
     OrchidMCPGatewayClientStore,
@@ -113,6 +114,7 @@ class _ResolvedOverrides:
     checkpointer_type: str
     checkpointer_dsn: str
     startup_hook: str
+    content_sources_json: str
     runtime_overrides: dict[str, Any]
 
 
@@ -139,6 +141,8 @@ async def _build_runtime(
     checkpointer_dsn: str = "",
     startup_hook: str = "",
     startup_hook_kwargs: dict[str, Any] | None = None,
+    content_sources: list[OrchidContentSource] | None = None,
+    content_sources_json: str = "",
     runtime_overrides: dict[str, Any] | None = None,
     skip_yaml_sections: set[str] | None = None,
 ) -> _BootstrapResult:
@@ -218,6 +222,7 @@ async def _build_runtime(
         checkpointer_type=checkpointer_type,
         checkpointer_dsn=checkpointer_dsn,
         startup_hook=startup_hook,
+        content_sources_json=content_sources_json,
         runtime_overrides=runtime_overrides,
     )
 
@@ -239,7 +244,11 @@ async def _build_runtime(
         mcp_gateway_state_store,
     ) = await _build_persistence(overrides)
 
-    # ── 6. Assemble runtime + optional checkpointer ──────────
+    # ── 6. Content sources ───────────────────────────
+    content_sources_config = _parse_content_sources_json(overrides.content_sources_json)
+    built_content_sources = _build_content_sources(content_sources_config, content_sources)
+
+    # ── 7. Assemble runtime + optional checkpointer ──────────
     runtime = OrchidRuntime(
         default_model=overrides.model,
         reader=reader,
@@ -248,6 +257,7 @@ async def _build_runtime(
         mcp_gateway_client_store=mcp_gateway_state_store,
         mcp_gateway_auth_code_store=mcp_gateway_state_store,  # type: ignore[arg-type]
         mcp_gateway_token_store=mcp_gateway_state_store,  # type: ignore[arg-type]
+        content_sources=built_content_sources,
         **overrides.runtime_overrides,
     )
     await _attach_checkpointer(runtime, overrides.checkpointer_type, overrides.checkpointer_dsn)
@@ -298,11 +308,13 @@ def _resolve_overrides(
     checkpointer_type: str,
     checkpointer_dsn: str,
     startup_hook: str,
-    runtime_overrides: dict[str, Any] | None,
+    content_sources_json: str = "",
+    runtime_overrides: dict[str, Any] | None = None,
 ) -> _ResolvedOverrides:
     """Apply ``arg → env → default`` precedence and return a typed bundle."""
     storage_dsn = chat_db_dsn or os.environ.get("CHAT_DB_DSN", "") or _DEFAULT_STORAGE_DSN
     extra_pkg = chat_extra_migrations_package or os.environ.get("CHAT_EXTRA_MIGRATIONS_PACKAGE", "") or None
+    content_json = content_sources_json or os.environ.get("CONTENT_SOURCES", "") or ""
     return _ResolvedOverrides(
         agents_config_path=agents_config_path or os.environ.get("AGENTS_CONFIG_PATH", "agents.yaml"),
         model=model or os.environ.get("LITELLM_MODEL", _DEFAULT_MODEL),
@@ -335,6 +347,7 @@ def _resolve_overrides(
         checkpointer_type=checkpointer_type or os.environ.get("CHECKPOINTER_TYPE", ""),
         checkpointer_dsn=checkpointer_dsn or os.environ.get("CHECKPOINTER_DSN", ""),
         startup_hook=startup_hook or os.environ.get("STARTUP_HOOK", ""),
+        content_sources_json=content_json,
         runtime_overrides=dict(runtime_overrides or {}),
     )
 
@@ -428,6 +441,45 @@ async def _build_persistence(
         mcp_client_registration_store,
         mcp_gateway_state_store,
     )
+
+
+def _parse_content_sources_json(json_str: str) -> list[dict[str, Any]] | None:
+    if not json_str:
+        return None
+    import json
+
+    try:
+        parsed = json.loads(json_str)
+    except json.JSONDecodeError:
+        logger.warning("[Bootstrap] CONTENT_SOURCES is not valid JSON — ignoring")
+        return None
+    if not isinstance(parsed, list):
+        logger.warning("[Bootstrap] CONTENT_SOURCES must be a JSON array — ignoring")
+        return None
+    return parsed
+
+
+def _build_content_sources(
+    content_sources_config: list[dict[str, Any]] | None,
+    overrides: list[OrchidContentSource] | None,
+) -> list[OrchidContentSource] | None:
+    if overrides is not None:
+        return overrides
+    if not content_sources_config:
+        return None
+    from .content import build_content_source
+
+    sources: list[OrchidContentSource] = []
+    for entry in content_sources_config:
+        entry_copy = dict(entry)
+        source_name = entry_copy.pop("source", "local")
+        try:
+            source = build_content_source(source_name, **entry_copy)
+        except Exception as exc:
+            logger.error("[Bootstrap] Failed to build content source '%s': %s", source_name, exc)
+            raise
+        sources.append(source)
+    return sources
 
 
 async def _run_startup_hook(

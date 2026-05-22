@@ -190,7 +190,7 @@ class TestMaxChars:
         # Short message untouched
         assert result[0]["content"] == "short"
         # Long message truncated with ellipsis
-        assert len(result[1]["content"]) == 101  # 100 chars + "…"
+        assert len(result[1]["content"]) == 100  # max_chars (99 + "…")
         assert result[1]["content"].endswith("…")
 
     def test_truncation_applies_to_user_messages(self) -> None:
@@ -202,7 +202,7 @@ class TestMaxChars:
             ]
         }
         result = OrchidAgent.extract_conversation_history(state, max_chars=50)
-        assert len(result[0]["content"]) == 51  # 50 + "…"
+        assert len(result[0]["content"]) == 50  # max_chars (49 + "…")
         assert result[0]["content"].endswith("…")
 
     def test_exact_limit_not_truncated(self) -> None:
@@ -233,4 +233,4 @@ class TestMaxChars:
         # Prefix stripped first, then truncated
         assert not result[0]["content"].startswith("[Agent]")
         assert result[0]["content"].endswith("…")
-        assert len(result[0]["content"]) == 51
+        assert len(result[0]["content"]) == 50

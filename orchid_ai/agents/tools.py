@@ -101,6 +101,7 @@ class BuiltinToolWrapper(BaseTool):
     """
 
     auth: Any  # OrchidAuthContext
+    content_sources: Any = None
     agent_name: str = ""
     requires_approval: bool = False  # HITL: pause and ask user before executing
 
@@ -115,7 +116,7 @@ class BuiltinToolWrapper(BaseTool):
 
         call_start = time.perf_counter()
         try:
-            result = await call_tool(self.name, auth_context=self.auth, **kwargs)
+            result = await call_tool(self.name, auth_context=self.auth, content_sources=self.content_sources, **kwargs)
             elapsed = (time.perf_counter() - call_start) * 1000
             text = json.dumps(result, default=str) if not isinstance(result, str) else result
             perf_logger.info(
@@ -169,6 +170,7 @@ def build_langchain_tools(
     auth: OrchidAuthContext,
     agent_name: str = "",
     approval_tools: set[str] | None = None,
+    content_sources: Any = None,
 ) -> list[BaseTool]:
     """Build a list of LangChain ``BaseTool`` instances for ToolNode dispatch.
 
@@ -209,6 +211,7 @@ def build_langchain_tools(
             description=desc,
             args_schema=None,
             auth=auth,
+            content_sources=content_sources,
             agent_name=agent_name,
             requires_approval=name in _approval,
         )

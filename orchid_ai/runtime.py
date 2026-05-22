@@ -37,6 +37,7 @@ from .core.mcp_gateway_state import (
     OrchidMCPGatewayClientStore,
     OrchidMCPGatewayTokenStore,
 )
+from .core.content import OrchidContentSource
 from .core.repository import OrchidVectorReader
 from .core.sparse import OrchidSparseEncoder
 
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
 
     from .config.schema import OrchidMCPServerConfig
     from .mcp.auth_registry import OrchidMCPAuthRegistry
+    from .persistence.base import OrchidChatStorage
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,8 @@ class OrchidRuntime:
     mcp_gateway_token_store: OrchidMCPGatewayTokenStore | None = None
     mcp_auth_registry: OrchidMCPAuthRegistry | None = field(default=None)
     checkpointer: BaseCheckpointSaver | None = None
+    content_sources: list[OrchidContentSource] | None = None
+    chat_storage: OrchidChatStorage | None = None
 
     # ── Resolved accessors (lazy defaults) ──────────────────────
 

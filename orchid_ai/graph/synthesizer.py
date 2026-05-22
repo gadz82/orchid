@@ -21,6 +21,9 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from ..config.schema import OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
+from ..core.helpers import _filter_summary_messages
+from ..core.memory import OrchidConversationMemory
+from ..agents.memory_rag import OrchidRAGConversationMemory
 from ._supervisor_helpers import _extract_single_agent_response, _llm_complete
 from .state import GraphState
 
@@ -58,15 +61,18 @@ class ResponseSynthesizer:
         model: str,
         supervisor_config: OrchidSupervisorConfig,
         chat_model: BaseChatModel | None,
+        memory: OrchidConversationMemory | None = None,
     ) -> None:
         self._model = model
         self._supervisor_config = supervisor_config
         self._chat_model = chat_model
+        self._memory = memory
 
     async def synthesise(self, state: GraphState) -> GraphState:
         """Return the final-response state delta, taking the fast path when possible."""
         fast = self._try_single_agent_fast_path(state)
         if fast is not None:
+            await self._store_turn_if_rag(state, fast.get("final_response", ""))
             return fast
         return await self._llm_synthesise(state)
 
@@ -122,14 +128,38 @@ class ResponseSynthesizer:
             state,
             max_turns=sup.history_max_turns,
             max_chars=sup.history_max_chars,
+            truncation_strategy=sup.memory.truncation_strategy,
         )
 
         if history and sup.history_summary_enabled and self._chat_model:
+            running_summary: str | None = None
+            if self._memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
+                chat_id = state.get("chat_id", "")
+                if chat_id:
+                    try:
+                        running_summary = await self._memory.get_running_summary(chat_id)
+                    except Exception:
+                        pass
             history = await OrchidAgent.compress_conversation_history(
                 history,
                 chat_model=self._chat_model,
                 recent_turns=sup.history_summary_recent_turns,
+                running_summary=running_summary,
+                structured_output=sup.memory.structured_output,
             )
+            # Persist the updated summary
+            if self._memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
+                chat_id = state.get("chat_id", "")
+                if chat_id:
+                    try:
+                        delta = _filter_summary_messages(history)
+                        await self._memory.update_running_summary(
+                            chat_id,
+                            delta,
+                            running_summary,
+                        )
+                    except Exception:
+                        pass
 
         if history:
             visible_history = [m for m in history if not m.get("content", "").startswith("[Conversation summary]")]
@@ -190,9 +220,45 @@ class ResponseSynthesizer:
                     "Please try again later."
                 )
 
+        await self._store_turn_if_rag(state, final)
+
         return {
             "messages": [AIMessage(content=final)],
             "final_response": final,
             "active_agents": [],
             "pending_agents": [],
         }
+
+    async def _store_turn_if_rag(self, state: GraphState, final_response: str) -> None:
+        sup = self._supervisor_config
+        if self._memory is None or sup.memory.strategy != "rag_augmented" or not sup.memory.store_turns:
+            return
+        if not isinstance(self._memory, OrchidRAGConversationMemory):
+            return
+        chat_id = state.get("chat_id", "")
+        if not chat_id:
+            return
+        auth = state.get("auth_context")
+        tenant_id = auth.tenant_key if auth else "default"
+        user_id = auth.user_id if auth else ""
+
+        try:
+            user_query = OrchidAgent.extract_user_query(state)
+            if user_query:
+                await self._memory.store_conversation_turn(
+                    chat_id=chat_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    turn={"role": "user", "content": user_query},
+                    metadata={"turn_type": "synthesis", "agent": "supervisor"},
+                )
+            if final_response:
+                await self._memory.store_conversation_turn(
+                    chat_id=chat_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    turn={"role": "assistant", "content": final_response},
+                    metadata={"turn_type": "synthesis", "agent": "supervisor"},
+                )
+        except Exception:
+            pass
