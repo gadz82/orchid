@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.8.2 (2026-05-22)
+
+### Bug Fixes
+
+- Handle missing `asyncpg` gracefully, add checks and raise ImportError with installation guidance
+  ([`c67c131`](https://github.com/gadz82/orchid/commit/c67c131255936bd1cb594968c7f92a60f79a68c2))
+
+
 ## v1.8.1 (2026-05-22)
 
 ### Bug Fixes
