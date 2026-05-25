@@ -1,11 +1,12 @@
 """Concrete signal-queue implementations.
 
-In-memory, SQLite, Postgres, and a relay-bus skeleton.  The
-in-memory queue keeps the in-memory stores (signals, jobs,
-schedules, triggers) under one roof so unit tests can drive the
-dispatcher and processor without spinning up a database; the
-durable queues each pair with the matching event-store class in
-``events/backends/``.
+In-memory, SQLite, and a relay-bus skeleton.  The in-memory queue
+keeps the in-memory stores (signals, jobs, schedules, triggers)
+under one roof so unit tests can drive the dispatcher and processor
+without spinning up a database; the durable queues pair with the
+matching event-store class in ``events/backends/``.
+
+The PostgreSQL queue lives in ``orchid-storage-postgres``.
 """
 
 from __future__ import annotations
@@ -27,17 +28,12 @@ __all__ = [
     "InMemorySignalQueue",
     "InMemorySignalStore",
     "InMemoryTriggerStore",
-    "PostgresSignalQueue",
     "RelayingSignalQueue",
     "SQLiteSignalQueue",
 ]
 
 
 def __getattr__(name: str) -> object:
-    if name == "PostgresSignalQueue":
-        from .postgres import PostgresSignalQueue
-
-        return PostgresSignalQueue
     if name == "SQLiteSignalQueue":
         from .sqlite import SQLiteSignalQueue
 

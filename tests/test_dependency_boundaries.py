@@ -21,12 +21,10 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "orchid_ai"
 # Each entry maps a forbidden top-level module name to the relative path
 # (under PACKAGE_ROOT) where it is *allowed* to be imported.  Empty list
 # means "nowhere" — current state for backends we haven't shipped yet.
+#
+# Note: qdrant_client and neo4j moved to plugin packages (orchid-rag-qdrant,
+# orchid-rag-neo4j) and are no longer present in the core library.
 ALLOWED_LOCATIONS: dict[str, list[str]] = {
-    "qdrant_client": [
-        "rag/backends/qdrant.py",
-        "rag/backends/qdrant_doc_store.py",
-    ],
-    "neo4j": ["rag/backends/neo4j_graph.py"],
     "opensearchpy": [],
     "weaviate": [],
     "weaviate_client": [],

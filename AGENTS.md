@@ -100,7 +100,7 @@ documents/   → core/  (standalone)
 | litellm | Multi-provider LLM routing (fallback) | Core |
 | qdrant-client | Vector DB client | Core |
 | aiosqlite | SQLite async driver (default storage) | Core |
-| asyncpg | PostgreSQL async driver | Optional (`orchid-ai[postgres]`) |
+| asyncpg | PostgreSQL async driver | Optional (via `orchid-storage-postgres`) |
 | langchain-openai | OpenAI provider (optional, improves perf) | Optional |
 | langchain-google-genai | Google AI provider (optional) | Optional |
 | langchain-ollama | Ollama provider (optional) | Optional |

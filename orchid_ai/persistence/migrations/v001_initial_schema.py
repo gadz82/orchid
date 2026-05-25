@@ -1,7 +1,8 @@
 """
-Migration v001 — Initial persistence schema (unified).
+Migration v001 — Initial persistence schema (SQLite only).
 
-Creates every framework-owned table in a single pass:
+Creates every framework-owned table in a single pass for SQLite.
+The PostgreSQL equivalent lives in ``orchid-storage-postgres``.
 
 **Chat persistence**
   - ``chat_sessions`` — one row per user chat thread.
@@ -13,7 +14,7 @@ Creates every framework-owned table in a single pass:
     endpoints + DCR (RFC 7591) credentials.
 
 **MCP inbound gateway state (external MCP clients authenticating to
-the gateway via OAuth 2.0 + DCR)**
+ the gateway via OAuth 2.0 + DCR)**
   - ``mcp_gateway_clients`` — registered inbound DCR clients.
   - ``mcp_gateway_auth_codes`` — in-flight authorization codes with
     upstream-IdP correlation state.
@@ -34,21 +35,18 @@ the gateway via OAuth 2.0 + DCR)**
   - ``signal_sources`` — webhook source registry consumed by the
     HTTP ingestion producer.
 
-Dialect-aware: uses ``TIMESTAMPTZ`` + ``JSONB`` + ``DOUBLE PRECISION``
-on PostgreSQL; ``TEXT`` + ``REAL`` on SQLite.  The JSON columns on
-SQLite store serialized strings — callers (the respective store
-backends) own the ``json.dumps`` / ``json.loads`` boundary.
+SQLite uses ``TEXT`` + ``REAL``.  The JSON columns store serialized
+strings — callers (the respective store backends) own the
+``json.dumps`` / ``json.loads`` boundary.
 """
 
 from __future__ import annotations
 
-from ._schema_ddl import PG_UP, SQLITE_UP
+from ._schema_ddl import SQLITE_UP
 
 VERSION = "001"
-DESCRIPTION = "Unified initial schema (chat, MCP outbound, MCP inbound gateway, events)"
+DESCRIPTION = "SQLite initial schema (chat, MCP outbound, MCP inbound gateway, events)"
 
-# Aliases for backward compat with any external code that imported these.
-_PG_UP = PG_UP
 _SQLITE_UP = SQLITE_UP
 
 
@@ -72,12 +70,15 @@ _DOWN = [
 ]
 
 
-async def up(conn, *, dialect: str = "postgres") -> None:
-    stmts = SQLITE_UP if dialect == "sqlite" else PG_UP
-    for sql in stmts:
+async def up(conn, *, dialect: str = "sqlite") -> None:
+    if dialect != "sqlite":
+        raise ValueError(
+            "Framework migration v001 only supports sqlite; use orchid-storage-postgres for postgres dialect."
+        )
+    for sql in SQLITE_UP:
         await conn.execute(sql)
 
 
-async def down(conn, *, dialect: str = "postgres") -> None:
+async def down(conn, *, dialect: str = "sqlite") -> None:
     for sql in _DOWN:
         await conn.execute(sql)

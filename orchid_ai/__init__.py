@@ -113,7 +113,6 @@ from .persistence.mcp_client_registration_factory import build_mcp_client_regist
 from .persistence.mcp_client_registration_sqlite import OrchidSQLiteMCPClientRegistrationStore
 from .persistence.mcp_token_factory import build_mcp_token_store
 from .persistence.mcp_token_sqlite import OrchidSQLiteMCPTokenStore
-from .persistence.config_postgres import OrchidPostgresConfigStorage
 from .persistence.config_sqlite import OrchidSQLiteConfigStorage
 from .persistence.sqlite import OrchidSQLiteChatStorage
 from .plugins import iter_entry_point_plugins
@@ -251,7 +250,6 @@ __all__ = [
     # ── Built-in backends ─────────────────────────────
     "OrchidConfigStorage",
     "OrchidConfigStorageConfig",
-    "OrchidPostgresConfigStorage",
     "OrchidSQLiteChatStorage",
     "OrchidSQLiteConfigStorage",
     "OrchidSQLiteMCPClientRegistrationStore",

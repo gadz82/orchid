@@ -41,23 +41,7 @@ def _run(*, visibility: str, visibility_user_id: str | None, tenant: str = "t-1"
     )
 
 
-# ── SQL fragment ────────────────────────────────────────────
-
-
-def test_postgres_admin_fragment_is_tenant_only() -> None:
-    auth = OrchidAuthContext(access_token="t", tenant_key="t-1", user_id="u-7", roles={"admin"})
-    f = build_run_filter_clause(auth, dialect="postgres")
-    assert "tenant_key = $1" in f.where
-    assert "visibility" not in f.where  # admin sees all
-    assert f.params == {"$1": "t-1"}
-
-
-def test_postgres_non_admin_fragment_includes_visibility_clauses() -> None:
-    auth = OrchidAuthContext(access_token="t", tenant_key="t-1", user_id="u-7")
-    f = build_run_filter_clause(auth, dialect="postgres")
-    assert "visibility = 'tenant'" in f.where
-    assert "visibility_user_id = $2" in f.where
-    assert f.params == {"$1": "t-1", "$2": "u-7"}
+# ── SQL fragment (SQLite only) ─────────────────────────────
 
 
 def test_sqlite_admin_fragment() -> None:

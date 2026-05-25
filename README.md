@@ -42,7 +42,7 @@ pip install orchid-ai
 With PostgreSQL support:
 
 ```bash
-pip install "orchid-ai[postgres]"
+pip install orchid-ai orchid-storage-postgres
 ```
 
 ## Quick Start
@@ -777,7 +777,7 @@ Runtime configuration consumed by orchid-api and orchid-cli. Each nested YAML ke
 
 - **`storage.class`** -- Dotted import path to the `OrchidChatStorage` implementation. The class is dynamically imported at startup. Built-in options:
   - `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` -- Default. Stores chats in a local SQLite file. Zero config, no external database needed. Best for development, demos, and single-user deployments.
-  - `orchid_ai.persistence.postgres.OrchidPostgresChatStorage` -- PostgreSQL backend. Requires `pip install "orchid-ai[postgres]"` and a running PostgreSQL instance. Best for production, multi-user, and Docker deployments.
+  - `orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage` -- PostgreSQL backend. Requires `pip install orchid-storage-postgres` and a running PostgreSQL instance. Best for production, multi-user, and Docker deployments.
   - Custom backends: implement the `OrchidChatStorage` ABC and reference your class here.
 - **`storage.dsn`** -- Database connection string. For SQLite: a file path (e.g. `"~/.orchid/chats.db"`, `"/data/chats.db"`). The directory is created automatically. For PostgreSQL: a full DSN (e.g. `"postgresql://user:pass@localhost:5432/orchid"`).
 
