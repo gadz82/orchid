@@ -18,7 +18,7 @@ def build_config_storage(class_path: str, dsn: str) -> OrchidConfigStorage:
     ----------
     class_path : str
         Dotted import path, e.g.
-        ``"orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage"``.
+        ``"orchid_storage_postgres.OrchidPostgresConfigStorage"``.
     dsn : str
         Data-source name / connection string for the backend
         (e.g. ``"postgresql://user:pass@host:5432/db"``).

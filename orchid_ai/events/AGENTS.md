@@ -65,15 +65,12 @@ orchid_ai/events/
                                 InMemorySignalStore + InMemoryScheduleStore +
                                 InMemoryTriggerStore (single test-friendly bundle)
     sqlite.py                   SQLiteSignalQueue (durable, single-process)
-    postgres.py                 PostgresSignalQueue (FOR UPDATE SKIP LOCKED,
-                                pg_notify on commit)
     relay.py                    RelayingSignalQueue + BusPublisher ABC +
                                 InMemoryBusPublisher (for tests / demos)
   backends/
     __init__.py
     sqlite.py                   SQLiteEventStorage facade + four narrow stores
                                 (signals / jobs / schedules / triggers)
-    postgres.py                 PostgresEventStorage facade + four narrow stores
   schedulers/
     __init__.py
     apscheduler.py              APSchedulerBackend (no SQLAlchemy — durability
@@ -127,9 +124,6 @@ What this package ships:
 - ``InMemorySignalQueue`` + the four in-memory stores under one roof.
 - ``SQLiteSignalQueue`` + ``SQLiteEventStorage`` (durable single-process
   queue, FOREIGN-KEY-cascading job runs, transactional outbox).
-- ``PostgresSignalQueue`` + ``PostgresEventStorage`` (``FOR UPDATE
-  SKIP LOCKED`` dequeue, optional ``pg_notify`` on commit, atomic
-  outbox via shared connection / pool).
 - ``RelayingSignalQueue`` — publish-then-mark adapter for external
   buses with the ``BusPublisher`` ABC.  ``RelayRecoveryProducer``
   drives the durable ``relay_status`` column through a periodic
@@ -289,8 +283,8 @@ Live in-chat progress for chat-bound Blooms.  See
 events:
   enabled: true
 
-  store: { class: orchid_ai.events.backends.postgres.PostgresEventStore }
-  queue: { class: orchid_ai.events.queues.postgres.PostgresSignalQueue }
+  store: { class: orchid_ai.events.backends.sqlite.SQLiteEventStorage }
+  queue: { class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue }
   scheduler: { class: orchid_ai.events.schedulers.apscheduler.APSchedulerBackend }
 
   # HTTPIngestionProducer (orchid-api adapter) is mounted automatically

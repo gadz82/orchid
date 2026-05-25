@@ -9,8 +9,8 @@ opt-out.
 What this module owns:
 
 - Resolving ``events.store`` / ``events.queue`` dotted paths into
-  live :class:`SQLiteEventStorage` / :class:`PostgresEventStorage`
-  instances and a matching :class:`OrchidSignalQueue`.
+  live :class:`SQLiteEventStorage`
+  instance and a matching :class:`OrchidSignalQueue`.
 - Building the trigger registry from
   :attr:`OrchidEventsConfig.triggers`, with the §13 / §25 / §26
   registration-time validations.
@@ -82,7 +82,7 @@ class EventsRuntime:
     schedule_store: Any | None = None
     trigger_store: Any | None = None
     trigger_registry: InMemoryTriggerRegistry | None = None
-    storage: Any | None = None  # SQLiteEventStorage | PostgresEventStorage
+    storage: Any | None = None  # SQLiteEventStorage (Postgres available via plugin)
     processor: AsyncioWorkerPoolProcessor | None = None
     producers: list[OrchidSignalProducer] = field(default_factory=list)
     http_producer: Any = None  # set by orchid-api after building HTTPIngestionProducer

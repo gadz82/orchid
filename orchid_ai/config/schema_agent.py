@@ -227,7 +227,8 @@ class OrchidAgentsConfig(BaseModel):
         """Merge DB-sourced agent configs into ``self.agents``.
 
         Used by integrators who load agent configurations from a database
-        store (e.g. ``OrchidPostgresConfigStorage``) and want to layer
+        store (e.g. a PostgreSQL config storage backend from the
+        orchid-storage-postgres plugin) and want to layer
         them on top of — or alongside — YAML-loaded configs.
 
         Parameters

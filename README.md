@@ -544,8 +544,8 @@ Top-level block that wires the event-driven activation layer. **Omit it (or set 
 | `triggers` | list — signal → agent rules | `[]` |
 
 - **`enabled`** -- Master switch. The full block is still parsed when `false` so typos in your YAML still fail loudly, but no runtime objects are constructed. Default `false` is the zero-overhead opt-out.
-- **`store`** -- Backend for the seven events tables (`signals`, `signal_queue`, `signal_queue_dead_letter`, `triggers`, `schedules`, `job_runs`, `signal_sources`). Built-in choices: `orchid_ai.events.backends.sqlite.SQLiteEventStorage`, `orchid_ai.events.backends.postgres.PostgresEventStorage`. The migrations live alongside chat/MCP migrations in `persistence/migrations/v001_initial_schema.py` — one root migration covers all three concerns.
-- **`queue`** -- Durable signal buffer. Built-ins: `orchid_ai.events.queues.inmemory.InMemorySignalQueue` (tests/demos), `orchid_ai.events.queues.sqlite.SQLiteSignalQueue` (single-process durable), `orchid_ai.events.queues.postgres.PostgresSignalQueue` (FOR UPDATE SKIP LOCKED, optional `pg_notify` on commit), `orchid_ai.events.queues.relay.RelayingSignalQueue` (publish-then-mark adapter for external buses). Tunable knobs: `notify_enabled` (default `true`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `dead_letter_table` (default `signal_queue_dead_letter`).
+- **`store`** -- Backend for the seven events tables (`signals`, `signal_queue`, `signal_queue_dead_letter`, `triggers`, `schedules`, `job_runs`, `signal_sources`). Built-in: `orchid_ai.events.backends.sqlite.SQLiteEventStorage`. PostgreSQL events backend available via `orchid-storage-postgres` plugin. The migrations live alongside chat/MCP migrations in `persistence/migrations/v001_initial_schema.py` — one root migration covers all three concerns.
+- **`queue`** -- Durable signal buffer. Built-ins: `orchid_ai.events.queues.inmemory.InMemorySignalQueue` (tests/demos), `orchid_ai.events.queues.sqlite.SQLiteSignalQueue` (single-process durable), `orchid_ai.events.queues.relay.RelayingSignalQueue` (publish-then-mark adapter for external buses). PostgreSQL signal queue (FOR UPDATE SKIP LOCKED, optional `pg_notify` on commit) available via `orchid-storage-postgres` plugin. Tunable knobs: `notify_enabled` (default `true`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `dead_letter_table` (default `signal_queue_dead_letter`).
 - **`scheduler`** -- Cron / interval driver. Built-in: `orchid_ai.events.schedulers.apscheduler.APSchedulerBackend` (wraps `apscheduler.AsyncIOScheduler`, no SQLAlchemy — durability lives in the `schedules` table; APScheduler's in-memory jobstore is re-populated on every boot).
 - **`producers`** -- Sources of signals. Built-ins: `orchid_ai.events.producers.scheduler.SchedulerProducer` (drives the configured `scheduler`), `orchid_ai.events.producers.internal.InternalEmissionProducer` (wires `OrchidAgent.emit_signal` and `DispatcherSignalEmitter`), `orchid_ai.events.producers.relay_recovery.RelayRecoveryProducer` (periodic re-publish sweep when using `RelayingSignalQueue`). When using **orchid-api**, `HTTPIngestionProducer` (from `orchid_api.events.producers.http`) is mounted automatically whenever `events.ingestion.sources` is non-empty — no explicit entry needed here.
 - **`processors`** -- Drain the queue and run the matched Blooms. Built-in: `orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor`. Tunable knobs: `concurrency` (default `4`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `drain_timeout_seconds` (default `10.0`).
@@ -613,9 +613,10 @@ events:
   enabled: true
 
   store:
-    class: orchid_ai.events.backends.postgres.PostgresEventStorage
+    class: orchid_ai.events.backends.sqlite.SQLiteEventStorage
+    dsn: /data/events.db
   queue:
-    class: orchid_ai.events.queues.postgres.PostgresSignalQueue
+    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
     notify_enabled: true
     lease_seconds: 60
   scheduler:
@@ -1108,7 +1109,7 @@ upload:
 
 # ── Chat persistence ─────────────────────────────────────────
 storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  class: orchid_storage_postgres.OrchidPostgresChatStorage
   dsn: postgresql://user:pass@localhost:5432/orchid
 
 # ── Observability ────────────────────────────────────────────
