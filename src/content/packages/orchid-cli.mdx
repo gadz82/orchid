@@ -18,15 +18,15 @@ external: []
 
 <RepoLink package="orchid-cli" />
 
-`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. The default storage is SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via environment variables when you need it.
+`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. The default storage is SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
 
-The CLI defaults to **ChromaDB** (`vector_backend: chroma`) for zero-infrastructure RAG — vectors live on disk at `~/.orchid/chroma/`, no Qdrant container required. Set `VECTOR_BACKEND=qdrant` to switch to Qdrant when you need sparse/hybrid search or scope promotion.
+The CLI bundles the **`orchid-rag-chroma`** plugin as a dependency for zero-infrastructure RAG — vectors live on disk at `~/.orchid/chroma/`, no Qdrant container required. Set `VECTOR_BACKEND=qdrant` and install `orchid-rag-qdrant` to switch when you need sparse/hybrid search or scope promotion.
 
 ## Installation
 
 ```bash
 pip install orchid-ai orchid-cli
-```
+# orchid-rag-chroma is included — no extra install needed for on-disk RAG
 
 After installation the `orchid` command is available in your shell.
 

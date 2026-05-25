@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-05-21
+Last generated: 2026-05-25
 
 ## Overview
 
@@ -50,6 +50,9 @@ https://gadz82.github.io/orchid/concepts/mini-agents
 Pollen + Bloom — Event-driven AI jobs: Pollen ingests and persists signals; Bloom matches them to triggers and runs them through the supervisor.
 https://gadz82.github.io/orchid/concepts/pollen-bloom
 
+Chat Summarization — Running summaries, structured entity extraction, RAG-augmented conversation memory, and configurable truncation strategies.
+https://gadz82.github.io/orchid/concepts/chat-summarization
+
 ## Packages
 
 orchid — The core Python library: ABCs, agents, graph builder, RAG, and persistence.
@@ -66,6 +69,18 @@ https://gadz82.github.io/orchid/packages/orchid-mcp
 
 orchid-frontend — Next.js 15 multi-chat UI with SSE streaming and file upload support.
 https://gadz82.github.io/orchid/packages/orchid-frontend
+
+orchid-storage-postgres — PostgreSQL storage plugin: chat persistence, checkpointer, and visibility fragment.
+https://gadz82.github.io/orchid/packages/orchid-storage-postgres
+
+orchid-rag-qdrant — Qdrant vector and doc-store plugin for the Orchid AI framework.
+https://gadz82.github.io/orchid/packages/orchid-rag-qdrant
+
+orchid-rag-chroma — ChromaDB vector-backend plugin for on-disk, zero-infrastructure RAG.
+https://gadz82.github.io/orchid/packages/orchid-rag-chroma
+
+orchid-rag-neo4j — Neo4j graph-store plugin for knowledge-graph RAG.
+https://gadz82.github.io/orchid/packages/orchid-rag-neo4j
 
 ## Configuration
 
@@ -107,6 +122,9 @@ https://gadz82.github.io/orchid/examples/mcp-auth
 Orchid Experts — Fleet of ten RAG-powered GenericAgent experts covering every Orchid concept — pure YAML + Markdown, zero custom agent code.
 https://gadz82.github.io/orchid/examples/orchid-experts
 
+Postgres Storage — Demonstrates the orchid-storage-postgres plugin: asyncpg chat persistence, PostgreSQL checkpointer, and visibility.
+https://gadz82.github.io/orchid/examples/postgres-storage
+
 Custom Storage Backend — Plug in a custom OrchidChatStorage subclass via the storage.class field.
 https://gadz82.github.io/orchid/examples/custom-storage
 
@@ -118,6 +136,15 @@ https://gadz82.github.io/orchid/examples/tool-strategies
 
 Prompt Customization — Every supervisor and agent prompt extension point — assistant_name, routing/synthesis prompts, prompt_sections, and transformer prompts.
 https://gadz82.github.io/orchid/examples/prompt-customization
+
+Gallery Curator — A multi-session art gallery curator that remembers artists, exhibitions, and decisions across sessions using Orchid's full conversation summarization pipeline.
+https://gadz82.github.io/orchid/examples/gallery-curator
+
+Festival Producer — Multi-agent festival planning with artist booking, logistics, and marketing agents — backed by rag_augmented conversation memory, orchestrator skills, and structured entity extraction.
+https://gadz82.github.io/orchid/examples/festival-producer
+
+Architecture Review Board — Multi-agent design review with structural engineering, cost estimation, and sustainability consulting — orchestrator skills and rag_augmented memory across design iterations.
+https://gadz82.github.io/orchid/examples/architecture-review
 
 Graph Knowledge Base — GraphRAG retrieval strategy: graph traversal fused with dense vector search for multi-hop relationship queries.
 https://gadz82.github.io/orchid/examples/graph-kb

@@ -20,12 +20,12 @@ external: []
 
 <RepoLink package="orchid-api" />
 
-`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, and identity bridging. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface.
+`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, and identity bridging. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface. The API does **not** bundle storage or RAG backends; install the corresponding plugin packages alongside it.
 
 ## Installation and startup
 
 ```bash
-pip install orchid-ai orchid-api
+pip install orchid-ai orchid-api orchid-storage-postgres orchid-rag-qdrant
 ORCHID_CONFIG=orchid.yml uvicorn orchid_api.main:app --port 8000
 ```
 

@@ -1,0 +1,70 @@
+---
+title: "Postgres Storage"
+description: "Demonstrates the orchid-storage-postgres plugin: asyncpg chat persistence, PostgreSQL checkpointer, and visibility."
+package: "cross-cutting"
+section: "examples"
+order: 57
+tags: ["persistence", "postgres", "plugin", "checkpointer"]
+sources:
+  - examples/postgres-storage/orchid.yml
+  - examples/postgres-storage/agents.yaml
+related:
+  - /packages/orchid-storage-postgres
+  - /concepts/persistence
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The postgres-storage example showcases the `orchid-storage-postgres` plugin in a minimal two-agent setup. It uses the `OrchidPostgresChatStorage` class for chat persistence with `asyncpg` connection pooling, a PostgreSQL LangGraph checkpointer for agent-state persistence across turns, and Qdrant RAG via the `orchid-rag-qdrant` plugin. All plugin components auto-register via `importlib.metadata` entry points.
+
+## Run it
+
+Start with Docker (includes PostgreSQL, Qdrant, and the API):
+
+```bash
+script/start_postgres_storage.sh
+```
+
+Or manually:
+
+```bash
+ORCHID_CONFIG=examples/postgres-storage/orchid.yml \
+docker compose -f script/docker-compose.examples.yml \
+  --profile postgres --profile qdrant up --build
+```
+
+## How it's wired
+
+The `orchid.yml` references the plugin classes directly:
+
+```yaml
+storage:
+  class: orchid_storage_postgres.OrchidPostgresChatStorage
+  dsn: postgresql://postgres:postgres@postgres:5432/orchid
+
+checkpointer:
+  type: postgres
+  dsn: postgresql://postgres:postgres@postgres:5432/orchid
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+```
+
+The `orchid-rag-qdrant` and `orchid-storage-postgres` packages are installed alongside `orchid-ai`. Their entry points register at import time — no manual `register_*()` calls needed.
+
+## Verify PostgreSQL persistence
+
+After sending a few messages, connect to the running PostgreSQL instance:
+
+```bash
+docker exec -it postgres psql -U postgres -d orchid
+
+# Chat sessions
+SELECT id, title, tenant_key, user_id, created_at FROM chat_sessions;
+
+# LangGraph checkpoints
+SELECT count(*) FROM checkpoints;
+```

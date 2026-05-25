@@ -1,0 +1,52 @@
+---
+title: "orchid-rag-chroma"
+description: "ChromaDB vector-backend plugin for on-disk, zero-infrastructure RAG."
+package: "orchid-rag-chroma"
+section: "packages"
+order: 27
+tags: []
+sources:
+  - "orchid-rag-chroma/README.md"
+  - "orchid-rag-chroma/AGENTS.md"
+  - "orchid-rag-chroma/orchid_rag_chroma/"
+related: ["/packages/orchid", "/packages/orchid-cli", "/concepts/rag"]
+example: ""
+external: []
+---
+
+<RepoLink package="orchid-rag-chroma" />
+
+`orchid-rag-chroma` is the ChromaDB vector-backend plugin. It provides on-disk, zero-infrastructure RAG — no external server needed — and auto-registers via Python entry points. Bundled as a dependency of `orchid-cli` for out-of-the-box vector search.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-rag-chroma
+```
+
+For CLI users, `orchid-cli` already depends on `orchid-rag-chroma` — no extra install needed.
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Vector backend | `ChromaRepository` | Full `OrchidVectorStoreRepository` implementation |
+| Filter builder | `_build_where` | Orchid scope → ChromaDB metadata filter translation |
+
+## Auto-Registration
+
+```toml
+[project.entry-points."orchid.vector_backends"]
+chroma = "orchid_rag_chroma:_register"
+```
+
+The plugin reads `CHROMA_PATH` from the environment to switch from HTTP to persistent (local on-disk) mode.
+
+## Configuration
+
+```yaml
+rag:
+  vector_backend: chroma
+  chroma_path: ~/.orchid/chroma        # local on-disk (persistent mode)
+  embedding_model: text-embedding-3-small
+```

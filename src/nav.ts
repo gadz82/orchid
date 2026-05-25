@@ -29,6 +29,10 @@ export const navNodes: NavNode[] = [
   { href: '/packages/orchid-cli', label: 'orchid-cli', group: 'packages', order: 22 },
   { href: '/packages/orchid-mcp', label: 'orchid-mcp', group: 'packages', order: 23 },
   { href: '/packages/orchid-frontend', label: 'orchid-frontend', group: 'packages', order: 24 },
+  { href: '/packages/orchid-storage-postgres', label: 'orchid-storage-postgres', group: 'packages', order: 25 },
+  { href: '/packages/orchid-rag-qdrant', label: 'orchid-rag-qdrant', group: 'packages', order: 26 },
+  { href: '/packages/orchid-rag-chroma', label: 'orchid-rag-chroma', group: 'packages', order: 27 },
+  { href: '/packages/orchid-rag-neo4j', label: 'orchid-rag-neo4j', group: 'packages', order: 28 },
 
   { href: '/configuration', label: 'Configuration Atlas', group: 'configuration', order: 30 },
   { href: '/configuration-reference', label: 'Configuration Reference', group: 'configuration', order: 31 },
@@ -52,6 +56,7 @@ export const navNodes: NavNode[] = [
   { href: '/examples/gallery-curator', label: 'Gallery Curator', group: 'examples', order: 54 },
   { href: '/examples/festival-producer', label: 'Festival Producer', group: 'examples', order: 55 },
   { href: '/examples/architecture-review', label: 'Architecture Review', group: 'examples', order: 56 },
+  { href: '/examples/postgres-storage', label: 'Postgres Storage', group: 'examples', order: 57 },
 
   { href: '/best-practices', label: 'Best Practices', group: 'meta', order: 60 },
   { href: '/glossary', label: 'Glossary', group: 'meta', order: 61 },

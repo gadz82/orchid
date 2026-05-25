@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-05-21
+Last generated: 2026-05-25
 
 ## Overview
 
@@ -873,6 +873,218 @@ All three layers between emitter and supervisor are independently pluggable:
 
 ---
 
+### Chat Summarization
+URL: https://gadz82.github.io/orchid/concepts/chat-summarization
+Description: Running summaries, structured entity extraction, RAG-augmented conversation memory, and configurable truncation strategies.
+
+Orchid replaces the naive O(n²) stateless re-summarization anti-pattern with a layered conversation memory system: **incremental running summaries**, **structured JSON entity extraction**, and **Qdrant-backed semantic retrieval** of past turns. All message filtering is consolidated into a single configurable pipeline.
+
+## Configuration
+
+Everything lives under `supervisor.memory:` in `agents.yaml`:
+
+```yaml
+supervisor:
+  memory:
+    strategy: "rag_augmented"           # none | running_summary | rag_augmented
+    summary_recent_turns: 10           # keep last N exchanges verbatim
+    summary_model: null                # null = supervisor model
+    structured_output: true            # JSON entity extraction
+    persist_summary: true              # store in chat storage
+    summary_prompt: null               # custom compression prompt (null = default)
+    # -- rag_augmented only --
+    rag_namespace: "__memory__"        # reserved Qdrant namespace
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    # -- truncation --
+    truncation_strategy: "hard"        # hard | middle | llm | semantic
+    truncation_max_chars: 1000
+```
+
+Compression prompts are overridable per-agent via `prompt_sections`:
+
+```yaml
+agents:
+  - name: my-agent
+    prompt_sections:
+      summary_compression_system_prompt: "..."
+      summary_compression_user_prompt: "Summarise: {transcript}"
+      summary_extension_user_prompt: "Extend: {existing_summary} with {new_messages}"
+```
+
+Compression is also controlled by legacy supervisor-level toggles:
+
+```yaml
+supervisor:
+  history_summary_enabled: true
+  history_summary_model: gemini/gemini-2.5-flash-lite
+  history_summary_recent_turns: 10
+  history_max_turns: 20
+  history_max_chars: 1000
+```
+
+## Strategy Phases
+
+### Phase 1 — Running Summary (stateful incremental compression)
+
+Every call to `compress_conversation_history()` used to re-process the **entire** older history from scratch — O(n²) LLM token waste. With `strategy: "running_summary"`, the summary is **incrementally extended**:
+
+1. On each turn, only the **new** older messages are sent to the LLM with an extension prompt:
+   *"Given this existing summary and these new conversation messages, produce an updated summary..."*.
+2. The summary is persisted in chat storage (`conversation_summaries` table) via `OrchidChatStorage`.
+3. On LLM failure, falls back to truncation (recent turns only, no crash).
+
+Memory implementation: `OrchidInMemoryConversationMemory` (`agents/memory.py`).
+
+### Phase 2 — Structured Summaries (JSON entity extraction)
+
+Flat paragraph summaries lose entities, topics, and structure. With `structured_output: true`, the LLM produces **structured JSON**:
+
+```json
+{
+  "topics": ["weather", "travel"],
+  "entities": [{"name": "John", "type": "person", "details": "user"}],
+  "actions_taken": ["looked up forecast"],
+  "decisions": ["postpone trip"],
+  "open_questions": ["what about hotel?"],
+  "user_preferences": ["prefers warm climate"],
+  "narrative": "User asked about weather and travel.",
+  "covered_turns": 5
+}
+```
+
+- Entities are **deduplicated** across turns (same entity `→` merged details).
+- On JSON parse failure, falls back to narrative-only.
+- Renders via `OrchidConversationSummary.to_context_string()` for LLM injection.
+
+Models: `OrchidConversationSummary`, `OrchidSummaryEntity` (`core/memory_types.py`).
+
+### Phase 3 — RAG-Augmented Memory (semantic retrieval)
+
+With `strategy: "rag_augmented"`, conversation turns are **embedded and stored in Qdrant** under the reserved `__memory__` namespace. On each new turn:
+
+1. The current query is embedded and used to retrieve the **k most relevant past turns** via semantic search.
+2. Results are **deduplicated** against the recent verbatim window (content hash check).
+3. The merged context flows into the compression step: `[RAG turns] + [summary] + [recent verbatim]`.
+4. Turns are stored in Qdrant after each synthesis and agent response, scoped by `OrchidRAGScope`.
+
+Graceful degradation: with `NullVectorReader`, `get_relevant_history()` returns `[]` and the system behaves like `running_summary` only — no crash.
+
+Memory implementation: `OrchidRAGConversationMemory` (`agents/memory_rag.py`).
+
+### Phase 4 — Configurable Prompts & Smarter Truncation
+
+All compression prompts are overridable per-agent. Message truncation strategies go beyond the basic hard cutoff:
+
+| Strategy | Behavior |
+|----------|----------|
+| `hard` (default) | `content[:max_chars] + "…"` |
+| `middle` | Keeps first 40% and last 40%, `…[truncated]…` in between |
+| `llm` | Asks LLM to summarize the message; falls back to `middle` on failure |
+| `semantic` | Reserved for embedding-based selection; falls back to `middle` |
+
+Implementation: `OrchidTruncationStrategy` enum, `truncate_content()` / `truncate_content_async()` in `core/truncation.py`.
+
+## Message Filtering Pipeline (Phase 5)
+
+Before Phase 5, message filtering was duplicated across 6+ call sites with slightly different logic. The `MessageFilterPipeline` consolidates all filtering:
+
+```python
+from orchid_ai.core.message_filter import MessageFilter, MessageFilterPipeline
+
+# Built-in presets
+from orchid_ai.core.message_filter import SUPERVISOR_PIPELINE
+# Skips: [Supervisor], [Conversation summary], tool types
+# Excludes last user message
+
+# Per-agent pipeline
+from orchid_ai.core.message_filter import agent_pipeline
+pipeline = agent_pipeline(("[MyAgent]\n",), max_chars=1000, max_turns=10)
+```
+
+`extract_conversation_history()` accepts an optional `pipeline=` parameter. When provided, it delegates to the pipeline. When `None`, it builds one from the legacy `skip_prefixes`/`strip_prefixes` parameters for backward compatibility.
+
+## Architecture
+
+```
+User message
+  │
+  ▼
+extract_conversation_history()          ── MessageFilterPipeline
+  │  ┌─ Skip [Supervisor] routing noise
+  │  ├─ Strip [Agent] prefixes
+  │  ├─ Truncate long messages (hard | middle | llm)
+  │  ├─ Exclude last user message (current query)
+  │  └─ Cap to max_turns
+  │
+  ▼
+compress_conversation_history()         ── Memory system
+  │  ┌─ Get running summary (from chat storage)
+  │  ├─ LLM: extend summary (only new older messages)
+  │  ├─ Store updated summary (to chat storage)
+  │  └─ Structured JSON + entity extraction (when enabled)
+  │
+  ▼
+RAG augmentation (when rag_augmented)
+  │  ┌─ Embed current query
+  │  ├─ Retrieve top-k relevant turns (Qdrant, __memory__ namespace)
+  │  ├─ Deduplicate against verbatim window
+  │  └─ Insert before summary + recent verbatim
+  │
+  ▼
+Final context: [RAG turns] [summary] [recent verbatim]
+  ▼
+Supervisor / Agent LLM call
+```
+
+## Storage
+
+The `conversation_summaries` table (in SQLite or PostgreSQL):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `chat_id` | TEXT PK, FK → chats | Chat session |
+| `summary_text` | TEXT | JSON (structured) or plain text (narrative) |
+| `turn_number` | INTEGER | Approximate turn count |
+| `updated_at` | TIMESTAMP | Last update |
+
+## Graceful Degradation
+
+Every component degrades gracefully:
+
+- **LLM failure** → fallback to recent-turns-only (no summary, no crash)
+- **JSON parse failure** → fallback to narrative-only summary
+- **Qdrant unavailable** (`NullVectorReader`) → returns `[]` from `get_relevant_history()`, degrades to `running_summary`
+- **No chat storage** → `NullConversationMemory` (no-op)
+- **No memory configured** (`strategy: "none"`) → identical to pre-Phase-1 behavior
+
+## Examples
+
+See the [Prompt Customization](/examples/prompt-customization) example for overriding compression prompts per-agent, and the [Basketball](/examples/basketball) example which uses the default `strategy: "none"`.
+
+```yaml
+# Full memory config example (rag_augmented with middle truncation)
+supervisor:
+  history_summary_enabled: true
+  history_summary_model: gemini/gemini-2.5-flash-lite
+  history_summary_recent_turns: 10
+  history_max_turns: 20
+  history_max_chars: 1000
+  memory:
+    strategy: "rag_augmented"
+    summary_recent_turns: 10
+    structured_output: true
+    persist_summary: true
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    truncation_strategy: "middle"
+    truncation_max_chars: 1000
+```
+
+---
+
 ## Packages
 
 ### orchid
@@ -886,8 +1098,11 @@ Description: The core Python library: ABCs, agents, graph builder, RAG, and pers
 ```bash
 pip install orchid-ai
 
-# PostgreSQL storage (optional — SQLite is the default)
-pip install "orchid-ai[postgres]"
+# Backends are separate plugin packages — install what you need:
+pip install orchid-storage-postgres   # PostgreSQL chat storage + checkpointer
+pip install orchid-rag-qdrant         # Qdrant vector + doc store
+pip install orchid-rag-chroma         # ChromaDB on-disk vector store
+pip install orchid-rag-neo4j          # Neo4j graph store
 ```
 
 ## Module map
@@ -910,11 +1125,11 @@ YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`)
 
 ### `rag/`
 
-Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends (Qdrant for full-featured deployments, ChromaDB for zero-infra local usage). All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. The ChromaDB backend lives in `orchid-cli/` and is registered in `VECTOR_BACKEND_REGISTRY` at CLI startup. See [RAG](/concepts/rag).
+Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends. The library ships with null + in-memory backends; Qdrant, ChromaDB, and Neo4j backends are separate plugin packages that auto-register via entry points. All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. See [RAG](/concepts/rag).
 
 ### `persistence/`
 
-`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) and PostgreSQL (`OrchidPostgresChatStorage`) implementations. Also contains `OrchidPostgresConfigStorage` for database-backed agent configuration management, the outbound MCP OAuth token stores, and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
+`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) — the default, single-file persistent store that requires no external services. PostgreSQL storage (`OrchidPostgresChatStorage`), the checkpointer, and the visibility fragment are provided by the separate `orchid-storage-postgres` plugin. Also contains the outbound MCP OAuth token stores and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
 
 ### `documents/`
 
@@ -999,12 +1214,12 @@ ruff format orchid_ai/
 URL: https://gadz82.github.io/orchid/packages/orchid-api
 Description: FastAPI server exposing the Orchid framework over HTTP with SSE streaming.
 
-`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, and identity bridging. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface.
+`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, and identity bridging. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface. The API does **not** bundle storage or RAG backends; install the corresponding plugin packages alongside it.
 
 ## Installation and startup
 
 ```bash
-pip install orchid-ai orchid-api
+pip install orchid-ai orchid-api orchid-storage-postgres orchid-rag-qdrant
 ORCHID_CONFIG=orchid.yml uvicorn orchid_api.main:app --port 8000
 ```
 
@@ -1102,15 +1317,15 @@ Set `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` to enable LangSmith. All
 URL: https://gadz82.github.io/orchid/packages/orchid-cli
 Description: Command-line interface for interacting with Orchid without running the API.
 
-`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. The default storage is SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via environment variables when you need it.
+`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. The default storage is SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
 
-The CLI defaults to **ChromaDB** (`vector_backend: chroma`) for zero-infrastructure RAG — vectors live on disk at `~/.orchid/chroma/`, no Qdrant container required. Set `VECTOR_BACKEND=qdrant` to switch to Qdrant when you need sparse/hybrid search or scope promotion.
+The CLI bundles the **`orchid-rag-chroma`** plugin as a dependency for zero-infrastructure RAG — vectors live on disk at `~/.orchid/chroma/`, no Qdrant container required. Set `VECTOR_BACKEND=qdrant` and install `orchid-rag-qdrant` to switch when you need sparse/hybrid search or scope promotion.
 
 ## Installation
 
 ```bash
 pip install orchid-ai orchid-cli
-```
+# orchid-rag-chroma is included — no extra install needed for on-disk RAG
 
 After installation the `orchid` command is available in your shell.
 
@@ -1441,6 +1656,160 @@ This proxy pattern means the frontend never needs to know anything about the ups
 4. **Override theme tokens**: edit only `src/app/globals.css`. The `@theme inline` block contains all colour tokens (`--orchid-bg`, `--orchid-accent`, etc.) — re-skin without touching a component.
 5. **Swap branding files**: replace `src/app/icon.svg` and any logo assets.
 6. **Build and verify**: `npm run build && npm run lint && npm test` must all pass.
+
+---
+
+### orchid-storage-postgres
+URL: https://gadz82.github.io/orchid/packages/orchid-storage-postgres
+Description: PostgreSQL storage plugin: chat persistence, checkpointer, and visibility fragment.
+
+`orchid-storage-postgres` is the PostgreSQL storage plugin for the Orchid AI framework. It provides production-grade PostgreSQL backends for chat persistence, LangGraph checkpointing, and SQL visibility filtering — all in a single installable package that auto-registers via Python entry points.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-storage-postgres
+```
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Chat storage | `OrchidPostgresChatStorage` | Full `OrchidChatStorage` implementation backed by `asyncpg` |
+| Checkpointer | `_build_postgres_checkpointer` | LangGraph `AsyncPostgresSaver` for agent-state persistence |
+| Visibility | `_build_postgres_filter` | PostgreSQL `$1..$N` positional-parameter visibility fragment |
+| Migrations | `PostgresMigrationRunner` | Unified v001 DDL for all framework-owned tables |
+
+## Auto-Registration
+
+The package registers itself via `importlib.metadata` entry points:
+
+```toml
+[project.entry-points."orchid.visibility_fragments"]
+postgres = "orchid_storage_postgres:_register"
+[project.entry-points."orchid.checkpointers"]
+postgres = "orchid_storage_postgres:_register"
+```
+
+No manual `register_visibility_fragment()` or `register_checkpointer()` calls are needed by integrators. The chat storage is referenced via dotted class path in YAML config.
+
+---
+
+### orchid-rag-qdrant
+URL: https://gadz82.github.io/orchid/packages/orchid-rag-qdrant
+Description: Qdrant vector and doc-store plugin for the Orchid AI framework.
+
+`orchid-rag-qdrant` is the Qdrant vector-backend plugin for the Orchid AI framework. It provides `QdrantRepository` (vector read + write + admin + hybrid sparse/dense) and `QdrantDocStore` (parent-document store), both auto-registering via Python entry points.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-rag-qdrant
+```
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Vector backend | `QdrantRepository` | Full `OrchidVectorStoreRepository` implementation |
+| Doc store | `QdrantDocStore` | Qdrant-backed parent document store |
+| Filter builder | `build_qdrant_filter` | Hierarchical scope → Qdrant payload filter |
+
+## Auto-Registration
+
+```toml
+[project.entry-points."orchid.vector_backends"]
+qdrant = "orchid_rag_qdrant:_register"
+[project.entry-points."orchid.doc_store_backends"]
+qdrant = "orchid_rag_qdrant:_register"
+```
+
+## Configuration
+
+```yaml
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: text-embedding-3-small
+```
+
+---
+
+### orchid-rag-chroma
+URL: https://gadz82.github.io/orchid/packages/orchid-rag-chroma
+Description: ChromaDB vector-backend plugin for on-disk, zero-infrastructure RAG.
+
+`orchid-rag-chroma` is the ChromaDB vector-backend plugin. It provides on-disk, zero-infrastructure RAG — no external server needed — and auto-registers via Python entry points. Bundled as a dependency of `orchid-cli` for out-of-the-box vector search.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-rag-chroma
+```
+
+For CLI users, `orchid-cli` already depends on `orchid-rag-chroma` — no extra install needed.
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Vector backend | `ChromaRepository` | Full `OrchidVectorStoreRepository` implementation |
+| Filter builder | `_build_where` | Orchid scope → ChromaDB metadata filter translation |
+
+## Auto-Registration
+
+```toml
+[project.entry-points."orchid.vector_backends"]
+chroma = "orchid_rag_chroma:_register"
+```
+
+The plugin reads `CHROMA_PATH` from the environment to switch from HTTP to persistent (local on-disk) mode.
+
+## Configuration
+
+```yaml
+rag:
+  vector_backend: chroma
+  chroma_path: ~/.orchid/chroma        # local on-disk (persistent mode)
+  embedding_model: text-embedding-3-small
+```
+
+---
+
+### orchid-rag-neo4j
+URL: https://gadz82.github.io/orchid/packages/orchid-rag-neo4j
+Description: Neo4j graph-store plugin for knowledge-graph RAG.
+
+`orchid-rag-neo4j` is the Neo4j graph-store plugin for the Orchid AI framework. It provides `Neo4jGraphStore` backed by the Python Neo4j driver, auto-registering via Python entry points.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-rag-neo4j
+```
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Graph store | `Neo4jGraphStore` | Full `OrchidGraphStore` implementation with Cypher queries |
+
+## Auto-Registration
+
+```toml
+[project.entry-points."orchid.graph_store_backends"]
+neo4j = "orchid_rag_neo4j:_register"
+```
+
+## Configuration
+
+```yaml
+rag:
+  graph_backend: neo4j
+  neo4j_uri: bolt://localhost:7687
+  neo4j_user: neo4j
+  neo4j_password: ${NEO4J_PASSWORD}
+```
 
 ---
 
@@ -2294,6 +2663,19 @@ Description: Detailed reference for every agents.yaml property — defaults, sup
   - [`supervisor.history_summary_model`](#agents-yaml__supervisor.history_summary_model)
   - [`supervisor.history_summary_recent_turns`](#agents-yaml__supervisor.history_summary_recent_turns)
   - [`supervisor.skip_synthesis_when_single_agent`](#agents-yaml__supervisor.skip_synthesis_when_single_agent)
+  - [`supervisor.memory`](#agents-yaml__supervisor.memory)
+    - [`supervisor.memory.strategy`](#agents-yaml__supervisor.memory.strategy)
+    - [`supervisor.memory.summary_recent_turns`](#agents-yaml__supervisor.memory.summary_recent_turns)
+    - [`supervisor.memory.summary_model`](#agents-yaml__supervisor.memory.summary_model)
+    - [`supervisor.memory.summary_prompt`](#agents-yaml__supervisor.memory.summary_prompt)
+    - [`supervisor.memory.persist_summary`](#agents-yaml__supervisor.memory.persist_summary)
+    - [`supervisor.memory.structured_output`](#agents-yaml__supervisor.memory.structured_output)
+    - [`supervisor.memory.rag_namespace`](#agents-yaml__supervisor.memory.rag_namespace)
+    - [`supervisor.memory.rag_k`](#agents-yaml__supervisor.memory.rag_k)
+    - [`supervisor.memory.rag_similarity_threshold`](#agents-yaml__supervisor.memory.rag_similarity_threshold)
+    - [`supervisor.memory.store_turns`](#agents-yaml__supervisor.memory.store_turns)
+    - [`supervisor.memory.truncation_strategy`](#agents-yaml__supervisor.memory.truncation_strategy)
+    - [`supervisor.memory.truncation_max_chars`](#agents-yaml__supervisor.memory.truncation_max_chars)
 
 **agents[]**
 - [`agents[]`](#agents-yaml__agents[])
@@ -2918,6 +3300,145 @@ supervisor:
   history_summary_model: ollama/llama3.2
   history_summary_recent_turns: 15
   skip_synthesis_when_single_agent: true
+```
+
+<a id="agents-yaml__supervisor.memory"></a>
+### `supervisor.memory`
+
+Conversation memory configuration — controls how past conversation context is summarized, persisted, and retrieved beyond the current LangGraph state. Three strategies available (see [Chat Summarization](/concepts/chat-summarization)).
+
+| | |
+|---|---|
+| **Short** | Conversation memory strategy and configuration. |
+| **Detailed** | A nested block that controls incremental running summaries, structured JSON entity extraction, and Qdrant-backed semantic retrieval of past turns. Default is `strategy: "none"` (no memory, backward-compatible). |
+| **Default** | `{strategy: "none", structured_output: true, ...}` |
+
+<a id="agents-yaml__supervisor.memory.strategy"></a>
+#### `supervisor.memory.strategy`
+
+| | |
+|---|---|
+| **Short** | Memory strategy selection. |
+| **Detailed** | `none` — no memory (backward-compatible). `running_summary` — stateful incremental compression (avoids O(n²) re-compute). `rag_augmented` — adds Qdrant semantic retrieval of past turns on top of running summary. |
+| **Default** | `"none"` |
+| **Available values** | `"none"`, `"running_summary"`, `"rag_augmented"` |
+
+<a id="agents-yaml__supervisor.memory.summary_recent_turns"></a>
+#### `supervisor.memory.summary_recent_turns`
+
+| | |
+|---|---|
+| **Short** | Recent turns kept verbatim when using memory-based summarization. |
+| **Detailed** | When memory is active, the most recent N exchange pairs are preserved in full text alongside the incremental summary. Independent of `supervisor.history_summary_recent_turns`. |
+| **Default** | `10` |
+
+<a id="agents-yaml__supervisor.memory.summary_model"></a>
+#### `supervisor.memory.summary_model`
+
+| | |
+|---|---|
+| **Short** | LLM model for summary extension calls in the memory pipeline. |
+| **Detailed** | A cheap, fast model recommended (e.g. `gemini/gemini-2.5-flash-lite`). Falls back to `supervisor.history_summary_model`, then the supervisor's main model. |
+| **Default** | `null` |
+
+<a id="agents-yaml__supervisor.memory.summary_prompt"></a>
+#### `supervisor.memory.summary_prompt`
+
+| | |
+|---|---|
+| **Short** | Custom compression prompt. |
+| **Detailed** | When set, overrides the default compression/extension prompt used by the memory system. `null` uses the built-in defaults (structured JSON extraction or narrative compression depending on `structured_output`). |
+| **Default** | `null` |
+
+<a id="agents-yaml__supervisor.memory.persist_summary"></a>
+#### `supervisor.memory.persist_summary`
+
+| | |
+|---|---|
+| **Short** | Persist running summaries to chat storage. |
+| **Detailed** | When `true`, summaries are stored in the `conversation_summaries` table (SQLite/PostgreSQL) for cross-invocation reuse. When `false`, summaries are computed fresh each turn (ephemeral, no disk write). |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+<a id="agents-yaml__supervisor.memory.structured_output"></a>
+#### `supervisor.memory.structured_output`
+
+| | |
+|---|---|
+| **Short** | Enable structured JSON entity extraction in summaries. |
+| **Detailed** | When `true`, the LLM produces JSON with topics, entities, actions, decisions, questions, and preferences. Falls back to narrative-only on JSON parse failure. When `false`, produces a flat paragraph summary. |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+<a id="agents-yaml__supervisor.memory.rag_namespace"></a>
+#### `supervisor.memory.rag_namespace`
+
+| | |
+|---|---|
+| **Short** | Qdrant namespace for conversation memory embeddings. |
+| **Detailed** | Reserved namespace in Qdrant where conversation turns are stored as embeddings. Uses `OrchidRAGScope` for hierarchical tenant isolation. Only relevant when `strategy: "rag_augmented"`. |
+| **Default** | `"__memory__"` |
+
+<a id="agents-yaml__supervisor.memory.rag_k"></a>
+#### `supervisor.memory.rag_k`
+
+| | |
+|---|---|
+| **Short** | Number of semantically relevant past turns to retrieve. |
+| **Detailed** | How many past conversation turns to retrieve from Qdrant via semantic search on each new user query. Higher values surface more context at the cost of token budget. Only relevant when `strategy: "rag_augmented"`. |
+| **Default** | `5` |
+
+<a id="agents-yaml__supervisor.memory.rag_similarity_threshold"></a>
+#### `supervisor.memory.rag_similarity_threshold`
+
+| | |
+|---|---|
+| **Short** | Minimum similarity score for RAG-retrieved turns. |
+| **Detailed** | Results below this score are discarded. Range 0.0–1.0. Lower values include more turns (potentially noisy). Higher values are stricter. Only relevant when `strategy: "rag_augmented"`. |
+| **Default** | `0.5` |
+
+<a id="agents-yaml__supervisor.memory.store_turns"></a>
+#### `supervisor.memory.store_turns`
+
+| | |
+|---|---|
+| **Short** | Automatically embed and store each conversation turn in Qdrant. |
+| **Detailed** | When `true`, each user message and assistant response is embedded and stored in the `__memory__` Qdrant namespace for future retrieval. Only relevant when `strategy: "rag_augmented"`. |
+| **Default** | `true` |
+| **Available values** | `true`, `false` |
+
+<a id="agents-yaml__supervisor.memory.truncation_strategy"></a>
+#### `supervisor.memory.truncation_strategy`
+
+| | |
+|---|---|
+| **Short** | How messages exceeding max_chars are truncated. |
+| **Detailed** | `hard` — `content[:max_chars] + "…"` (current behavior). `middle` — keeps first 40% and last 40%, with `…[truncated]…` marker. `llm` — asks LLM to summarize; falls back to `middle` on failure. `semantic` — reserved for embedding-based selection; falls back to `middle`. |
+| **Default** | `"hard"` |
+| **Available values** | `"hard"`, `"middle"`, `"llm"`, `"semantic"` |
+
+<a id="agents-yaml__supervisor.memory.truncation_max_chars"></a>
+#### `supervisor.memory.truncation_max_chars`
+
+| | |
+|---|---|
+| **Short** | Character limit for message truncation. |
+| **Detailed** | Individual messages longer than this are truncated using `truncation_strategy`. Overrides `supervisor.history_max_chars` when memory is enabled. |
+| **Default** | `1000` |
+
+```yaml
+# Full memory config example
+supervisor:
+  memory:
+    strategy: "rag_augmented"
+    summary_recent_turns: 10
+    structured_output: true
+    persist_summary: true
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    truncation_strategy: "middle"
+    truncation_max_chars: 1000
 ```
 
 ---
@@ -5082,6 +5603,66 @@ knowledge/
 
 ---
 
+### Postgres Storage
+URL: https://gadz82.github.io/orchid/examples/postgres-storage
+Description: Demonstrates the orchid-storage-postgres plugin: asyncpg chat persistence, PostgreSQL checkpointer, and visibility.
+
+## What this demonstrates
+
+The postgres-storage example showcases the `orchid-storage-postgres` plugin in a minimal two-agent setup. It uses the `OrchidPostgresChatStorage` class for chat persistence with `asyncpg` connection pooling, a PostgreSQL LangGraph checkpointer for agent-state persistence across turns, and Qdrant RAG via the `orchid-rag-qdrant` plugin. All plugin components auto-register via `importlib.metadata` entry points.
+
+## Run it
+
+Start with Docker (includes PostgreSQL, Qdrant, and the API):
+
+```bash
+script/start_postgres_storage.sh
+```
+
+Or manually:
+
+```bash
+ORCHID_CONFIG=examples/postgres-storage/orchid.yml \
+docker compose -f script/docker-compose.examples.yml \
+  --profile postgres --profile qdrant up --build
+```
+
+## How it's wired
+
+The `orchid.yml` references the plugin classes directly:
+
+```yaml
+storage:
+  class: orchid_storage_postgres.OrchidPostgresChatStorage
+  dsn: postgresql://postgres:postgres@postgres:5432/orchid
+
+checkpointer:
+  type: postgres
+  dsn: postgresql://postgres:postgres@postgres:5432/orchid
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+```
+
+The `orchid-rag-qdrant` and `orchid-storage-postgres` packages are installed alongside `orchid-ai`. Their entry points register at import time — no manual `register_*()` calls needed.
+
+## Verify PostgreSQL persistence
+
+After sending a few messages, connect to the running PostgreSQL instance:
+
+```bash
+docker exec -it postgres psql -U postgres -d orchid
+
+# Chat sessions
+SELECT id, title, tenant_key, user_id, created_at FROM chat_sessions;
+
+# LangGraph checkpoints
+SELECT count(*) FROM checkpoints;
+```
+
+---
+
 ### Custom Storage Backend
 URL: https://gadz82.github.io/orchid/examples/custom-storage
 Description: Plug in a custom OrchidChatStorage subclass via the storage.class field.
@@ -5303,6 +5884,312 @@ Agent configs show all customization layers, trimmed to the key fields:
 
 - examples/prompt-customization/orchid.yml
 - examples/prompt-customization/agents.yaml
+
+---
+
+### Gallery Curator
+URL: https://gadz82.github.io/orchid/examples/gallery-curator
+Description: A multi-session art gallery curator that remembers artists, exhibitions, and decisions across sessions using Orchid's full conversation summarization pipeline.
+
+## What this demonstrates
+
+The **Gallery Curator** is a single `GenericAgent` that helps gallery directors plan exhibitions, research artists, track auction results, and record curatorial decisions. It's purpose-built to showcase every feature in Orchid's [conversation summarization](/concepts/chat-summarization) pipeline (Phases 1–5).
+
+| Feature | Where configured | What happens |
+|---|---|---|
+| **Incremental running summary** | `supervisor.memory.strategy: running_summary` | Each new turn extends the summary instead of re-summarizing from scratch |
+| **Structured JSON entity extraction** | `supervisor.memory.structured_output: true` | Artists, venues, exhibitions tracked as typed entities; deduplicated across turns |
+| **RAG-augmented semantic retrieval** | `supervisor.memory.strategy: rag_augmented` | Past turns retrieved from Qdrant via embedding similarity to the current query |
+| **Configurable compression prompts** | `agents[].prompt_sections` | Gallery-specific instructions for the compression LLM |
+| **Smart message truncation** | `supervisor.memory.truncation_strategy: middle` | Long auction listings truncated keeping start (which item?) and end (how much?) |
+| **SQLite persistence** | `storage.class` + `persist_summary: true` | Summaries survive restarts via `conversation_summaries` table |
+| **Graceful degradation** | Qdrant unavailable → NullVectorReader | `rag_augmented` silently degrades to `running_summary`-only |
+
+## Run it
+
+```bash
+# From the monorepo root
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/gallery-curator/orchid.yml \
+  uvicorn orchid_api.main:app --port 8000
+```
+
+Or validate the YAML:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid config validate examples/gallery-curator/agents.yaml
+```
+
+Or via the CLI (no API server needed):
+
+```bash
+orchid chat interactive --config examples/gallery-curator/orchid.yml
+```
+
+## Configuration walkthrough
+
+The key block of `agents.yaml` — the `supervisor.memory` section:
+
+```yaml
+supervisor:
+  history_summary_enabled: true
+  history_max_turns: 30
+  history_max_chars: 1200
+
+  memory:
+    strategy: "running_summary"
+    summary_recent_turns: 8
+    summary_model: ollama/llama3.2
+    structured_output: true
+    persist_summary: true
+    # -- RAG memory (active when strategy=rag_augmented) --
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    # -- Truncation --
+    truncation_strategy: "middle"
+    truncation_max_chars: 800
+```
+
+Per-agent compression prompt overrides in `prompt_sections`:
+
+```yaml
+agents:
+  gallery-curator:
+    prompt_sections:
+      summary_compression_system_prompt: >
+        You are a gallery curator conversation summarizer. Extract structured
+        information from exhibition planning discussions...
+
+      summary_compression_user_prompt: >
+        Summarise the following gallery planning conversation in structured JSON...
+        {transcript}
+
+      summary_extension_user_prompt: >
+        Given the existing summary below and the new gallery planning messages...
+        Existing summary: {existing_summary}
+        New messages: {new_messages}
+```
+
+## Strategy comparison
+
+| Strategy | Summary persistent? | Uses RAG? | Best for |
+|---|---|---|---|
+| `none` | No | No | Short-lived chats, backward compat |
+| `running_summary` | Yes (SQLite/Postgres) | No | Long sessions, O(n) cost |
+| `rag_augmented` | Yes | Yes | Multi-session with semantic recall |
+
+Switch to `rag_augmented` in one line:
+```yaml
+memory:
+  strategy: "rag_augmented"  # was "running_summary"
+```
+
+Everything else stays the same — the `OrchidRAGConversationMemory` class automatically adds Qdrant retrieval on top of the running summary.
+
+## Simulated conversation flow
+
+```
+Turn 1:  "I'm planning the spring exhibition..."
+         → No prior context. First summary created.
+
+Turn 5:  "What was the budget for Ruth Asawa's shipping?"
+         → Running summary covers turns 1–4.
+         → With rag_augmented: Qdrant retrieves past "budget" turns.
+
+Turn 15: "Remind me of all Venice decisions."
+         → Summary has been incrementally extended 10+ times (O(n) cost).
+         → Structured JSON tracks 8+ entities with deduplication.
+         → With rag_augmented: top-5 Venice turns retrieved from Qdrant.
+         → LLM receives: [RAG turns] + [incremental summary] + [last 8 verbatim].
+```
+
+## Files
+
+```text
+examples/gallery-curator/
+├── README.md       # Full documentation with entity examples
+├── orchid.yml      # Infrastructure: SQLite, Qdrant, Ollama
+└── agents.yaml     # Agent + supervisor + memory config
+```
+
+No custom Python agent classes — everything is `GenericAgent` driven by YAML.
+
+---
+
+### Festival Producer
+URL: https://gadz82.github.io/orchid/examples/festival-producer
+Description: Multi-agent festival planning with artist booking, logistics, and marketing agents — backed by rag_augmented conversation memory, orchestrator skills, and structured entity extraction.
+
+## What this demonstrates
+
+Three `GenericAgent` instances (artist booking, logistics, marketing) with
+cross-agent orchestrator skills, backed by **rag_augmented** conversation memory.
+Every feature of the summarization pipeline (Phases 1–5) is active.
+
+| Feature | How It's Used |
+|---|---|
+| **rag_augmented memory** | Past turns embedded in Qdrant; 5 most relevant retrieved per query |
+| **Orchestrator skills** | `full_production_review`, `budget_optimization`, `stage_planning` — sequential pipelines |
+| **Structured JSON entities** | Artists, venues, budgets tracked as typed entities |
+| **Middle truncation** | Rider specs and stage configs truncated preserving start+end |
+| **Per-agent prompts** | Each agent overrides `summary_compression_*` in `prompt_sections` |
+
+## Run it
+
+```bash
+ORCHID_CONFIG=examples/festival-producer/orchid.yml uvicorn orchid_api.main:app
+# or:
+orchid chat interactive --config examples/festival-producer/orchid.yml
+# or validate:
+orchid config validate examples/festival-producer/agents.yaml
+```
+
+## Agents and tools
+
+| Agent | Tools | Expertise |
+|---|---|---|
+| `artist-booking` | lookup, list, riders, compare | Artist availability, fees, lineup curation |
+| `logistics` | venues, schedule, power, crew | Stage specs, power grids, crew planning |
+| `marketing` | demographics, pricing, channels, attendance | Ticket pricing, promo channels, projections |
+
+## Orchestrator skills
+
+```yaml
+skills:
+  full_production_review:     # booking → logistics → marketing
+  budget_optimization:        # booking → marketing
+  stage_planning:             # booking → logistics
+```
+
+## Memory config
+
+```yaml
+supervisor:
+  memory:
+    strategy: "rag_augmented"
+    summary_recent_turns: 12
+    structured_output: true
+    persist_summary: true
+    rag_k: 5
+    rag_similarity_threshold: 0.5
+    store_turns: true
+    truncation_strategy: "middle"
+    truncation_max_chars: 1000
+```
+
+## Simulated flow
+
+```
+"The Midnight Vibrations want $85K for Saturday. Can our budget handle it?"
+→ artist-booking: confirms availability Q2-Q3, 22K attendance draw
+→ marketing: projects $2.1M ticket revenue at $129 avg with this headliner
+→ budget_optimization skill fires: booking provides fee data, marketing projects revenue
+→ RAG retrieves past budget discussions from earlier planning sessions
+```
+
+## Files
+
+```text
+examples/festival-producer/
+├── README.md
+├── orchid.yml
+├── agents.yaml
+└── tools/
+    ├── booking.py      # 6 artists with static data
+    ├── logistics.py    # 5 venues with power/schedule
+    └── marketing.py    # demographics, pricing, channels
+```
+
+No custom agent classes — all three agents are `GenericAgent` driven by YAML.
+
+---
+
+### Architecture Review Board
+URL: https://gadz82.github.io/orchid/examples/architecture-review
+Description: Multi-agent design review with structural engineering, cost estimation, and sustainability consulting — orchestrator skills and rag_augmented memory across design iterations.
+
+## What this demonstrates
+
+Three `GenericAgent` instances forming a virtual design review board:
+structural engineering, cost estimation, and sustainability consulting.
+Cross-agent orchestrator skills run sequential pipelines with each agent
+seeing prior output. Backed by **rag_augmented** memory with a lower
+similarity threshold (0.45) to catch terminology variants across disciplines.
+
+| Feature | How It's Used |
+|---|---|
+| **rag_augmented memory** | Design decisions and material comparisons retrieved from Qdrant |
+| **Orchestrator skills** | `full_design_review` (structural → cost → sustainability), `material_selection` |
+| **Lower similarity threshold** | 0.45 catches "CLT" ↔ "cross-laminated timber" ↔ "mass timber" variants |
+| **Structured JSON entities** | Materials, jurisdictions, certifications tracked with deduplication |
+| **Per-agent prompts** | Domain-specific `summary_compression_*` for engineering, cost, and sustainability |
+
+## Run it
+
+```bash
+ORCHID_CONFIG=examples/architecture-review/orchid.yml uvicorn orchid_api.main:app
+orchid chat interactive --config examples/architecture-review/orchid.yml
+orchid config validate examples/architecture-review/agents.yaml
+```
+
+## Agents and tools
+
+| Agent | Tools | Expertise |
+|---|---|---|
+| `structural` | analyze, code compliance, compare materials, fire strategy | Load paths, Eurocode/IBC/ASCE, fire safety |
+| `cost` | construction estimate, lifecycle costs, market rates | Budgets, LCC, regional labour/materials |
+| `sustainability` | certification, embodied carbon, strategies, carbon compare | BREEAM/LEED/DGNB, carbon accounting |
+
+## Orchestrator skills
+
+```yaml
+skills:
+  full_design_review:     # structural → cost → sustainability
+  material_selection:     # structural → sustainability
+```
+
+## Memory config
+
+```yaml
+supervisor:
+  memory:
+    strategy: "rag_augmented"
+    rag_k: 6
+    rag_similarity_threshold: 0.45   # lower: catches terminology variants
+    structured_output: true
+    truncation_strategy: "middle"
+```
+
+## Simulated flow
+
+```
+"Review a 6-story office in Berlin, 8000m², LEED Gold."
+→ full_design_review skill fires
+→ structural: steel + CLT recommended, Eurocode 3/5 compliant
+→ cost: €22.4M, CLT 30% cheaper lifecycle vs steel-concrete
+→ sustainability: LEED Gold achievable, 40% below baseline carbon
+
+"Switch to all-timber instead."
+→ material_selection skill fires
+→ structural: CLT+glulam viable to 12m with fire encapsulation
+→ sustainability: carbon-negative (-210 kgCO2/m³ net), BREEAM Outstanding possible
+→ RAG retrieves past cost discussion from earlier design iteration
+```
+
+## Files
+
+```text
+examples/architecture-review/
+├── README.md
+├── orchid.yml
+├── agents.yaml
+└── tools/
+    ├── structural.py       # 6 materials, 6 building codes
+    ├── cost.py              # 3 building types, 5 regions
+    └── sustainability.py    # 4 certifications, 7 strategies
+```
 
 ---
 

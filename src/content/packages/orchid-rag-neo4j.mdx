@@ -1,0 +1,48 @@
+---
+title: "orchid-rag-neo4j"
+description: "Neo4j graph-store plugin for knowledge-graph RAG."
+package: "orchid-rag-neo4j"
+section: "packages"
+order: 28
+tags: []
+sources:
+  - "orchid-rag-neo4j/README.md"
+  - "orchid-rag-neo4j/AGENTS.md"
+  - "orchid-rag-neo4j/orchid_rag_neo4j/"
+related: ["/packages/orchid", "/concepts/rag", "/examples/graph-kb"]
+example: ""
+external: []
+---
+
+<RepoLink package="orchid-rag-neo4j" />
+
+`orchid-rag-neo4j` is the Neo4j graph-store plugin for the Orchid AI framework. It provides `Neo4jGraphStore` backed by the Python Neo4j driver, auto-registering via Python entry points.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-rag-neo4j
+```
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Graph store | `Neo4jGraphStore` | Full `OrchidGraphStore` implementation with Cypher queries |
+
+## Auto-Registration
+
+```toml
+[project.entry-points."orchid.graph_store_backends"]
+neo4j = "orchid_rag_neo4j:_register"
+```
+
+## Configuration
+
+```yaml
+rag:
+  graph_backend: neo4j
+  neo4j_uri: bolt://localhost:7687
+  neo4j_user: neo4j
+  neo4j_password: ${NEO4J_PASSWORD}
+```

@@ -1,0 +1,47 @@
+---
+title: "orchid-storage-postgres"
+description: "PostgreSQL storage plugin: chat persistence, checkpointer, and visibility fragment."
+package: "orchid-storage-postgres"
+section: "packages"
+order: 25
+tags: []
+sources:
+  - "orchid-storage-postgres/README.md"
+  - "orchid-storage-postgres/AGENTS.md"
+  - "orchid-storage-postgres/orchid_storage_postgres/"
+related: ["/packages/orchid", "/concepts/persistence"]
+example: "/examples/postgres-storage"
+external: []
+---
+
+<RepoLink package="orchid-storage-postgres" />
+
+`orchid-storage-postgres` is the PostgreSQL storage plugin for the Orchid AI framework. It provides production-grade PostgreSQL backends for chat persistence, LangGraph checkpointing, and SQL visibility filtering — all in a single installable package that auto-registers via Python entry points.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-storage-postgres
+```
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Chat storage | `OrchidPostgresChatStorage` | Full `OrchidChatStorage` implementation backed by `asyncpg` |
+| Checkpointer | `_build_postgres_checkpointer` | LangGraph `AsyncPostgresSaver` for agent-state persistence |
+| Visibility | `_build_postgres_filter` | PostgreSQL `$1..$N` positional-parameter visibility fragment |
+| Migrations | `PostgresMigrationRunner` | Unified v001 DDL for all framework-owned tables |
+
+## Auto-Registration
+
+The package registers itself via `importlib.metadata` entry points:
+
+```toml
+[project.entry-points."orchid.visibility_fragments"]
+postgres = "orchid_storage_postgres:_register"
+[project.entry-points."orchid.checkpointers"]
+postgres = "orchid_storage_postgres:_register"
+```
+
+No manual `register_visibility_fragment()` or `register_checkpointer()` calls are needed by integrators. The chat storage is referenced via dotted class path in YAML config.

@@ -144,6 +144,21 @@
     "sources": ""
   },
   {
+    "route": "/concepts/chat-summarization",
+    "title": "Chat Summarization",
+    "description": "Running summaries, structured entity extraction, RAG-augmented conversation memory, and configurable truncation strategies.",
+    "package": "orchid",
+    "section": "concepts",
+    "tags": [
+      "memory",
+      "summarization",
+      "rag",
+      "truncation",
+      "conversation"
+    ],
+    "sources": ""
+  },
+  {
     "route": "/packages/orchid",
     "title": "orchid",
     "description": "The core Python library: ABCs, agents, graph builder, RAG, and persistence.",
@@ -184,6 +199,42 @@
     "title": "orchid-frontend",
     "description": "Next.js 15 multi-chat UI with SSE streaming and file upload support.",
     "package": "orchid-frontend",
+    "section": "packages",
+    "tags": [],
+    "sources": ""
+  },
+  {
+    "route": "/packages/orchid-storage-postgres",
+    "title": "orchid-storage-postgres",
+    "description": "PostgreSQL storage plugin: chat persistence, checkpointer, and visibility fragment.",
+    "package": "orchid-storage-postgres",
+    "section": "packages",
+    "tags": [],
+    "sources": ""
+  },
+  {
+    "route": "/packages/orchid-rag-qdrant",
+    "title": "orchid-rag-qdrant",
+    "description": "Qdrant vector and doc-store plugin for the Orchid AI framework.",
+    "package": "orchid-rag-qdrant",
+    "section": "packages",
+    "tags": [],
+    "sources": ""
+  },
+  {
+    "route": "/packages/orchid-rag-chroma",
+    "title": "orchid-rag-chroma",
+    "description": "ChromaDB vector-backend plugin for on-disk, zero-infrastructure RAG.",
+    "package": "orchid-rag-chroma",
+    "section": "packages",
+    "tags": [],
+    "sources": ""
+  },
+  {
+    "route": "/packages/orchid-rag-neo4j",
+    "title": "orchid-rag-neo4j",
+    "description": "Neo4j graph-store plugin for knowledge-graph RAG.",
+    "package": "orchid-rag-neo4j",
     "section": "packages",
     "tags": [],
     "sources": ""
@@ -419,6 +470,67 @@
       "supervisor",
       "skills",
       "guardrails"
+    ],
+    "sources": ""
+  },
+  {
+    "route": "/examples/gallery-curator",
+    "title": "Gallery Curator",
+    "description": "A multi-session art gallery curator that remembers artists, exhibitions, and decisions across sessions using Orchid's full conversation summarization pipeline.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "memory",
+      "summarization",
+      "rag",
+      "structured-output",
+      "truncation",
+      "persistence"
+    ],
+    "sources": ""
+  },
+  {
+    "route": "/examples/festival-producer",
+    "title": "Festival Producer",
+    "description": "Multi-agent festival planning with artist booking, logistics, and marketing agents — backed by rag_augmented conversation memory, orchestrator skills, and structured entity extraction.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "memory",
+      "rag",
+      "multi-agent",
+      "skills",
+      "summarization"
+    ],
+    "sources": ""
+  },
+  {
+    "route": "/examples/architecture-review",
+    "title": "Architecture Review Board",
+    "description": "Multi-agent design review with structural engineering, cost estimation, and sustainability consulting — orchestrator skills and rag_augmented memory across design iterations.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "memory",
+      "rag",
+      "multi-agent",
+      "skills",
+      "sustainability",
+      "summarization"
+    ],
+    "sources": ""
+  },
+  {
+    "route": "/examples/postgres-storage",
+    "title": "Postgres Storage",
+    "description": "Demonstrates the orchid-storage-postgres plugin: asyncpg chat persistence, PostgreSQL checkpointer, and visibility.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "persistence",
+      "postgres",
+      "plugin",
+      "checkpointer"
     ],
     "sources": ""
   },

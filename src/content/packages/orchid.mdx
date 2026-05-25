@@ -28,8 +28,11 @@ external: []
 ```bash
 pip install orchid-ai
 
-# PostgreSQL storage (optional — SQLite is the default)
-pip install "orchid-ai[postgres]"
+# Backends are separate plugin packages — install what you need:
+pip install orchid-storage-postgres   # PostgreSQL chat storage + checkpointer
+pip install orchid-rag-qdrant         # Qdrant vector + doc store
+pip install orchid-rag-chroma         # ChromaDB on-disk vector store
+pip install orchid-rag-neo4j          # Neo4j graph store
 ```
 
 ## Module map
@@ -52,11 +55,11 @@ YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`)
 
 ### `rag/`
 
-Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends (Qdrant for full-featured deployments, ChromaDB for zero-infra local usage). All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. The ChromaDB backend lives in `orchid-cli/` and is registered in `VECTOR_BACKEND_REGISTRY` at CLI startup. See [RAG](/concepts/rag).
+Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends. The library ships with null + in-memory backends; Qdrant, ChromaDB, and Neo4j backends are separate plugin packages that auto-register via entry points. All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. See [RAG](/concepts/rag).
 
 ### `persistence/`
 
-`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) and PostgreSQL (`OrchidPostgresChatStorage`) implementations. Also contains `OrchidPostgresConfigStorage` for database-backed agent configuration management, the outbound MCP OAuth token stores, and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
+`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) — the default, single-file persistent store that requires no external services. PostgreSQL storage (`OrchidPostgresChatStorage`), the checkpointer, and the visibility fragment are provided by the separate `orchid-storage-postgres` plugin. Also contains the outbound MCP OAuth token stores and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
 
 ### `documents/`
 

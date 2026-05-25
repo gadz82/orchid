@@ -1,0 +1,51 @@
+---
+title: "orchid-rag-qdrant"
+description: "Qdrant vector and doc-store plugin for the Orchid AI framework."
+package: "orchid-rag-qdrant"
+section: "packages"
+order: 26
+tags: []
+sources:
+  - "orchid-rag-qdrant/README.md"
+  - "orchid-rag-qdrant/AGENTS.md"
+  - "orchid-rag-qdrant/orchid_rag_qdrant/"
+related: ["/packages/orchid", "/concepts/rag"]
+example: ""
+external: []
+---
+
+<RepoLink package="orchid-rag-qdrant" />
+
+`orchid-rag-qdrant` is the Qdrant vector-backend plugin for the Orchid AI framework. It provides `QdrantRepository` (vector read + write + admin + hybrid sparse/dense) and `QdrantDocStore` (parent-document store), both auto-registering via Python entry points.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-rag-qdrant
+```
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Vector backend | `QdrantRepository` | Full `OrchidVectorStoreRepository` implementation |
+| Doc store | `QdrantDocStore` | Qdrant-backed parent document store |
+| Filter builder | `build_qdrant_filter` | Hierarchical scope → Qdrant payload filter |
+
+## Auto-Registration
+
+```toml
+[project.entry-points."orchid.vector_backends"]
+qdrant = "orchid_rag_qdrant:_register"
+[project.entry-points."orchid.doc_store_backends"]
+qdrant = "orchid_rag_qdrant:_register"
+```
+
+## Configuration
+
+```yaml
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: text-embedding-3-small
+```
