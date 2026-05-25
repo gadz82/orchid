@@ -170,6 +170,13 @@ class GraphRAGRetrieval(OrchidRetrievalStrategy):
         return merged[:k]
 
 
+def _format_properties(props: dict[str, Any] | None) -> str:
+    if not props:
+        return ""
+    parts = [f"{k}: {v}" for k, v in sorted(props.items()) if v]
+    return f"  [{'; '.join(parts)}]" if parts else ""
+
+
 def _default_serialise(
     entities: list[OrchidEntity],
     edges: list[OrchidEdge],
@@ -190,7 +197,8 @@ def _default_serialise(
         lines.append("Entities:")
         for entity in sorted(entities, key=lambda e: e.id):
             display = entity.name or entity.id
-            lines.append(f"  - {display} ({entity.type or 'unknown'}) — id={entity.id}")
+            props = _format_properties(entity.properties)
+            lines.append(f"  - {display} ({entity.type or 'unknown'}) — id={entity.id}{props}")
 
     if edges:
         lines.append("Relations:")

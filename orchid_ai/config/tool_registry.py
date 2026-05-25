@@ -74,17 +74,79 @@ def get_tool(name: str) -> BuiltinToolEntry:
     return _REGISTRY[name]
 
 
+_TYPE_COERCE: dict[str, Callable[[Any], Any]] = {
+    "int": int,
+    "integer": int,
+    "float": float,
+    "number": float,
+    "bool": lambda v: v if isinstance(v, bool) else str(v).lower() in ("true", "1", "yes"),
+    "boolean": lambda v: v if isinstance(v, bool) else str(v).lower() in ("true", "1", "yes"),
+}
+
+_TYPE_CHECK: dict[str, type] = {
+    "int": int,
+    "integer": int,
+    "float": float,
+    "number": float,
+    "bool": bool,
+    "boolean": bool,
+    "string": str,
+}
+
+
+def _coerce_param(name: str, value: Any, param: ToolParameter) -> Any:
+    """Coerce a single parameter value to the declared YAML type."""
+    if value is None:
+        return param.default
+    declared = param.type.lower()
+
+    # Skip coercion when the value is already the correct Python type.
+    expected = _TYPE_CHECK.get(declared)
+    if expected is not None and type(value) is expected:
+        return value
+
+    coercer = _TYPE_COERCE.get(declared)
+    if coercer is None:
+        return value
+    try:
+        return coercer(value)
+    except (ValueError, TypeError):
+        logger.warning(
+            "[ToolRegistry] Could not coerce param '%s' value=%r to %s — passing raw",
+            name,
+            value,
+            declared,
+        )
+        return value
+
+
 async def call_tool(name: str, **kwargs: Any) -> Any:
     """
     Call a registered built-in tool by name.
 
-    If the handler is a coroutine function, it is awaited directly.
-    Otherwise, it is run in a thread via ``asyncio.to_thread``.
+    Parameter values are coerced to the declared YAML types before
+    the handler is invoked.  LLMs often pass numeric values as
+    strings (e.g. ``floors: "4"`` for an ``integer`` parameter);
+    the coercion maps to the Python type without a round-trip.
     """
     entry = get_tool(name)
+
+    coerced_kwargs: dict[str, Any] = {}
+    for param_name, param in entry.parameters.items():
+        if param_name not in kwargs:
+            if param.required:
+                continue  # missing required param — let the handler raise TypeError
+            coerced_kwargs[param_name] = param.default
+            continue
+        coerced_kwargs[param_name] = _coerce_param(param_name, kwargs[param_name], param)
+    # Forward any extra kwargs the tool handler accepts (e.g. **kwargs slots).
+    for k, v in kwargs.items():
+        if k not in coerced_kwargs:
+            coerced_kwargs[k] = v
+
     if asyncio.iscoroutinefunction(entry.handler):
-        return await entry.handler(**kwargs)
-    return await asyncio.to_thread(entry.handler, **kwargs)
+        return await entry.handler(**coerced_kwargs)
+    return await asyncio.to_thread(entry.handler, **coerced_kwargs)
 
 
 def _resolve_handler(handler_path: str) -> Callable[..., Any]:

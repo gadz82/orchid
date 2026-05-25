@@ -54,7 +54,7 @@ def build_chat_storage(
     ----------
     class_path : str
         Fully-qualified dotted path to a ``OrchidChatStorage`` subclass.
-        Example: ``"orchid_ai.persistence.postgres.OrchidPostgresChatStorage"``
+        Example: ``"orchid_storage_postgres.OrchidPostgresChatStorage"``
     dsn : str
         Connection string (PostgreSQL DSN) or file path (SQLite).
         Passed as ``dsn=`` keyword to the constructor.

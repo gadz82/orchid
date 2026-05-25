@@ -39,8 +39,52 @@ def _scope_key(scope: OrchidRAGScope) -> tuple[str, str, str, str]:
     return (scope.tenant_id, scope.user_id, scope.chat_id, scope.agent_id)
 
 
+def _ancestor_scope_keys(scope: OrchidRAGScope) -> list[tuple[str, str, str, str]]:
+    """Return scope keys from broadest to narrowest, matching
+    ``build_qdrant_filter`` hierarchy so shared seed data is visible."""
+    t = scope.tenant_id
+    u = scope.user_id or ""
+    c = scope.chat_id or ""
+    a = scope.agent_id or ""
+    return [
+        ("__shared__", "", "", ""),  # root
+        (t, "", "", ""),  # tenant
+        *([(t, u, "", "")] if u else []),  # user
+        *([(t, u, c, "")] if u and c else []),  # chat-shared
+        *([(t, u, c, a)] if u and c and a else []),  # agent-private
+    ]
+
+
 def _edge_key(edge: OrchidEdge) -> tuple[str, str, str]:
     return (edge.source_id, edge.target_id, edge.relation)
+
+
+def _merged_state(
+    scopes: dict[tuple[str, str, str, str], _ScopeState],
+    scope: OrchidRAGScope,
+) -> _ScopeState:
+    """Build a composite ``_ScopeState`` by OR-ing entities + edges across
+    all visible ancestor scopes.  Entities are deduplicated by id; edges
+    by key."""
+    merged = _ScopeState()
+    seen_entities: set[str] = set()
+    seen_edges: set[tuple[str, str, str]] = set()
+    for key in _ancestor_scope_keys(scope):
+        state = scopes.get(key)
+        if state is None:
+            continue
+        for eid, entity in state.entities.items():
+            if eid not in seen_entities:
+                seen_entities.add(eid)
+                merged.entities[eid] = entity
+        for src, edges in state.out_edges.items():
+            for edge in edges:
+                ek = _edge_key(edge)
+                if ek not in seen_edges:
+                    seen_edges.add(ek)
+                    merged.out_edges.setdefault(src, []).append(edge)
+                    merged.in_edges.setdefault(edge.target_id, []).append(edge)
+    return merged
 
 
 class InMemoryGraphStore(OrchidGraphStore):
@@ -89,8 +133,8 @@ class InMemoryGraphStore(OrchidGraphStore):
         type_filter: list[str] | None = None,
         k: int = 10,
     ) -> list[OrchidEntity]:
-        state = self._scopes.get(_scope_key(scope))
-        if state is None:
+        state = _merged_state(self._scopes, scope)
+        if not state.entities:
             return []
 
         type_set = set(type_filter) if type_filter else None
@@ -119,8 +163,8 @@ class InMemoryGraphStore(OrchidGraphStore):
         max_hops: int = 2,
         relation_filter: list[str] | None = None,
     ) -> tuple[list[OrchidEntity], list[OrchidEdge]]:
-        state = self._scopes.get(_scope_key(scope))
-        if state is None or max_hops < 0:
+        state = _merged_state(self._scopes, scope)
+        if not state.entities or max_hops < 0:
             return ([], [])
 
         relation_set = set(relation_filter) if relation_filter else None
@@ -163,16 +207,20 @@ class InMemoryGraphStore(OrchidGraphStore):
 
 
 def _match_score(q_lower: str, entity: OrchidEntity) -> float:
-    """Exact-name → 1.0, exact-id → 0.95, name substring → 0.6,
-    id substring → 0.4, otherwise 0.0."""
+    """Exact-name → 1.0, exact-id → 0.95, name substring in query → 0.6,
+    id substring in query → 0.4, property-value substring in query → 0.3,
+    otherwise 0.0."""
     name_lower = (entity.name or "").lower()
     id_lower = entity.id.lower()
     if name_lower and name_lower == q_lower:
         return 1.0
     if id_lower == q_lower:
         return 0.95
-    if name_lower and q_lower in name_lower:
+    if name_lower and name_lower in q_lower:
         return 0.6
-    if q_lower in id_lower:
+    if id_lower in q_lower:
         return 0.4
+    for val in (entity.properties or {}).values():
+        if isinstance(val, str) and val.lower() in q_lower:
+            return 0.3
     return 0.0
