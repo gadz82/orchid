@@ -22,7 +22,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _EXAMPLES: list[tuple[Path, dict[str, str]]] = [
     (REPO_ROOT / "examples" / "basketball" / "agents.yaml", {}),
     (REPO_ROOT / "examples" / "restaurant" / "config" / "agents.yaml", {}),
-    (REPO_ROOT / "examples" / "helpdesk" / "config" / "agents.yaml", {}),
+    (
+        REPO_ROOT / "examples" / "helpdesk" / "config" / "agents.yaml",
+        {"HELPDESK_DATABASE_URL": "postgresql://localhost/test"},
+    ),
     (REPO_ROOT / "examples" / "travel-agency" / "config" / "agents.yaml", {}),
     (REPO_ROOT / "examples" / "prompt-customization" / "agents.yaml", {}),
     (REPO_ROOT / "examples" / "custom-storage" / "agents.yaml", {}),
@@ -65,10 +68,11 @@ def test_restaurant_uses_multi_query_strategy() -> None:
     assert menu.rag.retrieval.query_transformers == ["reformulate"]
 
 
-def test_helpdesk_uses_reformulate_transformer() -> None:
+def test_helpdesk_uses_reformulate_transformer(monkeypatch: pytest.MonkeyPatch) -> None:
     path = REPO_ROOT / "examples" / "helpdesk" / "config" / "agents.yaml"
     if not path.exists():
         pytest.skip(f"Example file not present: {path}")
+    monkeypatch.setenv("HELPDESK_DATABASE_URL", "postgresql://localhost/test")
     config = load_config(str(path))
     support = config.agents["support"]
     assert support.rag.retrieval.strategy == "simple"

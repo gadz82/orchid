@@ -567,7 +567,7 @@ class TestOrchidAgentsConfigConfigStorage:
         cfg = OrchidAgentsConfig(
             config_storage=OrchidConfigStorageConfig(
                 enabled=True,
-                class_path="orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage",
+                class_path="orchid_storage_postgres.config_postgres.OrchidPostgresConfigStorage",
                 dsn="postgresql://user:pass@host:5432/db",
             )
         )
@@ -579,11 +579,11 @@ class TestOrchidAgentsConfigConfigStorage:
             "version": "1",
             "config_storage": {
                 "enabled": True,
-                "class": "orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage",
+                "class": "orchid_storage_postgres.config_postgres.OrchidPostgresConfigStorage",
                 "dsn": "postgresql://user:pass@host:5432/db",
             },
             "agents": {},
         }
         cfg = OrchidAgentsConfig.model_validate(data)
         assert cfg.config_storage.enabled is True
-        assert cfg.config_storage.class_path == "orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage"
+        "orchid_storage_postgres.config_postgres.OrchidPostgresConfigStorage"

@@ -88,7 +88,7 @@ dotted path of your migrations package:
 
 ```yaml
 storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
   dsn: postgresql://...
   extra_migrations_package: myapp.migrations
 ```
@@ -145,6 +145,6 @@ async def up(conn, *, dialect: str = "postgres") -> None:
 ## Important
 
 - **`aiosqlite` is a core dependency** — it ships with the library for the built-in SQLite default backend.
-- **`asyncpg` is an optional dependency** — install via `pip install "orchid[postgres]"` for the PostgreSQL backend.
+- **`asyncpg` is NOT a dependency of orchid-ai** — install via `pip install orchid-storage-postgres` for the PostgreSQL backend.
 - **Constructor signature:** All backends must accept `*, dsn: str` (keyword-only).
 - **The factory uses `importlib`.** The class path must be importable from the working directory.
