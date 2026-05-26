@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from langchain_core.language_models import BaseChatModel
 
@@ -114,6 +114,18 @@ class OrchidRuntime:
     checkpointer: BaseCheckpointSaver | None = None
     content_sources: list[OrchidContentSource] | None = None
     chat_storage: OrchidChatStorage | None = None
+    #: Namespace where uploaded document chunks are stored in the vector
+    #: store.  Queried by :meth:`OrchidAgent.fetch_all_rag_context` alongside
+    #: the agent's own ``rag_namespace``.  Defaults to ``"uploads"`` for
+    #: backward compatibility.
+    upload_namespace: str = "uploads"
+    #: Optional signal emitter for the Pollen event subsystem.  When
+    #: ``events.enabled: true`` in ``agents.yaml``, the bootstrap injects a
+    #: :class:`DispatcherSignalEmitter` here — the ``Orchid`` facade then
+    #: propagates it to every agent instance.  ``None`` when events are
+    #: disabled, which makes ``OrchidAgent.emit_signal()`` raise
+    #: ``RuntimeError``.
+    signal_emitter: Any | None = None
 
     # ── Resolved accessors (lazy defaults) ──────────────────────
 
