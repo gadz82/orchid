@@ -45,6 +45,31 @@ With PostgreSQL support:
 pip install orchid-ai orchid-storage-postgres
 ```
 
+## Dependency Matrix
+
+The core `orchid-ai` library ships with `null` and `in_memory` backends only — no Qdrant, no PostgreSQL, no ChromaDB. Concrete backends live in **separate plugin packages** that auto-register via Python entry points. Install only what your configuration needs:
+
+| If your config uses this… | Install this | Required by |
+|---|---|---|
+| `rag.vector_backend: qdrant` | `pip install orchid-rag-qdrant` | Qdrant vector + doc store |
+| `rag.vector_backend: chroma` | `pip install orchid-rag-chroma` | ChromaDB on-disk vector store |
+| `rag.vector_backend: neo4j` | `pip install orchid-rag-neo4j` | Neo4j graph store |
+| `storage.class: orchid_storage_postgres.*` | `pip install orchid-storage-postgres` | PostgreSQL chat persistence |
+| `checkpointer_type: postgres` | `pip install orchid-storage-postgres` | LangGraph checkpointing |
+| Events with PostgreSQL backends | `pip install orchid-storage-postgres` | Postgres signal queue + event storage |
+
+The version constraint (`orchid-ai>=X.Y.Z`) is declared in each plugin's
+`pyproject.toml` and enforced by pip at install time. At runtime, the
+plugin's `_register()` function safely skips registration when the
+expected framework symbols are missing (graceful downgrade).
+
+Missing a plugin that your config references raises a clear error at
+startup, e.g.:
+```
+ValueError: Unknown vector backend 'qdrant'. Install the missing
+plugin: pip install orchid-rag-qdrant. Registered built-ins: ['null'].
+```
+
 ## Quick Start
 
 ### 1. Define Agents
