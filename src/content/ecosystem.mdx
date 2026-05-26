@@ -28,6 +28,26 @@ Orchid is delivered as five separable packages with a clear, one-direction depen
 
 The library (`orchid`) contains only ABCs, the `GenericAgent` implementation, and framework infrastructure with no vendor or product coupling. It is installable as a standalone pip package so teams can build their own server, CLI, or integration on top of it without pulling in FastAPI, a specific auth system, or a frontend framework.
 
+## Plugin dependencies by configuration
+
+The core `orchid-ai` library ships with `null` and `in_memory` backends only — no Qdrant, no PostgreSQL, no ChromaDB. Concrete backends live in **separate plugin packages** that auto-register via Python entry points. The table below shows which plugin to install for each configuration choice:
+
+| If your config uses this… | Install this | Backend provided |
+|---|---|---|
+| `rag.vector_backend: qdrant` | `pip install orchid-rag-qdrant` | Qdrant vector store + doc store |
+| `rag.vector_backend: chroma` | `pip install orchid-rag-chroma` | ChromaDB on-disk vector store |
+| `rag.vector_backend: neo4j` | `pip install orchid-rag-neo4j` | Neo4j graph store |
+| `storage.class: orchid_storage_postgres.*` | `pip install orchid-storage-postgres` | PostgreSQL chat persistence |
+| `checkpointer_type: postgres` | `pip install orchid-storage-postgres` | LangGraph Postgres checkpointer |
+| Events with PostgreSQL backends | `pip install orchid-storage-postgres` | Postgres signal queue + event storage |
+
+Missing a plugin raises a clear startup error. For example, setting
+`vector_backend: qdrant` without installing `orchid-rag-qdrant` produces:
+```
+ValueError: Unknown vector backend 'qdrant'. Install the missing
+plugin: pip install orchid-rag-qdrant. Registered built-ins: ['null'].
+```
+
 `orchid-api` and `orchid-cli` are thin consumers. They import `orchid` as a Python dependency, add the runtime surface (HTTP routes, CLI commands, Docker entrypoints), and delegate all agent execution back to the framework library. Because the split is at the Python package boundary, the framework can be upgraded independently of the serving layer.
 
 `orchid-frontend` and `orchid-mcp` talk to `orchid-api` over HTTP only — they have no Python import dependency on the framework. This makes them portable boilerplate: fork either one, point it at any `orchid-api` deployment, and it works. The MCP gateway, in particular, is designed to be forked by integrators who want to expose Orchid agents inside their own MCP host infrastructure without touching the Python layer.
