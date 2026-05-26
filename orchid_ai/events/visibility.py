@@ -33,7 +33,17 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class _Filter:
     """SQL fragment + param map.  Routers AND ``where`` onto their
-    ``SELECT`` and pass ``params`` to asyncpg / aiosqlite."""
+    ``SELECT`` and pass ``params`` to asyncpg / aiosqlite.
+
+    **Dialect conventions:**
+
+    - **SQLite** (``:param``-style): ``params`` keys are named bind
+      parameters.  Consumers pass ``**params`` to ``aiosqlite``.
+    - **PostgreSQL** (``$1..$N``-style): ``params`` keys are
+      documentation-only; the consumer must extract values in
+      **insertion order** and pass them positionally to ``asyncpg``.
+      The fragment implementation MUST insert params in the same
+      order as the ``$N`` placeholders appear in ``where``."""
 
     where: str
     params: dict[str, Any]

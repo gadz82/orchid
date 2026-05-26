@@ -117,3 +117,51 @@ async def test_render_capabilities_skips_clients_without_configured_caps():
     assert client.list_tools_calls == 0
     assert client.list_prompts_calls == 0
     assert client.list_resources_calls == 0
+
+
+class _DuplicateResourceClient(OrchidMCPClient):
+    @property
+    def server_url(self) -> str:
+        return "http://stub-mcp/mcp"
+
+    async def call_tool(self, tool_name, arguments, auth):  # pragma: no cover
+        return OrchidMCPToolResult()
+
+    async def list_tools(self, auth):
+        return []
+
+    async def list_prompts(self, auth):
+        return []
+
+    async def list_resources(self, auth):
+        return [
+            {"uri": "ui://first", "name": "duplicate", "description": "", "mime_type": "text/plain"},
+            {"uri": "ui://second", "name": "duplicate", "description": "", "mime_type": "text/plain"},
+        ]
+
+    async def get_prompt(self, name, arguments, auth):  # pragma: no cover
+        return []
+
+    async def read_resource(self, uri, auth):
+        return f"content-for:{uri}"
+
+
+@pytest.mark.asyncio
+async def test_render_capabilities_disambiguates_duplicate_resource_names():
+    client = _DuplicateResourceClient()
+    server_config = OrchidMCPServerConfig(
+        name="catalog",
+        url="http://stub-mcp/mcp",
+        resources=[],
+        discover_all_resources=True,
+        auth=OrchidMCPAuthConfig(mode="none"),
+    )
+    dispatcher = MCPDispatcher([client], [server_config])
+    auth = OrchidAuthContext(access_token="t", tenant_key="x", user_id="y")
+
+    caps = await dispatcher.render_capabilities(auth, agent_name="catalog-agent")
+
+    assert caps.resource_contents == {
+        "duplicate (ui://first)": "content-for:ui://first",
+        "duplicate (ui://second)": "content-for:ui://second",
+    }
