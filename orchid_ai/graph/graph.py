@@ -286,6 +286,7 @@ def _instantiate_agent(
     summary_config: dict[str, Any] | None = None,
     graph_store: Any | None = None,
     content_sources: Any | None = None,
+    upload_namespace: str = "uploads",
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -342,6 +343,7 @@ def _instantiate_agent(
         kwargs["graph_store"] = graph_store
     if content_sources:
         kwargs["content_sources"] = content_sources
+    kwargs["upload_namespace"] = upload_namespace
 
     return cls(**kwargs)
 
@@ -357,6 +359,7 @@ def _build_subgraph(
     mcp_client_factory: MCPClientFactory | None = None,
     graph_store: Any | None = None,
     content_sources: Any | None = None,
+    upload_namespace: str = "uploads",
 ) -> Any:
     """
     Build a sub-graph for an agent with children.
@@ -377,6 +380,7 @@ def _build_subgraph(
             mcp_client_factory,
             graph_store=graph_store,
             content_sources=content_sources,
+            upload_namespace=upload_namespace,
         )
         children_agents.append(child_agent)
 
@@ -737,6 +741,7 @@ def build_graph(
                 mcp_factory,
                 graph_store=graph_store,
                 content_sources=runtime.content_sources,
+                upload_namespace=runtime.upload_namespace,
             )
             subgraph_nodes[agent_name] = subgraph
         else:
@@ -752,6 +757,7 @@ def build_graph(
                 summary_config=summary_cfg,
                 graph_store=graph_store,
                 content_sources=runtime.content_sources,
+                upload_namespace=runtime.upload_namespace,
             )
             agents.append(agent)
 
