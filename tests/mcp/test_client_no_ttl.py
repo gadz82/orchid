@@ -174,5 +174,66 @@ class TestFailedResourceNegativeCache:
 
         assert "ui://broken" in client._cache.failed_resource_uris
         assert "ui://good" not in client._cache.failed_resource_uris
-        assert client._cache.resource_contents.get("good") == "ok-content"
-        assert "broken" not in client._cache.resource_contents
+        assert client._cache.resource_contents.get("ui://good") == "ok-content"
+        assert "ui://broken" not in client._cache.resource_contents
+
+    @pytest.mark.asyncio
+    async def test_discover_and_cache_keeps_duplicate_resource_names_by_uri(self):
+        client = StreamableHttpMCPClient("http://localhost/mcp", auth_mode="none")
+
+        class _StubResource:
+            def __init__(self, uri, name):
+                self.uri = uri
+                self.name = name
+                self.description = ""
+                self.mimeType = "text/plain"
+
+        class _StubResources:
+            def __init__(self, resources):
+                self.resources = resources
+
+        class _StubResult:
+            def __init__(self, items):
+                self.tools = items
+                self.prompts = items
+
+        @asynccontextmanager
+        async def _stub_connect(auth, *, timeout=30.0):
+            class _Session:
+                async def list_tools(self):
+                    return _StubResult([])
+
+                async def list_prompts(self):
+                    return _StubResult([])
+
+                async def list_resources(self):
+                    return _StubResources(
+                        [
+                            _StubResource("ui://first", "duplicate"),
+                            _StubResource("ui://second", "duplicate"),
+                        ]
+                    )
+
+                async def read_resource(self, uri):
+                    class _Content:
+                        def __init__(self, text):
+                            self.text = text
+
+                    class _Result:
+                        def __init__(self, text):
+                            self.contents = [_Content(text)]
+
+                    return _Result(f"content-for:{uri}")
+
+            yield _Session()
+
+        client._connect = _stub_connect  # type: ignore[assignment]
+
+        await client._discover_and_cache(self._auth())
+
+        assert client._cache.resource_contents == {
+            "ui://first": "content-for:ui://first",
+            "ui://second": "content-for:ui://second",
+        }
+        assert await client.read_resource("ui://first", self._auth()) == "content-for:ui://first"
+        assert await client.read_resource("ui://second", self._auth()) == "content-for:ui://second"

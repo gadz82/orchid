@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -38,7 +39,8 @@ class MCPCapabilities:
     tool_annotations: dict[str, MCPToolAnnotations] = field(default_factory=dict)
     #: Zero-arg prompts rendered to text: [{"name": ..., "text": ...}].
     rendered_prompts: list[dict[str, str]] = field(default_factory=list)
-    #: Resource contents: {name: content_str}.
+    #: Resource contents keyed by display label. Duplicate resource
+    #: names are disambiguated as ``name (uri)``.
     resource_contents: dict[str, str] = field(default_factory=dict)
     #: Prompts that require arguments (listed but not rendered).
     skipped_prompts: list[dict[str, Any]] = field(default_factory=list)
@@ -237,6 +239,7 @@ class MCPDispatcher:
         """
         caps = MCPCapabilities()
         render_start = time.perf_counter()
+        resource_entries: list[dict[str, str]] = []
 
         if not self._clients or not self._configs:
             return caps
@@ -330,7 +333,13 @@ class MCPDispatcher:
                         try:
                             content = await client.read_resource(res["uri"], auth)
                             if content:
-                                caps.resource_contents[res["name"]] = content
+                                resource_entries.append(
+                                    {
+                                        "name": res["name"],
+                                        "uri": res["uri"],
+                                        "content": content,
+                                    }
+                                )
                         except Exception as exc:
                             logger.warning(
                                 "[%s] Could not read resource '%s' from '%s': %s",
@@ -350,8 +359,15 @@ class MCPDispatcher:
 
         # asyncio.gather runs coroutines on a single thread; they only
         # interleave at await points, so concurrent mutation of ``caps``
-        # (list.append / dict.__setitem__) is safe without locks.
+        # and ``resource_entries`` (list.append / dict.__setitem__) is
+        # safe without locks.
         await asyncio.gather(*(_render_server(i, cfg) for i, cfg in enumerate(self._configs)))
+        duplicate_names = Counter(entry["name"] for entry in resource_entries)
+        for entry in resource_entries:
+            label = entry["name"]
+            if duplicate_names[label] > 1:
+                label = f"{label} ({entry['uri']})"
+            caps.resource_contents[label] = entry["content"]
         render_elapsed = (time.perf_counter() - render_start) * 1000
         perf_logger.info(
             "[PERF][agent=%s][mcp] render_capabilities total=%.1f ms (servers=%d, tools_total=%d)",
