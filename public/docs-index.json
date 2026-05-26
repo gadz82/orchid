@@ -377,6 +377,21 @@
     "sources": ""
   },
   {
+    "route": "/examples/education",
+    "title": "Education Studio",
+    "description": "Four-agent teaching workflow with concept extraction, quiz generation, lesson planning, and multi-format export via PDF, DOCX, PPTX, and Markdown.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "agents",
+      "rag",
+      "mini-agents",
+      "events",
+      "built-in-tools"
+    ],
+    "sources": ""
+  },
+  {
     "route": "/examples/mcp-auth",
     "title": "MCP Authentication Modes",
     "description": "All three MCP auth modes in one example: none, passthrough, and OAuth 2.0 with dynamic client registration.",

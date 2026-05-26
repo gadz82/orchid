@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-05-25
+Last generated: 2026-05-26
 
 ## Overview
 
@@ -25,6 +25,26 @@ Orchid is delivered as five separable packages with a clear, one-direction depen
 ## Why this split?
 
 The library (`orchid`) contains only ABCs, the `GenericAgent` implementation, and framework infrastructure with no vendor or product coupling. It is installable as a standalone pip package so teams can build their own server, CLI, or integration on top of it without pulling in FastAPI, a specific auth system, or a frontend framework.
+
+## Plugin dependencies by configuration
+
+The core `orchid-ai` library ships with `null` and `in_memory` backends only — no Qdrant, no PostgreSQL, no ChromaDB. Concrete backends live in **separate plugin packages** that auto-register via Python entry points. The table below shows which plugin to install for each configuration choice:
+
+| If your config uses this… | Install this | Backend provided |
+|---|---|---|
+| `rag.vector_backend: qdrant` | `pip install orchid-rag-qdrant` | Qdrant vector store + doc store |
+| `rag.vector_backend: chroma` | `pip install orchid-rag-chroma` | ChromaDB on-disk vector store |
+| `rag.vector_backend: neo4j` | `pip install orchid-rag-neo4j` | Neo4j graph store |
+| `storage.class: orchid_storage_postgres.*` | `pip install orchid-storage-postgres` | PostgreSQL chat persistence |
+| `checkpointer_type: postgres` | `pip install orchid-storage-postgres` | LangGraph Postgres checkpointer |
+| Events with PostgreSQL backends | `pip install orchid-storage-postgres` | Postgres signal queue + event storage |
+
+Missing a plugin raises a clear startup error. For example, setting
+`vector_backend: qdrant` without installing `orchid-rag-qdrant` produces:
+```
+ValueError: Unknown vector backend 'qdrant'. Install the missing
+plugin: pip install orchid-rag-qdrant. Registered built-ins: ['null'].
+```
 
 `orchid-api` and `orchid-cli` are thin consumers. They import `orchid` as a Python dependency, add the runtime surface (HTTP routes, CLI commands, Docker entrypoints), and delegate all agent execution back to the framework library. Because the split is at the Python package boundary, the framework can be upgraded independently of the serving layer.
 
@@ -5246,6 +5266,81 @@ Both agents share the `recipes` namespace. The `query_transformers: [reformulate
 - `examples/recipes/orchid.yml`
 - `examples/recipes/agents.yaml`
 - `examples/recipes/hooks/startup.py`
+
+---
+
+### Education Studio
+URL: https://gadz82.github.io/orchid/examples/education
+Description: Four-agent teaching workflow with concept extraction, quiz generation, lesson planning, and multi-format export via PDF, DOCX, PPTX, and Markdown.
+
+## What this demonstrates
+
+The Education Studio example turns uploaded course material into quizzes, lesson plans, and export-ready teaching packages. Four specialized agents — `content-analyzer`, `quiz-generator`, `lesson-builder`, and `format-exporter` — collaborate through three cross-agent skills (`generate_quiz`, `generate_lesson`, `generate_full_package`). The `quiz-generator` uses mini-agents to draft questions from multiple source sections in parallel. All agents share RAG-scoped namespaces for source material, generated content, and exports. A cron-driven `weekly-quiz` schedule and a chat-bound `education.generate` signal trigger event-driven generation without manual intervention.
+
+## Run it
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/education/orchid.yml uvicorn orchid_api.main:app --port 8000
+```
+
+Or via the CLI:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/education/orchid.yml
+```
+
+Install extra dependencies for PDF and PPTX export:
+
+```bash
+pip install reportlab python-pptx
+```
+
+## Configuration walkthrough
+
+`orchid.yml` sets the runtime — LLM, Qdrant for RAG, file uploads, and identity resolution:
+
+Agent configs define the four agents, their tools, three cross-agent skills, and the event pipeline:
+
+## What to look for
+
+- `tools.<name>.class: "examples.education.tools.content.extract_concepts.ExtractConceptsTool"` → tools are `OrchidTool` subclasses with declarative `parameters_schema` and `parallel_safe` flags; the framework resolves them by dotted import path at startup.
+- `tools.*.parallel_safe` → content-analysis tools are `parallel_safe: true` (stateless reads), while export tools that write files are `parallel_safe: false` (sequential I/O).
+- `mini_agent.enabled: true` on `quiz-generator` → multi-section source material fans out into parallel mini-agents, each drafting questions from one section. Custom `decomposer_prompt` and `aggregator_prompt` control the split/merge logic.
+- Three cross-agent skills (`generate_quiz`, `generate_lesson`, `generate_full_package`) → chain agents sequentially; each step passes context forward. The `generate_full_package` skill demonstrates a four-agent pipeline.
+- `rag.namespace: education-source` / `education` / `education-exports` → three distinct RAG namespaces isolate source content from generated quizzes from export artifacts.
+- `events.schedules[].cron: "0 8 * * 1"` → the APScheduler backend fires a weekly cron that triggers `quiz-generator` to produce a tenant-wide review quiz every Monday at 08:00.
+- `identity.mode: service_account` on the weekly quiz → the Bloom runs as `quiz-bot`, visible to all users in the tenant via `visibility: tenant`.
+- `respect_chat_binding: true` on `chat-bound-generation` → when a Bloom is triggered from within a chat context, its output is attached to that conversation rather than creating a standalone artifact.
+- `format-exporter` agent has `rag.enabled: false` → export formatting doesn't need retrieval; saves embedding and context overhead.
+- `eywords` → `EducationIdentityResolver` implements `resolve_service_account()` and `mint_for_user()`, enabling both cron-driven service-account flows and per-user event scoping.
+- `upload:` section in `orchid.yml` → file uploads target the `education-uploads` Qdrant namespace; the framework auto-chunks and indexes uploaded material at 1000-char chunks with 200-char overlap.
+
+## Related concepts
+
+- [Agents](/concepts/agents)
+- [Hierarchical RAG](/concepts/rag)
+- [Mini-Agents](/concepts/mini-agents)
+- [Pollen + Bloom](/concepts/pollen-bloom)
+
+## Sources
+
+- examples/education/orchid.yml
+- examples/education/agents.yaml
+- examples/education/identity.py
+- examples/education/tools/content/extract_concepts.py
+- examples/education/tools/content/generate_questions.py
+- examples/education/tools/content/validate.py
+- examples/education/tools/content/format_quiz.py
+- examples/education/tools/content/build_lesson.py
+- examples/education/tools/content/format_lesson.py
+- examples/education/tools/output/generate_pdf.py
+- examples/education/tools/output/generate_docx.py
+- examples/education/tools/output/generate_pptx.py
+- examples/education/tools/output/generate_markdown.py
+- examples/education/tools/output/generate_txt.py
+- examples/education/tests/
 
 ---
 

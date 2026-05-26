@@ -1,0 +1,366 @@
+---
+title: "Education Studio"
+description: "Four-agent teaching workflow with concept extraction, quiz generation, lesson planning, and multi-format export via PDF, DOCX, PPTX, and Markdown."
+package: "cross-cutting"
+section: "examples"
+order: 40
+tags: ["agents", "rag", "mini-agents", "events", "built-in-tools"]
+sources:
+  - examples/education/agents.yaml
+  - examples/education/orchid.yml
+  - examples/education/tools/content/extract_concepts.py
+  - examples/education/tools/content/generate_questions.py
+  - examples/education/tools/content/format_quiz.py
+  - examples/education/tools/content/build_lesson.py
+  - examples/education/tools/content/format_lesson.py
+  - examples/education/tools/output/generate_pdf.py
+  - examples/education/tools/output/generate_docx.py
+  - examples/education/tools/output/generate_pptx.py
+related:
+  - /concepts/agents
+  - /concepts/rag
+  - /concepts/mini-agents
+  - /concepts/pollen-bloom
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The Education Studio example turns uploaded course material into quizzes, lesson plans, and export-ready teaching packages. Four specialized agents — `content-analyzer`, `quiz-generator`, `lesson-builder`, and `format-exporter` — collaborate through three cross-agent skills (`generate_quiz`, `generate_lesson`, `generate_full_package`). The `quiz-generator` uses mini-agents to draft questions from multiple source sections in parallel. All agents share RAG-scoped namespaces for source material, generated content, and exports. A cron-driven `weekly-quiz` schedule and a chat-bound `education.generate` signal trigger event-driven generation without manual intervention.
+
+## Run it
+
+```bash
+pip install -e ./orchid -e ./orchid-api
+ORCHID_CONFIG=examples/education/orchid.yml uvicorn orchid_api.main:app --port 8000
+```
+
+Or via the CLI:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/education/orchid.yml
+```
+
+Install extra dependencies for PDF and PPTX export:
+
+```bash
+pip install reportlab python-pptx
+```
+
+## Configuration walkthrough
+
+`orchid.yml` sets the runtime — LLM, Qdrant for RAG, file uploads, and identity resolution:
+
+<CodePair
+  yaml={`# orchid.yml (trimmed)
+agents:
+  config_path: examples/education/agents.yaml
+
+llm:
+  model: ollama/llama3.2
+  ollama_api_base: http://host.docker.internal:11434
+
+auth:
+  dev_bypass: true
+  identity_resolver_class: examples.education.identity.EducationIdentityResolver
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: ollama/nomic-embed-text
+
+upload:
+  vision_model: ollama/minicpm-v
+  namespace: education-uploads
+  max_size_mb: 20
+  chunk_size: 1000
+  chunk_overlap: 200
+
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: ~/.orchid/education_chats.db
+
+# ...truncated`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: ollama/llama3.2
+  ollama_api_base: http://host.docker.internal:11434
+
+auth:
+  dev_bypass: true
+  identity_resolver_class: examples.education.identity.EducationIdentityResolver
+
+rag:
+  vector_backend: qdrant
+  embedding_model: ollama/nomic-embed-text
+
+upload:
+  vision_model: ollama/minicpm-v
+  namespace: education-uploads
+  chunk_size: 1000
+
+storage:
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  dsn: ~/.orchid/education_chats.db
+---`}
+  mdLabel="orchid.md (infra)"
+/>
+
+Agent configs define the four agents, their tools, three cross-agent skills, and the event pipeline:
+
+<CodePair
+  yaml={`# agents.yaml (trimmed)
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+  rag:
+    enabled: true
+    k: 8
+    max_context_chars: 4000
+
+supervisor:
+  assistant_name: "Education Studio"
+
+tools:
+  extract_concepts:
+    class: "examples.education.tools.content.extract_concepts.ExtractConceptsTool"
+    description: "Extract key concepts and headings from source material"
+    parallel_safe: true
+  generate_questions:
+    class: "examples.education.tools.content.generate_questions.GenerateQuestionsTool"
+    description: "Generate quiz question scaffolds from extracted concepts"
+    parallel_safe: true
+  validate_questions:
+    class: "examples.education.tools.content.validate.ValidateQuestionsTool"
+    description: "Validate questions for structure and duplication"
+    parallel_safe: true
+  build_lesson_structure:
+    class: "examples.education.tools.content.build_lesson.BuildLessonStructureTool"
+    description: "Build a timed lesson-plan scaffold"
+    parallel_safe: true
+  define_learning_objectives:
+    class: "examples.education.tools.content.format_lesson.DefineLearningObjectivesTool"
+    description: "Create Bloom-aligned learning objectives"
+    parallel_safe: true
+  format_lesson_section:
+    class: "examples.education.tools.content.format_lesson.FormatLessonSectionTool"
+    description: "Format one lesson section as Markdown"
+    parallel_safe: true
+  format_multiple_choice:
+    class: "examples.education.tools.content.format_quiz.FormatMultipleChoiceTool"
+    description: "Format multiple-choice questions as Markdown"
+    parallel_safe: true
+  format_true_false:
+  # ... additional format and export tools
+
+skills:
+  generate_quiz:
+    description: "Analyze material, extract concepts, turn them into a quiz."
+    steps:
+      - agent: content-analyzer
+        instruction: "Extract key concepts from the source material."
+      - agent: quiz-generator
+        instruction: "Generate a quiz grounded in those concepts."
+      - agent: format-exporter
+        instruction: "Format the quiz for the requested file format."
+  generate_lesson:
+    description: "Analyze material and assemble a lesson plan."
+    steps:
+      - agent: content-analyzer
+        instruction: "Identify concepts for a coherent lesson."
+      - agent: lesson-builder
+        instruction: "Build objectives, sections, and assessment."
+      - agent: format-exporter
+        instruction: "Format the lesson for the requested output format."
+  generate_full_package:
+    description: "Produce quiz, lesson plan, and presentation exports."
+    steps:
+      - agent: content-analyzer
+      - agent: quiz-generator
+      - agent: lesson-builder
+      - agent: format-exporter
+
+agents:
+  content-analyzer:
+    description: "Extracts headings and core concepts from uploaded material."
+    tools: [extract_concepts]
+    rag:
+      namespace: education-source
+    execution_hints:
+      parallel_safe: true
+
+  quiz-generator:
+    description: "Converts concepts into answerable questions."
+    tools: [generate_questions, validate_questions]
+    mini_agent:
+      enabled: true
+      max_count: 4
+    rag:
+      namespace: education
+    execution_hints:
+      parallel_safe: true
+
+  lesson-builder:
+    description: "Turns concepts into a paced lesson structure."
+    tools: [build_lesson_structure, define_learning_objectives, format_lesson_section]
+    rag:
+      namespace: education
+    execution_hints:
+      parallel_safe: true
+
+  format-exporter:
+    description: "Exports content as PDF, DOCX, PPTX, Markdown, or text."
+    tools: [format_multiple_choice, format_true_false, format_fill_blank, format_matching, generate_pdf, generate_docx, generate_pptx, generate_markdown, generate_txt]
+    rag:
+      enabled: false
+    execution_hints:
+      parallel_safe: false
+
+events:
+  enabled: true
+  store:
+    class: orchid_ai.events.backends.sqlite.SQLiteEventStorage
+  scheduler:
+    class: orchid_ai.events.schedulers.apscheduler.APSchedulerBackend
+
+  schedules:
+    - id: weekly-quiz-cron
+      cron: "0 8 * * 1"
+      trigger_id: weekly-quiz
+      identity: { mode: service_account, name: quiz-bot }
+
+  triggers:
+    - id: weekly-quiz
+      "on": { signal: cron, cron: "0 8 * * 1" }
+      emits:
+        agent: quiz-generator
+        prompt_template: |
+          Generate a 10-question weekly review quiz.
+        identity: { mode: service_account, name: quiz-bot }
+        visibility: tenant
+      parallelism: unbounded
+
+    - id: chat-bound-generation
+      "on":
+        signal: education.generate
+      emits:
+        agent: content-analyzer
+        prompt_template: |
+          Extract key concepts from this source text.
+          Source: {{payload.source_text}}
+        identity: { mode: act_as_user, user_id_from: signal.user_id }
+        respect_chat_binding: true
+      parallelism: per_user
+
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+version: "1"
+
+defaults:
+  llm:
+    model: "ollama/llama3.2"
+    temperature: 0.2
+  rag:
+    enabled: true
+    k: 8
+
+supervisor:
+  assistant_name: "Education Studio"
+
+skills:
+  generate_quiz:
+    steps:
+      - agent: content-analyzer
+      - agent: quiz-generator
+      - agent: format-exporter
+  generate_lesson:
+    steps:
+      - agent: content-analyzer
+      - agent: lesson-builder
+      - agent: format-exporter
+  generate_full_package:
+    steps:
+      - agent: content-analyzer
+      - agent: quiz-generator
+      - agent: lesson-builder
+      - agent: format-exporter
+
+agents:
+  content-analyzer:
+    tools: [extract_concepts]
+    rag:
+      namespace: education-source
+
+  quiz-generator:
+    tools: [generate_questions, validate_questions]
+    mini_agent:
+      enabled: true
+      max_count: 4
+    rag:
+      namespace: education
+
+  lesson-builder:
+    tools: [build_lesson_structure, define_learning_objectives, format_lesson_section]
+    rag:
+      namespace: education
+
+  format-exporter:
+    tools:
+      - format_multiple_choice
+      - format_true_false
+      - format_fill_blank
+      - format_matching
+      - generate_pdf
+      - generate_docx
+      - generate_pptx
+      - generate_markdown
+      - generate_txt
+---`}
+  mdLabel="orchid.md (agents)"
+/>
+
+## What to look for
+
+- `tools.<name>.class: "examples.education.tools.content.extract_concepts.ExtractConceptsTool"` → tools are `OrchidTool` subclasses with declarative `parameters_schema` and `parallel_safe` flags; the framework resolves them by dotted import path at startup.
+- `tools.*.parallel_safe` → content-analysis tools are `parallel_safe: true` (stateless reads), while export tools that write files are `parallel_safe: false` (sequential I/O).
+- `mini_agent.enabled: true` on `quiz-generator` → multi-section source material fans out into parallel mini-agents, each drafting questions from one section. Custom `decomposer_prompt` and `aggregator_prompt` control the split/merge logic.
+- Three cross-agent skills (`generate_quiz`, `generate_lesson`, `generate_full_package`) → chain agents sequentially; each step passes context forward. The `generate_full_package` skill demonstrates a four-agent pipeline.
+- `rag.namespace: education-source` / `education` / `education-exports` → three distinct RAG namespaces isolate source content from generated quizzes from export artifacts.
+- `events.schedules[].cron: "0 8 * * 1"` → the APScheduler backend fires a weekly cron that triggers `quiz-generator` to produce a tenant-wide review quiz every Monday at 08:00.
+- `identity.mode: service_account` on the weekly quiz → the Bloom runs as `quiz-bot`, visible to all users in the tenant via `visibility: tenant`.
+- `respect_chat_binding: true` on `chat-bound-generation` → when a Bloom is triggered from within a chat context, its output is attached to that conversation rather than creating a standalone artifact.
+- `format-exporter` agent has `rag.enabled: false` → export formatting doesn't need retrieval; saves embedding and context overhead.
+- `eywords` → `EducationIdentityResolver` implements `resolve_service_account()` and `mint_for_user()`, enabling both cron-driven service-account flows and per-user event scoping.
+- `upload:` section in `orchid.yml` → file uploads target the `education-uploads` Qdrant namespace; the framework auto-chunks and indexes uploaded material at 1000-char chunks with 200-char overlap.
+
+## Related concepts
+
+- [Agents](/concepts/agents)
+- [Hierarchical RAG](/concepts/rag)
+- [Mini-Agents](/concepts/mini-agents)
+- [Pollen + Bloom](/concepts/pollen-bloom)
+
+## Sources
+
+- examples/education/orchid.yml
+- examples/education/agents.yaml
+- examples/education/identity.py
+- examples/education/tools/content/extract_concepts.py
+- examples/education/tools/content/generate_questions.py
+- examples/education/tools/content/validate.py
+- examples/education/tools/content/format_quiz.py
+- examples/education/tools/content/build_lesson.py
+- examples/education/tools/content/format_lesson.py
+- examples/education/tools/output/generate_pdf.py
+- examples/education/tools/output/generate_docx.py
+- examples/education/tools/output/generate_pptx.py
+- examples/education/tools/output/generate_markdown.py
+- examples/education/tools/output/generate_txt.py
+- examples/education/tests/
