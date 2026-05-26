@@ -188,8 +188,10 @@ class _AgentNodeWrapper:
     async def _run_agent(self, state: GraphState, auth: Any) -> GraphState:
         prev_chat_id = self._agent._current_chat_id
         prev_message_id = self._agent._current_message_id
+        prev_auth = self._agent._current_auth
         self._agent._current_chat_id = state.get("chat_id") or None
         self._agent._current_message_id = _latest_human_message_id(state)
+        self._agent._current_auth = auth
 
         agent_start = time.perf_counter()
         perf_logger.info("[PERF][agent=%s] >>> START", self._agent.name)
@@ -215,6 +217,7 @@ class _AgentNodeWrapper:
         finally:
             self._agent._current_chat_id = prev_chat_id
             self._agent._current_message_id = prev_message_id
+            self._agent._current_auth = prev_auth
         agent_elapsed = (time.perf_counter() - agent_start) * 1000
         perf_logger.info("[PERF][agent=%s] <<< DONE total=%.1f ms", self._agent.name, agent_elapsed)
         return result
