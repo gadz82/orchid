@@ -9,8 +9,9 @@ import pytest
 from orchid_ai.agents.generic_agent import GenericAgent
 from orchid_ai.agents.mcp_dispatcher import MCPCapabilities
 from orchid_ai.config.schema import OrchidAgentConfig, OrchidLLMConfig, OrchidRAGConfig
-from orchid_ai.config.tool_registry import BuiltinToolEntry, ToolParameter
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.tools.function_tool import FunctionTool
+from orchid_ai.tools.registry import ToolParameter, parameters_to_json_schema
 
 
 def _make_auth() -> OrchidAuthContext:
@@ -48,12 +49,15 @@ def _make_agent(tools: list[str]) -> GenericAgent:
     )
 
 
-def _mock_tool_entry(name: str, description: str, params: dict[str, ToolParameter]) -> BuiltinToolEntry:
-    return BuiltinToolEntry(
+def _mock_tool_entry(name: str, description: str, params: dict[str, ToolParameter]) -> FunctionTool:
+    def _handler(**_kwargs):
+        return None
+
+    return FunctionTool(
+        _handler,
         name=name,
-        handler=AsyncMock(),
         description=description,
-        parameters=params,
+        parameters_schema=parameters_to_json_schema(params),
     )
 
 

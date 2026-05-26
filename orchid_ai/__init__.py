@@ -83,6 +83,7 @@ from .core.repository import (
 from .core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
 from .core.sparse import OrchidSparseEncoder, OrchidSparseVector
 from .core.state import OrchidAgentState, OrchidAuthContext
+from .core.tool import OrchidTool, OrchidToolInput, OrchidToolOutput
 from .graph.graph import build_graph
 from .graph.supervisor import OrchidRoutingDecision
 from .guardrails import build_guardrail_chain, register_guardrail
@@ -161,6 +162,7 @@ from .rag.transformers import (
     register_query_transformer,
 )
 from .runtime import OrchidRuntime
+from .tools import FunctionTool, OrchidToolRegistry
 
 # ``utils.import_class`` is intentionally NOT re-exported on the top-level
 # ``orchid_ai`` namespace — it's an implementation detail used by the
@@ -204,6 +206,10 @@ __all__ = [
     "OrchidRetrievalStrategy",
     "OrchidSparseEncoder",
     "OrchidSparseVector",
+    "OrchidTool",
+    "OrchidToolInput",
+    "OrchidToolOutput",
+    "OrchidToolRegistry",
     "OrchidVectorReader",
     "OrchidVectorStoreAdmin",
     "OrchidVectorStoreRepository",
@@ -278,6 +284,7 @@ __all__ = [
     "SimpleRetrieval",
     # ── Factories + RAG registries ────────────────────
     "ConfigSnapshot",
+    "FunctionTool",
     "OrchidConfigSnapshot",
     "OrchidConfigWatcher",
     "OrchidConfigWatcherBase",

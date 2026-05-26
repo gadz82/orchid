@@ -1,0 +1,59 @@
+from __future__ import annotations
+
+import asyncio
+import inspect
+from typing import Any, Callable
+
+from ..core.tool import OrchidTool, OrchidToolInput, OrchidToolOutput
+from .registry import OrchidToolRegistry, clone_schema, filter_to_signature, schema_to_parameters
+
+
+class FunctionTool(OrchidTool):
+    """Adapter that exposes a plain Python callable through the OrchidTool API."""
+
+    def __init__(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str,
+        description: str = "",
+        parameters_schema: dict[str, Any] | None = None,
+    ) -> None:
+        self._fn = fn
+        self.handler = fn
+        self.name = name
+        self.description = description
+        self.parameters_schema = (
+            clone_schema(parameters_schema)
+            if parameters_schema is not None
+            else OrchidToolRegistry._auto_extract_schema(fn)
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        """Compatibility view for legacy callers that expect parameter metadata."""
+        return schema_to_parameters(self.get_parameters_schema())
+
+    async def invoke(self, tool_input: OrchidToolInput) -> OrchidToolOutput:
+        kwargs = {
+            **tool_input.parameters,
+            "query": tool_input.query,
+            "context": tool_input.context,
+            "auth_context": tool_input.auth_context,
+            "content_sources": tool_input.content_sources,
+        }
+        try:
+            signature = inspect.signature(self._fn)
+            accepted = filter_to_signature(kwargs, signature)
+        except (TypeError, ValueError):
+            accepted = dict(kwargs)
+
+        if inspect.iscoroutinefunction(self._fn):
+            result = await self._fn(**accepted)
+        else:
+            result = await asyncio.to_thread(self._fn, **accepted)
+
+        if inspect.isawaitable(result):
+            result = await result
+
+        return OrchidToolOutput(result=result)

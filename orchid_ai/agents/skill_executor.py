@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 import logging
-from typing import Any, Callable, Awaitable
+from typing import Any, Awaitable, Callable
 
 from ..config.schema import OrchidAgentSkillStepConfig
+from ..config.tool_registry import filter_to_schema, get_tool
+from ..core.tool import OrchidToolInput
 from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
@@ -100,70 +101,26 @@ class SkillExecutor:
         previous_results: dict[str, Any],
         content_sources: Any = None,
     ) -> Any:
-        """Execute a built-in tool skill step.
+        """Execute a built-in tool skill step."""
+        tool = get_tool(tool_name)
+        params = filter_to_schema(step_arguments, tool.get_parameters_schema())
+        logger.debug(
+            "[%s] Builtin step '%s': schema params=%s, provided=%s",
+            self._agent_name,
+            tool_name,
+            sorted(tool.get_parameters_schema().get("properties", {}).keys()),
+            sorted(params.keys()),
+        )
 
-        Introspects the tool handler's signature to pass only the
-        parameters it accepts, avoiding ``unexpected keyword argument``
-        errors.  Framework-provided kwargs (``query``, ``context``,
-        ``auth_context``) are offered but only forwarded when the
-        handler declares them.
-
-        No automatic parameter name mapping is performed — if a tool
-        requires a specific parameter (e.g. ``search_text``), it must
-        be provided via ``step_arguments`` in the YAML skill definition.
-        For workflows that need LLM-driven parameter extraction, use
-        orchestrator-level skills with agent steps instead of
-        deterministic tool chaining.
-        """
-        from ..config.tool_registry import get_tool
-
-        # Build a pool of available kwargs — the handler picks what it needs
-        available: dict[str, Any] = {
-            "query": query,
-            "auth_context": auth,
-            "content_sources": content_sources,
-            **step_arguments,
-        }
-        if previous_results:
-            available["context"] = previous_results
-
-        # Introspect the handler to filter to accepted params only
-        try:
-            entry = get_tool(tool_name)
-            sig = inspect.signature(entry.handler)
-
-            # Explicit parameter names (excluding **kwargs itself)
-            explicit_params = {
-                name
-                for name, p in sig.parameters.items()
-                if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-            }
-
-            accepts_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
-            if accepts_var_keyword:
-                # Handler has **kwargs — pass everything
-                args = available
-            else:
-                args = {k: v for k, v in available.items() if k in explicit_params}
-
-            logger.debug(
-                "[%s] Builtin step '%s': handler accepts %s, passing %s",
-                self._agent_name,
-                tool_name,
-                sorted(explicit_params),
-                sorted(args.keys()),
-            )
-        except (KeyError, ValueError, TypeError) as exc:
-            # Fallback: pass everything and let the handler raise if needed
-            logger.warning(
-                "[%s] Could not introspect tool '%s' (%s), passing all kwargs",
-                self._agent_name,
-                tool_name,
-                exc,
-            )
-            args = available
-
-        return await self._builtin_tool_caller(tool_name, **args)
+        tool_input = OrchidToolInput(
+            parameters=params,
+            query=query,
+            context=previous_results or None,
+            auth_context=auth,
+            content_sources=content_sources,
+        )
+        output = await tool.invoke(tool_input)
+        return output.result
 
     async def _run_agent_step(
         self,
