@@ -187,6 +187,12 @@ class Orchid:
         self._owns_resources = _owns_resources
         self._closed = False
         self._agents: dict[str, OrchidAgent] = {}
+        # Load framework-managed plugins (entry-point groups for RAG
+        # backends, checkpointers, visibility fragments) on first
+        # construction — NOT at module import time.
+        from .plugins import lazy_init_plugins
+
+        lazy_init_plugins()
         self._graph = build_graph(config=config, runtime=runtime, agents_out=self._agents)
         self._inventory = OrchidMCPServerInventory.from_config(config)
         self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)

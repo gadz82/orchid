@@ -165,10 +165,17 @@ def _run_tenant_key(run: Any) -> str | None:
 
 # ── Load external visibility fragments via entry points ─────
 
-from ..plugins import iter_entry_point_plugins  # noqa: E402
 
-for _ep_name, _ep_register in iter_entry_point_plugins("orchid.visibility_fragments"):
-    try:
-        _ep_register()
-    except Exception as _exc:
-        logger.warning("[Visibility] Failed to load plugin '%s': %s", _ep_name, _exc)
+def _load_entry_point_visibility_fragments() -> None:
+    """Load registered visibility fragment builders.
+
+    Called from :func:`orchid_ai.plugins.lazy_init_plugins` on
+    first :class:`orchid_ai.Orchid` construction.
+    """
+    from ..plugins import iter_entry_point_plugins
+
+    for _ep_name, _ep_register in iter_entry_point_plugins("orchid.visibility_fragments"):
+        try:
+            _ep_register()
+        except Exception as _exc:
+            logger.warning("[Visibility] Failed to load plugin '%s': %s", _ep_name, _exc)

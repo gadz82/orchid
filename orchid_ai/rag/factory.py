@@ -100,6 +100,14 @@ def build_reader(
     Raises :class:`ValueError` with the registered names listed when
     ``vector_backend`` is unknown — easier to spot a YAML typo than a
     silent fall-through.
+
+    **Default is ``"null"``** (no vector database).  This is intentional:
+    when no vector backend is configured, retrieval returns an empty result
+    set and logs a warning at retrieval time.  The application continues
+    to function — agents respond without RAG context — so a missing plugin
+    or misconfigured backend does not crash the process.  Operators will
+    see ``[NullVectorReader] retrieve() called — no vector backend configured``
+    in the logs, making the degradation visible without breaking requests.
     """
     builder = VECTOR_BACKEND_REGISTRY.get(vector_backend)
     if builder is None:
@@ -197,6 +205,8 @@ register_graph_store_backend("in_memory", _build_in_memory_graph_store)
 
 
 # ── Load external backends via entry points ───────────────────
+# Called from :func:`orchid_ai.plugins.lazy_init_plugins` on
+# first :class:`orchid_ai.Orchid` construction.
 
 
 def _load_entry_point_backends() -> None:
@@ -215,9 +225,6 @@ def _load_entry_point_backends() -> None:
             register_fn()
         except Exception as exc:
             logger.warning("[GraphStoreBackends] Failed to load plugin '%s': %s", name, exc)
-
-
-_load_entry_point_backends()
 
 
 __all__ = [

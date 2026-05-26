@@ -17,6 +17,7 @@ NullGraphStore}`` is canonical.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, ClassVar
 
 from ...core.doc_store import OrchidDocStore
@@ -24,9 +25,19 @@ from ...core.graph_store import OrchidEdge, OrchidEntity, OrchidGraphStore
 from ...core.repository import OrchidSearchResult, OrchidVectorReader
 from ...core.scopes import OrchidRAGScope
 
+logger = logging.getLogger(__name__)
+
 
 class NullVectorReader(OrchidVectorReader):
-    """No-op reader that always returns an empty result set."""
+    """No-op reader that always returns an empty result set.
+
+    Used when ``vector_backend`` is ``"null"`` (the default).  Retrieval
+    returns ``[]`` so agents continue without RAG context rather than
+    crashing.  A warning is logged on the first call so operators can
+    spot a missing or misconfigured vector backend.
+    """
+
+    _logged: ClassVar[bool] = False
 
     async def retrieve(
         self,
@@ -36,6 +47,14 @@ class NullVectorReader(OrchidVectorReader):
         scope: OrchidRAGScope | None = None,
         metadata_filters: dict[str, Any] | None = None,
     ) -> list[OrchidSearchResult]:
+        if not NullVectorReader._logged:
+            logger.warning(
+                "[NullVectorReader] retrieve() called — no vector backend configured. "
+                "RAG queries will return empty results. "
+                "Install a vector plugin (e.g. orchid-rag-qdrant) or set "
+                "vector_backend in your config."
+            )
+            NullVectorReader._logged = True
         return []
 
     async def retrieve_sparse(

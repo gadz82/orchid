@@ -7,6 +7,8 @@ from typing import Any, Callable
 from ..core.tool import OrchidTool, OrchidToolInput, OrchidToolOutput
 from .registry import OrchidToolRegistry, clone_schema, filter_to_signature, schema_to_parameters
 
+_FRAMEWORK_PARAMS = frozenset({"query", "context", "auth_context", "content_sources"})
+
 
 class FunctionTool(OrchidTool):
     """Adapter that exposes a plain Python callable through the OrchidTool API."""
@@ -47,6 +49,15 @@ class FunctionTool(OrchidTool):
             accepted = filter_to_signature(kwargs, signature)
         except (TypeError, ValueError):
             accepted = dict(kwargs)
+
+        # When the handler has **kwargs, filter_to_signature returns ALL
+        # kwargs including framework params.  Strip framework params that
+        # the handler does NOT explicitly declare — framework params should
+        # only reach the handler when it asks for them by name.
+        has_var_keyword = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
+        if has_var_keyword:
+            explicit_params = set(signature.parameters.keys())
+            accepted = {k: v for k, v in accepted.items() if k not in _FRAMEWORK_PARAMS or k in explicit_params}
 
         if inspect.iscoroutinefunction(self._fn):
             result = await self._fn(**accepted)

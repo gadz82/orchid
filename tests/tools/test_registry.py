@@ -30,12 +30,15 @@ def test_register_and_get():
     assert registry.get("dummy") is tool
 
 
-def test_register_duplicate_raises():
+def test_register_duplicate_overwrites_with_warning(caplog):
     registry = OrchidToolRegistry()
     registry.register(DummyTool())
 
-    with pytest.raises(ValueError, match="already registered"):
+    # Duplicate registration logs a warning and overwrites (does not raise).
+    with caplog.at_level("WARNING"):
         registry.register(DummyTool())
+    assert any("already registered" in m for m in caplog.messages)
+    assert "dummy" in registry.get_all()
 
 
 def test_get_missing_raises():
@@ -58,12 +61,13 @@ def test_unregister_and_clear():
     assert registry.get_all() == {}
 
 
-def test_get_all_returns_copy():
+def test_get_all_returns_read_only_view():
     registry = OrchidToolRegistry()
     registry.register(DummyTool())
 
     tools = registry.get_all()
-    tools["other"] = DummyTool()
+    with pytest.raises(TypeError):
+        tools["other"] = DummyTool()
 
     assert set(registry.get_all()) == {"dummy"}
 

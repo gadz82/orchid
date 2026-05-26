@@ -6,6 +6,12 @@ The function :func:`iter_entry_point_plugins` walks a named entry-point
 group and yields ``(name, loaded_object)`` pairs, isolating the caller
 from the minor API differences between Python 3.9–3.11 and 3.12+.
 
+:func:`lazy_init_plugins` loads all framework-managed plugin groups
+(vector backends, doc stores, graph stores, checkpointers, visibility
+fragments) on first call — NOT at module import time.  Call it once
+at the application entry point (``Orchid.__init__`` calls it
+automatically).
+
 Example::
 
     from orchid_ai.plugins import iter_entry_point_plugins
@@ -29,7 +35,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Iterator
 
-__all__ = ["iter_entry_point_plugins"]
+__all__ = ["iter_entry_point_plugins", "lazy_init_plugins"]
+
+_lazy_init_done: bool = False
 
 
 def iter_entry_point_plugins(
@@ -69,3 +77,33 @@ def iter_entry_point_plugins(
             log.warning("[Plugins] Failed to load '%s' from group %r: %s", ep.name, group, exc)
             continue
         yield ep.name, obj
+
+
+def lazy_init_plugins() -> None:
+    """Load all framework-managed plugins once.
+
+    Called from :class:`orchid_ai.Orchid.__init__` automatically.
+    Safe to call multiple times — only the first call does work.
+    """
+    global _lazy_init_done
+    if _lazy_init_done:
+        return
+    _lazy_init_done = True
+
+    _log = logging.getLogger(__name__)
+    _log.debug("[Plugins] Loading framework-managed entry points")
+
+    # RAG backends (vector, doc_store, graph_store)
+    from .rag.factory import _load_entry_point_backends
+
+    _load_entry_point_backends()
+
+    # Checkpointers
+    from .checkpointing.factory import _load_entry_point_checkpointers
+
+    _load_entry_point_checkpointers()
+
+    # Visibility fragments
+    from .events.visibility import _load_entry_point_visibility_fragments
+
+    _load_entry_point_visibility_fragments()

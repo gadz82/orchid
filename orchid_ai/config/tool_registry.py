@@ -104,21 +104,31 @@ def _coerce_registered_tool(
         if handler is not None:
             raise ValueError("When registering a tool instance, do not also pass 'handler'")
         tool = name
+        # Instance passed directly — do NOT mutate it.
+        # Use the instance's own name/description/schema as-is.
+        if not tool.name:
+            raise ValueError("Tool instance must have a non-empty name")
     elif isinstance(handler, OrchidTool):
         tool = handler
-        tool.name = str(name)
+        if tool.name and tool.name != str(name):
+            logger.error(
+                "[ToolRegistry] Tool instance already named '%s'; re-registering as '%s' — "
+                "the second registration will overwrite the first",
+                tool.name,
+                name,
+            )
+        # Instance passed as handler — do NOT mutate it.
+        # The registry will map it under the requested ``name`` key.
     else:
         if handler is None:
             raise ValueError("register_tool() requires either a tool instance or a callable handler")
         schema = parameters_to_json_schema(parameters) if parameters is not None else None
-        tool = FunctionTool(handler, name=str(name), description=description, parameters_schema=schema)
-
-    if description:
-        tool.description = description
-    if parameters is not None:
-        tool.parameters_schema = parameters_to_json_schema(parameters) or {"type": "object", "properties": {}}
-    if not tool.name:
-        tool.name = str(name)
+        tool = FunctionTool(
+            handler,
+            name=str(name),
+            description=description,
+            parameters_schema=schema,
+        )
     return tool
 
 
