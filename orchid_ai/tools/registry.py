@@ -3,10 +3,13 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 import inspect
-from types import NoneType, UnionType
+import logging
+from types import MappingProxyType, NoneType, UnionType
 from typing import Any, Callable, Union, get_args, get_origin
 
 from ..core.tool import OrchidTool
+
+logger = logging.getLogger(__name__)
 
 _FRAMEWORK_PARAMS = frozenset(
     {"kwargs", "self", "cls", "query", "context", "auth_context", "_kwargs", "content_sources"}
@@ -80,11 +83,18 @@ class OrchidToolRegistry:
         self._tools: dict[str, OrchidTool] = {}
 
     def register(self, tool: OrchidTool) -> None:
-        """Register a tool instance by ``tool.name``."""
+        """Register a tool instance by ``tool.name``.
+
+        If a tool with the same name is already registered, the new instance
+        overwrites it and a warning is logged.
+        """
         if not tool.name:
             raise ValueError("Tool must define a non-empty name before registration")
         if tool.name in self._tools:
-            raise ValueError(f"Tool '{tool.name}' is already registered")
+            logger.warning(
+                "[ToolRegistry] Tool '%s' already registered; overwriting with new instance",
+                tool.name,
+            )
         self._tools[tool.name] = tool
 
     def get(self, name: str) -> OrchidTool:
@@ -93,9 +103,9 @@ class OrchidToolRegistry:
             raise KeyError(f"Built-in tool '{name}' is not registered. Available: {list(self._tools.keys())}")
         return self._tools[name]
 
-    def get_all(self) -> dict[str, OrchidTool]:
-        """Return a shallow copy of the registry."""
-        return dict(self._tools)
+    def get_all(self) -> MappingProxyType:
+        """Return a read-only view of the registry."""
+        return MappingProxyType(dict(self._tools))
 
     def unregister(self, name: str) -> None:
         """Remove a tool if present."""
@@ -301,7 +311,7 @@ def _coerce_param(name: str, value: Any, declared_type: str) -> Any:
 
     declared = declared_type.lower()
     expected = _TYPE_CHECK.get(declared)
-    if expected is not None and type(value) is expected:
+    if expected is not None and isinstance(value, expected):
         return value
 
     coercer = _TYPE_COERCE.get(declared)

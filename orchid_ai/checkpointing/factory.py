@@ -52,7 +52,22 @@ logger = logging.getLogger(__name__)
 # Maps type string → async factory callable(dsn) -> BaseCheckpointSaver
 _CHECKPOINTER_REGISTRY: dict[str, Callable[..., Coroutine[Any, Any, BaseCheckpointSaver]]] = {}
 
-_CHECKPOINTER_PACKAGE_HINTS: dict[str, str] = {}
+_CHECKPOINTER_PACKAGE_HINTS: dict[str, str] = {
+    "orchid_storage_postgres.": "orchid-storage-postgres",
+}
+
+
+def _augment_checkpointer_import_error(class_path: str, exc: Exception) -> ImportError:
+    msg = (
+        f"Cannot resolve checkpointer class '{class_path}'. "
+        f"Ensure it is a valid dotted import path to a BaseCheckpointSaver subclass. "
+        f"Error: {exc}"
+    )
+    for prefix, package in _CHECKPOINTER_PACKAGE_HINTS.items():
+        if class_path.startswith(prefix):
+            msg += f" Install the missing plugin: pip install {package}"
+            break
+    return ImportError(msg)
 
 
 def register_checkpointer(
@@ -135,15 +150,7 @@ async def build_checkpointer(
     try:
         cls = import_class(checkpointer_type)
     except ImportError as exc:
-        hint = _CHECKPOINTER_PACKAGE_HINTS.get(checkpointer_type)
-        msg = (
-            f"Cannot resolve checkpointer class '{checkpointer_type}'. "
-            f"Ensure it is a valid dotted import path to a BaseCheckpointSaver subclass. "
-        )
-        if hint:
-            msg += f"If you meant a built-in type, install the plugin: pip install {hint} "
-        msg += f"Error: {exc}"
-        raise ImportError(msg) from exc
+        raise _augment_checkpointer_import_error(checkpointer_type, exc) from exc
 
     if not (isinstance(cls, type) and issubclass(cls, BaseCheckpointSaver)):
         raise TypeError(f"'{checkpointer_type}' resolves to {cls!r}, which is not a BaseCheckpointSaver subclass.")
@@ -158,9 +165,6 @@ def _load_entry_point_checkpointers() -> None:
             register_fn()
         except Exception as exc:
             logger.warning("[Checkpointers] Failed to load plugin '%s': %s", name, exc)
-
-
-_load_entry_point_checkpointers()
 
 
 async def shutdown_checkpointer(saver: BaseCheckpointSaver | None) -> None:

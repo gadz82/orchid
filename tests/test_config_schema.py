@@ -586,4 +586,4 @@ class TestOrchidAgentsConfigConfigStorage:
         }
         cfg = OrchidAgentsConfig.model_validate(data)
         assert cfg.config_storage.enabled is True
-        "orchid_storage_postgres.config_postgres.OrchidPostgresConfigStorage"
+        assert cfg.config_storage.class_path == "orchid_storage_postgres.config_postgres.OrchidPostgresConfigStorage"
