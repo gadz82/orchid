@@ -47,6 +47,7 @@ from .persistence.factory import build_chat_storage
 from .persistence.mcp_client_registration_factory import build_mcp_client_registration_store
 from .persistence.mcp_gateway_state_factory import build_mcp_gateway_state_store
 from .persistence.mcp_token_factory import build_mcp_token_store
+from .plugins import lazy_init_plugins
 from .rag.factory import build_reader
 from .runtime import OrchidRuntime
 from .utils import import_class
@@ -198,6 +199,9 @@ async def _build_runtime(
         CLI) that want their own defaults to win over YAML for specific
         sections (e.g. ``{"storage"}``).
     """
+    # ── 0. Load external plugins (vector backends, doc stores, etc.) ──
+    lazy_init_plugins()
+
     # ── 1. YAML → env (optional) ──────────────────────────────
     if apply_yaml and config_path:
         os.environ.setdefault("ORCHID_CONFIG", config_path)
