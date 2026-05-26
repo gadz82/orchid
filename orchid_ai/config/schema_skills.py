@@ -36,7 +36,8 @@ class BuiltinToolParameter(BaseModel):
 class OrchidBuiltinToolConfig(BaseModel):
     """A built-in Python tool declared at the YAML top level."""
 
-    handler: str  # dotted import path, e.g. "myproject.tools.dates.format_date"
+    class_: str | None = Field(default=None, alias="class")
+    handler: str | None = None  # dotted import path, e.g. "myproject.tools.dates.format_date"
     description: str = ""
     parameters: dict[str, BuiltinToolParameter] = Field(default_factory=dict)
     inject_to_rag: bool = False  # opt-in: store this tool's results in RAG
@@ -55,6 +56,14 @@ class OrchidBuiltinToolConfig(BaseModel):
     #: shallow per top-level field — tool's ``ingestion`` block wins
     #: only when set; same for ``retrieval``, ``namespace``, etc.
     rag: OrchidRAGConfig | None = None
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def _check_class_or_handler(self) -> OrchidBuiltinToolConfig:
+        if not self.class_ and not self.handler:
+            raise ValueError("Tool must set either 'class' or 'handler'")
+        return self
 
 
 class OrchidAgentSkillStepConfig(BaseModel):

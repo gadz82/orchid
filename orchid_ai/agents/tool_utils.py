@@ -10,11 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 
-def _tool_param_type_to_json_schema(t: str) -> str:
-    """Map tool parameter types to JSON Schema types."""
-    return {"int": "integer", "float": "number", "bool": "boolean"}.get(t, "string")
-
-
 def tools_to_litellm_format(
     tool_names: list[str],
     *,
@@ -33,37 +28,12 @@ def tools_to_litellm_format(
         if skip_tools and (tool_name in skip_tools or f"builtin_{tool_name}" in skip_tools):
             continue
         try:
-            entry = get_tool(tool_name)
+            tool = get_tool(tool_name)
         except KeyError:
             continue
 
         names.add(tool_name)
-
-        properties: dict[str, Any] = {}
-        required: list[str] = []
-        for p in entry.parameters.values():
-            prop: dict[str, str] = {
-                "type": _tool_param_type_to_json_schema(p.type),
-                "description": p.description,
-            }
-            properties[p.name] = prop
-            if p.required:
-                required.append(p.name)
-
-        schema: dict[str, Any] = {"type": "object", "properties": properties}
-        if required:
-            schema["required"] = required
-
-        defs.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": tool_name,
-                    "description": entry.description,
-                    "parameters": schema,
-                },
-            }
-        )
+        defs.append(tool.to_litellm_tool_def())
 
     return names, defs
 

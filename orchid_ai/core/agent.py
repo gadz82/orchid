@@ -427,6 +427,8 @@ class OrchidAgent(ABC):
         The tool must be registered in the tool registry (via ``agents.yaml``
         top-level ``tools:`` section or programmatic ``register_tool()``).
         """
-        from ..config.tool_registry import call_tool
+        from ..config.tool_registry import build_tool_input, get_tool
 
-        return await call_tool(tool_name, **kwargs)
+        tool = get_tool(tool_name)
+        output = await tool.invoke(build_tool_input(tool, **kwargs))
+        return output.result

@@ -1,161 +1,129 @@
-"""
-Built-in tool registry — maps YAML ``tools`` declarations to Python callables.
-
-Resolution:
-  1. Short name in registry → pre-registered callable
-  2. Dotted handler path → ``importlib.import_module`` + ``getattr``
-
-Sync functions are automatically wrapped with ``asyncio.to_thread`` at call time.
-
-Parameters:
-  When a ``OrchidBuiltinToolConfig`` declares ``parameters``, they are stored
-  alongside the handler.  When omitted, parameters are auto-extracted
-  from the Python function signature via ``inspect``.  This metadata is
-  used by the CLI skill generator to produce accurate Claude Code
-  skill documentation and CLI wrappers.
-"""
+"""Built-in tool registry backed by the OrchidTool abstraction."""
 
 from __future__ import annotations
 
-import asyncio
 import importlib
 import inspect
 import logging
-from dataclasses import dataclass, field
 from typing import Any, Callable
+
+from ..core.tool import OrchidTool, OrchidToolInput
+from ..tools.function_tool import FunctionTool
+from ..tools.registry import (
+    ToolParameter,
+    OrchidToolRegistry,
+    clone_schema,
+    coerce_parameters_from_schema,
+    filter_to_schema,
+    find_param_doc,
+    parameters_to_json_schema,
+    schema_to_parameters,
+)
 
 logger = logging.getLogger(__name__)
 
+TOOL_REGISTRY = OrchidToolRegistry()
 
-@dataclass(frozen=True)
-class ToolParameter:
-    """Metadata for a single tool parameter."""
-
-    name: str
-    type: str = "string"  # string, int, float, bool
-    description: str = ""
-    required: bool = True
-    default: Any = None
-
-
-@dataclass(frozen=True)
-class BuiltinToolEntry:
-    """A registered built-in tool with optional parameter metadata."""
-
-    name: str
-    handler: Callable[..., Any]
-    description: str
-    parameters: dict[str, ToolParameter] = field(default_factory=dict)
-
-
-_REGISTRY: dict[str, BuiltinToolEntry] = {}
+_FRAMEWORK_PARAMS = frozenset(
+    {"kwargs", "self", "cls", "query", "context", "auth_context", "_kwargs", "content_sources"}
+)
 
 
 def register_tool(
-    name: str,
-    handler: Callable[..., Any],
+    name: str | OrchidTool,
+    handler: Callable[..., Any] | OrchidTool | None = None,
     description: str = "",
     parameters: dict[str, ToolParameter] | None = None,
 ) -> None:
-    """Register a built-in tool by short name.
-
-    When ``parameters`` is ``None``, they are auto-extracted from the
-    handler's function signature via ``inspect``.
-    """
-    params = parameters if parameters is not None else _extract_parameters_from_handler(handler)
-    _REGISTRY[name] = BuiltinToolEntry(name=name, handler=handler, description=description, parameters=params)
-    logger.debug("[ToolRegistry] registered '%s' (%d params)", name, len(params))
+    """Register a built-in tool by name or tool instance."""
+    tool = _coerce_registered_tool(name=name, handler=handler, description=description, parameters=parameters)
+    TOOL_REGISTRY.register(tool)
+    logger.debug("[ToolRegistry] registered '%s'", tool.name)
 
 
-def get_tool(name: str) -> BuiltinToolEntry:
-    """Look up a built-in tool by name. Raises ``KeyError`` if not found."""
-    if name not in _REGISTRY:
-        raise KeyError(f"Built-in tool '{name}' is not registered. Available: {list(_REGISTRY.keys())}")
-    return _REGISTRY[name]
+def get_tool(name: str) -> OrchidTool:
+    """Look up a built-in tool by name."""
+    return TOOL_REGISTRY.get(name)
 
 
-_TYPE_COERCE: dict[str, Callable[[Any], Any]] = {
-    "int": int,
-    "integer": int,
-    "float": float,
-    "number": float,
-    "bool": lambda v: v if isinstance(v, bool) else str(v).lower() in ("true", "1", "yes"),
-    "boolean": lambda v: v if isinstance(v, bool) else str(v).lower() in ("true", "1", "yes"),
-}
-
-_TYPE_CHECK: dict[str, type] = {
-    "int": int,
-    "integer": int,
-    "float": float,
-    "number": float,
-    "bool": bool,
-    "boolean": bool,
-    "string": str,
-}
+def list_tools() -> list[OrchidTool]:
+    """Return all registered built-in tools."""
+    return list(TOOL_REGISTRY.get_all().values())
 
 
-def _coerce_param(name: str, value: Any, param: ToolParameter) -> Any:
-    """Coerce a single parameter value to the declared YAML type."""
-    if value is None:
-        return param.default
-    declared = param.type.lower()
+def clear() -> None:
+    """Clear the registry (useful for testing)."""
+    TOOL_REGISTRY.clear()
 
-    # Skip coercion when the value is already the correct Python type.
-    expected = _TYPE_CHECK.get(declared)
-    if expected is not None and type(value) is expected:
-        return value
 
-    coercer = _TYPE_COERCE.get(declared)
-    if coercer is None:
-        return value
-    try:
-        return coercer(value)
-    except (ValueError, TypeError):
-        logger.warning(
-            "[ToolRegistry] Could not coerce param '%s' value=%r to %s — passing raw",
-            name,
-            value,
-            declared,
-        )
-        return value
+def unregister(name: str) -> None:
+    """Remove one tool from the registry."""
+    TOOL_REGISTRY.unregister(name)
 
 
 async def call_tool(name: str, **kwargs: Any) -> Any:
-    """
-    Call a registered built-in tool by name.
+    """Call a registered built-in tool by name and return its primary result."""
+    tool = get_tool(name)
+    tool_input = build_tool_input(tool, **kwargs)
+    output = await tool.invoke(tool_input)
+    return output.result
 
-    Parameter values are coerced to the declared YAML types before
-    the handler is invoked.  LLMs often pass numeric values as
-    strings (e.g. ``floors: "4"`` for an ``integer`` parameter);
-    the coercion maps to the Python type without a round-trip.
-    """
-    entry = get_tool(name)
 
-    coerced_kwargs: dict[str, Any] = {}
-    for param_name, param in entry.parameters.items():
-        if param_name not in kwargs:
-            if param.required:
-                continue  # missing required param — let the handler raise TypeError
-            coerced_kwargs[param_name] = param.default
-            continue
-        coerced_kwargs[param_name] = _coerce_param(param_name, kwargs[param_name], param)
-    # Forward any extra kwargs the tool handler accepts (e.g. **kwargs slots).
-    for k, v in kwargs.items():
-        if k not in coerced_kwargs:
-            coerced_kwargs[k] = v
+def build_tool_input(tool: OrchidTool, **kwargs: Any) -> OrchidToolInput:
+    """Split framework kwargs from business parameters and coerce by schema."""
+    framework: dict[str, Any] = {}
+    parameters: dict[str, Any] = {}
+    schema_properties = set(tool.get_parameters_schema().get("properties", {}).keys())
 
-    if asyncio.iscoroutinefunction(entry.handler):
-        return await entry.handler(**coerced_kwargs)
-    return await asyncio.to_thread(entry.handler, **coerced_kwargs)
+    for key, value in kwargs.items():
+        if key in _FRAMEWORK_PARAMS:
+            framework[key] = value
+            if key in schema_properties:
+                parameters[key] = value
+        else:
+            parameters[key] = value
+
+    coerced = coerce_parameters_from_schema(parameters, tool.get_parameters_schema())
+    return OrchidToolInput(
+        parameters=coerced,
+        query=framework.get("query"),
+        context=framework.get("context"),
+        auth_context=framework.get("auth_context"),
+        content_sources=framework.get("content_sources"),
+    )
+
+
+def _coerce_registered_tool(
+    *,
+    name: str | OrchidTool,
+    handler: Callable[..., Any] | OrchidTool | None,
+    description: str,
+    parameters: dict[str, ToolParameter] | None,
+) -> OrchidTool:
+    if isinstance(name, OrchidTool):
+        if handler is not None:
+            raise ValueError("When registering a tool instance, do not also pass 'handler'")
+        tool = name
+    elif isinstance(handler, OrchidTool):
+        tool = handler
+        tool.name = str(name)
+    else:
+        if handler is None:
+            raise ValueError("register_tool() requires either a tool instance or a callable handler")
+        schema = parameters_to_json_schema(parameters) if parameters is not None else None
+        tool = FunctionTool(handler, name=str(name), description=description, parameters_schema=schema)
+
+    if description:
+        tool.description = description
+    if parameters is not None:
+        tool.parameters_schema = parameters_to_json_schema(parameters) or {"type": "object", "properties": {}}
+    if not tool.name:
+        tool.name = str(name)
+    return tool
 
 
 def _resolve_handler(handler_path: str) -> Callable[..., Any]:
-    """
-    Resolve a dotted Python path to a callable.
-
-    Example: ``"myproject.tools.dates.format_date"`` →
-    ``importlib.import_module("myproject.tools.dates").format_date``
-    """
+    """Resolve a dotted Python path to a callable."""
     module_path, _, attr_name = handler_path.rpartition(".")
     if not module_path:
         raise ValueError(f"Invalid handler path '{handler_path}': must be a dotted path like 'module.function'")
@@ -168,154 +136,119 @@ def _resolve_handler(handler_path: str) -> Callable[..., Any]:
     return handler
 
 
-_ANNOTATION_TO_TYPE: dict[Any, str] = {
-    str: "string",
-    int: "int",
-    float: "float",
-    bool: "bool",
-    "str": "string",
-    "int": "int",
-    "float": "float",
-    "bool": "bool",
-}
-
-# Parameters that GenericAgent injects automatically — skip these
-# when auto-extracting from function signatures.
-_FRAMEWORK_PARAMS = frozenset(
-    {"kwargs", "self", "cls", "query", "context", "auth_context", "_kwargs", "content_sources"}
-)
+def _resolve_tool_class(class_path: str) -> type[OrchidTool]:
+    """Resolve a dotted Python path to an OrchidTool subclass."""
+    module_path, _, attr_name = class_path.rpartition(".")
+    if not module_path:
+        raise ValueError(f"Invalid class path '{class_path}': must be a dotted path like 'module.ToolClass'")
+    module = importlib.import_module(module_path)
+    tool_cls = getattr(module, attr_name, None)
+    if tool_cls is None:
+        raise AttributeError(f"Module '{module_path}' has no attribute '{attr_name}'")
+    if not inspect.isclass(tool_cls):
+        raise TypeError(f"'{class_path}' resolved to a non-class: {type(tool_cls)}")
+    if not issubclass(tool_cls, OrchidTool):
+        raise TypeError(f"'{class_path}' must be a subclass of OrchidTool")
+    return tool_cls
 
 
 def _extract_parameters_from_handler(handler: Callable[..., Any]) -> dict[str, ToolParameter]:
-    """Auto-extract parameter metadata from a function's signature and docstring.
-
-    Skips framework-injected parameters (``query``, ``context``,
-    ``auth_context``, ``**kwargs``, etc.) so only the tool's
-    "business" parameters are returned.
-    """
-    try:
-        sig = inspect.signature(handler)
-    except (ValueError, TypeError):
-        return {}
-
-    docstring = inspect.getdoc(handler) or ""
-    params: dict[str, ToolParameter] = {}
-
-    for param_name, param in sig.parameters.items():
-        # Skip framework-injected and catch-all params
-        if param_name in _FRAMEWORK_PARAMS:
-            continue
-        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
-            continue
-
-        # Determine type
-        ann = param.annotation
-        param_type = _ANNOTATION_TO_TYPE.get(ann, "string")
-
-        # Determine required + default
-        has_default = param.default is not inspect.Parameter.empty
-        required = not has_default
-        default = param.default if has_default else None
-
-        # Try to find description in docstring
-        desc = find_param_doc(docstring, param_name) or param_type
-
-        params[param_name] = ToolParameter(
-            name=param_name,
-            type=param_type,
-            description=desc,
-            required=required,
-            default=default,
-        )
-
-    return params
-
-
-def find_param_doc(docstring: str, param_name: str) -> str:
-    """Extract a parameter description from a NumPy/Google-style docstring.
-
-    Handles both formats:
-    - NumPy: ``param : str`` followed by an indented description line.
-    - Google: ``param: description`` on the same line.
-
-    Returns an empty string when the parameter is not documented.
-    """
-    lines = docstring.splitlines()
-    in_params = False
-    found_param = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped in ("Parameters", "Parameters:", "Args:", "Arguments:"):
-            in_params = True
-            continue
-        if in_params and stripped.startswith("---"):
-            continue
-        if in_params and stripped in ("Returns", "Returns:", "Raises", "Raises:", "Yields", "Yields:"):
-            break
-        if in_params:
-            # Look for "param_name : type" or "param_name:" line
-            if stripped.startswith(param_name) and (":" in stripped or stripped == param_name):
-                # Google-style: "param_name: description" on same line
-                if ":" in stripped:
-                    after_colon = stripped.split(":", 1)[1].strip()
-                    # NumPy-style has type after colon (e.g. "param : str"), desc on next line
-                    # Google-style has description (e.g. "param: Some description")
-                    # Heuristic: if it contains spaces, it's a description, not a type
-                    if after_colon and " " in after_colon:
-                        return after_colon
-                found_param = True
-                continue
-            if found_param:
-                if stripped and (not stripped[0].isalpha() or line.startswith("    ")):
-                    if stripped:
-                        return stripped
-                    break
-                else:
-                    break
-    return ""
+    """Compatibility wrapper that exposes signature-derived parameters."""
+    return schema_to_parameters(OrchidToolRegistry._auto_extract_schema(handler))
 
 
 def load_tools_from_config(tools_config: dict[str, Any]) -> None:
-    """
-    Resolve all tool declarations from the YAML ``tools:`` section and register them.
-
-    When a tool declares ``parameters`` in YAML, they take precedence
-    over auto-extraction from the function signature.
-
-    Parameters
-    ----------
-    tools_config : dict
-        Mapping of tool name → ``OrchidBuiltinToolConfig``-like object with ``handler``, ``description``,
-        and optional ``parameters``.
-    """
+    """Resolve and register all tools declared in the config ``tools:`` block."""
     for tool_name, tool_cfg in tools_config.items():
-        handler_path = tool_cfg.handler if hasattr(tool_cfg, "handler") else tool_cfg.get("handler", "")
-        description = tool_cfg.description if hasattr(tool_cfg, "description") else tool_cfg.get("description", "")
+        class_path = _config_value(tool_cfg, "class_") or _config_value(tool_cfg, "class")
+        handler_path = _config_value(tool_cfg, "handler")
+
+        if tool_name in TOOL_REGISTRY.get_all():
+            TOOL_REGISTRY.unregister(tool_name)
+
         try:
-            handler = _resolve_handler(handler_path)
-
-            # Convert YAML-declared parameters to ToolParameter instances
-            yaml_params = _get_yaml_parameters(tool_cfg)
-
-            register_tool(tool_name, handler, description, parameters=yaml_params)
+            tool = _tool_from_config(tool_name, tool_cfg, class_path=class_path, handler_path=handler_path)
+            TOOL_REGISTRY.register(tool)
         except Exception as exc:
-            logger.error("[ToolRegistry] Failed to resolve tool '%s' (handler=%s): %s", tool_name, handler_path, exc)
+            logger.error(
+                "[ToolRegistry] Failed to resolve tool '%s' (class=%s, handler=%s): %s",
+                tool_name,
+                class_path,
+                handler_path,
+                exc,
+            )
             raise
 
 
-def _get_yaml_parameters(tool_cfg: Any) -> dict[str, ToolParameter] | None:
-    """Extract YAML-declared parameters from a tool config, if any.
+def _tool_from_config(
+    tool_name: str,
+    tool_cfg: Any,
+    *,
+    class_path: str | None,
+    handler_path: str | None,
+) -> OrchidTool:
+    description = _config_value(tool_cfg, "description")
+    explicit = _config_explicit_fields(tool_cfg)
+    yaml_params = _get_yaml_parameters(tool_cfg)
+    schema_override = parameters_to_json_schema(yaml_params)
 
-    Returns ``None`` when no parameters are declared (triggering
-    auto-extraction from the function signature).
-    """
-    raw_params = getattr(tool_cfg, "parameters", None) or {}
+    if class_path:
+        tool_cls = _resolve_tool_class(class_path)
+        tool = tool_cls()
+    elif handler_path:
+        handler = _resolve_handler(handler_path)
+        tool = FunctionTool(handler, name=tool_name, description=description or "", parameters_schema=schema_override)
+    else:
+        raise ValueError("Tool must declare either 'class' or 'handler'")
+
+    tool.name = tool_name
+    if "description" in explicit and description:
+        tool.description = description
+    if schema_override is not None:
+        tool.parameters_schema = clone_schema(schema_override)
+
+    _apply_runtime_overrides(tool, tool_cfg, explicit)
+    return tool
+
+
+def _apply_runtime_overrides(tool: OrchidTool, tool_cfg: Any, explicit: set[str]) -> None:
+    if "requires_approval" in explicit:
+        tool.requires_approval = bool(_config_value(tool_cfg, "requires_approval"))
+    if "parallel_safe" in explicit:
+        tool.parallel_safe = bool(_config_value(tool_cfg, "parallel_safe"))
+    if "inject_to_rag" in explicit:
+        tool.inject_to_rag = bool(_config_value(tool_cfg, "inject_to_rag"))
+    if "rag_ttl" in explicit:
+        tool.rag_ttl = _config_value(tool_cfg, "rag_ttl")
+    if "rag" in explicit:
+        tool.rag_overrides = _config_value(tool_cfg, "rag")
+
+
+def _config_value(tool_cfg: Any, key: str) -> Any:
+    if hasattr(tool_cfg, key):
+        return getattr(tool_cfg, key)
+    if isinstance(tool_cfg, dict):
+        return tool_cfg.get(key)
+    return None
+
+
+def _config_explicit_fields(tool_cfg: Any) -> set[str]:
+    if isinstance(tool_cfg, dict):
+        return set(tool_cfg.keys())
+    return set(getattr(tool_cfg, "model_fields_set", set()))
+
+
+def _get_yaml_parameters(tool_cfg: Any) -> dict[str, ToolParameter] | None:
+    """Extract YAML-declared parameters from a tool config, if any."""
+    raw_params = getattr(tool_cfg, "parameters", None)
+    if raw_params is None and isinstance(tool_cfg, dict):
+        raw_params = tool_cfg.get("parameters")
+    raw_params = raw_params or {}
     if not raw_params:
-        return None  # trigger auto-extraction
+        return None
 
     params: dict[str, ToolParameter] = {}
     for param_name, param_cfg in raw_params.items():
-        # Support both Pydantic model and plain dict
         if hasattr(param_cfg, "type"):
             params[param_name] = ToolParameter(
                 name=param_name,
@@ -332,14 +265,21 @@ def _get_yaml_parameters(tool_cfg: Any) -> dict[str, ToolParameter] | None:
                 required=param_cfg.get("required", True),
                 default=param_cfg.get("default"),
             )
-    return params if params else None
+    return params or None
 
 
-def list_tools() -> list[BuiltinToolEntry]:
-    """Return all registered built-in tools."""
-    return list(_REGISTRY.values())
-
-
-def clear() -> None:
-    """Clear the registry (useful for testing)."""
-    _REGISTRY.clear()
+__all__ = [
+    "TOOL_REGISTRY",
+    "ToolParameter",
+    "build_tool_input",
+    "call_tool",
+    "clear",
+    "filter_to_schema",
+    "find_param_doc",
+    "get_tool",
+    "list_tools",
+    "load_tools_from_config",
+    "register_tool",
+    "schema_to_parameters",
+    "unregister",
+]

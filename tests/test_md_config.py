@@ -486,14 +486,8 @@ class TestLoadMDConfig:
             "    enabled: false\n"
             "tools:\n"
             "  get_player_stats:\n"
-            "    handler: examples.basketball.tools.basketball.get_player_stats\n"
+            "    class: examples.basketball.tools.basketball.GetPlayerStatsTool\n"
             "    description: Gets stats for an NBA player\n"
-            "    parameters:\n"
-            "      player_name:\n"
-            "        type: string\n"
-            "        description: Player name\n"
-            "        required: false\n"
-            "        default: ''\n"
             "---\n",
             encoding="utf-8",
         )
@@ -542,14 +536,14 @@ class TestLoadMDConfig:
             "    enabled: false\n"
             "tools:\n"
             "  get_player_stats:\n"
-            "    handler: my.tools.get_stats\n"
+            "    class: my.tools.GetStatsTool\n"
             "    description: Get stats\n"
             "---\n",
             encoding="utf-8",
         )
         config, _ = load_md_config(root, agents_dir=agents_dir)
         assert "get_player_stats" in config.tools
-        assert config.tools["get_player_stats"].handler == "my.tools.get_stats"
+        assert config.tools["get_player_stats"].class_ == "my.tools.GetStatsTool"
 
     def test_file_hashes_returned(self, tmp_path):
         root = tmp_path / "orchid.md"

@@ -21,6 +21,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # placeholder values for examples that declare external services.
 _EXAMPLES: list[tuple[Path, dict[str, str]]] = [
     (REPO_ROOT / "examples" / "basketball" / "agents.yaml", {}),
+    (REPO_ROOT / "examples" / "education" / "agents.yaml", {}),
+    (REPO_ROOT / "examples" / "festival-producer" / "agents.yaml", {}),
+    (REPO_ROOT / "examples" / "architecture_review" / "agents.yaml", {}),
     (REPO_ROOT / "examples" / "restaurant" / "config" / "agents.yaml", {}),
     (
         REPO_ROOT / "examples" / "helpdesk" / "config" / "agents.yaml",
@@ -210,3 +213,36 @@ def test_prompt_customization_example_threads_overrides() -> None:
     assert "{parent_prompt}" in advisor.mini_agent.system_prompt_template
     assert "{instruction}" in advisor.mini_agent.system_prompt_template
     assert "{tool_list}" in advisor.mini_agent.system_prompt_template
+
+
+def test_education_example_threads_agent_roles() -> None:
+    """The education example wires its four agents and top-level skills."""
+    path = REPO_ROOT / "examples" / "education" / "agents.yaml"
+    if not path.exists():
+        pytest.skip(f"Example file not present: {path}")
+    config = load_config(str(path))
+
+    assert set(config.agents) == {
+        "content-analyzer",
+        "quiz-generator",
+        "lesson-builder",
+        "format-exporter",
+    }
+    assert set(config.skills) == {
+        "generate_quiz",
+        "generate_lesson",
+        "generate_full_package",
+    }
+    assert config.events is not None
+    assert config.events.enabled is True
+    assert {schedule.id for schedule in config.events.schedules} == {"weekly-quiz-cron"}
+    assert {trigger.id for trigger in config.events.triggers} == {
+        "weekly-quiz",
+        "chat-bound-generation",
+    }
+    assert config.agents["content-analyzer"].rag.namespace == "education-source"
+    assert config.agents["quiz-generator"].mini_agent.enabled is True
+    assert config.agents["quiz-generator"].mini_agent.max_count == 4
+    assert config.agents["quiz-generator"].mini_agent.tool_allowlist_mode == "inferred"
+    assert "merge overlapping questions" in (config.agents["quiz-generator"].mini_agent.aggregator_prompt or "")
+    assert config.agents["format-exporter"].rag.enabled is False

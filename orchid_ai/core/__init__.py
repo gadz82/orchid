@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from .state import OrchidAgentState, OrchidAuthContext
 from .agent import OrchidAgent
+from .tool import OrchidTool, OrchidToolInput, OrchidToolOutput
 from .repository import (
     Document,
     OrchidSearchResult,
@@ -29,6 +30,9 @@ __all__ = [
     "OrchidAgentState",
     "OrchidAuthContext",
     "OrchidAgent",
+    "OrchidTool",
+    "OrchidToolInput",
+    "OrchidToolOutput",
     "Document",
     "OrchidRAGScope",
     "OrchidSearchResult",
