@@ -72,11 +72,20 @@ def test_get_all_returns_read_only_view():
     assert set(registry.get_all()) == {"dummy"}
 
 
-def test_load_tools_from_config_supports_class_path():
-    clear()
+def _ensure_examples_importable() -> None:
+    """Add workspace root to sys.path and skip if examples package is unavailable."""
     workspace_root = str(Path(__file__).resolve().parents[3])
     if workspace_root not in sys.path:
         sys.path.insert(0, workspace_root)
+    try:
+        import examples  # noqa: F401
+    except ImportError:
+        pytest.skip("examples package not available — only in monorepo workspace")
+
+
+def test_load_tools_from_config_supports_class_path():
+    clear()
+    _ensure_examples_importable()
     try:
         load_tools_from_config(
             {
@@ -119,9 +128,7 @@ def test_load_tools_from_config_supports_class_path():
 )
 def test_load_tools_from_config_resolves_example_tool_classes(tool_name: str, class_path: str, field_name: str):
     clear()
-    workspace_root = str(Path(__file__).resolve().parents[3])
-    if workspace_root not in sys.path:
-        sys.path.insert(0, workspace_root)
+    _ensure_examples_importable()
     try:
         load_tools_from_config({tool_name: OrchidBuiltinToolConfig(class_=class_path)})
         tool = get_tool(tool_name)
@@ -142,10 +149,8 @@ def test_load_tools_from_config_resolves_example_tool_classes(tool_name: str, cl
 )
 def test_load_tools_from_config_registers_all_tools_from_migrated_examples(config_path: str):
     clear()
+    _ensure_examples_importable()
     workspace_root = Path(__file__).resolve().parents[3]
-    workspace_root_str = str(workspace_root)
-    if workspace_root_str not in sys.path:
-        sys.path.insert(0, workspace_root_str)
     try:
         config = load_config(workspace_root / config_path)
         load_tools_from_config(config.tools)
