@@ -2,6 +2,49 @@
 
 <!-- version list -->
 
+## v1.8.3 (2026-05-27)
+
+### Bug Fixes
+
+- Add `langgraph-checkpoint-sqlite` dependency to pyproject for SQLite checkpointing support
+  ([`1ac677a`](https://github.com/gadz82/orchid/commit/1ac677a89d64743335df20fc9911655256e4615c))
+
+- Add `upload_namespace` handling and enable signal-based content delegation
+  ([`18bfd84`](https://github.com/gadz82/orchid/commit/18bfd846ad4c0539fef045e64bab9e6c267293ba))
+
+- Add dependency matrix documentation across Orchid modules
+  ([`53dc686`](https://github.com/gadz82/orchid/commit/53dc6862639da09c9a1dec4af36583801bc4e6d7))
+
+- Disambiguate duplicate resource names in render capabilities; cache by URI instead of name
+  ([`c5b9564`](https://github.com/gadz82/orchid/commit/c5b95645de0eeea713afe3c2c8f5765890d5b4e4))
+
+- Persist and restore `_current_auth` in `_run_agent` to maintain state consistency
+  ([`1a9f53a`](https://github.com/gadz82/orchid/commit/1a9f53a23485b9f95e4d108173e6dc1155d77cc2))
+
+### Chores
+
+- Remove Postgres event and queue backends; cleanup deprecated implementations
+  ([`5982dc4`](https://github.com/gadz82/orchid/commit/5982dc4e165a20ba9fff02b5e2ac992ef3ef917e))
+
+- Update documentation and code references to deprecate built-in PostgreSQL backends; standardize
+  plugin-based integration
+  ([`7d6836c`](https://github.com/gadz82/orchid/commit/7d6836c4df2376738649aea38d4c0e48b5b85ab3))
+
+### Refactoring
+
+- Centralize `sys.path` management and example package checks in tests
+  ([`bf0fee9`](https://github.com/gadz82/orchid/commit/bf0fee9f3dd8bc84f126be693becfb6dd400be2d))
+
+- Enhance plugin load logic and tooling behavior
+  ([`2fbe30d`](https://github.com/gadz82/orchid/commit/2fbe30d9234b70641746d84db6dfda3efad04ba1))
+
+- Introduce event-based lifecycle tracking in `_agentic_tool_loop`
+  ([`600baa1`](https://github.com/gadz82/orchid/commit/600baa16f2c7427e54c27b4def77e2b84cae8d84))
+
+- Migrate tool registry to `OrchidTool` abstraction for enhanced modularity
+  ([`0feb138`](https://github.com/gadz82/orchid/commit/0feb138bc6287487dd7603c8c3ab4f2111fe6731))
+
+
 ## v1.8.2 (2026-05-22)
 
 ### Bug Fixes
