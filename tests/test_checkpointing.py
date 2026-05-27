@@ -41,15 +41,7 @@ class TestBuildCheckpointerMemory:
 
 
 class TestBuildCheckpointerSQLite:
-    """build_checkpointer('sqlite') requires langgraph-checkpoint-sqlite."""
-
-    @pytest.mark.asyncio
-    async def test_sqlite_missing_package(self):
-        from orchid_ai.checkpointing import build_checkpointer
-
-        with patch.dict("sys.modules", {"langgraph.checkpoint.sqlite": None, "langgraph.checkpoint.sqlite.aio": None}):
-            with pytest.raises(ImportError, match="langgraph-checkpoint-sqlite"):
-                await build_checkpointer("sqlite", dsn="test.db")
+    """build_checkpointer('sqlite') — built-in."""
 
     @pytest.mark.asyncio
     async def test_sqlite_missing_dsn(self):
@@ -60,25 +52,18 @@ class TestBuildCheckpointerSQLite:
 
 
 class TestBuildCheckpointerPostgres:
-    """build_checkpointer('postgres') requires langgraph-checkpoint-postgres."""
+    """build_checkpointer('postgres') — requires plugin."""
 
     @pytest.mark.asyncio
-    async def test_postgres_missing_package(self):
+    async def test_postgres_missing_plugin(self):
         from orchid_ai.checkpointing import build_checkpointer
 
         with patch.dict(
             "sys.modules",
             {"langgraph.checkpoint.postgres": None, "langgraph.checkpoint.postgres.aio": None},
         ):
-            with pytest.raises(ImportError, match="langgraph-checkpoint-postgres"):
+            with pytest.raises(ImportError):
                 await build_checkpointer("postgres", dsn="postgresql://localhost/test")
-
-    @pytest.mark.asyncio
-    async def test_postgres_missing_dsn(self):
-        from orchid_ai.checkpointing import build_checkpointer
-
-        with pytest.raises(ValueError, match="DSN"):
-            await build_checkpointer("postgres", dsn="")
 
 
 class TestBuildCheckpointerCustom:

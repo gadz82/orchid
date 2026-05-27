@@ -187,6 +187,12 @@ class Orchid:
         self._owns_resources = _owns_resources
         self._closed = False
         self._agents: dict[str, OrchidAgent] = {}
+        # Load framework-managed plugins (entry-point groups for RAG
+        # backends, checkpointers, visibility fragments) on first
+        # construction — NOT at module import time.
+        from .plugins import lazy_init_plugins
+
+        lazy_init_plugins()
         self._graph = build_graph(config=config, runtime=runtime, agents_out=self._agents)
         self._inventory = OrchidMCPServerInventory.from_config(config)
         self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)
@@ -640,6 +646,19 @@ class Orchid:
         """
         return self._mcp_token_store
 
+    def inject_signal_emitter(self, emitter: Any) -> None:
+        """Inject a signal emitter into the runtime and every agent instance.
+
+        Called by ``orchid-api``'s lifecycle after the Pollen + Bloom
+        events subsystem finishes bootstrapping (which happens after
+        the framework is already built).  Once set, every
+        ``agent.emit_signal()`` call routes through *emitter*.
+        Idempotent — safe to call more than once.
+        """
+        self._runtime.signal_emitter = emitter
+        for agent in self._agents.values():
+            agent._signal_emitter = emitter
+
     @property
     def config_storage(self) -> "OrchidConfigStorage | None":
         """Database-backed config storage, or ``None`` when not configured.
@@ -687,6 +706,10 @@ class Orchid:
             )
             self._inventory = OrchidMCPServerInventory.from_config(new_snapshot.config)
             self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)
+            # Re-inject signal emitter into the new agent instances
+            if self._runtime.signal_emitter is not None:
+                for agent in self._agents.values():
+                    agent._signal_emitter = self._runtime.signal_emitter
 
         logger.info("[Orchid] Hot-reloaded graph with %d agent(s)", len(new_snapshot.config.agents))
         return True

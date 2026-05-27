@@ -30,6 +30,7 @@ from ..core.agent import OrchidAgent
 from ..core.graph_store import OrchidGraphStore
 from ..core.helpers import _filter_summary_messages
 from ..core.mcp import OrchidMCPClient
+from ..observability.mini_agent_events import make_event_message
 from ..core.repository import OrchidVectorReader
 from ..core.retrieval import apply_pre_strategy
 from ..core.state import OrchidAgentState, OrchidAuthContext
@@ -210,6 +211,15 @@ class GenericAgent(OrchidAgent):
         if skill_name:
             logger.info("[%s] Running agent skill '%s'", self.name, skill_name)
             skill = self._config.skills[skill_name]
+            loop_events = [
+                make_event_message(
+                    "skill.adopted",
+                    {
+                        "agent": self.name,
+                        "skill": skill_name,
+                    },
+                )
+            ]
             skill_run_start = time.perf_counter()
             mcp_data = await self._skill_executor.run_skill(skill_name, skill.steps, query, auth)
             skill_run_elapsed = (time.perf_counter() - skill_run_start) * 1000
@@ -225,7 +235,7 @@ class GenericAgent(OrchidAgent):
             # Unified agentic loop: MCP + built-in tools in a single
             # native tool_calls conversation with duplicate detection.
             loop_start = time.perf_counter()
-            final_text, mcp_data = await self._agentic_tool_loop(
+            final_text, mcp_data, loop_events = await self._agentic_tool_loop(
                 query,
                 auth,
                 state,
@@ -271,8 +281,11 @@ class GenericAgent(OrchidAgent):
 
         await self._store_agent_turn(state, summary)
 
+        output_messages: list = [AIMessage(content=f"[{self.name.title()} Agent]\n{summary}")]
+        for evt in loop_events:
+            output_messages.insert(0, evt)
         return {
-            "messages": [AIMessage(content=f"[{self.name.title()} Agent]\n{summary}")],
+            "messages": output_messages,
             "mcp_context": {self.name: mcp_data},
             "rag_context": {self.name: rag_data},
         }
@@ -551,22 +564,24 @@ class GenericAgent(OrchidAgent):
         *,
         skip_tools: set[str] | None = None,
         content_sources: Any = None,
-    ) -> tuple[str | None, dict[str, Any]]:
+    ) -> tuple[str | None, dict[str, Any], list]:
         """Unified MCP + built-in tool loop using native ``tool_calls``.
 
         Delegates to :class:`AgenticLoop` which owns the multi-round
         lifecycle (duplicate tracking, max-round safety, HITL interrupts).
 
-        Returns ``(final_text, tool_results)``.  ``final_text`` is ``None``
-        when the loop exhausted rounds without producing text (caller
-        should fall back to summarisation).
+        Returns ``(final_text, tool_results, events)``.  ``final_text`` is
+        ``None`` when the loop exhausted rounds without producing text
+        (caller should fall back to summarisation).  ``events`` is a list
+        of lifecycle ``SystemMessage`` objects (``tool.started``,
+        ``tool.finished``) collected during dispatch.
         """
         from .agentic_loop import AgenticLoop
         from .tools import build_langchain_tools
 
         llm_config = self._config.llm
         if not self._chat_model:
-            return None, {}
+            return None, {}, []
 
         # ── Discover MCP capabilities ───────────────────────
         caps = await self._mcp_dispatcher.render_capabilities(auth, agent_name=self.name)
@@ -582,7 +597,7 @@ class GenericAgent(OrchidAgent):
         )
         all_tool_defs = mcp_tool_defs + builtin_tool_defs
         if not all_tool_defs:
-            return None, {}
+            return None, {}, []
 
         # ── Build LangChain tool wrappers ───────────────────
         lc_tools = build_langchain_tools(
@@ -626,7 +641,8 @@ class GenericAgent(OrchidAgent):
             temperature=llm_config.temperature if llm_config else 0.2,
             parallel_safety=parallel_safety,
         )
-        return await loop.run(messages)
+        final_text, tool_results = await loop.run(messages)
+        return final_text, tool_results, loop._events
 
     # ── Parallel-dispatch safety resolver ───────────────────────
 

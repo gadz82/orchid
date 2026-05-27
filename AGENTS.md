@@ -31,14 +31,10 @@ orchid/
     documents/            Parsers (PDF/DOCX/XLSX/CSV/Image), chunker, pipeline
     persistence/          OrchidChatStorage + OrchidMCPTokenStore + gateway-state stores + shared migrations:
       sqlite.py                       OrchidSQLiteChatStorage (default, aiosqlite — core dep)
-      postgres.py                     OrchidPostgresChatStorage (optional, asyncpg)
-      config_postgres.py              OrchidPostgresConfigStorage (agent config CRUD)
       mcp_token_sqlite.py             OrchidSQLiteMCPTokenStore (outbound MCP OAuth tokens)
-      mcp_token_postgres.py           OrchidPostgresMCPTokenStore
       mcp_token_factory.py            build_mcp_token_store()
       mcp_client_registration_*.py    Per-server discovered endpoints + DCR creds (RFC 7591)
       mcp_gateway_state_sqlite.py     Inbound gateway-state store (SQLite)
-      mcp_gateway_state_postgres.py   Inbound gateway-state store (Postgres)
       mcp_gateway_state_factory.py    build_mcp_gateway_state_store()
       migrations/                     Unified v001 — chat + outbound MCP + inbound gateway tables
     mcp/                  StreamableHttpMCPClient + OrchidMCPAuthRegistry
@@ -100,7 +96,7 @@ documents/   → core/  (standalone)
 | litellm | Multi-provider LLM routing (fallback) | Core |
 | qdrant-client | Vector DB client | Core |
 | aiosqlite | SQLite async driver (default storage) | Core |
-| asyncpg | PostgreSQL async driver | Optional (`orchid-ai[postgres]`) |
+| asyncpg | PostgreSQL async driver | Optional (via `orchid-storage-postgres`) |
 | langchain-openai | OpenAI provider (optional, improves perf) | Optional |
 | langchain-google-genai | Google AI provider (optional) | Optional |
 | langchain-ollama | Ollama provider (optional) | Optional |
@@ -280,7 +276,7 @@ block in `agents.yaml`:
 ```yaml
 config_storage:
   enabled: true
-  class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+  class: orchid_storage_postgres.OrchidPostgresConfigStorage  # install orchid-storage-postgres plugin
   dsn: postgresql://user:pass@host:5432/db
 ```
 

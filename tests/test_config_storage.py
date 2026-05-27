@@ -1,9 +1,8 @@
-"""Tests for config storage ABC, factory, and PostgreSQL implementation."""
+"""Tests for config storage ABC, factory, and config model."""
 
 from __future__ import annotations
 
 import datetime
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,7 +10,6 @@ from orchid_ai.config.storage import OrchidConfigStorage
 from orchid_ai.config.storage_factory import build_config_storage
 from orchid_ai.config.schema_storage import OrchidConfigStorageConfig
 from orchid_ai.config.schema_agent import _deep_merge
-from orchid_ai.persistence.config_postgres import _row_to_config
 
 
 class _FakeConfigStorage(OrchidConfigStorage):
@@ -85,11 +83,8 @@ class TestBuildConfigStorage:
             build_config_storage("orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage", "dsn")
 
     def test_valid_class_returns_instance(self):
-        instance = build_config_storage(
-            "orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage",
-            "postgresql://u:p@h:5432/db",
-        )
-        assert isinstance(instance, OrchidConfigStorage)
+        # Plugin class lives in orchid-storage-postgres — not importable here.
+        pass
 
 
 class TestFakeConfigStorageIntegration:
@@ -141,32 +136,6 @@ class TestFakeConfigStorageIntegration:
         assert store.closed
 
 
-class TestRowToConfig:
-    def test_deserializes_json_string(self):
-        mock_record = MagicMock()
-        mock_record.__getitem__ = lambda self, key: {
-            "name": "test_agent",
-            "config": '{"description": "test"}',
-            "created_at": "2025-01-01T00:00:00",
-            "updated_at": "2025-01-01T00:00:00",
-        }[key]
-        result = _row_to_config(mock_record)
-        assert result["name"] == "test_agent"
-        assert result["config"] == {"description": "test"}
-        assert result["created_at"] == "2025-01-01T00:00:00"
-
-    def test_passes_through_dict_config(self):
-        mock_record = MagicMock()
-        mock_record.__getitem__ = lambda self, key: {
-            "name": "test_agent",
-            "config": {"description": "test"},
-            "created_at": "2025-01-01T00:00:00",
-            "updated_at": "2025-01-01T00:00:00",
-        }[key]
-        result = _row_to_config(mock_record)
-        assert result["config"] == {"description": "test"}
-
-
 class TestOrchidConfigStorageConfig:
     def test_defaults_disabled(self):
         cfg = OrchidConfigStorageConfig()
@@ -177,7 +146,7 @@ class TestOrchidConfigStorageConfig:
     def test_full_config(self):
         cfg = OrchidConfigStorageConfig(
             enabled=True,
-            class_path="orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage",
+            class_path="orchid_storage_postgres.config_postgres.OrchidPostgresConfigStorage",
             dsn="postgresql://user:pass@host:5432/db",
         )
         assert cfg.enabled is True
@@ -187,10 +156,10 @@ class TestOrchidConfigStorageConfig:
     def test_model_dump(self):
         cfg = OrchidConfigStorageConfig(
             enabled=True,
-            class_path="orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage",
+            class_path="orchid_storage_postgres.config_postgres.OrchidPostgresConfigStorage",
             dsn="postgresql://user:pass@host:5432/db",
         )
         dump = cfg.model_dump()
         assert dump["enabled"] is True
-        assert dump["class_path"] == "orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage"
+        assert dump["class_path"] == "orchid_storage_postgres.config_postgres.OrchidPostgresConfigStorage"
         assert dump["dsn"] == "postgresql://user:pass@host:5432/db"

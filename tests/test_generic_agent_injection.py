@@ -62,7 +62,7 @@ async def test_no_injection_when_no_injectable_tools():
             agent,
             "_agentic_tool_loop",
             new_callable=AsyncMock,
-            return_value=(None, {}),
+            return_value=(None, {}, []),
         ),
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
@@ -100,7 +100,7 @@ async def test_injection_only_for_opted_in_mcp_tools():
             agent,
             "_agentic_tool_loop",
             new_callable=AsyncMock,
-            return_value=(None, mcp_results),
+            return_value=(None, mcp_results, []),
         ),
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
@@ -135,7 +135,7 @@ async def test_injection_only_for_opted_in_builtin_tools():
             agent,
             "_agentic_tool_loop",
             new_callable=AsyncMock,
-            return_value=(None, tool_results),
+            return_value=(None, tool_results, []),
         ),
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
@@ -171,7 +171,7 @@ async def test_no_injection_when_rag_disabled():
             agent,
             "_agentic_tool_loop",
             new_callable=AsyncMock,
-            return_value=(None, {"tool_a": "data"}),
+            return_value=(None, {"tool_a": "data"}, []),
         ),
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
@@ -212,7 +212,7 @@ async def test_cache_hit_skips_tool_in_agentic_loop():
             agent,
             "_agentic_tool_loop",
             new_callable=AsyncMock,
-            return_value=(None, {"fresh_tool": "fresh data"}),
+            return_value=(None, {"fresh_tool": "fresh data"}, []),
         ) as mock_loop,
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock),
     ):
@@ -249,7 +249,7 @@ async def test_cache_miss_calls_tool_normally():
             agent,
             "_agentic_tool_loop",
             new_callable=AsyncMock,
-            return_value=(None, {"tool_a": "fresh"}),
+            return_value=(None, {"tool_a": "fresh"}, []),
         ) as mock_loop,
         patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock),
     ):
@@ -276,7 +276,7 @@ async def test_no_cache_check_when_no_ttls():
         agent,
         "_agentic_tool_loop",
         new_callable=AsyncMock,
-        return_value=(None, {}),
+        return_value=(None, {}, []),
     ):
         await agent.run(_make_state())
         agent.reader.lookup_cached_tool_results.assert_not_called()

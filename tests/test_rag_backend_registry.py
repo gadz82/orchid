@@ -35,10 +35,9 @@ class TestVectorBackendRegistry:
         assert "null" in VECTOR_BACKEND_REGISTRY
         assert isinstance(build_reader(vector_backend="null"), NullVectorReader)
 
-    def test_qdrant_built_in(self):
-        # We assert registration only — actually constructing QdrantRepository
-        # would attempt a network connection.
-        assert "qdrant" in VECTOR_BACKEND_REGISTRY
+    def test_qdrant_not_built_in(self):
+        # Qdrant moved to orchid-rag-qdrant plugin package.
+        assert "qdrant" not in VECTOR_BACKEND_REGISTRY
 
     def test_register_custom_and_build(self):
         class _MyReader(OrchidVectorReader):
@@ -56,8 +55,8 @@ class TestVectorBackendRegistry:
             VECTOR_BACKEND_REGISTRY.pop("custom-vec", None)
 
     def test_unknown_raises_with_helpful_message(self):
-        with pytest.raises(ValueError, match="register_vector_backend"):
-            build_reader(vector_backend="not-real")
+        with pytest.raises(ValueError, match="pip install"):
+            build_reader(vector_backend="qdrant")
 
     def test_overwrite_logs_warning(self, caplog):
         with caplog.at_level("WARNING"):
@@ -87,10 +86,9 @@ class TestDocStoreBackendRegistry:
         assert "in_memory" in DOC_STORE_BACKEND_REGISTRY
         assert isinstance(build_doc_store(doc_store_backend="in_memory"), InMemoryDocStore)
 
-    def test_qdrant_registered(self):
-        # Constructing the qdrant backend would need a live URL — assert
-        # registration only.
-        assert "qdrant" in DOC_STORE_BACKEND_REGISTRY
+    def test_qdrant_not_registered(self):
+        # Qdrant moved to orchid-rag-qdrant plugin package.
+        assert "qdrant" not in DOC_STORE_BACKEND_REGISTRY
 
     def test_register_custom(self):
         class _MyStore(OrchidDocStore):
@@ -128,10 +126,9 @@ class TestGraphStoreBackendRegistry:
         assert "in_memory" in GRAPH_STORE_BACKEND_REGISTRY
         assert isinstance(build_graph_store(graph_store_backend="in_memory"), InMemoryGraphStore)
 
-    def test_neo4j_registered(self):
-        # Constructing the neo4j backend would need the optional extra
-        # — assert registration only.
-        assert "neo4j" in GRAPH_STORE_BACKEND_REGISTRY
+    def test_neo4j_not_registered(self):
+        # Neo4j moved to orchid-rag-neo4j plugin package.
+        assert "neo4j" not in GRAPH_STORE_BACKEND_REGISTRY
 
     def test_register_custom(self):
         class _MyGraph(OrchidGraphStore):

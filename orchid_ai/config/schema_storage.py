@@ -18,7 +18,7 @@ class OrchidConfigStorageConfig(BaseModel):
 
         config_storage:
           enabled: true
-          class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+          class: orchid_storage_postgres.OrchidPostgresConfigStorage  # install orchid-storage-postgres plugin
           dsn: postgresql://user:pass@host:5432/db
 
     Attributes
@@ -29,7 +29,7 @@ class OrchidConfigStorageConfig(BaseModel):
         Dotted Python import path of the storage backend.
         Must subclass ``OrchidConfigStorage``.
         Examples:
-          - ``orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage``
+          - ``orchid_storage_postgres.OrchidPostgresConfigStorage``
     dsn : str
         Data-source name / connection string for the backend.
         For PostgreSQL: ``postgresql://user:pass@host:5432/dbname``

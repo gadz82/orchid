@@ -2,9 +2,9 @@
 Factory for chat storage backends.
 
 Resolves a dotted class path to a concrete ``OrchidChatStorage`` implementation
-and instantiates it.  The library ships built-in SQLite (default) and
-PostgreSQL backends; consumers can provide alternative backends via
-dotted import paths.
+and instantiates it.  The library ships a built-in SQLite backend (default);
+PostgreSQL is available via the ``orchid-storage-postgres`` plugin package.
+Consumers can provide alternative backends via dotted import paths.
 
 Usage:
     storage = build_chat_storage(
@@ -23,6 +23,23 @@ from .base import OrchidChatStorage
 
 logger = logging.getLogger(__name__)
 
+_STORAGE_PACKAGE_HINTS = {
+    "orchid_storage_postgres.": "orchid-storage-postgres",
+}
+
+
+def _augment_import_error(class_path: str, exc: Exception) -> ImportError:
+    msg = (
+        f"Cannot resolve chat storage class '{class_path}'. "
+        f"Ensure it is a valid dotted import path to a OrchidChatStorage subclass. "
+        f"Error: {exc}"
+    )
+    for prefix, package in _STORAGE_PACKAGE_HINTS.items():
+        if class_path.startswith(prefix):
+            msg += f" Install the missing plugin: pip install {package}"
+            break
+    return ImportError(msg)
+
 
 def build_chat_storage(
     class_path: str,
@@ -37,7 +54,7 @@ def build_chat_storage(
     ----------
     class_path : str
         Fully-qualified dotted path to a ``OrchidChatStorage`` subclass.
-        Example: ``"orchid_ai.persistence.postgres.OrchidPostgresChatStorage"``
+        Example: ``"orchid_storage_postgres.OrchidPostgresChatStorage"``
     dsn : str
         Connection string (PostgreSQL DSN) or file path (SQLite).
         Passed as ``dsn=`` keyword to the constructor.
@@ -55,11 +72,7 @@ def build_chat_storage(
     try:
         cls = import_class(class_path)
     except ImportError as exc:
-        raise ImportError(
-            f"Cannot resolve chat storage class '{class_path}'. "
-            f"Ensure it is a valid dotted import path to a OrchidChatStorage subclass. "
-            f"Error: {exc}"
-        ) from exc
+        raise _augment_import_error(class_path, exc) from exc
 
     if not (isinstance(cls, type) and issubclass(cls, OrchidChatStorage)):
         raise TypeError(f"'{class_path}' resolves to {cls!r}, which is not a OrchidChatStorage subclass.")

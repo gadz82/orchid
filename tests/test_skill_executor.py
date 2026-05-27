@@ -93,8 +93,8 @@ class TestBuiltinStepSignatureFiltering:
         assert received["search_text"] == "test query"
 
     @pytest.mark.asyncio
-    async def test_tool_with_kwargs_receives_everything(self):
-        """Tools with **kwargs get all available params."""
+    async def test_tool_with_kwargs_does_not_leak_framework_params(self):
+        """Tools with **kwargs do NOT receive framework params unless explicitly declared."""
         received_keys = set()
 
         def flexible_tool(**kwargs):
@@ -119,10 +119,12 @@ class TestBuiltinStepSignatureFiltering:
             step_arguments={"extra": "val"},
             previous_results={"prev": "data"},
         )
-        assert "query" in received_keys
-        assert "auth_context" in received_keys
+        # Framework params are stripped — only business params reach **kwargs.
+        assert "query" not in received_keys
+        assert "auth_context" not in received_keys
+        assert "context" not in received_keys
+        assert "content_sources" not in received_keys
         assert "extra" in received_keys
-        assert "context" in received_keys
 
     @pytest.mark.asyncio
     async def test_previous_results_as_context(self):

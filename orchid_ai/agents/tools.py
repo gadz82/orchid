@@ -112,12 +112,15 @@ class BuiltinToolWrapper(BaseTool):
         raise NotImplementedError("BuiltinToolWrapper is async-only; use ainvoke()")
 
     async def _arun(self, **kwargs: Any) -> str:
-        from ..config.tool_registry import call_tool
+        from ..config.tool_registry import build_tool_input, get_tool
 
         call_start = time.perf_counter()
         try:
-            result = await call_tool(self.name, auth_context=self.auth, content_sources=self.content_sources, **kwargs)
+            tool = get_tool(self.name)
+            tool_input = build_tool_input(tool, auth_context=self.auth, content_sources=self.content_sources, **kwargs)
+            output = await tool.invoke(tool_input)
             elapsed = (time.perf_counter() - call_start) * 1000
+            result = output.result
             text = json.dumps(result, default=str) if not isinstance(result, str) else result
             perf_logger.info(
                 "[PERF][agent=%s][builtin.call] tool=%s took %.1f ms (out_chars=%d)",

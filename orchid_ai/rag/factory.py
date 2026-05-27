@@ -8,13 +8,13 @@ composition root before constructing :class:`Orchid`.
 
 Built-ins register on import:
 
-  * vector       — ``null``, ``qdrant``
-  * doc_store    — ``null``, ``in_memory``, ``qdrant``
-  * graph_store  — ``null``
+  * vector       — ``null``
+  * doc_store    — ``null``, ``in_memory``
+  * graph_store  — ``null``, ``in_memory``
   * sparse       — ``bm25``
 
-Stage 5+ backends (``in_memory`` and ``neo4j`` graph stores, ``splade``
-sparse encoder) register from their own modules in their landing stages.
+External backends (Qdrant, Neo4j, ChromaDB) register automatically via
+Python entry points when their plugin package is installed.
 
 The factories are deliberately permissive about ``**settings`` — each
 builder picks only the kwargs it needs.  This keeps ``build_reader``'s
@@ -31,8 +31,8 @@ from ..core.doc_store import OrchidDocStore
 from ..core.graph_store import OrchidGraphStore
 from ..core.repository import OrchidVectorReader
 from ..core.sparse import OrchidSparseEncoder
+from ..plugins import iter_entry_point_plugins
 from .backends.null import NullDocStore, NullGraphStore, NullVectorReader
-from .embeddings import build_embeddings, get_embedding_dimension
 from .sparse import get_sparse_encoder, register_sparse_encoder  # re-exported below
 
 logger = logging.getLogger(__name__)
@@ -68,9 +68,31 @@ def register_vector_backend(name: str, builder: VectorBackendBuilder) -> None:
     logger.debug("[VectorBackends] Registered '%s'", name)
 
 
+_BACKEND_PACKAGE_HINTS = {
+    "qdrant": "orchid-rag-qdrant",
+    "neo4j": "orchid-rag-neo4j",
+    "chroma": "orchid-rag-chroma",
+}
+
+
+def _format_missing_backend_error(name: str, backend_type: str) -> str:
+    hint = _BACKEND_PACKAGE_HINTS.get(name)
+    lines = [
+        f"Unknown {backend_type} backend {name!r}.",
+    ]
+    if hint:
+        lines.append(f"Install the missing plugin: pip install {hint}")
+    lines.append(
+        f"Registered built-ins: {sorted(VECTOR_BACKEND_REGISTRY)}. "
+        f"Call register_{backend_type}_backend({name!r}, builder) "
+        f"before constructing Orchid."
+    )
+    return " ".join(lines)
+
+
 def build_reader(
     *,
-    vector_backend: str = "qdrant",
+    vector_backend: str = "null",
     **settings: Any,
 ) -> OrchidVectorReader:
     """Build a vector reader by registry name.
@@ -78,15 +100,18 @@ def build_reader(
     Raises :class:`ValueError` with the registered names listed when
     ``vector_backend`` is unknown — easier to spot a YAML typo than a
     silent fall-through.
+
+    **Default is ``"null"``** (no vector database).  This is intentional:
+    when no vector backend is configured, retrieval returns an empty result
+    set and logs a warning at retrieval time.  The application continues
+    to function — agents respond without RAG context — so a missing plugin
+    or misconfigured backend does not crash the process.  Operators will
+    see ``[NullVectorReader] retrieve() called — no vector backend configured``
+    in the logs, making the degradation visible without breaking requests.
     """
     builder = VECTOR_BACKEND_REGISTRY.get(vector_backend)
     if builder is None:
-        raise ValueError(
-            f"Unknown vector backend {vector_backend!r}. "
-            f"Registered: {sorted(VECTOR_BACKEND_REGISTRY)}. "
-            f"Call register_vector_backend({vector_backend!r}, builder) "
-            f"before constructing Orchid."
-        )
+        raise ValueError(_format_missing_backend_error(vector_backend, "vector"))
     return builder(**settings)
 
 
@@ -105,12 +130,7 @@ def build_doc_store(*, doc_store_backend: str = "null", **settings: Any) -> Orch
     """Build a doc store by registry name."""
     builder = DOC_STORE_BACKEND_REGISTRY.get(doc_store_backend)
     if builder is None:
-        raise ValueError(
-            f"Unknown doc store backend {doc_store_backend!r}. "
-            f"Registered: {sorted(DOC_STORE_BACKEND_REGISTRY)}. "
-            f"Call register_doc_store_backend({doc_store_backend!r}, builder) "
-            f"before constructing Orchid."
-        )
+        raise ValueError(_format_missing_backend_error(doc_store_backend, "doc_store"))
     return builder(**settings)
 
 
@@ -129,12 +149,7 @@ def build_graph_store(*, graph_store_backend: str = "null", **settings: Any) -> 
     """Build a graph store by registry name."""
     builder = GRAPH_STORE_BACKEND_REGISTRY.get(graph_store_backend)
     if builder is None:
-        raise ValueError(
-            f"Unknown graph store backend {graph_store_backend!r}. "
-            f"Registered: {sorted(GRAPH_STORE_BACKEND_REGISTRY)}. "
-            f"Call register_graph_store_backend({graph_store_backend!r}, builder) "
-            f"before constructing Orchid."
-        )
+        raise ValueError(_format_missing_backend_error(graph_store_backend, "graph_store"))
     return builder(**settings)
 
 
@@ -162,30 +177,6 @@ def _build_null_reader(**_settings: Any) -> OrchidVectorReader:
     return NullVectorReader()
 
 
-def _build_qdrant_reader(
-    *,
-    qdrant_url: str = "http://qdrant:6333",
-    embedding_model: str = "text-embedding-3-small",
-    **_settings: Any,
-) -> OrchidVectorReader:
-    from .backends.qdrant import QdrantRepository
-
-    embeddings = build_embeddings(embedding_model)
-    dimension = get_embedding_dimension(embedding_model)
-    repo = QdrantRepository(
-        url=qdrant_url,
-        embeddings=embeddings,
-        embedding_dimension=dimension,
-    )
-    logger.info(
-        "[RAG] Using QdrantRepository (url=%s, model=%s, dim=%d)",
-        qdrant_url,
-        embedding_model,
-        dimension,
-    )
-    return repo
-
-
 def _build_null_doc_store(**_settings: Any) -> OrchidDocStore:
     return NullDocStore()
 
@@ -194,17 +185,6 @@ def _build_in_memory_doc_store(**_settings: Any) -> OrchidDocStore:
     from .backends.in_memory_doc_store import InMemoryDocStore
 
     return InMemoryDocStore()
-
-
-def _build_qdrant_doc_store(
-    *,
-    qdrant_url: str = "http://qdrant:6333",
-    doc_store_collection: str = "__doc_store__",
-    **_settings: Any,
-) -> OrchidDocStore:
-    from .backends.qdrant_doc_store import QdrantDocStore
-
-    return QdrantDocStore(url=qdrant_url, collection_name=doc_store_collection)
 
 
 def _build_null_graph_store(**_settings: Any) -> OrchidGraphStore:
@@ -217,32 +197,34 @@ def _build_in_memory_graph_store(**_settings: Any) -> OrchidGraphStore:
     return InMemoryGraphStore()
 
 
-def _build_neo4j_graph_store(
-    *,
-    neo4j_url: str = "bolt://localhost:7687",
-    neo4j_user: str = "",
-    neo4j_password: str = "",
-    neo4j_database: str = "neo4j",
-    **_settings: Any,
-) -> OrchidGraphStore:
-    from .backends.neo4j_graph import Neo4jGraphStore
-
-    return Neo4jGraphStore(
-        url=neo4j_url,
-        user=neo4j_user,
-        password=neo4j_password,
-        database=neo4j_database,
-    )
-
-
 register_vector_backend("null", _build_null_reader)
-register_vector_backend("qdrant", _build_qdrant_reader)
 register_doc_store_backend("null", _build_null_doc_store)
 register_doc_store_backend("in_memory", _build_in_memory_doc_store)
-register_doc_store_backend("qdrant", _build_qdrant_doc_store)
 register_graph_store_backend("null", _build_null_graph_store)
 register_graph_store_backend("in_memory", _build_in_memory_graph_store)
-register_graph_store_backend("neo4j", _build_neo4j_graph_store)
+
+
+# ── Load external backends via entry points ───────────────────
+# Called from :func:`orchid_ai.plugins.lazy_init_plugins` on
+# first :class:`orchid_ai.Orchid` construction.
+
+
+def _load_entry_point_backends() -> None:
+    for name, register_fn in iter_entry_point_plugins("orchid.vector_backends"):
+        try:
+            register_fn()
+        except Exception as exc:
+            logger.warning("[VectorBackends] Failed to load plugin '%s': %s", name, exc)
+    for name, register_fn in iter_entry_point_plugins("orchid.doc_store_backends"):
+        try:
+            register_fn()
+        except Exception as exc:
+            logger.warning("[DocStoreBackends] Failed to load plugin '%s': %s", name, exc)
+    for name, register_fn in iter_entry_point_plugins("orchid.graph_store_backends"):
+        try:
+            register_fn()
+        except Exception as exc:
+            logger.warning("[GraphStoreBackends] Failed to load plugin '%s': %s", name, exc)
 
 
 __all__ = [

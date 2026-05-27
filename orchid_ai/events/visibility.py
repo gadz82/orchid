@@ -9,10 +9,10 @@ The ``visibility`` model on ``JobRun`` rows splits the world into:
 
 Two flavours of filter ship here:
 
-- :func:`build_run_filter_clause` returns SQL fragments for the two
-  dialects we ship (Postgres + SQLite).  Routers paste this onto
-  every ``SELECT FROM job_runs`` (and onto ``signals`` queries via
-  the join).
+- :func:`build_run_filter_clause` returns SQL fragments for the built-in
+  SQLite dialect.  The PostgreSQL fragment lives in ``orchid-storage-postgres``.
+  Routers paste this onto every ``SELECT FROM job_runs`` (and onto
+  ``signals`` queries via the join).
 - :func:`run_is_visible` is the in-memory predicate used by tests
   and by the in-memory backend (which skips SQL).
 
@@ -23,20 +23,48 @@ role.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
 class _Filter:
     """SQL fragment + param map.  Routers AND ``where`` onto their
-    ``SELECT`` and pass ``params`` to asyncpg / aiosqlite."""
+    ``SELECT`` and pass ``params`` to asyncpg / aiosqlite.
+
+    **Dialect conventions:**
+
+    - **SQLite** (``:param``-style): ``params`` keys are named bind
+      parameters.  Consumers pass ``**params`` to ``aiosqlite``.
+    - **PostgreSQL** (``$1..$N``-style): ``params`` keys are
+      documentation-only; the consumer must extract values in
+      **insertion order** and pass them positionally to ``asyncpg``.
+      The fragment implementation MUST insert params in the same
+      order as the ``$N`` placeholders appear in ``where``."""
 
     where: str
     params: dict[str, Any]
 
 
-def build_run_filter_clause(auth: Any, *, dialect: str = "postgres") -> _Filter:
+# Pluggable registry for dialect-specific SQL fragments.
+# Plugins (e.g. orchid-storage-postgres) register their fragments here.
+_VISIBILITY_FRAGMENT_REGISTRY: dict[str, Callable[..., _Filter]] = {}
+
+
+def register_visibility_fragment(dialect: str, fn: Callable[..., _Filter]) -> None:
+    """Register a dialect-specific ``build_run_filter_clause`` implementation.
+
+    Called by plugin packages at import time via the
+    ``orchid.visibility_fragments`` entry-point group.
+    """
+    _VISIBILITY_FRAGMENT_REGISTRY[dialect] = fn
+    logger.debug("[Visibility] Registered fragment for dialect: %s", dialect)
+
+
+def build_run_filter_clause(auth: Any, *, dialect: str = "sqlite") -> _Filter:
     """Return a ``WHERE`` fragment + bind params for the caller.
 
     ``auth`` must expose ``tenant_key``, ``user_id``, and ``roles``
@@ -44,33 +72,19 @@ def build_run_filter_clause(auth: Any, *, dialect: str = "postgres") -> _Filter:
     short-circuit to a tenant-only filter; everyone else gets
     visibility-by-row.
 
-    The fragment uses **named parameters** for asyncpg-Postgres
-    (``$N``-style binding requires an ordered tuple) and named
-    parameters for sqlite (``:tenant``-style).  Callers pick a
-    placeholder format with ``dialect``.
+    The fragment uses named parameters (``:tenant_key``-style) for SQLite.
+    Callers with other dialects should register a fragment via
+    :func:`register_visibility_fragment`.
     """
+    # Delegate to a registered plugin fragment when available.
+    plugin_fn = _VISIBILITY_FRAGMENT_REGISTRY.get(dialect)
+    if plugin_fn is not None:
+        return plugin_fn(auth)
+
     tenant_key = getattr(auth, "tenant_key", "default")
     user_id = getattr(auth, "user_id", "")
     roles = getattr(auth, "roles", frozenset())
 
-    if dialect == "postgres":
-        if "admin" in roles:
-            return _Filter(
-                where="tenant_key = $1",
-                params={"$1": tenant_key},
-            )
-        return _Filter(
-            where=(
-                "tenant_key = $1 AND ("
-                "visibility = 'tenant' "
-                "OR (visibility IN ('actor', 'addressed') "
-                "    AND visibility_user_id = $2)"
-                ")"
-            ),
-            params={"$1": tenant_key, "$2": user_id},
-        )
-
-    # SQLite (and other ``?``/named placeholder dialects).
     if "admin" in roles:
         return _Filter(
             where="tenant_key = :tenant_key",
@@ -92,7 +106,7 @@ def run_is_visible(run: Any, auth: Any) -> bool:
     """In-memory predicate over a :class:`JobRun`.
 
     Mirrors the SQL filter exactly so the in-memory backend used by
-    Phase 1's tests stays in lock-step with the durable backends.
+    tests stays in lock-step with the durable backends.
     Returns ``False`` for cross-tenant access regardless of role.
 
     ``run`` must expose ``spec.visibility``, ``spec.visibility_user_id``,
@@ -147,3 +161,21 @@ def _run_tenant_key(run: Any) -> str | None:
         if isinstance(candidate, str) and candidate:
             return candidate
     return None
+
+
+# ── Load external visibility fragments via entry points ─────
+
+
+def _load_entry_point_visibility_fragments() -> None:
+    """Load registered visibility fragment builders.
+
+    Called from :func:`orchid_ai.plugins.lazy_init_plugins` on
+    first :class:`orchid_ai.Orchid` construction.
+    """
+    from ..plugins import iter_entry_point_plugins
+
+    for _ep_name, _ep_register in iter_entry_point_plugins("orchid.visibility_fragments"):
+        try:
+            _ep_register()
+        except Exception as _exc:
+            logger.warning("[Visibility] Failed to load plugin '%s': %s", _ep_name, _exc)

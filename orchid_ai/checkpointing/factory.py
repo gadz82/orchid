@@ -1,10 +1,9 @@
 """
 Factory for LangGraph checkpointers — pluggable state persistence.
 
-Resolves well-known type strings (``"memory"``, ``"sqlite"``, ``"postgres"``)
-or any dotted class path to a ``BaseCheckpointSaver`` instance.  Integrators
-can use the built-in types or provide a fully-qualified class path to a
-custom ``BaseCheckpointSaver`` subclass.
+Resolves well-known type strings (``"memory"``, ``"sqlite"``) or any dotted
+class path to a ``BaseCheckpointSaver`` instance.  SQLite is built-in;
+PostgreSQL ships in ``orchid-storage-postgres``.
 
 Example — built-in types::
 
@@ -13,10 +12,10 @@ Example — built-in types::
     # In-memory (testing / dev)
     saver = await build_checkpointer("memory")
 
-    # SQLite (requires: pip install langgraph-checkpoint-sqlite)
+    # SQLite (built-in)
     saver = await build_checkpointer("sqlite", dsn="~/.orchid/checkpoints.db")
 
-    # PostgreSQL (requires: pip install langgraph-checkpoint-postgres)
+    # PostgreSQL (requires: pip install orchid-storage-postgres)
     saver = await build_checkpointer("postgres", dsn="postgresql://...")
 
 Example — custom class::
@@ -44,6 +43,7 @@ from typing import Any, Callable, Coroutine
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from ..plugins import iter_entry_point_plugins
 from ..utils import import_class
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,23 @@ logger = logging.getLogger(__name__)
 # Registry for custom built-in checkpointer types.
 # Maps type string → async factory callable(dsn) -> BaseCheckpointSaver
 _CHECKPOINTER_REGISTRY: dict[str, Callable[..., Coroutine[Any, Any, BaseCheckpointSaver]]] = {}
+
+_CHECKPOINTER_PACKAGE_HINTS: dict[str, str] = {
+    "orchid_storage_postgres.": "orchid-storage-postgres",
+}
+
+
+def _augment_checkpointer_import_error(class_path: str, exc: Exception) -> ImportError:
+    msg = (
+        f"Cannot resolve checkpointer class '{class_path}'. "
+        f"Ensure it is a valid dotted import path to a BaseCheckpointSaver subclass. "
+        f"Error: {exc}"
+    )
+    for prefix, package in _CHECKPOINTER_PACKAGE_HINTS.items():
+        if class_path.startswith(prefix):
+            msg += f" Install the missing plugin: pip install {package}"
+            break
+    return ImportError(msg)
 
 
 def register_checkpointer(
@@ -120,51 +137,34 @@ async def build_checkpointer(
         return MemorySaver()
 
     if checkpointer_type == "sqlite":
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
         if not resolved_dsn:
-            raise ValueError("SQLite checkpointer requires a DSN (file path), e.g. '~/.orchid/checkpoints.db'")
-        try:
-            from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-        except ImportError as exc:
-            raise ImportError(
-                "SQLite checkpointer requires the 'langgraph-checkpoint-sqlite' package. "
-                "Install it with: pip install langgraph-checkpoint-sqlite"
-            ) from exc
-
-        saver = AsyncSqliteSaver.from_conn_string(resolved_dsn)
-        logger.info("[Checkpointer] Using AsyncSqliteSaver (dsn=%s)", resolved_dsn)
-        return saver
-
-    if checkpointer_type == "postgres":
-        if not resolved_dsn:
-            raise ValueError("PostgreSQL checkpointer requires a DSN, e.g. 'postgresql://user:pass@host/db'")
-        try:
-            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-        except ImportError as exc:
-            raise ImportError(
-                "PostgreSQL checkpointer requires the 'langgraph-checkpoint-postgres' package. "
-                "Install it with: pip install langgraph-checkpoint-postgres"
-            ) from exc
-
-        saver = AsyncPostgresSaver.from_conn_string(resolved_dsn)
-        await saver.setup()
-        logger.info("[Checkpointer] Using AsyncPostgresSaver (dsn=%s)", _mask_dsn(resolved_dsn))
-        return saver
+            raise ValueError("DSN is required for sqlite checkpointer (e.g. ~/.orchid/checkpoints.db)")
+        checkpointer = AsyncSqliteSaver.from_conn_string(resolved_dsn)
+        await checkpointer.setup()
+        logger.info("[Checkpointer] SQLite checkpointer ready — %s", _mask_dsn(resolved_dsn))
+        return checkpointer
 
     # ── Custom dotted class path ──────────────────────────────
     try:
         cls = import_class(checkpointer_type)
     except ImportError as exc:
-        raise ImportError(
-            f"Cannot resolve checkpointer class '{checkpointer_type}'. "
-            f"Ensure it is a valid dotted import path to a BaseCheckpointSaver subclass. "
-            f"Error: {exc}"
-        ) from exc
+        raise _augment_checkpointer_import_error(checkpointer_type, exc) from exc
 
     if not (isinstance(cls, type) and issubclass(cls, BaseCheckpointSaver)):
         raise TypeError(f"'{checkpointer_type}' resolves to {cls!r}, which is not a BaseCheckpointSaver subclass.")
 
     logger.info("[Checkpointer] Using custom class: %s", checkpointer_type)
     return cls(dsn=resolved_dsn) if resolved_dsn else cls()
+
+
+def _load_entry_point_checkpointers() -> None:
+    for name, register_fn in iter_entry_point_plugins("orchid.checkpointers"):
+        try:
+            register_fn()
+        except Exception as exc:
+            logger.warning("[Checkpointers] Failed to load plugin '%s': %s", name, exc)
 
 
 async def shutdown_checkpointer(saver: BaseCheckpointSaver | None) -> None:

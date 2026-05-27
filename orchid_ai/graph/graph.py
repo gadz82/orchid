@@ -188,8 +188,10 @@ class _AgentNodeWrapper:
     async def _run_agent(self, state: GraphState, auth: Any) -> GraphState:
         prev_chat_id = self._agent._current_chat_id
         prev_message_id = self._agent._current_message_id
+        prev_auth = self._agent._current_auth
         self._agent._current_chat_id = state.get("chat_id") or None
         self._agent._current_message_id = _latest_human_message_id(state)
+        self._agent._current_auth = auth
 
         agent_start = time.perf_counter()
         perf_logger.info("[PERF][agent=%s] >>> START", self._agent.name)
@@ -215,6 +217,7 @@ class _AgentNodeWrapper:
         finally:
             self._agent._current_chat_id = prev_chat_id
             self._agent._current_message_id = prev_message_id
+            self._agent._current_auth = prev_auth
         agent_elapsed = (time.perf_counter() - agent_start) * 1000
         perf_logger.info("[PERF][agent=%s] <<< DONE total=%.1f ms", self._agent.name, agent_elapsed)
         return result
@@ -286,6 +289,7 @@ def _instantiate_agent(
     summary_config: dict[str, Any] | None = None,
     graph_store: Any | None = None,
     content_sources: Any | None = None,
+    upload_namespace: str = "uploads",
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -342,6 +346,7 @@ def _instantiate_agent(
         kwargs["graph_store"] = graph_store
     if content_sources:
         kwargs["content_sources"] = content_sources
+    kwargs["upload_namespace"] = upload_namespace
 
     return cls(**kwargs)
 
@@ -357,6 +362,7 @@ def _build_subgraph(
     mcp_client_factory: MCPClientFactory | None = None,
     graph_store: Any | None = None,
     content_sources: Any | None = None,
+    upload_namespace: str = "uploads",
 ) -> Any:
     """
     Build a sub-graph for an agent with children.
@@ -377,6 +383,7 @@ def _build_subgraph(
             mcp_client_factory,
             graph_store=graph_store,
             content_sources=content_sources,
+            upload_namespace=upload_namespace,
         )
         children_agents.append(child_agent)
 
@@ -737,6 +744,7 @@ def build_graph(
                 mcp_factory,
                 graph_store=graph_store,
                 content_sources=runtime.content_sources,
+                upload_namespace=runtime.upload_namespace,
             )
             subgraph_nodes[agent_name] = subgraph
         else:
@@ -752,6 +760,7 @@ def build_graph(
                 summary_config=summary_cfg,
                 graph_store=graph_store,
                 content_sources=runtime.content_sources,
+                upload_namespace=runtime.upload_namespace,
             )
             agents.append(agent)
 

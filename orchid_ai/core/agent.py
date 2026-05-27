@@ -66,6 +66,7 @@ class OrchidAgent(ABC):
         self.reader = reader
         self.mcp_clients = mcp_clients or []
         self._chat_model = chat_model  # BaseChatModel (duck-typed to avoid core/ deps)
+        self._upload_namespace: str = _kwargs.pop("upload_namespace", "uploads")
         self._content_sources: list[OrchidContentSource] = _kwargs.pop("content_sources", None) or []
 
         # ── Events-layer wiring (Pollen + Bloom — §15.1) ─────
@@ -114,6 +115,16 @@ class OrchidAgent(ABC):
         Override if the agent uses RAG.  Default: empty string (no RAG).
         """
         return ""
+
+    @property
+    def upload_namespace(self) -> str:
+        """Vector store namespace for uploaded documents, e.g. 'education-uploads'.
+
+        Queried by :meth:`fetch_all_rag_context` alongside ``rag_namespace``.
+        Default: ``"uploads"`` (backward compatible).  Set via
+        ``OrchidRuntime.upload_namespace`` at deployment level.
+        """
+        return self._upload_namespace
 
     @property
     def content_sources(self) -> list[OrchidContentSource]:
@@ -300,7 +311,7 @@ class OrchidAgent(ABC):
         """
         domain_docs, upload_docs = await asyncio.gather(
             self.fetch_rag_context(query, scope, namespace=self.rag_namespace, k=k),
-            self.fetch_rag_context(query, scope, namespace="uploads", k=k),
+            self.fetch_rag_context(query, scope, namespace=self.upload_namespace, k=k),
         )
 
         combined = domain_docs + upload_docs
@@ -427,6 +438,8 @@ class OrchidAgent(ABC):
         The tool must be registered in the tool registry (via ``agents.yaml``
         top-level ``tools:`` section or programmatic ``register_tool()``).
         """
-        from ..config.tool_registry import call_tool
+        from ..config.tool_registry import build_tool_input, get_tool
 
-        return await call_tool(tool_name, **kwargs)
+        tool = get_tool(tool_name)
+        output = await tool.invoke(build_tool_input(tool, **kwargs))
+        return output.result

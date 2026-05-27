@@ -39,6 +39,7 @@ class _CapabilitiesCache:
     tools: list[dict[str, Any]] = field(default_factory=list)
     prompts: list[dict[str, Any]] = field(default_factory=list)
     resources: list[dict[str, Any]] = field(default_factory=list)
+    #: Pre-read resource bodies keyed by resource URI.
     resource_contents: dict[str, str] = field(default_factory=dict)
     rendered_prompts: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     #: Negative cache for resources whose initial ``read_resource`` call
@@ -204,7 +205,7 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
                                 parts.append(content.text)
                             elif hasattr(content, "blob"):
                                 parts.append(f"[binary data, {len(content.blob)} bytes]")
-                        self._cache.resource_contents[res["name"]] = "\n".join(parts)
+                        self._cache.resource_contents[res["uri"]] = "\n".join(parts)
                     except Exception as exc:
                         # Negative-cache the failed URI so subsequent
                         # ``read_resource`` calls don't pay the
@@ -467,14 +468,8 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
             logger.debug("[MCP] Resource '%s' previously failed; returning empty (negative cache)", uri)
             return ""
 
-        # Check cache by URI or name
-        for res_name, content in self._cache.resource_contents.items():
-            if res_name == uri:
-                return content
-        # Also check by matching URI in the resource list
-        for res in self._cache.resources:
-            if res["uri"] == uri and res["name"] in self._cache.resource_contents:
-                return self._cache.resource_contents[res["name"]]
+        if uri in self._cache.resource_contents:
+            return self._cache.resource_contents[uri]
 
         # Not cached — fetch live, negative-caching on failure
         try:

@@ -83,6 +83,7 @@ from .core.repository import (
 from .core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
 from .core.sparse import OrchidSparseEncoder, OrchidSparseVector
 from .core.state import OrchidAgentState, OrchidAuthContext
+from .core.tool import OrchidTool, OrchidToolInput, OrchidToolOutput
 from .graph.graph import build_graph
 from .graph.supervisor import OrchidRoutingDecision
 from .guardrails import build_guardrail_chain, register_guardrail
@@ -113,7 +114,6 @@ from .persistence.mcp_client_registration_factory import build_mcp_client_regist
 from .persistence.mcp_client_registration_sqlite import OrchidSQLiteMCPClientRegistrationStore
 from .persistence.mcp_token_factory import build_mcp_token_store
 from .persistence.mcp_token_sqlite import OrchidSQLiteMCPTokenStore
-from .persistence.config_postgres import OrchidPostgresConfigStorage
 from .persistence.config_sqlite import OrchidSQLiteConfigStorage
 from .persistence.sqlite import OrchidSQLiteChatStorage
 from .plugins import iter_entry_point_plugins
@@ -162,6 +162,7 @@ from .rag.transformers import (
     register_query_transformer,
 )
 from .runtime import OrchidRuntime
+from .tools import FunctionTool, OrchidToolRegistry
 
 # ``utils.import_class`` is intentionally NOT re-exported on the top-level
 # ``orchid_ai`` namespace — it's an implementation detail used by the
@@ -205,6 +206,10 @@ __all__ = [
     "OrchidRetrievalStrategy",
     "OrchidSparseEncoder",
     "OrchidSparseVector",
+    "OrchidTool",
+    "OrchidToolInput",
+    "OrchidToolOutput",
+    "OrchidToolRegistry",
     "OrchidVectorReader",
     "OrchidVectorStoreAdmin",
     "OrchidVectorStoreRepository",
@@ -251,7 +256,6 @@ __all__ = [
     # ── Built-in backends ─────────────────────────────
     "OrchidConfigStorage",
     "OrchidConfigStorageConfig",
-    "OrchidPostgresConfigStorage",
     "OrchidSQLiteChatStorage",
     "OrchidSQLiteConfigStorage",
     "OrchidSQLiteMCPClientRegistrationStore",
@@ -280,6 +284,7 @@ __all__ = [
     "SimpleRetrieval",
     # ── Factories + RAG registries ────────────────────
     "ConfigSnapshot",
+    "FunctionTool",
     "OrchidConfigSnapshot",
     "OrchidConfigWatcher",
     "OrchidConfigWatcherBase",

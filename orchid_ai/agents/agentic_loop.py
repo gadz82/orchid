@@ -19,6 +19,8 @@ import logging
 import time
 from typing import Any
 
+from orchid_ai.observability.mini_agent_events import make_event_message
+
 
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
@@ -68,6 +70,11 @@ class AgenticLoop:
         self._agent_name = agent_name
         self._chat_model = chat_model
         self._temperature = temperature
+        # ``_events`` collects lifecycle event SystemMessages emitted
+        # during tool dispatch.  ``GenericAgent`` drains this list
+        # after ``loop.run()`` returns and includes them in the node
+        # output so ``_streaming.py`` translates them to SSE frames.
+        self._events: list = []
         # ``is_mini`` is metadata used for log labelling and to mark
         # this loop as belonging to a forked sub-task.  It does not
         # gate any behaviour inside the loop — duplicate-detection
@@ -265,7 +272,27 @@ class AgenticLoop:
                 fn_name,
                 fn_args,
             )
+            self._events.append(
+                make_event_message(
+                    "tool.started",
+                    {
+                        "agent": self._agent_name,
+                        "tool": fn_name,
+                        "args": fn_args,
+                    },
+                )
+            )
             result_text = await self._execute_one(fn_name, fn_args, call_key, round_num)
+            self._events.append(
+                make_event_message(
+                    "tool.finished",
+                    {
+                        "agent": self._agent_name,
+                        "tool": fn_name,
+                        "result_preview": result_text[:200],
+                    },
+                )
+            )
             self._tool_results[fn_name] = result_text
             messages.append(ToolMessage(content=result_text, tool_call_id=tc_id))
 
@@ -306,6 +333,18 @@ class AgenticLoop:
                 len(parallel_indices),
                 [unpacked[i][0] for i in parallel_indices],
             )
+            for i in parallel_indices:
+                fn_name, fn_args, _, _ = unpacked[i]
+                self._events.append(
+                    make_event_message(
+                        "tool.started",
+                        {
+                            "agent": self._agent_name,
+                            "tool": fn_name,
+                            "args": fn_args,
+                        },
+                    )
+                )
             gather_start = time.perf_counter()
             coros = [self._execute_parallel_leg(*unpacked[i]) for i in parallel_indices]
             gathered = await asyncio.gather(*coros, return_exceptions=True)
@@ -331,6 +370,16 @@ class AgenticLoop:
                     )
                 else:
                     text = outcome
+                self._events.append(
+                    make_event_message(
+                        "tool.finished",
+                        {
+                            "agent": self._agent_name,
+                            "tool": fn_name,
+                            "result_preview": text[:200],
+                        },
+                    )
+                )
                 results[idx] = text
                 self._tool_results[fn_name] = text
 
@@ -344,7 +393,27 @@ class AgenticLoop:
                 fn_name,
                 fn_args,
             )
+            self._events.append(
+                make_event_message(
+                    "tool.started",
+                    {
+                        "agent": self._agent_name,
+                        "tool": fn_name,
+                        "args": fn_args,
+                    },
+                )
+            )
             text = await self._execute_one(fn_name, fn_args, call_key, round_num)
+            self._events.append(
+                make_event_message(
+                    "tool.finished",
+                    {
+                        "agent": self._agent_name,
+                        "tool": fn_name,
+                        "result_preview": text[:200],
+                    },
+                )
+            )
             results[idx] = text
             self._tool_results[fn_name] = text
 
