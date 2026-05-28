@@ -37,7 +37,7 @@ def client():
         }
     )
     runtime = OrchidRuntime(default_model="ollama/llama3.2")
-    with patch("orchid_ai.orchid.build_graph") as build:
+    with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
         build.return_value = MagicMock()
         yield Orchid(config=config, runtime=runtime)
 

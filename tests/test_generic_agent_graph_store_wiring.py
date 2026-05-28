@@ -65,7 +65,7 @@ async def test_graph_store_propagates_to_retrieval_kwargs():
     fake_strategy.retrieve = _retrieve
 
     with patch(
-        "orchid_ai.agents.generic_agent.get_retrieval_strategy",
+        "orchid_ai.agents.rag_pipeline.get_retrieval_strategy",
         return_value=fake_strategy,
     ):
         await agent._step_rag_retrieval(
@@ -99,7 +99,7 @@ async def test_no_graph_store_yields_none():
     fake_strategy.retrieve = _retrieve
 
     with patch(
-        "orchid_ai.agents.generic_agent.get_retrieval_strategy",
+        "orchid_ai.agents.rag_pipeline.get_retrieval_strategy",
         return_value=fake_strategy,
     ):
         await agent._step_rag_retrieval(

@@ -44,11 +44,8 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, StateGraph
-from langgraph.types import Send
 
-from ..agents.mini_agent_aggregator import aggregator_node_factory
-from ..agents.mini_agent_node import mini_agent_node_factory
-from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidGuardrailsConfig
+from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig
 from ..config.registry import get_class
 from ..config.tool_registry import load_tools_from_config
 from ..core.agent import OrchidAgent, OrchidAgentRunContext
@@ -65,6 +62,11 @@ from ..mcp.auth_registry import OrchidMCPAuthRegistry
 from ..runtime import MCPClientFactory, OrchidRuntime
 from .state import GraphState
 from .supervisor import create_supervisor_node, route_to_agents
+from .guardrail_wiring import _GuardrailWiring
+from .mini_agent_wiring import _MiniAgentWiring
+
+# Backward-compat re-exports (moved to dedicated modules in M2 refactoring)
+_make_fork_router = _MiniAgentWiring.make_fork_router
 
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
@@ -416,154 +418,6 @@ def _build_subgraph(
     return compiled
 
 
-def _build_guardrail_chains(
-    guardrails_config: OrchidGuardrailsConfig,
-) -> tuple[OrchidGuardrailChain, OrchidGuardrailChain]:
-    """Build input and output guardrail chains from YAML config."""
-    from ..guardrails.registry import build_guardrail_chain
-
-    input_configs = [{"type": r.type, "fail_action": r.fail_action, **r.config} for r in guardrails_config.input]
-    output_configs = [{"type": r.type, "fail_action": r.fail_action, **r.config} for r in guardrails_config.output]
-
-    return (
-        build_guardrail_chain(input_configs),
-        build_guardrail_chain(output_configs),
-    )
-
-
-def _create_global_input_guardrail_node(chain: OrchidGuardrailChain):
-    """Create a LangGraph node that runs global input guardrails."""
-
-    async def input_guardrails_node(state: GraphState) -> GraphState:
-        """Global input guardrails — runs before the supervisor."""
-        from ..core.agent import OrchidAgent
-
-        query = OrchidAgent.extract_user_query(state)
-        if not query:
-            return state
-
-        auth = state.get("auth_context")
-        ctx = OrchidGuardrailContext(
-            direction=OrchidGuardrailDirection.INPUT,
-            tenant_key=auth.tenant_key if auth else "default",
-            user_id=auth.user_id if auth else "",
-            chat_id=state.get("chat_id", ""),
-        )
-
-        result = await chain.evaluate(query, ctx)
-        if result.blocked:
-            logger.warning("[Guardrails] Global input blocked by '%s': %s", result.guardrail_name, result.message)
-            return {
-                "messages": [AIMessage(content=result.message)],
-                "final_response": result.message,
-                "active_agents": [],
-                "pending_agents": [],
-            }
-
-        if result.action == OrchidGuardrailAction.REDACT and result.redacted_content is not None:
-            logger.info("[Guardrails] Global input redacted by '%s'", result.guardrail_name)
-            # Replace the last human message with redacted version
-            from langchain_core.messages import HumanMessage
-
-            messages = list(state.get("messages", []))
-            if messages and isinstance(messages[-1], HumanMessage):
-                messages[-1] = HumanMessage(content=result.redacted_content)
-            return {"messages": messages}
-
-        return state
-
-    return input_guardrails_node
-
-
-def _create_global_output_guardrail_node(chain: OrchidGuardrailChain):
-    """Create a LangGraph node that runs global output guardrails."""
-
-    async def output_guardrails_node(state: GraphState) -> GraphState:
-        """Global output guardrails — runs after synthesis, before END."""
-        final = state.get("final_response")
-        if not final:
-            return state
-
-        auth = state.get("auth_context")
-        ctx = OrchidGuardrailContext(
-            direction=OrchidGuardrailDirection.OUTPUT,
-            tenant_key=auth.tenant_key if auth else "default",
-            user_id=auth.user_id if auth else "",
-            chat_id=state.get("chat_id", ""),
-            metadata={"rag_context": state.get("rag_context", {})},
-        )
-
-        result = await chain.evaluate(final, ctx)
-        if result.blocked:
-            logger.warning("[Guardrails] Global output blocked by '%s': %s", result.guardrail_name, result.message)
-            return {
-                "messages": [AIMessage(content=result.message)],
-                "final_response": result.message,
-            }
-
-        if result.action == OrchidGuardrailAction.REDACT and result.redacted_content is not None:
-            logger.info("[Guardrails] Global output redacted by '%s'", result.guardrail_name)
-            return {
-                "messages": [AIMessage(content=result.redacted_content)],
-                "final_response": result.redacted_content,
-            }
-
-        return state
-
-    return output_guardrails_node
-
-
-def _make_fork_router(parent_name: str):
-    """Build the conditional-edge function for a mini-agent-enabled parent.
-
-    Reads ``state["mini_agent_decisions"][parent_name]`` (written by
-    the parent ``GenericAgent.run()`` when the decomposer chose to
-    fork) and returns either:
-
-    - ``"supervisor"`` — no fork (parent emitted its own AIMessage),
-      or no decision was recorded (defensive fallthrough).
-    - A list of ``Send(f"{parent_name}_mini", payload)`` — one per
-      sub-task.  Each payload carries the per-Send sentinels the
-      mini node reads to identify its sub-task.
-    """
-
-    def fork_router(state: GraphState):
-        decisions = state.get("mini_agent_decisions") or {}
-        decision = decisions.get(parent_name)
-        if not decision or not decision.get("should_fork"):
-            return "supervisor"
-
-        sub_tasks = decision.get("sub_tasks") or []
-        if not sub_tasks:
-            return "supervisor"
-
-        sends: list[Send] = []
-        for sub_task in sub_tasks:
-            mini_id = sub_task.get("id") or f"mini_{len(sends)}"
-            tool_subset = sub_task.get("resolved_tool_subset") or sub_task.get("allowed_tools") or []
-            sends.append(
-                Send(
-                    f"{parent_name}_mini",
-                    {
-                        **state,
-                        "_active_mini_parent": parent_name,
-                        "_active_mini_id": mini_id,
-                        "_active_mini_subtask": sub_task,
-                        "_active_mini_tool_subset": list(tool_subset),
-                    },
-                ),
-            )
-        logger.info(
-            "[Route] %s parent forking into %d mini-agent(s)",
-            parent_name,
-            len(sends),
-        )
-        return sends
-
-    fork_router.__name__ = f"{parent_name}_fork_router"
-    return fork_router
-
-
 def _route_after_input_guardrails(state: GraphState) -> str:
     """Conditional edge: skip supervisor if input guardrails blocked."""
     if state.get("final_response"):
@@ -639,7 +493,7 @@ def build_graph(
         logger.info("[Graph] registered %d built-in tools", len(config.tools))
 
     # ── Build global guardrail chains ──
-    global_input_chain, global_output_chain = _build_guardrail_chains(config.guardrails)
+    global_input_chain, global_output_chain = _GuardrailWiring.build_chains(config.guardrails)
     has_global_input_rails = not global_input_chain.empty
     has_global_output_rails = not global_output_chain.empty
 
@@ -771,7 +625,7 @@ def build_graph(
 
         # Build per-agent guardrail chains
         if agent_config.guardrails.input or agent_config.guardrails.output:
-            input_chain, output_chain = _build_guardrail_chains(agent_config.guardrails)
+            input_chain, output_chain = _GuardrailWiring.build_chains(agent_config.guardrails)
             agent_guardrails[agent_name] = (input_chain, output_chain)
             logger.info(
                 "[Graph] agent '%s' guardrails: input=%s, output=%s",
@@ -839,13 +693,13 @@ def build_graph(
 
     # Add global input guardrails node (before supervisor)
     if has_global_input_rails:
-        g.add_node("input_guardrails", _create_global_input_guardrail_node(global_input_chain))
+        g.add_node("input_guardrails", _GuardrailWiring.create_global_input_node(global_input_chain))
 
     g.add_node("supervisor", supervisor_node)
 
     # Add global output guardrails node (after synthesis)
     if has_global_output_rails:
-        g.add_node("output_guardrails", _create_global_output_guardrail_node(global_output_chain))
+        g.add_node("output_guardrails", _GuardrailWiring.create_global_output_node(global_output_chain))
 
     for agent in agents:
         node_name = f"{agent.name}_agent"
@@ -869,29 +723,13 @@ def build_graph(
         mini_enabled = bool(agent_config and agent_config.mini_agent.enabled)
         parent_chat_model = getattr(agent, "_chat_model", None)
         if mini_enabled and parent_chat_model is not None:
-            mini_node = mini_agent_node_factory(
-                parent_config=agent_config,
-                chat_model=parent_chat_model,
-                mcp_clients=getattr(agent, "mcp_clients", None) or [],
-            )
-            aggregator_node = aggregator_node_factory(
-                parent_config=agent_config,
-                chat_model=parent_chat_model,
-            )
-            g.add_node(f"{agent.name}_mini", mini_node)
-            g.add_node(f"{agent.name}_aggregator", aggregator_node)
-            g.add_conditional_edges(
-                node_name,
-                _make_fork_router(agent.name),
-                [f"{agent.name}_mini", "supervisor"],
-            )
-            g.add_edge(f"{agent.name}_mini", f"{agent.name}_aggregator")
-            g.add_edge(f"{agent.name}_aggregator", "supervisor")
-            logger.info(
-                "[Graph] agent '%s' wired with mini-agent topology (max_count=%d, class=%s)",
-                agent.name,
-                agent_config.mini_agent.max_count,
-                type(agent).__name__,
+            _MiniAgentWiring.wire_mini_topology(
+                graph=g,
+                agent_name=agent.name,
+                agent_config=agent_config,
+                agent_chat_model=parent_chat_model,
+                agent_mcp_clients=getattr(agent, "mcp_clients", None),
+                node_name=node_name,
             )
         else:
             if mini_enabled and parent_chat_model is None:

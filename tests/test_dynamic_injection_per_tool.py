@@ -66,9 +66,9 @@ async def test_mcp_tool_override_namespace_reaches_inject_to_rag():
             new_callable=AsyncMock,
             return_value=(None, {"lookup": "result text"}, []),
         ),
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
         patch(
-            "orchid_ai.agents.generic_agent.build_ingestion_strategy",
+            "orchid_ai.agents.rag_pipeline.build_ingestion_strategy",
         ) as mock_build,
     ):
         sentinel = MagicMock(name="ingestion-strategy")
@@ -116,8 +116,8 @@ async def test_no_override_uses_agent_namespace():
             new_callable=AsyncMock,
             return_value=(None, {"lookup": "result"}, []),
         ),
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
-        patch("orchid_ai.agents.generic_agent.build_ingestion_strategy", return_value=MagicMock()),
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
+        patch("orchid_ai.agents.rag_pipeline.build_ingestion_strategy", return_value=MagicMock()),
     ):
         await agent.run(_state())
         kwargs = mock_inject.call_args.kwargs
@@ -151,8 +151,8 @@ async def test_builtin_tool_override_namespace_reaches_inject_to_rag():
             new_callable=AsyncMock,
             return_value=(None, {"format_date": "2024-01-01"}, []),
         ),
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
-        patch("orchid_ai.agents.generic_agent.build_ingestion_strategy", return_value=MagicMock()),
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
+        patch("orchid_ai.agents.rag_pipeline.build_ingestion_strategy", return_value=MagicMock()),
     ):
         await agent.run(_state())
         mock_inject.assert_awaited_once()
@@ -187,8 +187,8 @@ async def test_mixed_injectable_and_non_injectable_tools_iterate_only_injectable
             new_callable=AsyncMock,
             return_value=(None, {"t_keep": "a", "t_skip": "b", "t_keep_2": "c"}, []),
         ),
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
-        patch("orchid_ai.agents.generic_agent.build_ingestion_strategy", return_value=MagicMock()),
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
+        patch("orchid_ai.agents.rag_pipeline.build_ingestion_strategy", return_value=MagicMock()),
     ):
         await agent.run(_state())
         # Two injectable tools → two calls; t_skip was filtered out.
@@ -226,7 +226,7 @@ async def test_exclude_dynamic_injects_negative_filter_into_retrieval():
     fake_strategy.retrieve = _retrieve
 
     with patch(
-        "orchid_ai.agents.generic_agent.get_retrieval_strategy",
+        "orchid_ai.agents.rag_pipeline.get_retrieval_strategy",
         return_value=fake_strategy,
     ):
         from orchid_ai.rag.scopes import OrchidRAGScope
@@ -266,7 +266,7 @@ async def test_exclude_dynamic_off_leaves_filters_alone():
     fake_strategy.retrieve = _retrieve
 
     with patch(
-        "orchid_ai.agents.generic_agent.get_retrieval_strategy",
+        "orchid_ai.agents.rag_pipeline.get_retrieval_strategy",
         return_value=fake_strategy,
     ):
         from orchid_ai.rag.scopes import OrchidRAGScope

@@ -11,9 +11,11 @@ Implements the standard pipeline entirely from YAML configuration:
      agentic loop already produced a final text response)
 
 Collaborators (SRP — each extracted into its own module):
-  - ``SkillDetector``  — matches user queries to agent-level skills via LLM
-  - ``MCPDispatcher``  — discovers MCP capabilities and routes tool calls
-  - ``SkillExecutor``  — runs multi-step agent-level skills
+  - ``SkillDetector``      — matches user queries to agent-level skills via LLM
+  - ``MCPDispatcher``      — discovers MCP capabilities and routes tool calls
+  - ``SkillExecutor``      — runs multi-step agent-level skills
+  - ``RagPipeline``        — owns RAG retrieval, cache check, dynamic injection
+  - ``SystemPromptBuilder`` — assembles the agentic-loop system prompt
 """
 
 from __future__ import annotations
@@ -34,10 +36,7 @@ from ..observability.mini_agent_events import make_event_message
 from ..core.repository import OrchidVectorReader
 from ..core.retrieval import apply_pre_strategy
 from ..core.state import OrchidAgentState, OrchidAuthContext
-from ..documents.strategies import build_ingestion_strategy
-from ..rag.dynamic import inject_to_rag
 from ..rag.scopes import OrchidRAGScope
-from ..rag.strategies import get_retrieval_strategy
 from ..rag.transformers import (
     TRANSFORMER_REGISTRY,
     get_query_transformer,
@@ -45,6 +44,8 @@ from ..rag.transformers import (
 )
 
 from .mcp_dispatcher import MCPCapabilities, MCPDispatcher
+from .prompt_builder import SystemPromptBuilder
+from .rag_pipeline import RagPipeline
 from .skill_detector import SkillDetector
 from .skill_executor import SkillExecutor
 
@@ -95,6 +96,12 @@ class GenericAgent(OrchidAgent):
             agent_peers=self._agent_peers,
             content_sources=self._content_sources,
         )
+        self._rag_pipeline = RagPipeline(
+            reader=reader,
+            chat_model=chat_model,
+            graph_store=graph_store,
+        )
+        self._prompt_builder = SystemPromptBuilder(config.prompt_sections)
 
     def needs_peer_wiring(self) -> bool:
         """Return ``True`` if any skill step references another agent."""
@@ -352,119 +359,41 @@ class GenericAgent(OrchidAgent):
         query: str,
         scope: OrchidRAGScope,
     ) -> list[dict[str, Any]]:
-        """Step 1: RAG retrieval — strategy resolved by name from the registry.
-
-        The strategy operates on a single namespace; the agent fans out
-        to ``rag_namespace`` + ``"uploads"`` in parallel and merges by
-        score (preserving the prior ``fetch_all_rag_context`` shape).
-        """
-        if not self._config.rag.enabled:
-            return []
-
-        import asyncio as _asyncio
-
-        strategy = get_retrieval_strategy(
-            self._config.rag.retrieval.strategy or "simple",
-            config=self._config.rag.retrieval,
+        """Step 1: RAG retrieval — delegated to RagPipeline."""
+        return await self._rag_pipeline.retrieve(
+            query=query,
+            scope=scope,
+            rag_namespace=self.rag_namespace,
+            k=self._config.rag.k,
+            enabled=self._config.rag.enabled,
+            retrieval_strategy=self._config.rag.retrieval.strategy,
+            retrieval_config=self._config.rag.retrieval,
+            exclude_dynamic=self._config.rag.retrieval.exclude_dynamic,
         )
-
-        # Only ``pre_strategy=False`` transformers reach the strategy —
-        # ``pre_strategy=True`` ones already rewrote the query at the
-        # turn entry in ``run()``.  Prompt overrides (if configured)
-        # are forwarded to each transformer's constructor.
-        prompts_cfg = self._config.rag.retrieval.transformer_prompts
-        strategy_transformers = [
-            get_query_transformer(name, **resolve_transformer_kwargs(name, prompts_cfg))
-            for name in (self._config.rag.retrieval.query_transformers or [])
-            if not TRANSFORMER_REGISTRY[name].pre_strategy
-        ]
-
-        # When ``retrieval.exclude_dynamic`` is set the agent injects
-        # ``dynamic: {"not": True}`` into the metadata filters so
-        # dynamically-injected tool output stays out of the retrieval
-        # path (cycle mitigation).
-        configured_filters = dict(self._config.rag.retrieval.metadata_filters or {})
-        if self._config.rag.retrieval.exclude_dynamic:
-            configured_filters.setdefault("dynamic", {"not": True})
-        metadata_filters = configured_filters or None
-
-        common_kwargs: dict[str, Any] = {
-            "query": query,
-            "scope": scope,
-            "k": self._config.rag.k,
-            "reader": self.reader,
-            "chat_model": self._chat_model,
-            "transformers": strategy_transformers,
-            "metadata_filters": metadata_filters,
-            "graph_store": self._graph_store,
-        }
-
-        domain_results, upload_results = await _asyncio.gather(
-            strategy.retrieve(namespace=self.rag_namespace, **common_kwargs),
-            strategy.retrieve(namespace="uploads", **common_kwargs),
-        )
-
-        combined: list[dict[str, Any]] = []
-        for r in [*domain_results, *upload_results]:
-            content = r.document.metadata.get("parent_content", r.document.page_content)
-            combined.append(
-                {
-                    "content": content,
-                    "score": round(r.score, 3),
-                    "metadata": {
-                        mk: mv
-                        for mk, mv in r.document.metadata.items()
-                        if mk not in ("content", "embedding", "parent_content")
-                    },
-                }
-            )
-
-        combined.sort(key=lambda d: d.get("score", 0), reverse=True)
-        return combined[: self._config.rag.k]
 
     async def _step_cache_check(self, scope: OrchidRAGScope) -> dict[str, Any]:
         """Step 1.5: Check RAG for cached tool results within TTL."""
-        if not (self._config.rag.enabled and self._config.injectable_tool_ttls):
-            return {}
-        return await self._check_tool_cache(scope)
+        return await self._rag_pipeline.check_cache(
+            scope=scope,
+            rag_namespace=self._config.rag.namespace,
+            enabled=self._config.rag.enabled,
+            tool_ttls=self._config.injectable_tool_ttls,
+        )
 
     async def _step_dynamic_injection(
         self,
         mcp_data: dict[str, Any],
         scope: OrchidRAGScope,
     ) -> None:
-        """Dynamic RAG injection — per-tool ``effective_rag``.
-
-        Each injectable tool resolves its own RAG config via
-        :meth:`OrchidAgentConfig.effective_rag` so a tool that points
-        at a different namespace, ingestion strategy, or chunk size
-        is honoured at runtime.  When the tool has no override, the
-        agent's RAG block applies as before.
-        """
-        if not (self._config.rag.enabled and self._config.injectable_tools):
-            return
-
-        for tool_name, tool_result in mcp_data.items():
-            # ``injectable_tools`` mixes raw MCP tool names with
-            # ``builtin_<name>`` keys for built-in tools — match either
-            # so both flavours of injection reach this branch.
-            if tool_name not in self._config.injectable_tools and (
-                f"builtin_{tool_name}" not in self._config.injectable_tools
-            ):
-                continue
-
-            effective = self._config.effective_rag(tool_name)
-            target_namespace = effective.namespace or self._config.rag.namespace
-            ingestion = build_ingestion_strategy(effective.ingestion)
-
-            await inject_to_rag(
-                self.reader,
-                tool_name=tool_name,
-                tool_result=tool_result,
-                namespace=target_namespace,
-                scope=scope,
-                ingestion=ingestion,
-            )
+        """Dynamic RAG injection — per-tool ``effective_rag``."""
+        await self._rag_pipeline.inject(
+            mcp_data=mcp_data,
+            scope=scope,
+            rag_namespace=self._config.rag.namespace,
+            enabled=self._config.rag.enabled,
+            injectable_tools=self._config.injectable_tools,
+            effective_rag_resolver=self._config.effective_rag,
+        )
 
     async def _step_summarise(
         self,
@@ -709,61 +638,22 @@ class GenericAgent(OrchidAgent):
     ) -> str:
         """Build a rich system prompt from config + MCP metadata + RAG context.
 
-        Section templates and truncation knobs are sourced from
-        ``self._config.prompt_sections`` (an :class:`OrchidAgentPromptConfig`
-        instance).  Omitting the block from YAML uses the built-in
-        defaults defined on that class.
+        Delegated to :class:`SystemPromptBuilder`.
         """
-        sections = self._config.prompt_sections
-        parts = [self._config.prompt]
+        builder = getattr(self, "_prompt_builder", None)
+        if builder is None:
+            # Fallback for tests that bypass __init__ (GenericAgent.__new__)
+            from orchid_ai.agents.prompt_builder import SystemPromptBuilder
 
-        # Prior tool results from previous turns
-        prior_ctx = (state.get("mcp_context") or {}).get(self.name) if state else None
-        if prior_ctx:
-            parts.append(sections.prior_results_header)
-            parts.append(json.dumps(prior_ctx, indent=2, default=str)[: sections.prior_results_max_chars])
-
-        # Rendered MCP prompts (zero-arg prompts evaluated at discovery time)
-        if caps.rendered_prompts:
-            for prompt in caps.rendered_prompts:
-                parts.append(
-                    sections.mcp_prompt_template.format(
-                        name=prompt["name"],
-                        text=prompt["text"],
-                    )
-                )
-
-        # Prompts that require arguments — listed so the LLM knows they exist
-        if caps.skipped_prompts:
-            for sp in caps.skipped_prompts:
-                parts.append(
-                    sections.skipped_prompt_template.format(
-                        name=sp["name"],
-                        description=sp["description"],
-                        required_args=", ".join(sp["required_args"]),
-                    )
-                )
-
-        # MCP resource contents
-        if caps.resource_contents:
-            parts.append(sections.resources_header)
-            for name, content in caps.resource_contents.items():
-                parts.append(
-                    sections.resource_template.format(
-                        name=name,
-                        content=content[: sections.resource_max_chars],
-                    )
-                )
-
-        # RAG context — cap configurable per-agent via
-        # ``rag.max_context_chars`` (defaults to 3000).  Bump it for
-        # catalog-style agents where the RAG IS the source of truth.
-        if rag_data:
-            cap = self._config.rag.max_context_chars or 3000
-            parts.append(sections.rag_header)
-            parts.append(json.dumps(rag_data, indent=2, default=str)[:cap])
-
-        return "\n".join(parts)
+            builder = SystemPromptBuilder(self._config.prompt_sections)
+        return builder.build(
+            base_prompt=self._config.prompt,
+            caps=caps,
+            rag_data=rag_data,
+            state=state,
+            agent_name=self.name,
+            rag_max_context_chars=self._config.rag.max_context_chars or 3000,
+        )
 
     # ── Built-in tools → litellm format ──────────────────────────
 
@@ -796,30 +686,6 @@ class GenericAgent(OrchidAgent):
         except Exception as exc:
             logger.error("[%s] Built-in tool '%s' error: %s", self.name, fn_name, exc, exc_info=True)
             return f"[Tool error] {exc}"
-
-    # ── RAG tool cache ────────────────────────────────────────
-
-    async def _check_tool_cache(self, scope: OrchidRAGScope) -> dict[str, Any]:
-        """Check RAG for cached tool results within TTL. Returns {tool_name: content}."""
-        import asyncio as _asyncio
-
-        if not self._config.injectable_tool_ttls:
-            return {}
-
-        async def _lookup(tool_name: str, ttl: int) -> tuple[str, Any]:
-            min_time = time.time() - ttl
-            result = await self.reader.lookup_cached_tool_results(
-                namespace=self._config.rag.namespace,
-                scope=scope,
-                tool_name=tool_name,
-                min_injected_at=min_time,
-            )
-            if result is not None:
-                logger.info("[%s] Cache hit for tool '%s' (TTL=%ds)", self.name, tool_name, ttl)
-            return tool_name, result
-
-        pairs = await _asyncio.gather(*(_lookup(name, ttl) for name, ttl in self._config.injectable_tool_ttls.items()))
-        return {name: val for name, val in pairs if val is not None}
 
     # ── Skill detection ──────────────────────────────────────
 

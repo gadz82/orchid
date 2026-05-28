@@ -64,7 +64,7 @@ async def test_no_injection_when_no_injectable_tools():
             new_callable=AsyncMock,
             return_value=(None, {}, []),
         ),
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
         mock_inject.assert_not_called()
@@ -102,7 +102,7 @@ async def test_injection_only_for_opted_in_mcp_tools():
             new_callable=AsyncMock,
             return_value=(None, mcp_results, []),
         ),
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
         # One inject_to_rag call per opted-in tool.
@@ -137,7 +137,7 @@ async def test_injection_only_for_opted_in_builtin_tools():
             new_callable=AsyncMock,
             return_value=(None, tool_results, []),
         ),
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
         assert mock_inject.await_count == 1
@@ -173,7 +173,7 @@ async def test_no_injection_when_rag_disabled():
             new_callable=AsyncMock,
             return_value=(None, {"tool_a": "data"}, []),
         ),
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock) as mock_inject,
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
         await agent.run(_make_state())
         mock_inject.assert_not_called()
@@ -214,7 +214,7 @@ async def test_cache_hit_skips_tool_in_agentic_loop():
             new_callable=AsyncMock,
             return_value=(None, {"fresh_tool": "fresh data"}, []),
         ) as mock_loop,
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock),
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock),
     ):
         await agent.run(_make_state())
         mock_loop.assert_called_once()
@@ -251,7 +251,7 @@ async def test_cache_miss_calls_tool_normally():
             new_callable=AsyncMock,
             return_value=(None, {"tool_a": "fresh"}, []),
         ) as mock_loop,
-        patch("orchid_ai.agents.generic_agent.inject_to_rag", new_callable=AsyncMock),
+        patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock),
     ):
         await agent.run(_make_state())
         # skip_tools should be empty (no cache hits)

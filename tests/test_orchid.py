@@ -92,7 +92,7 @@ class TestDataclasses:
 class TestInvoke:
     @pytest.mark.asyncio
     async def test_generates_chat_id_when_missing(self, minimal_config, noop_runtime):
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph(response="hello", agents=["helper"])
             client = Orchid(config=minimal_config, runtime=noop_runtime)
 
@@ -107,7 +107,7 @@ class TestInvoke:
     @pytest.mark.asyncio
     async def test_passes_thread_id_via_config(self, minimal_config, noop_runtime):
         chat_id = "chat-xyz"
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             graph = _fake_graph()
             build.return_value = graph
             client = Orchid(config=minimal_config, runtime=noop_runtime)
@@ -119,7 +119,7 @@ class TestInvoke:
 
     @pytest.mark.asyncio
     async def test_auth_fallback_is_auth_context(self, minimal_config, noop_runtime):
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             graph = _fake_graph()
             build.return_value = graph
             client = Orchid(config=minimal_config, runtime=noop_runtime)
@@ -142,7 +142,7 @@ class TestInvoke:
 
     @pytest.mark.asyncio
     async def test_explicit_auth_wins(self, minimal_config, noop_runtime):
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             graph = _fake_graph()
             build.return_value = graph
             client = Orchid(config=minimal_config, runtime=noop_runtime)
@@ -161,7 +161,7 @@ class TestInvoke:
 
     @pytest.mark.asyncio
     async def test_explicit_history_passed_through(self, minimal_config, noop_runtime):
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             graph = _fake_graph()
             build.return_value = graph
             client = Orchid(config=minimal_config, runtime=noop_runtime)
@@ -188,7 +188,7 @@ class TestInterrupts:
     @pytest.mark.asyncio
     async def test_graph_interrupt_returns_result(self, minimal_config, noop_runtime):
         pending = _FakeInterrupt({"tool": "book", "args": {"time": "8pm"}, "agent": "bookings"})
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph(interrupts=[pending])
             client = Orchid(config=minimal_config, runtime=noop_runtime)
 
@@ -206,7 +206,7 @@ class TestInterrupts:
     @pytest.mark.asyncio
     async def test_non_dict_interrupt_value(self, minimal_config, noop_runtime):
         pending = _FakeInterrupt("raw-text", id_="abc")
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph(interrupts=[pending])
             client = Orchid(config=minimal_config, runtime=noop_runtime)
 
@@ -222,7 +222,7 @@ class TestInterrupts:
 class TestResume:
     @pytest.mark.asyncio
     async def test_resume_requires_checkpointer(self, minimal_config, noop_runtime):
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph()
             client = Orchid(config=minimal_config, runtime=noop_runtime)
 
@@ -238,7 +238,7 @@ class TestResume:
             checkpointer=MemorySaver(),
         )
 
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             graph = _fake_graph(response="booked!", agents=["bookings"])
             build.return_value = graph
             client = Orchid(config=minimal_config, runtime=runtime)
@@ -261,7 +261,7 @@ class TestPersistence:
         chat_repo = OrchidSQLiteChatStorage(dsn=":memory:")
         await chat_repo.init_db()
 
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph(response="the answer", agents=["helper"])
             client = Orchid(
                 config=minimal_config,
@@ -287,7 +287,7 @@ class TestPersistence:
         chat_repo = OrchidSQLiteChatStorage(dsn=":memory:")
         await chat_repo.init_db()
 
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph(response="hi")
             client = Orchid(
                 config=minimal_config,
@@ -317,7 +317,7 @@ class TestPersistence:
         await chat_repo.add_message(chat.id, "user", "earlier question")
         await chat_repo.add_message(chat.id, "assistant", "earlier answer")
 
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             graph = _fake_graph(response="fresh response")
             build.return_value = graph
             client = Orchid(
@@ -352,7 +352,7 @@ class TestPersistence:
         await chat_repo.add_message(chat.id, "user", "old")
         await chat_repo.add_message(chat.id, "assistant", "older")
 
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             graph = _fake_graph(response="new")
             build.return_value = graph
             client = Orchid(
@@ -378,7 +378,7 @@ class TestPersistence:
 class TestLifecycle:
     @pytest.mark.asyncio
     async def test_close_is_idempotent(self, minimal_config, noop_runtime):
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph()
             client = Orchid(config=minimal_config, runtime=noop_runtime)
 
@@ -387,7 +387,7 @@ class TestLifecycle:
 
     @pytest.mark.asyncio
     async def test_invoke_after_close_raises(self, minimal_config, noop_runtime):
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph()
             client = Orchid(config=minimal_config, runtime=noop_runtime)
 
@@ -397,7 +397,7 @@ class TestLifecycle:
 
     @pytest.mark.asyncio
     async def test_async_context_manager(self, minimal_config, noop_runtime):
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph(response="ctx")
             async with Orchid(config=minimal_config, runtime=noop_runtime) as client:
                 result = await client.invoke("hi", persist=False)
@@ -412,7 +412,7 @@ class TestLifecycle:
 
         chat_repo.close.return_value = _aclose()
 
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph()
             client = Orchid(
                 config=minimal_config,
@@ -429,7 +429,7 @@ class TestLifecycle:
         chat_repo = MagicMock()
         chat_repo.close = MagicMock()
 
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph()
             client = Orchid(
                 config=minimal_config,
@@ -448,7 +448,7 @@ class TestLifecycle:
 class TestAccessors:
     @pytest.mark.asyncio
     async def test_accessors_return_wired_values(self, minimal_config, noop_runtime):
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph()
             client = Orchid(config=minimal_config, runtime=noop_runtime)
 
@@ -465,7 +465,7 @@ class TestAccessors:
     async def test_mcp_token_store_accessor_returns_injected_store(self, minimal_config, noop_runtime):
         """Regression for the 1.3.2 release that shipped without this accessor."""
         sentinel = object()
-        with patch("orchid_ai.orchid.build_graph") as build:
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
             build.return_value = _fake_graph()
             client = Orchid(
                 config=minimal_config,
