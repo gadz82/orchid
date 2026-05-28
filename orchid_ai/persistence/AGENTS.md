@@ -44,7 +44,7 @@ CHAT_DB_DSN=/data/chats.db
 ```
 
 ```python
-# src/persistence/factory.py
+# orchid_ai/persistence/factory.py
 storage = build_chat_storage(
     class_path=settings.chat_storage_class,
     dsn=settings.chat_db_dsn,
@@ -71,17 +71,18 @@ class OrchidChatStorage(ABC):
 ## Writing a Custom Backend
 
 1. Create a Python file anywhere importable (e.g., `my_project/storage/mysql.py`)
-2. Subclass `OrchidChatStorage` from `orchid.persistence.base`
-3. Subclass `OrchidMigrationRunner` from `orchid.persistence.migrations.runner` — set `dialect` and `migrations_package`
+2. Subclass `OrchidChatStorage` from `orchid_ai.persistence.base`
+3. Subclass `OrchidMigrationRunner` from `orchid_ai.persistence.migrations.runner` — set `dialect` and `migrations_package`
 4. Create migration modules in your migrations package
 5. The constructor must accept `*, dsn: str, extra_migrations_package: str | None = None` and forward the extras kwarg to the migrator
 6. Set `CHAT_STORAGE_CLASS=my_project.storage.mysql.MySQLChatStorage`
 
 **Integrator migrations (recommended path for most consumers).** If you
-only need extra tables/indices on top of the built-in PostgreSQL or
-SQLite backend, don't subclass anything — point `storage.class` at the
-framework backend and set `storage.extra_migrations_package` to the
-dotted path of your migrations package:
+only need extra tables/indices on top of the built-in SQLite backend
+(or the `orchid-storage-postgres` plugin's PostgreSQL backend), don't
+subclass anything — point `storage.class` at the framework / plugin
+backend and set `storage.extra_migrations_package` to the dotted
+path of your migrations package:
 
 ```yaml
 storage:
@@ -127,7 +128,7 @@ dependency direction.
 
 ### discover_migrations(package)
 
-Scans the given package for modules starting with `v` that expose `VERSION`, `up(conn, *, dialect)`, `down(conn, *, dialect)`. The `package` parameter is a dotted import path (e.g., `"orchid.persistence.migrations"`).
+Scans the given package for modules starting with `v` that expose `VERSION`, `up(conn, *, dialect)`, `down(conn, *, dialect)`. The `package` parameter is a dotted import path (e.g., `"orchid_ai.persistence.migrations"`).
 
 ### Dialect-Aware Migrations
 

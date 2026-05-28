@@ -29,6 +29,7 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
 from ..core.repository import OrchidSearchResult
+from .adapters import to_langchain_document
 
 
 class OrchidRetriever(BaseRetriever):
@@ -36,6 +37,11 @@ class OrchidRetriever(BaseRetriever):
 
     All fields use ``Any`` type hints to satisfy Pydantic validation
     without importing concrete types that would violate dependency rules.
+
+    Conversion from the framework's :class:`OrchidDocument` to
+    LangChain's ``Document`` happens here at the boundary via
+    :func:`orchid_ai.rag.adapters.to_langchain_document` — keeping
+    ``core/`` free of LangChain imports.
     """
 
     reader: Any  # OrchidVectorReader — Any to avoid Pydantic ABC validation issues
@@ -66,4 +72,4 @@ class OrchidRetriever(BaseRetriever):
             k=self.k,
             scope=self.scope,
         )
-        return [r.document for r in results]
+        return [to_langchain_document(r.document) for r in results]

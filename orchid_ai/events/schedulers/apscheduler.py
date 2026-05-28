@@ -39,16 +39,22 @@ _logger = logging.getLogger(__name__)
 # Lazy-import APScheduler so projects that don't enable events don't
 # pay the import cost.  The exception text is friendly because this
 # is the most common "wait what dependency?" stumble.
+#
+# Raises :class:`ImportError` (not :class:`RuntimeError`) so callers
+# can ``except ImportError`` uniformly across the parsers + scheduler
+# extras gates — see ``documents/parsers.py`` for the same pattern.
 def _apscheduler_imports() -> tuple[Any, Any, Any]:
     try:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
         from apscheduler.triggers.cron import CronTrigger
         from apscheduler.triggers.interval import IntervalTrigger
     except ImportError as exc:  # pragma: no cover — exercised only when dep missing
-        raise RuntimeError(
-            "APSchedulerBackend requires the 'apscheduler' package — "
-            "install via `pip install apscheduler` or include the "
-            "[events] extra of orchid-ai."
+        raise ImportError(
+            "APSchedulerBackend requires the 'apscheduler' package, "
+            "which is not installed.\n"
+            "Install via `pip install orchid-ai[events]` to enable "
+            "event-driven activation (Pollen + Bloom), or install "
+            "`apscheduler` directly."
         ) from exc
     return AsyncIOScheduler, CronTrigger, IntervalTrigger
 

@@ -51,7 +51,7 @@ from ..agents.mini_agent_node import mini_agent_node_factory
 from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidGuardrailsConfig
 from ..config.registry import get_class
 from ..config.tool_registry import load_tools_from_config
-from ..core.agent import OrchidAgent
+from ..core.agent import OrchidAgent, OrchidAgentRunContext
 from ..core.guardrails import (
     OrchidGuardrailAction,
     OrchidGuardrailChain,
@@ -186,12 +186,19 @@ class _AgentNodeWrapper:
         return update
 
     async def _run_agent(self, state: GraphState, auth: Any) -> GraphState:
-        prev_chat_id = self._agent._current_chat_id
-        prev_message_id = self._agent._current_message_id
-        prev_auth = self._agent._current_auth
-        self._agent._current_chat_id = state.get("chat_id") or None
-        self._agent._current_message_id = _latest_human_message_id(state)
-        self._agent._current_auth = auth
+        # Bind per-request state on a ContextVar so two concurrent
+        # activations of the same agent (LangGraph ``Send()``
+        # fan-out, mini-agent forks, events runner) stay isolated.
+        # ``correlation_id`` inherits the existing binding — the
+        # wrapper does not own it.
+        token = self._agent.set_run_context(
+            OrchidAgentRunContext(
+                auth=auth,
+                correlation_id=self._agent._current_correlation_id,
+                chat_id=state.get("chat_id") or None,
+                message_id=_latest_human_message_id(state),
+            )
+        )
 
         agent_start = time.perf_counter()
         perf_logger.info("[PERF][agent=%s] >>> START", self._agent.name)
@@ -215,9 +222,7 @@ class _AgentNodeWrapper:
                 ],
             }
         finally:
-            self._agent._current_chat_id = prev_chat_id
-            self._agent._current_message_id = prev_message_id
-            self._agent._current_auth = prev_auth
+            self._agent.reset_run_context(token)
         agent_elapsed = (time.perf_counter() - agent_start) * 1000
         perf_logger.info("[PERF][agent=%s] <<< DONE total=%.1f ms", self._agent.name, agent_elapsed)
         return result

@@ -29,11 +29,9 @@ import hashlib
 import logging
 from typing import Any, Callable
 
-from langchain_core.documents import Document
-
 from ...core.doc_store import OrchidDocStore
 from ...core.graph_store import OrchidEdge, OrchidEntity, OrchidGraphStore
-from ...core.repository import OrchidSearchResult, OrchidVectorReader
+from ...core.repository import OrchidDocument, OrchidSearchResult, OrchidVectorReader
 from ...core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
 from ...core.scopes import OrchidRAGScope
 from .simple import SimpleRetrieval
@@ -138,7 +136,7 @@ class GraphRAGRetrieval(OrchidRetrievalStrategy):
         graph_text = self._serialiser(entities, edges)
         graph_doc_id = f"graph::{hashlib.sha256(graph_text.encode()).hexdigest()[:16]}"
         graph_result = OrchidSearchResult(
-            document=Document(
+            document=OrchidDocument(
                 id=graph_doc_id,
                 page_content=graph_text,
                 metadata={

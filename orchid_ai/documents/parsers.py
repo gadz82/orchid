@@ -4,6 +4,19 @@ Pluggable document parsers — extract text from various file formats.
 Each parser implements ``DocumentParser.parse()`` which takes raw bytes
 and returns extracted text. New formats can be added by subclassing
 and registering in ``PARSER_REGISTRY``.
+
+The PDF / DOCX / XLSX / image parsers depend on heavy third-party
+packages (``pymupdf``, ``python-docx``, ``openpyxl``, ``Pillow``) that
+ship via the ``[documents]`` extra:
+
+    pip install orchid-ai[documents]
+
+The base :class:`DocumentParser` plus the lightweight
+:class:`CSVParser` and :class:`TextParser` are always available and
+require no extras.  Each heavy parser raises a friendly
+:class:`ImportError` from inside ``parse()`` if its underlying
+package is missing — so importing this module never fails on a lean
+``pip install orchid-ai`` install.
 """
 
 from __future__ import annotations
@@ -17,6 +30,30 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+_DOCUMENTS_EXTRA_HINT = (
+    "Install via `pip install orchid-ai[documents]` to enable "
+    "PDF / DOCX / XLSX parsing, or install the underlying package "
+    "directly."
+)
+
+
+def _missing_extra(parser_name: str, package: str, distribution: str) -> ImportError:
+    """Build a uniform, actionable :class:`ImportError`.
+
+    ``parser_name`` is the human-readable parser label
+    (``"PDF"``, ``"DOCX"``, ``"XLSX"``).  ``package`` is the import
+    name (``"fitz"``, ``"docx"``, …).  ``distribution`` is the PyPI
+    distribution that owns the import (``"pymupdf"``, ``"python-docx"``,
+    …) — the two often differ and we want the message to spell out
+    exactly what to ``pip install``.
+    """
+    return ImportError(
+        f"{parser_name} parsing requires the '{package}' package "
+        f"(PyPI: '{distribution}'), which is not installed.\n"
+        f"{_DOCUMENTS_EXTRA_HINT}"
+    )
+
+
 class DocumentParser(ABC):
     """Base class for document parsers."""
 
@@ -27,10 +64,19 @@ class DocumentParser(ABC):
 
 
 class PDFParser(DocumentParser):
-    """Parse PDF files using PyMuPDF (fitz)."""
+    """Parse PDF files using PyMuPDF (fitz).
+
+    Requires the ``pymupdf`` package (ships with
+    ``orchid-ai[documents]``).  Raises a friendly
+    :class:`ImportError` from :meth:`parse` if the package is missing
+    so importing this module on a lean install never fails.
+    """
 
     async def parse(self, file_bytes: bytes, filename: str) -> str:
-        import fitz  # pymupdf
+        try:
+            import fitz  # pymupdf
+        except ImportError as exc:  # pragma: no cover — exercised only when dep missing
+            raise _missing_extra("PDF", "fitz", "pymupdf") from exc
 
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         pages: list[str] = []
@@ -41,10 +87,18 @@ class PDFParser(DocumentParser):
 
 
 class DOCXParser(DocumentParser):
-    """Parse Word documents using python-docx."""
+    """Parse Word documents using python-docx.
+
+    Requires the ``python-docx`` package (ships with
+    ``orchid-ai[documents]``).  Raises a friendly
+    :class:`ImportError` from :meth:`parse` if the package is missing.
+    """
 
     async def parse(self, file_bytes: bytes, filename: str) -> str:
-        from docx import Document
+        try:
+            from docx import Document
+        except ImportError as exc:  # pragma: no cover — exercised only when dep missing
+            raise _missing_extra("DOCX", "docx", "python-docx") from exc
 
         doc = Document(io.BytesIO(file_bytes))
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
@@ -52,10 +106,18 @@ class DOCXParser(DocumentParser):
 
 
 class XLSXParser(DocumentParser):
-    """Parse Excel spreadsheets using openpyxl, outputting as CSV-like text."""
+    """Parse Excel spreadsheets using openpyxl, outputting as CSV-like text.
+
+    Requires the ``openpyxl`` package (ships with
+    ``orchid-ai[documents]``).  Raises a friendly
+    :class:`ImportError` from :meth:`parse` if the package is missing.
+    """
 
     async def parse(self, file_bytes: bytes, filename: str) -> str:
-        from openpyxl import load_workbook
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:  # pragma: no cover — exercised only when dep missing
+            raise _missing_extra("XLSX", "openpyxl", "openpyxl") from exc
 
         wb = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
         sheets: list[str] = []

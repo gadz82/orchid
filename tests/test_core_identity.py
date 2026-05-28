@@ -1,4 +1,4 @@
-"""Tests for OrchidIdentityResolver ABC and OrchidIdentityError from src/core/identity.py."""
+"""Tests for OrchidIdentityResolver ABC and OrchidIdentityError from orchid_ai/core/identity.py."""
 
 from __future__ import annotations
 

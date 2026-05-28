@@ -20,9 +20,11 @@ Platform-agnostic: no vendor-specific references.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import datetime as _dt
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from . import helpers as _helpers
@@ -32,9 +34,33 @@ from .repository import OrchidVectorReader
 from .scopes import OrchidRAGScope
 from .state import OrchidAgentState
 
-__all__ = ["OrchidAgent"]
+__all__ = ["OrchidAgent", "OrchidAgentRunContext"]
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class OrchidAgentRunContext:
+    """Per-request state for a single agent activation.
+
+    Bound to the asyncio task via :data:`_run_ctx_var` so concurrent
+    activations of the same :class:`OrchidAgent` instance (LangGraph
+    parallel fan-out, mini-agent forks, events runner) do not race on
+    shared instance attributes.
+    """
+
+    auth: Any | None = None
+    correlation_id: str | None = None
+    chat_id: str | None = None
+    message_id: str | None = None
+
+
+_EMPTY_RUN_CONTEXT = OrchidAgentRunContext()
+
+_run_ctx_var: contextvars.ContextVar[OrchidAgentRunContext] = contextvars.ContextVar(
+    "orchid.agent_run_context",
+    default=_EMPTY_RUN_CONTEXT,
+)
 
 
 class OrchidAgent(ABC):
@@ -69,26 +95,74 @@ class OrchidAgent(ABC):
         self._upload_namespace: str = _kwargs.pop("upload_namespace", "uploads")
         self._content_sources: list[OrchidContentSource] = _kwargs.pop("content_sources", None) or []
 
-        # ── Events-layer wiring (Pollen + Bloom — §15.1) ─────
-        # The graph builder injects these when ``events.enabled:
-        # true``; otherwise they stay ``None`` and any
-        # ``await self.emit_signal(...)`` raises a clear
-        # ``RuntimeError`` rather than silently dropping.
-        # Concrete graph wiring lands in Phase 4's lifespan; the
-        # API ships now so consumers can plan against it.
+        # Events-layer wiring (Pollen + Bloom — §15.1).  The
+        # signal emitter is injected once at startup by
+        # ``Orchid.inject_signal_emitter`` and read-only from then
+        # on, so it is safe as an instance attribute.  Per-request
+        # state (auth, chat_id, message_id, correlation_id) lives
+        # on :data:`_run_ctx_var` — see :meth:`set_run_context`.
         self._signal_emitter: Any | None = None
-        self._current_auth: Any | None = None
-        self._current_correlation_id: str | None = None
-        self._current_chat_id: str | None = None
-        # The id of the user message that triggered the current
-        # chat turn.  Set by the graph wrapper alongside
-        # ``_current_chat_id`` so that ``emit_signal(chat_id="self")``
-        # can auto-populate ``ChatBinding.source_message_id``
-        # (§LS5).  ``None`` outside chat turns (job runs, scheduled
-        # firings) — chained Bloom emissions therefore default to
-        # ``source_message_id=None`` and the frontend renders them
-        # in the bottom dock fallback.
-        self._current_message_id: str | None = None
+
+    # ── Per-request run context (ContextVar-backed) ─────────
+    #
+    # The four ``_current_*`` properties below proxy to
+    # :data:`_run_ctx_var`, an asyncio-task-local ContextVar.  Two
+    # concurrent activations of the same agent (e.g. LangGraph
+    # ``Send()`` fan-out, mini-agent forks, the events runner
+    # firing the same agent for two signals at once) each see
+    # their own run context — no cross-talk.
+    #
+    # Setters are preserved for test fixtures and back-compat;
+    # production code should prefer :meth:`set_run_context` /
+    # :meth:`reset_run_context` (Token API) for explicit
+    # restoration on return.
+
+    @property
+    def _current_auth(self) -> Any | None:
+        return _run_ctx_var.get().auth
+
+    @_current_auth.setter
+    def _current_auth(self, value: Any | None) -> None:
+        _run_ctx_var.set(replace(_run_ctx_var.get(), auth=value))
+
+    @property
+    def _current_correlation_id(self) -> str | None:
+        return _run_ctx_var.get().correlation_id
+
+    @_current_correlation_id.setter
+    def _current_correlation_id(self, value: str | None) -> None:
+        _run_ctx_var.set(replace(_run_ctx_var.get(), correlation_id=value))
+
+    @property
+    def _current_chat_id(self) -> str | None:
+        return _run_ctx_var.get().chat_id
+
+    @_current_chat_id.setter
+    def _current_chat_id(self, value: str | None) -> None:
+        _run_ctx_var.set(replace(_run_ctx_var.get(), chat_id=value))
+
+    @property
+    def _current_message_id(self) -> str | None:
+        return _run_ctx_var.get().message_id
+
+    @_current_message_id.setter
+    def _current_message_id(self, value: str | None) -> None:
+        _run_ctx_var.set(replace(_run_ctx_var.get(), message_id=value))
+
+    def set_run_context(self, ctx: OrchidAgentRunContext) -> contextvars.Token:
+        """Bind *ctx* to the current asyncio task and return a token.
+
+        Pair every call with :meth:`reset_run_context` in a
+        ``try/finally`` to restore the previous binding on return.
+        The graph wrapper (``_AgentNodeWrapper._run_agent``) drives
+        this around each agent activation so concurrent fan-out of
+        the same agent stays isolated.
+        """
+        return _run_ctx_var.set(ctx)
+
+    def reset_run_context(self, token: contextvars.Token) -> None:
+        """Restore the run context bound before :meth:`set_run_context`."""
+        _run_ctx_var.reset(token)
 
     # ── Identity ────────────────────────────────────────────
 

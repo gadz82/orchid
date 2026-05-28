@@ -2,10 +2,14 @@
 
 ## Golden Rule
 
-**This package depends only on `langchain-core`** (for `Document` and message types). No concrete backend imports are allowed.
+**This package depends only on the Python standard library.** No third-party imports are allowed — including `langchain`, `langchain_core`, `litellm`, `httpx`, `pydantic`, or concrete backend clients.
 
-Allowed: `dataclasses`, `typing`, `abc`, `enum`, `datetime`, `collections`, `langchain_core.*`
-Forbidden: `qdrant_client`, `litellm`, `asyncpg`, `pydantic` (except via langchain_core)
+The framework's canonical document model is `OrchidDocument` (a stdlib dataclass in `core/repository.py`).  RAG code that interoperates with LangChain goes through the adapter layer in `orchid_ai/rag/adapters.py` (`to_langchain_document()` / `from_langchain_document()`) — that module sits in `rag/`, where LangChain imports are explicitly allowed.
+
+Allowed: `dataclasses`, `typing`, `abc`, `enum`, `datetime`, `collections`, `asyncio`, `logging`, etc.
+Forbidden: `langchain`, `langchain_core`, `qdrant_client`, `litellm`, `asyncpg`, `pydantic` — anything outside the stdlib.
+
+The architectural invariant is enforced by `tests/test_dependency_boundaries.py` (`test_core_has_no_langchain_imports`).
 
 ## Files
 
@@ -42,6 +46,10 @@ OrchidAgentState(TypedDict)      # Flows through LangGraph. Extended by GraphSta
 ### `repository.py` — Vector Store Interfaces
 
 ```python
+OrchidDocument                   # Plain stdlib dataclass — page_content, metadata, id.
+                                  # Replaces langchain_core's Document inside the framework.
+                                  # ``Document`` is kept as a back-compat alias.
+
 OrchidVectorReader(ABC)          # Read-only. Agents depend on this.
   .retrieve(query, namespace, k, scope) → list[OrchidSearchResult]
 
@@ -51,6 +59,8 @@ OrchidVectorWriter(ABC)          # Write-only. Indexers depend on this.
 
 OrchidVectorStoreRepository(OrchidVectorReader, OrchidVectorWriter)  # Combined. Qdrant implements this.
 ```
+
+Conversion to/from LangChain's ``Document`` lives in `orchid_ai/rag/adapters.py` (`to_langchain_document()` / `from_langchain_document()`) — every backend or LangChain-facing wrapper crosses that boundary explicitly.
 
 The `scope` parameter in `retrieve()` is a `OrchidRAGScope` — NOT a raw dict.  Raw `filters: dict` is not supported.
 
@@ -173,7 +183,7 @@ OrchidMCPClient(ABC)
 
 ## When Modifying core/
 
-- Run `ruff check src/core/` to verify no forbidden imports crept in.
+- Run `ruff check orchid_ai/core/` to verify no forbidden imports crept in.
 - Any new dataclass should be `frozen=True` if it represents identity/config.
 - `TypedDict` with `total=False` for state objects (all fields optional for partial updates).
 - Don't add default implementations to ABCs — keep them pure contracts.

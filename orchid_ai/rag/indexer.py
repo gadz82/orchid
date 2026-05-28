@@ -23,7 +23,7 @@ import logging
 from dataclasses import dataclass
 from typing import Callable
 
-from ..core.repository import Document, OrchidVectorWriter
+from ..core.repository import OrchidDocument, OrchidVectorWriter
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +45,8 @@ class StaticIndexer:
     def register_namespace(
         self,
         namespace: str,
-        shared_docs: list[Document],
-        tenant_docs_fn: Callable[[str], list[Document]] | None = None,
+        shared_docs: list[OrchidDocument],
+        tenant_docs_fn: Callable[[str], list[OrchidDocument]] | None = None,
     ) -> None:
         """
         Register a namespace with its seed data.
@@ -55,7 +55,7 @@ class StaticIndexer:
         ----------
         namespace : str
             The vector store collection name (e.g. ``"knowledge-base"``).
-        shared_docs : list[Document]
+        shared_docs : list[OrchidDocument]
             Documents visible to all tenants (``tenant_id = "__shared__"``).
         tenant_docs_fn : callable, optional
             A function that takes ``tenant_key`` and returns tenant-specific
@@ -108,5 +108,5 @@ class StaticIndexer:
 class _NamespaceData:
     """Internal storage for a registered namespace."""
 
-    shared_docs: list[Document]
-    tenant_docs_fn: Callable[[str], list[Document]] | None = None
+    shared_docs: list[OrchidDocument]
+    tenant_docs_fn: Callable[[str], list[OrchidDocument]] | None = None

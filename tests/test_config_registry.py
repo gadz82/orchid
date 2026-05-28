@@ -1,4 +1,4 @@
-"""Tests for src.config.registry — agent class registry."""
+"""Tests for orchid_ai.config.registry — agent class registry."""
 
 from __future__ import annotations
 

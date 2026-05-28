@@ -1,4 +1,4 @@
-"""Tests for Document, OrchidSearchResult, and vector store ABCs from src/core/repository.py."""
+"""Tests for Document, OrchidSearchResult, and vector store ABCs from orchid_ai/core/repository.py."""
 
 from __future__ import annotations
 

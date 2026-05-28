@@ -1,4 +1,4 @@
-"""Tests for src.persistence.models — OrchidChatSession + OrchidChatMessage."""
+"""Tests for orchid_ai.persistence.models — OrchidChatSession + OrchidChatMessage."""
 
 from __future__ import annotations
 

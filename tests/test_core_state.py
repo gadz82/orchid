@@ -1,4 +1,4 @@
-"""Tests for OrchidAuthContext and OrchidAgentState from src/core/state.py."""
+"""Tests for OrchidAuthContext and OrchidAgentState from orchid_ai/core/state.py."""
 
 from __future__ import annotations
 

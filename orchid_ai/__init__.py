@@ -74,6 +74,7 @@ from .core.mcp_gateway_state import (
 )
 from .core.repository import (
     Document,
+    OrchidDocument,
     OrchidSearchResult,
     OrchidVectorReader,
     OrchidVectorStoreAdmin,
@@ -142,6 +143,12 @@ from .rag.factory import (
     register_graph_store_backend,
     register_sparse_encoder_backend,
     register_vector_backend,
+)
+from .rag.adapters import (
+    from_langchain_document,
+    from_langchain_documents,
+    to_langchain_document,
+    to_langchain_documents,
 )
 from .rag.scopes import OrchidRAGScope
 from .rag.strategies import (
@@ -216,6 +223,7 @@ __all__ = [
     "OrchidVectorWriter",
     # ── Data / result types ───────────────────────────
     "Document",
+    "OrchidDocument",
     "OrchidMCPAuthDiscovery",
     "OrchidMCPAuthRegistry",
     "OrchidMCPAuthRequiredError",
@@ -301,6 +309,8 @@ __all__ = [
     "build_mcp_token_store",
     "build_reader",
     "build_sparse_encoder",
+    "from_langchain_document",
+    "from_langchain_documents",
     "get_ingestion_strategy",
     "get_post_processor",
     "get_query_transformer",
@@ -321,4 +331,6 @@ __all__ = [
     "register_sparse_encoder_backend",
     "register_vector_backend",
     "shutdown_checkpointer",
+    "to_langchain_document",
+    "to_langchain_documents",
 ]

@@ -5,7 +5,7 @@ Default storage backend for orchid. Data is stored in a single file
 (default: ``~/.orchid/chats.db``) or ``:memory:`` for tests.
 
 Configuration:
-    CHAT_STORAGE_CLASS=orchid.persistence.sqlite.OrchidSQLiteChatStorage
+    CHAT_STORAGE_CLASS=orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
     CHAT_DB_DSN=~/.orchid/chats.db
 """
 

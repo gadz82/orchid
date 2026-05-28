@@ -1,4 +1,4 @@
-"""Tests for OrchidMCPToolResult and OrchidMCPClient ABC from src/core/mcp.py."""
+"""Tests for OrchidMCPToolResult and OrchidMCPClient ABC from orchid_ai/core/mcp.py."""
 
 from __future__ import annotations
 

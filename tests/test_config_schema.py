@@ -1,4 +1,4 @@
-"""Tests for src.config.schema — Pydantic config models."""
+"""Tests for orchid_ai.config.schema — Pydantic config models."""
 
 from __future__ import annotations
 

@@ -5,12 +5,36 @@ from __future__ import annotations
 import pytest
 from datetime import datetime
 
+from orchid_ai.agents.skill_executor import _skill_depth_var
+from orchid_ai.core.agent import _EMPTY_RUN_CONTEXT, _run_ctx_var
 from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.core.repository import OrchidVectorReader, OrchidVectorWriter, OrchidVectorStoreAdmin
 from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
 from orchid_ai.rag.scopes import OrchidRAGScope
 from orchid_ai.rag.backends.null import NullVectorReader
 from orchid_ai.persistence.models import OrchidChatSession, OrchidChatMessage
+
+
+@pytest.fixture(autouse=True)
+def _reset_agent_context_vars():
+    """Reset per-request ContextVars between tests.
+
+    The H4 fix moved per-request agent state (auth, chat_id,
+    message_id, correlation_id) and skill recursion depth onto
+    asyncio-task-local ContextVars.  pytest-asyncio's task model
+    does not always isolate ContextVar bindings between tests in
+    the same module, so a test that sets ``agent._current_chat_id
+    = "C-7"`` would leak that binding into a sibling test that
+    relies on the default ``None``.  Snapshotting around every
+    test restores isolation regardless of asyncio_mode.
+    """
+    ctx_token = _run_ctx_var.set(_EMPTY_RUN_CONTEXT)
+    depth_token = _skill_depth_var.set(0)
+    try:
+        yield
+    finally:
+        _run_ctx_var.reset(ctx_token)
+        _skill_depth_var.reset(depth_token)
 
 
 # ── OrchidAuthContext fixtures ──

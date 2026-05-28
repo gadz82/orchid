@@ -1,4 +1,4 @@
-"""Tests for src.persistence.factory — build_chat_storage factory."""
+"""Tests for orchid_ai.persistence.factory — build_chat_storage factory."""
 
 from __future__ import annotations
 

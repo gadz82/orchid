@@ -29,7 +29,7 @@ import time
 from typing import Any
 
 from ..core.ingestion import OrchidIngestionStrategy
-from ..core.repository import Document, OrchidVectorReader, OrchidVectorWriter
+from ..core.repository import OrchidDocument, OrchidVectorReader, OrchidVectorWriter
 from .scopes import OrchidRAGScope
 
 logger = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ async def inject_to_rag(
     if not chunks:
         return 0
 
-    documents: list[Document] = []
+    documents: list[OrchidDocument] = []
     for idx, chunk in enumerate(chunks):
         content_hash = hashlib.sha256(chunk.text.encode("utf-8", errors="replace")).hexdigest()[:16]
         doc_id = chunk.metadata.get("chunk_id") or (
@@ -116,7 +116,7 @@ async def inject_to_rag(
             "dynamic": True,
             "injected_at": time.time(),
         }
-        documents.append(Document(id=doc_id, page_content=chunk.text, metadata=metadata))
+        documents.append(OrchidDocument(id=doc_id, page_content=chunk.text, metadata=metadata))
 
     try:
         await store.upsert(documents, namespace)

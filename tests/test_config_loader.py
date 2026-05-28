@@ -1,4 +1,4 @@
-"""Tests for src.config.loader — YAML config loading + env interpolation."""
+"""Tests for orchid_ai.config.loader — YAML config loading + env interpolation."""
 
 from __future__ import annotations
 

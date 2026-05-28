@@ -41,20 +41,13 @@ dependencies = [
     "langchain-litellm>=0.5.0",
     "langchain-community>=0.3.0",
     "litellm>=1.60.0",
-    "google-generativeai>=0.8.3",  # Gemini models
     "httpx>=0.28.0",
     "mcp>=1.9.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "pyyaml>=6.0",
-    "python-multipart>=0.0.9",
-    "pymupdf>=1.24.0",
-    "python-docx>=1.1.0",
-    "openpyxl>=3.1.0",
-    "Pillow>=10.0.0",
     "aiosqlite>=0.20.0",
     "jmespath>=1.0.0",
-    "apscheduler>=3.10,<4",
 ]
 
 [project.urls]
@@ -65,6 +58,32 @@ Issues = "https://github.com/gadz82/orchid/issues"
 Changelog = "https://github.com/gadz82/orchid/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+# ── Heavy / vendor extras ────────────────────────────────────────────
+# Document parsing — only needed when the integrator actually parses
+# PDF / DOCX / XLSX / image uploads.  ``orchid-api`` and ``orchid-cli``
+# pull this in transitively so end users of those packages still get
+# upload support out of the box.
+documents = [
+    "pymupdf>=1.24.0",
+    "python-docx>=1.1.0",
+    "openpyxl>=3.1.0",
+    "Pillow>=10.0.0",
+]
+
+# Event-driven activation (Pollen + Bloom) — APScheduler is the
+# in-process clock for cron / interval triggers.  Only required when
+# ``events.enabled: true`` is set in ``agents.yaml``.
+events = [
+    "apscheduler>=3.10,<4",
+]
+
+# Direct Google Generative AI SDK — LiteLLM already routes Gemini, so
+# this is opt-in for integrators who want the native Google client
+# (e.g. for streaming behaviours not exposed via LiteLLM).
+gemini = [
+    "google-generativeai>=0.8.3",
+]
+
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.25.0",

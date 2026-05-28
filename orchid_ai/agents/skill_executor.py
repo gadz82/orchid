@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 from typing import Any, Awaitable, Callable
@@ -14,6 +15,18 @@ from ..core.state import OrchidAuthContext
 logger = logging.getLogger(__name__)
 
 MAX_AGENT_SKILL_DEPTH = 3
+
+# Task-local recursion depth.  Replaces the previous
+# ``self._skill_depth`` instance attribute, which was mutated on the
+# *peer* executor (``peer._skill_executor._skill_depth = ...``) — a
+# pattern that races under LangGraph parallel fan-out and clobbered
+# the depth back to ``0`` (not the previous value) on unwind.  The
+# ContextVar is asyncio-task-local, so concurrent skill chains never
+# share counter state.
+_skill_depth_var: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "orchid.skill_depth",
+    default=0,
+)
 
 
 class SkillExecutor:
@@ -33,7 +46,19 @@ class SkillExecutor:
         self._builtin_tool_caller = builtin_tool_caller
         self._agent_peers = agent_peers or {}
         self._content_sources = content_sources
-        self._skill_depth: int = 0
+
+    @property
+    def _skill_depth(self) -> int:
+        """Current task-local recursion depth.
+
+        Read-only proxy over :data:`_skill_depth_var`.  Kept as a
+        property (not an instance attribute) so legacy callers that
+        peeked at the field still see the right value, while
+        concurrent skill chains cannot stomp on each other's
+        counter.  Use the Token API in :meth:`_run_agent_step` to
+        increment / restore.
+        """
+        return _skill_depth_var.get()
 
     async def run_skill(
         self,
@@ -137,9 +162,10 @@ class SkillExecutor:
             available = list(self._agent_peers.keys())
             raise ValueError(f"Agent '{agent_name}' not available. Available peers: {available}")
 
-        if self._skill_depth >= MAX_AGENT_SKILL_DEPTH:
+        current_depth = _skill_depth_var.get()
+        if current_depth >= MAX_AGENT_SKILL_DEPTH:
             raise RecursionError(
-                f"Agent skill depth exceeded ({self._skill_depth}). "
+                f"Agent skill depth exceeded ({current_depth}). "
                 f"'{self._agent_name}' tried to invoke '{agent_name}' but max depth of "
                 f"{MAX_AGENT_SKILL_DEPTH} reached."
             )
@@ -159,22 +185,22 @@ class SkillExecutor:
             "mcp_context": {},
         }
 
-        # Track recursion depth on the peer if it has a skill executor
-        if hasattr(peer, "_skill_executor") and peer._skill_executor:
-            peer._skill_executor._skill_depth = self._skill_depth + 1
-
+        # Increment task-local depth via the ContextVar.  The Token
+        # returned by ``set`` is reset in ``finally`` so the prior
+        # depth (not ``0``) is restored — fixes the pre-existing
+        # bug where two-level nesting unwound to ``0`` mid-chain.
+        depth_token = _skill_depth_var.set(current_depth + 1)
         try:
             logger.info(
                 "[%s] Invoking peer '%s' (depth=%d): %s",
                 self._agent_name,
                 agent_name,
-                self._skill_depth + 1,
+                current_depth + 1,
                 effective_query[:120],
             )
             result_state = await peer.run(mini_state)
         finally:
-            if hasattr(peer, "_skill_executor") and peer._skill_executor:
-                peer._skill_executor._skill_depth = 0
+            _skill_depth_var.reset(depth_token)
 
         mcp_data = result_state.get("mcp_context", {})
         messages = result_state.get("messages", [])

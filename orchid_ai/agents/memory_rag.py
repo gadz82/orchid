@@ -21,8 +21,7 @@ import logging
 import time
 from typing import Any
 
-from langchain_core.documents import Document
-
+from ..core.repository import OrchidDocument
 from ..core.scopes import OrchidRAGScope
 from .memory import OrchidInMemoryConversationMemory
 
@@ -89,7 +88,7 @@ class OrchidRAGConversationMemory(OrchidInMemoryConversationMemory):
             **(metadata or {}),
         }
 
-        doc = Document(id=doc_id, page_content=content, metadata=doc_metadata)
+        doc = OrchidDocument(id=doc_id, page_content=content, metadata=doc_metadata)
 
         try:
             await self._writer.upsert(documents=[doc], namespace=self.MEMORY_NAMESPACE)

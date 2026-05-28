@@ -5,10 +5,21 @@ OrchidVectorReader: agents that only retrieve.
 OrchidVectorWriter: indexers that only write.
 OrchidVectorStoreRepository: combines both (for components that need full access).
 
-Uses LangChain's ``Document`` as the standard document model:
+The framework's canonical document model is :class:`OrchidDocument` —
+a plain stdlib dataclass with ``page_content``, ``metadata``, and
+``id`` fields. ``core/`` deliberately ships no LangChain dependency
+(see the architectural rule in :mod:`orchid_ai.core.__init__`); RAG
+backends and integrators that need to interoperate with LangChain go
+through the thin adapter layer in :mod:`orchid_ai.rag.adapters`
+(``to_langchain_document()`` / ``from_langchain_document()``).
 
-    from langchain_core.documents import Document
-    doc = Document(page_content="text", metadata={"scope": "tenant"}, id="doc-1")
+Example::
+
+    from orchid_ai.core.repository import OrchidDocument
+    doc = OrchidDocument(page_content="text", metadata={"scope": "tenant"}, id="doc-1")
+
+A ``Document`` alias is re-exported for backwards compatibility — new
+code should use :class:`OrchidDocument` directly.
 
 Architectural rule:
     No agent, tool, or pipeline may import QdrantClient, opensearchpy,
@@ -20,10 +31,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, ClassVar
-
-from langchain_core.documents import Document
 
 from .scopes import OrchidRAGScope
 from .sparse import OrchidSparseVector
@@ -31,11 +40,40 @@ from .sparse import OrchidSparseVector
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class OrchidDocument:
+    """A document with text, metadata, and an optional id.
+
+    Plain stdlib dataclass — :mod:`orchid_ai.core` keeps a zero
+    third-party dependency surface, so this type intentionally does
+    not inherit from LangChain's ``Document``.  The two shapes are
+    structurally compatible (same field names) and the
+    :func:`orchid_ai.rag.adapters.to_langchain_document` /
+    :func:`orchid_ai.rag.adapters.from_langchain_document` adapters
+    convert between them at the RAG boundary.
+
+    Field order matches LangChain's ``Document`` so positional
+    construction (``OrchidDocument("text")``) keeps working in code
+    that previously instantiated ``Document(page_content)``.
+    """
+
+    page_content: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    id: str | None = None
+
+
+# Backwards-compatible alias — older code (and downstream consumers)
+# imports ``Document`` from this module.  Keeping the alias avoids a
+# breaking-change cascade through all existing call sites.  New code
+# should reference :class:`OrchidDocument` directly.
+Document = OrchidDocument
+
+
 @dataclass(frozen=True)
 class OrchidSearchResult:
     """A document with its relevance score."""
 
-    document: Document
+    document: OrchidDocument
     score: float  # 0.0 → 1.0
 
 
@@ -110,7 +148,7 @@ class OrchidVectorWriter(ABC):
     @abstractmethod
     async def index(
         self,
-        documents: list[Document],
+        documents: list[OrchidDocument],
         namespace: str,
     ) -> None:
         """Index documents into the namespace."""
@@ -119,7 +157,7 @@ class OrchidVectorWriter(ABC):
     @abstractmethod
     async def upsert(
         self,
-        documents: list[Document],
+        documents: list[OrchidDocument],
         namespace: str,
     ) -> None:
         """Insert or update documents (idempotent)."""

@@ -13,7 +13,7 @@ import logging
 from typing import Any
 
 from ..core.ingestion import OrchidChunk, OrchidChunkPostProcessor, OrchidIngestionStrategy
-from ..core.repository import Document, OrchidVectorWriter
+from ..core.repository import OrchidDocument, OrchidVectorWriter
 from ..rag.scopes import OrchidRAGScope
 from .parsers import get_parser
 from .strategies import RecursiveIngestion
@@ -123,7 +123,7 @@ async def ingest_document(
 
     # 4. Convert to Documents and upsert (embeddings generated lazily by writer)
     documents = [
-        Document(
+        OrchidDocument(
             id=c.metadata.get("chunk_id") or f"{filename}-{i}",
             page_content=c.text,
             metadata=c.metadata,

@@ -51,8 +51,8 @@ def discover_migrations(package: str | None = None) -> list[Migration]:
     package : str | None
         Dotted import path of the package to scan (e.g.
         ``"examples.basketball.storage.migrations"``).  If *None*, falls back
-        to ``src.persistence.migrations`` (the library default, used by the
-        built-in ``OrchidPostgresChatStorage``).
+        to ``orchid_ai.persistence.migrations`` (the library default, used by
+        the built-in ``OrchidSQLiteChatStorage``).
 
     Each module in the package whose name starts with ``v`` and
     exposes ``VERSION``, ``up()``, and ``down()`` is collected.
