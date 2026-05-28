@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { FileCode2, Database, Plug, Bot } from 'lucide-react';
+import { FileCode2, Layers, Cog, Zap, Database, Plug } from 'lucide-react';
 import EcosystemSplice from '@/components/EcosystemSplice';
 import PillarCard from '@/components/PillarCard';
 import CodeBlock from '@/components/CodeBlock';
 import OrchidIcon from '@/components/OrchidIcon';
 import HeroCanvas from '@/components/HeroCanvas';
+import IntelligenceLayer from '@/components/IntelligenceLayer';
 
 export const metadata: Metadata = {
   title: 'Orchestrator Index — Multi-Agent AI Framework',
@@ -21,6 +22,27 @@ const PILLARS = [
     href: '/concepts/agents',
   },
   {
+    icon: Layers,
+    title: 'Multi-LLM',
+    description:
+      'OpenAI, Anthropic, Google Gemini, Groq, Ollama — switch providers by changing a single YAML field.',
+    href: '/concepts/multi-llm',
+  },
+  {
+    icon: Cog,
+    title: 'Customizable Agents',
+    description:
+      'Full control over agentic behaviour, tools, skills, and mini-agents. Compose specialised agents via YAML or Python.',
+    href: '/concepts/agents',
+  },
+  {
+    icon: Zap,
+    title: 'Event-Driven',
+    description:
+      'Pollen and Bloom enable reactive, event-driven agent workflows — react to signals, not just prompts.',
+    href: '/concepts/agents',
+  },
+  {
     icon: Database,
     title: 'Hierarchical RAG',
     description:
@@ -33,13 +55,6 @@ const PILLARS = [
     description:
       'Connect any MCP server. Supports none, passthrough, and OAuth auth modes out of the box.',
     href: '/concepts/mcp',
-  },
-  {
-    icon: Bot,
-    title: 'Multi-LLM',
-    description:
-      'OpenAI, Anthropic, Google Gemini, Groq, Ollama — switch providers by changing a single YAML field.',
-    href: '/concepts/multi-llm',
   },
 ];
 
@@ -113,6 +128,15 @@ const RUNTIME_TABS = [
     "chat_id": "my-chat"
   }
 }`,
+  },
+  {
+    language: 'python' as const,
+    label: 'SDK',
+    code: `from orchid_ai import Orchid
+
+orchid = Orchid.from_config("examples/basketball/orchid.yml")
+reply = orchid.chat("Tell me about LeBron James")
+print(reply.content)`,
   },
 ];
 
@@ -204,37 +228,98 @@ export default function HomePage() {
       </section>
 
       {/* ── Content below the fold ────────────────────────────── */}
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
+
+        {/* ── Intelligence as a Service ───────────────────────── */}
+        <section className="mb-16">
+          <IntelligenceLayer />
+        </section>
 
         {/* ── Ecosystem splice ────────────────────────────────── */}
-        <section className="mb-16">
-          <h2 className="text-2xl font-bold text-orchid-text mb-2">The Ecosystem</h2>
-          <p className="text-orchid-muted mb-6 text-sm">
-            Five separable packages with a one-direction dependency graph.
-          </p>
+        <section className="mb-16 -mx-6 sm:-mx-8 lg:-mx-12">
+          <div className="px-6 sm:px-8 lg:px-12">
+            <h2 className="text-2xl font-bold text-orchid-text mb-2">The Ecosystem</h2>
+            <p className="text-orchid-muted mb-6 text-sm">
+              Five separable packages with a one-direction dependency graph.
+            </p>
+          </div>
           <EcosystemSplice variant="compact" />
         </section>
 
-        {/* ── Four pillars ────────────────────────────────────── */}
+        {/* ── Six pillars ────────────────────────────────────── */}
         <section className="mb-16">
-          <h2 className="text-2xl font-bold text-orchid-text mb-2">Built on four pillars</h2>
+          <h2 className="text-2xl font-bold text-orchid-text mb-2">Built on six pillars</h2>
           <p className="text-orchid-muted mb-6 text-sm">
-            Every design decision stems from these four principles.
+            Every design decision stems from these six principles.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {PILLARS.map((p) => (
-              <PillarCard key={p.href} {...p} />
+              <PillarCard key={p.title} {...p} />
             ))}
+          </div>
+        </section>
+
+        {/* ── What is Orchestrator Index ──────────────────────── */}
+        <section className="mb-16">
+          <h2 className="text-2xl font-bold text-orchid-text mb-4">What is Orchestrator Index?</h2>
+          <div className="text-sm text-orchid-muted leading-relaxed space-y-4">
+            <p>
+              Orchestrator Index is an open-source, YAML-driven multi-agent AI framework built on
+              top of LangGraph. It lets you define autonomous agents, their tools, skills, and
+              behavioural prompts entirely in configuration files — no Python or TypeScript
+              required for the majority of use cases. Change a single YAML field and swap from
+              OpenAI to Anthropic, Google Gemini, Groq, or a local Ollama model without touching
+              a line of code.
+            </p>
+            <p>
+              At its core sits <strong className="text-orchid-text">GenericAgent</strong>, a
+              composable agent that delegates to specialised collaborators: a SkillDetector for
+              intent matching, an MCPDispatcher for external tool calls, and a SkillExecutor for
+              step-by-step reasoning. Each agent can be extended with custom Python classes while
+              keeping the framework&rsquo;s SOLID architecture intact — new behaviour is added by
+              subclassing, never by modifying existing code.
+            </p>
+            <p>
+              Orchestrator Index ships with a five-level hierarchical RAG system
+              (root → tenant → user → chat → agent) backed by Qdrant or ChromaDB, giving you
+              fine-grained scoping of retrieved context across multi-tenant deployments.
+              Documents are parsed once and indexed automatically, so your agents always have
+              access to the most relevant knowledge without manual pipeline management.
+            </p>
+            <p>
+              External tool integration is handled through the Model Context Protocol (MCP).
+              Orchestrator Index connects to any MCP server with three authentication modes —
+              none for local development, passthrough for forwarding user tokens, and full
+              OAuth 2.0 discovery for production-grade integrations. Capabilities are cached
+              proactively at session start, so the supervisor never blocks on discovery RPCs
+              during a conversation.
+            </p>
+            <p>
+              The framework exposes its intelligence layer through three runtimes: a REST API
+              (FastAPI) for web and mobile backends, a command-line interface for quick
+              prototyping, and an MCP gateway that lets any MCP-capable host LLM — Claude, GPT,
+              Gemini, or custom — call your agents as tools. Chat history is persisted via a
+              pluggable storage backend (PostgreSQL or SQLite), and every conversation can be
+              resumed, shared, or summarised on demand.
+            </p>
+            <p>
+              Whether you are building a customer support bot, a knowledge-base assistant, or a
+              multi-agent research pipeline, Orchestrator Index gives you the
+              configuration-first abstraction layer to move fast without sacrificing
+              extensibility. The entire ecosystem — library, API, CLI, frontend, and MCP
+              gateway — is composable, independently deployable, and designed to grow with
+              your project.
+            </p>
           </div>
         </section>
 
         {/* ── Two files, three runtimes ─────────── */}
         <section className="mb-16">
-          <h2 className="text-2xl font-bold text-orchid-text mb-2">Two files. Three runtimes.</h2>
+          <h2 className="text-2xl font-bold text-orchid-text mb-2">Two files. Four runtimes.</h2>
           <p className="text-orchid-muted mb-6 text-sm">
             <code className="text-orchid-text">orchid.yml</code> defines runtime settings (LLM, RAG, storage).
             <code className="text-orchid-text ml-1">agents.yaml</code> defines agents, tools, and skills.
-            Together they power the API, CLI, and MCP gateway.
+            Together they power the API, CLI, MCP gateway, and Python SDK.
           </p>
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1 min-w-0">

@@ -31,7 +31,7 @@ type EdgeData = {
 const NODES: NodeData[] = [
   {
     id: 'orchid',
-    cx: 450,
+    cx: 500,
     cy: 260,
     rx: 75,
     ry: 45,
@@ -41,8 +41,8 @@ const NODES: NodeData[] = [
   },
   {
     id: 'orchid-api',
-    cx: 700,
-    cy: 200,
+    cx: 750,
+    cy: 190,
     rx: 65,
     ry: 40,
     isAccent: false,
@@ -51,8 +51,8 @@ const NODES: NodeData[] = [
   },
   {
     id: 'orchid-cli',
-    cx: 180,
-    cy: 340,
+    cx: 250,
+    cy: 350,
     rx: 65,
     ry: 40,
     isAccent: false,
@@ -61,8 +61,8 @@ const NODES: NodeData[] = [
   },
   {
     id: 'orchid-frontend',
-    cx: 870,
-    cy: 95,
+    cx: 920,
+    cy: 85,
     rx: 65,
     ry: 40,
     isAccent: false,
@@ -71,63 +71,63 @@ const NODES: NodeData[] = [
   },
   {
     id: 'orchid-mcp',
-    cx: 870,
-    cy: 415,
+    cx: 920,
+    cy: 435,
     rx: 65,
     ry: 40,
     isAccent: false,
     kind: 'boilerplate',
-    purpose: 'MCP gateway — exposes Orchid to any MCP-capable host LLM',
+    purpose: 'MCP gateway — exposes Orchestrator Index to any MCP-capable host LLM',
   },
 ];
 
 const EDGES: EdgeData[] = [
   {
     id: 'e1',
-    x1: 635,
+    x1: 685,
     y1: 213,
-    x2: 525,
-    y2: 240,
+    x2: 575,
+    y2: 232,
     label: 'Python dep',
-    labelX: 570,
-    labelY: 215,
-    len: 113,
+    labelX: 620,
+    labelY: 200,
+    len: 115,
     cls: 'eco-e1',
   },
   {
     id: 'e2',
-    x1: 245,
-    y1: 318,
-    x2: 375,
-    y2: 278,
+    x1: 315,
+    y1: 328,
+    x2: 425,
+    y2: 282,
     label: 'Python dep',
-    labelX: 300,
+    labelX: 355,
     labelY: 295,
-    len: 136,
+    len: 115,
     cls: 'eco-e2',
   },
   {
     id: 'e3',
-    x1: 808,
-    y1: 135,
-    x2: 764,
-    y2: 160,
+    x1: 855,
+    y1: 118,
+    x2: 815,
+    y2: 158,
     label: 'HTTP',
-    labelX: 845,
-    labelY: 145,
-    len: 55,
+    labelX: 870,
+    labelY: 128,
+    len: 52,
     cls: 'eco-e3',
   },
   {
     id: 'e4',
-    x1: 836,
-    y1: 375,
-    x2: 734,
-    y2: 240,
+    x1: 855,
+    y1: 402,
+    x2: 575,
+    y2: 282,
     label: 'HTTP',
-    labelX: 843,
-    labelY: 308,
-    len: 160,
+    labelX: 750,
+    labelY: 360,
+    len: 300,
     cls: 'eco-e4',
   },
 ];
@@ -136,11 +136,12 @@ export default function EcosystemSplice({ variant = 'full' }: Props) {
   return (
     <div>
       <svg
-        viewBox="0 0 1000 520"
+        viewBox="0 0 1020 520"
         xmlns="http://www.w3.org/2000/svg"
         role="img"
-        aria-label="Orchid package dependency graph"
-        style={{ width: '100%', height: 'auto' }}
+        aria-label="Orchestrator Index package dependency graph"
+        className="w-full"
+        style={{ height: 'auto' }}
       >
         <style>{`
           @keyframes eco-draw { to { stroke-dashoffset: 0; } }
@@ -173,11 +174,24 @@ export default function EcosystemSplice({ variant = 'full' }: Props) {
           </filter>
         </defs>
 
-        {/* Edges */}
+        {/* Edges — static track */}
         {EDGES.map((edge) => (
           <line
             key={edge.id}
             data-testid="edge"
+            x1={edge.x1}
+            y1={edge.y1}
+            x2={edge.x2}
+            y2={edge.y2}
+            stroke="#2A2440"
+            strokeWidth={2}
+          />
+        ))}
+
+        {/* Edges — animated draw */}
+        {EDGES.map((edge) => (
+          <line
+            key={`draw-${edge.id}`}
             x1={edge.x1}
             y1={edge.y1}
             x2={edge.x2}
@@ -190,6 +204,50 @@ export default function EcosystemSplice({ variant = 'full' }: Props) {
             strokeDasharray={edge.len}
             strokeDashoffset={edge.len}
           />
+        ))}
+
+        {/* Edges — flowing dashed overlay */}
+        {EDGES.map((edge) => (
+          <line
+            key={`dash-${edge.id}`}
+            x1={edge.x1}
+            y1={edge.y1}
+            x2={edge.x2}
+            y2={edge.y2}
+            stroke="#B06AB3"
+            strokeWidth={1}
+            strokeDasharray="4 10"
+            opacity={0.35}
+          >
+            <animate
+              attributeName="stroke-dashoffset"
+              from="0"
+              to="-28"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </line>
+        ))}
+
+        {/* Edges — flowing particles */}
+        {EDGES.map((edge) => (
+          <g key={`particle-${edge.id}`}>
+            <circle r={3} fill="#D490D7" opacity={0.9}>
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path={`M ${edge.x1} ${edge.y1} L ${edge.x2} ${edge.y2}`}
+              />
+            </circle>
+            <circle r={2} fill="#C87ECB" opacity={0.5}>
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                begin="0.9s"
+                path={`M ${edge.x1} ${edge.y1} L ${edge.x2} ${edge.y2}`}
+              />
+            </circle>
+          </g>
         ))}
 
         {/* Edge labels (full variant only) */}
