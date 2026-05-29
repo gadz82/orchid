@@ -47,6 +47,7 @@ dependencies = [
     "pyyaml>=6.0",
     "aiosqlite>=0.20.0",
     "jmespath>=1.0.0",
+    "langchain-text-splitters>=0.0.4",
 ]
 
 [project.urls]
