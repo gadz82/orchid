@@ -13,11 +13,17 @@ through :class:`Orchid` so the three surfaces stay in lock-step.
 
 from __future__ import annotations
 
-__version__ = "0.0.0"
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("orchid-ai")
+except PackageNotFoundError:
+    __version__ = "0.0.0+local"
 
 from .checkpointing.factory import build_checkpointer, shutdown_checkpointer
 from .config.frontmatter import MarkdownFile, load_markdown_file, parse_frontmatter
 from .config.loader import load_config
+from .config.errors import OrchidConfigError
 from .config.md_loader import load_md_config, md_infrastructure_to_env
 from .config.watcher import (
     ConfigSnapshot,
@@ -191,6 +197,7 @@ __all__ = [
     "OrchidAuthExchangeClient",
     "OrchidAuthExchangeError",
     "OrchidChatStorage",
+    "OrchidConfigError",
     "OrchidChunk",
     "OrchidChunkPostProcessor",
     "OrchidDocStore",

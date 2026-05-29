@@ -78,22 +78,24 @@ class OrchidAgent(ABC):
         reader: OrchidVectorReader,
         mcp_clients: list[OrchidMCPClient] | None = None,
         chat_model: Any | None = None,
+        upload_namespace: str = "uploads",
+        content_sources: list[OrchidContentSource] | None = None,
+        config: Any | None = None,
+        summary_config: dict[str, Any] | None = None,
+        graph_store: Any | None = None,
         **_kwargs: Any,
     ):
-        # ``**_kwargs`` absorbs framework-injected extras the graph
-        # builder always passes (currently ``config`` and
-        # ``summary_config``).  Subclasses that need those values —
-        # ``GenericAgent`` and any consumer subclass — accept them
-        # explicitly in their own ``__init__``; subclasses that don't
-        # care simply ignore them.  This keeps the base ABC stable
-        # while letting the composition root hand every agent the same
-        # full kwargs set without inspect.signature sniffing.
+        # ``**_kwargs`` is preserved for backward compatibility with
+        # consumer subclasses that may forward unknown kwargs through
+        # ``super().__init__(**kwargs)``.  New framework-injected
+        # parameters should be declared explicitly above so static
+        # analysis catches contract drift.
         self.model_id: str = model_id
         self.reader = reader
         self.mcp_clients = mcp_clients or []
         self._chat_model = chat_model  # BaseChatModel (duck-typed to avoid core/ deps)
-        self._upload_namespace: str = _kwargs.pop("upload_namespace", "uploads")
-        self._content_sources: list[OrchidContentSource] = _kwargs.pop("content_sources", None) or []
+        self._upload_namespace: str = upload_namespace
+        self._content_sources: list[OrchidContentSource] = content_sources or []
 
         # Events-layer wiring (Pollen + Bloom — §15.1).  The
         # signal emitter is injected once at startup by
@@ -102,6 +104,49 @@ class OrchidAgent(ABC):
         # state (auth, chat_id, message_id, correlation_id) lives
         # on :data:`_run_ctx_var` — see :meth:`set_run_context`.
         self._signal_emitter: Any | None = None
+
+        # Sentinel — set by OrchidAgent.__init__ so that
+        # ``__init_subclass__`` enforcement can detect at runtime
+        # whether a subclass forgot to call ``super().__init__()``.
+        self._orchid_initialized: bool = True
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Enforce that subclasses call ``super().__init__()`` at runtime.
+
+        This hook wraps the subclass ``__init__`` to verify the
+        ``_orchid_initialized`` sentinel is set after construction.
+        If a consumer subclass forgets ``super().__init__()``, the
+        framework raises immediately rather than failing later with
+        a confusing ``AttributeError`` on ``_signal_emitter``.
+        """
+        super().__init_subclass__(**kwargs)
+        original_init = cls.__init__  # type: ignore[misc]
+
+        # Only wrap if the subclass defines its own __init__
+        if original_init is OrchidAgent.__init__:
+            return
+
+        from functools import wraps
+
+        @wraps(original_init)
+        def _checked_init(self: "OrchidAgent", *args: Any, **kw: Any) -> None:
+            original_init(self, *args, **kw)
+            if not getattr(self, "_orchid_initialized", False):
+                raise TypeError(
+                    f"{type(self).__name__}.__init__() must call super().__init__() "
+                    f"to properly initialise the OrchidAgent base class."
+                )
+
+        cls.__init__ = _checked_init  # type: ignore[misc]
+
+    def inject_signal_emitter(self, emitter: Any) -> None:
+        """Wire the signal emitter into this agent.
+
+        Called once at startup by :class:`OrchidLifecycle` to propagate
+        the events-layer emitter.  Public so lifecycle code doesn't
+        need to poke the private ``_signal_emitter`` attribute directly.
+        """
+        self._signal_emitter = emitter
 
     # ── Per-request run context (ContextVar-backed) ─────────
     #
@@ -191,6 +236,16 @@ class OrchidAgent(ABC):
         return ""
 
     @property
+    def chat_model(self) -> Any | None:
+        """The LLM chat model bound to this agent (``BaseChatModel``).
+
+        Public accessor so graph wiring and mini-agent topology can
+        read the model without poking the private ``_chat_model``
+        attribute.  Returns ``None`` when no model was injected.
+        """
+        return self._chat_model
+
+    @property
     def upload_namespace(self) -> str:
         """Vector store namespace for uploaded documents, e.g. 'education-uploads'.
 
@@ -243,13 +298,7 @@ class OrchidAgent(ABC):
     @staticmethod
     def extract_user_query(state: OrchidAgentState) -> str:
         """Walk messages in reverse to find the last human message."""
-        for msg in reversed(state.get("messages", [])):
-            # Duck-type check: LangChain message objects expose .type
-            if hasattr(msg, "type") and msg.type == "human":
-                return str(msg.content)
-            if type(msg).__name__ == "HumanMessage":
-                return str(msg.content)
-        return ""
+        return _helpers.extract_user_query(state)
 
     @staticmethod
     def extract_conversation_history(
@@ -382,11 +431,22 @@ class OrchidAgent(ABC):
         Retrieve from both the domain namespace AND the uploads namespace.
 
         Merges results by score and returns the top-k.
+        Uses ``return_exceptions=True`` so one failing retrieval doesn't
+        cancel the other.
         """
-        domain_docs, upload_docs = await asyncio.gather(
+        domain_result, upload_result = await asyncio.gather(
             self.fetch_rag_context(query, scope, namespace=self.rag_namespace, k=k),
             self.fetch_rag_context(query, scope, namespace=self.upload_namespace, k=k),
+            return_exceptions=True,
         )
+
+        domain_docs = domain_result if not isinstance(domain_result, BaseException) else []
+        upload_docs = upload_result if not isinstance(upload_result, BaseException) else []
+
+        if isinstance(domain_result, BaseException):
+            logger.warning("[%s] Domain RAG retrieval failed: %s", self.name, domain_result)
+        if isinstance(upload_result, BaseException):
+            logger.warning("[%s] Upload RAG retrieval failed: %s", self.name, upload_result)
 
         combined = domain_docs + upload_docs
         combined.sort(key=lambda d: d.get("score", 0), reverse=True)

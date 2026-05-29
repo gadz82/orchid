@@ -98,8 +98,12 @@ class CallAllStrategy(OrchidToolCallStrategy):
                 result = await client.call_tool(tool.name, args, auth)
                 return tool.name, result.text
             except Exception as exc:
-                # Broad catch: MCP tool calls can fail with HTTP errors (401, 500),
-                # transport errors, or protocol errors.  Report gracefully.
+                # Fault-isolation boundary: MCP tool calls cross a
+                # network/process boundary and can raise arbitrary
+                # exceptions (McpError, httpx.HTTPStatusError,
+                # AttributeError from buggy implementations, etc.).
+                # We catch broadly here to prevent one failing tool
+                # from crashing the entire agent.
                 logger.error("[%s] Tool '%s' failed: %s", agent_name, tool.name, exc)
                 return f"{tool.name}_error", str(exc)
 

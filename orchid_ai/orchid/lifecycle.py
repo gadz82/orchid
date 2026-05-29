@@ -109,7 +109,7 @@ class OrchidLifecycle:
         """Inject a signal emitter into the runtime and every agent instance."""
         self._runtime.signal_emitter = emitter
         for agent in self._agents.values():
-            agent._signal_emitter = emitter
+            agent.inject_signal_emitter(emitter)
 
     # ── Hot-reload ─────────────────────────────────────────
 

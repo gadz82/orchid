@@ -7,6 +7,20 @@ real env vars always win).
 
 Consumer-specific YAML keys (e.g. custom MCP server URLs) are simply
 ignored — the mapping is strict and only processes known keys.
+
+.. warning:: Global state mutation
+
+   :func:`apply_yaml_to_env` writes values into ``os.environ``.  This
+   is intentional — downstream ``pydantic-settings`` consumers read
+   from env.  Implications:
+
+   - Construction is NOT isolated: two ``Orchid`` instances in the same
+     process pollute each other's env.  Run one ``Orchid`` per process,
+     or call ``Orchid.from_config_path`` from a single coroutine before
+     any others.
+   - Tests that trigger config loading MUST restore ``os.environ``
+     afterward.  The ``tests/conftest.py`` ``_isolate_env`` autouse
+     fixture handles this automatically.
 """
 
 from __future__ import annotations

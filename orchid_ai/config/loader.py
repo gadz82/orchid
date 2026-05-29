@@ -14,6 +14,7 @@ from pathlib import Path
 
 import yaml
 
+from .errors import OrchidConfigError
 from .schema import OrchidAgentsConfig
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ def _interpolate_env(raw: str) -> str:
         var_name = match.group(1)
         value = os.environ.get(var_name)
         if value is None:
-            raise ValueError(
+            raise OrchidConfigError(
                 f"Environment variable '{var_name}' is referenced in agents.yaml "
                 f"but not set. Add it to your .env or environment."
             )

@@ -35,8 +35,9 @@ class TestGetEmbeddingBatchSize:
         assert get_embedding_batch_size("bedrock/cohere.embed-english-v3") == 80
 
     def test_bedrock_titan_unbounded(self):
-        # langchain-aws serialises single-input calls; no value in wrapping.
-        assert get_embedding_batch_size("bedrock/amazon.titan-embed-text-v2:0") is None
+        # langchain-aws serialises single-input calls; wrapping with a
+        # sensible default (32) still avoids surprise rate limits.
+        assert get_embedding_batch_size("bedrock/amazon.titan-embed-text-v2:0") == 32
 
     def test_openai_text_embedding_3_small_has_cap(self):
         assert get_embedding_batch_size("text-embedding-3-small") == 2000
@@ -48,10 +49,10 @@ class TestGetEmbeddingBatchSize:
         assert get_embedding_batch_size("text-embedding-ada-002") == 2000
 
     def test_ollama_unbounded(self):
-        assert get_embedding_batch_size("ollama/nomic-embed-text") is None
+        assert get_embedding_batch_size("ollama/nomic-embed-text") == 32
 
     def test_unknown_model_unbounded(self):
-        assert get_embedding_batch_size("mistral/mistral-embed") is None
+        assert get_embedding_batch_size("mistral/mistral-embed") == 32
 
 
 # ── BatchLimitingEmbeddings ────────────────────────────────
@@ -207,7 +208,7 @@ class TestBuildEmbeddingsWrapping:
         assert result.batch_size == 2000
 
     def test_unknown_fallback_model_is_not_wrapped(self):
-        """Bare-name models not in the limits table pass through unwrapped."""
+        """Bare-name models not in the limits table get the default batch size (32)."""
         fake_inner = _StubEmbeddings()
         with patch(
             "orchid_ai.rag.embeddings._build_fallback_embeddings",
@@ -215,10 +216,11 @@ class TestBuildEmbeddingsWrapping:
         ):
             result = build_embeddings("some-unknown-embedding-model")
 
-        assert result is fake_inner
-        assert not isinstance(result, BatchLimitingEmbeddings)
+        assert isinstance(result, BatchLimitingEmbeddings)
 
     def test_ollama_model_is_not_wrapped(self):
+        """Ollama models get the default batch size (32) since they have no
+        provider-specific limit in the table."""
         fake_inner = _StubEmbeddings()
         fake_module = MagicMock()
         fake_module.OllamaEmbeddings = MagicMock(return_value=fake_inner)
@@ -226,8 +228,7 @@ class TestBuildEmbeddingsWrapping:
         with patch("importlib.import_module", return_value=fake_module):
             result = build_embeddings("ollama/nomic-embed-text")
 
-        assert result is fake_inner
-        assert not isinstance(result, BatchLimitingEmbeddings)
+        assert isinstance(result, BatchLimitingEmbeddings)
 
 
 # ── get_embedding_dimension (existing contract) ────────────

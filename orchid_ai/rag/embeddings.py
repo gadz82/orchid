@@ -95,16 +95,22 @@ def get_embedding_dimension(model: str) -> int:
 
 
 def get_embedding_batch_size(model: str) -> int | None:
-    """Return the safe batch size for a model, or ``None`` if unbounded.
+    """Return the safe batch size for a model, or a sensible default.
 
     Used by :func:`build_embeddings` to detect providers whose embedding
     APIs reject requests above a server-side cap so large indexing jobs
     are transparently chunked inside :class:`BatchLimitingEmbeddings`.
+
+    Returns a sensible default of 32 for unknown providers to avoid
+    hitting undocumented rate limits on first-run with large indexes.
     """
     for prefix, limit in _PROVIDER_BATCH_LIMITS.items():
         if model.startswith(prefix):
             return limit
-    return None
+    # Sensible default: most embedding APIs have undocumented rate
+    # limits that surface on first large indexing run.  32 is safe
+    # for all known providers and avoids surprise 429s.
+    return 32
 
 
 def build_embeddings(model: str, **kwargs: Any) -> Embeddings:
@@ -158,7 +164,7 @@ def build_embeddings(model: str, **kwargs: Any) -> Embeddings:
 
 
 def _maybe_wrap_with_batch_limit(embeddings: Embeddings, model: str) -> Embeddings:
-    """Wrap ``embeddings`` in :class:`BatchLimitingEmbeddings` when the model has a known cap."""
+    """Wrap ``embeddings`` in :class:`BatchLimitingEmbeddings` when a batch size is configured."""
     batch_size = get_embedding_batch_size(model)
     if batch_size is None:
         return embeddings

@@ -3,6 +3,15 @@
 Distinct from :mod:`mcp_registration` (which is keyed per server) — a
 token record is owned by the ``(tenant_id, user_id, server_name)``
 triple and rotates on refresh / revocation.
+
+Security note — encryption at rest
+-----------------------------------
+By default, tokens are stored as plaintext in the backing store (SQLite
+or PostgreSQL).  The threat model assumes the host is trusted.  For
+deployments that require encryption at rest, integrators inject a custom
+:class:`OrchidTokenSerializer` into the token store at construction
+time.  The serializer is called around every read/write of the
+``access_token`` and ``refresh_token`` fields.
 """
 
 from __future__ import annotations
@@ -10,6 +19,40 @@ from __future__ import annotations
 import time as _time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+
+
+class OrchidTokenSerializer(ABC):
+    """Hook for encryption-at-rest of stored OAuth tokens.
+
+    Integrators implement this ABC and pass it to the token store
+    constructor to encrypt ``access_token`` and ``refresh_token``
+    before they hit the database, and decrypt on read.
+
+    The default (no serializer) stores tokens as plaintext — suitable
+    for developer SDKs where the host is trusted.
+
+    Example::
+
+        class AESTokenSerializer(OrchidTokenSerializer):
+            def __init__(self, key: bytes):
+                self._key = key
+
+            def encrypt(self, plaintext: str) -> str:
+                return aes_encrypt(plaintext, self._key).hex()
+
+            def decrypt(self, ciphertext: str) -> str:
+                return aes_decrypt(bytes.fromhex(ciphertext), self._key)
+    """
+
+    @abstractmethod
+    def encrypt(self, plaintext: str) -> str:
+        """Encrypt a token value before storage."""
+        ...
+
+    @abstractmethod
+    def decrypt(self, ciphertext: str) -> str:
+        """Decrypt a token value after retrieval."""
+        ...
 
 
 @dataclass

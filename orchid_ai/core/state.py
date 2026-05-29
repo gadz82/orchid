@@ -178,12 +178,38 @@ class OrchidAuthContext:
         )
 
     def __eq__(self, other: object) -> bool:
+        """Identity equality based on principal (tenant + user).
+
+        Two contexts with the same ``(tenant_key, user_id)`` are
+        considered equal even if they carry different tokens or role
+        sets.  This is intentional: equality answers "is this the same
+        person?" — not "do they have the same permissions right now?".
+
+        Use :meth:`same_principal` when you want an explicit,
+        self-documenting check without relying on ``__eq__`` semantics.
+        """
         if not isinstance(other, OrchidAuthContext):
             return NotImplemented
         return self.tenant_key == other.tenant_key and self.user_id == other.user_id
 
     def __hash__(self) -> int:
+        """Hash based on principal identity (tenant + user).
+
+        Consistent with :meth:`__eq__` — only ``tenant_key`` and
+        ``user_id`` participate.  Roles and tokens are excluded so
+        that a user whose roles change mid-session still maps to the
+        same cache / set bucket.
+        """
         return hash((self.tenant_key, self.user_id))
+
+    def same_principal(self, other: "OrchidAuthContext") -> bool:
+        """Return ``True`` if *other* represents the same person.
+
+        Explicit alternative to ``==`` for callers that want
+        self-documenting code.  Checks only ``tenant_key`` and
+        ``user_id`` — ignores roles, token, and expiry.
+        """
+        return self.tenant_key == other.tenant_key and self.user_id == other.user_id
 
 
 # ── LangGraph State ─────────────────────────────────────────────

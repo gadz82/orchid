@@ -16,7 +16,7 @@ from orchid_ai.runtime import OrchidRuntime
 class TestDefaults:
     def test_default_model(self):
         rt = OrchidRuntime()
-        assert rt.default_model == "ollama/llama3.2"
+        assert rt.default_model == ""
 
     def test_reader_defaults_to_none(self):
         rt = OrchidRuntime()
@@ -35,9 +35,16 @@ class TestDefaults:
         assert rt.get_reader() is mock_reader
 
     def test_get_chat_model_returns_default_when_none(self):
-        from langchain_core.language_models import BaseChatModel
+        import pytest
 
         rt = OrchidRuntime()
+        with pytest.raises(RuntimeError, match="No LLM model configured"):
+            rt.get_chat_model()
+
+    def test_get_chat_model_returns_default_with_model(self):
+        from langchain_core.language_models import BaseChatModel
+
+        rt = OrchidRuntime(default_model="ollama/llama3.2")
         model = rt.get_chat_model()
         assert isinstance(model, BaseChatModel)
 

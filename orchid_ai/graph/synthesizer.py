@@ -21,7 +21,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from ..config.schema import OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
-from ..core.helpers import _filter_summary_messages
+from ..core.helpers import filter_summary_messages
 from ..core.memory import OrchidConversationMemory
 from ..agents.memory_rag import OrchidRAGConversationMemory
 from ._supervisor_helpers import _extract_single_agent_response, _llm_complete
@@ -152,7 +152,7 @@ class ResponseSynthesizer:
                 chat_id = state.get("chat_id", "")
                 if chat_id:
                     try:
-                        delta = _filter_summary_messages(history)
+                        delta = filter_summary_messages(history)
                         await self._memory.update_running_summary(
                             chat_id,
                             delta,

@@ -52,6 +52,11 @@ class MCPDispatcher:
     def __init__(self, mcp_clients: list[OrchidMCPClient], server_configs: list[OrchidMCPServerConfig]):
         self._clients = mcp_clients
         self._configs = server_configs
+        #: Cached capabilities from render_capabilities — computed once
+        #: per session (cache is populated on first call and reused until
+        #: invalidated).  Avoids re-discovering capabilities every turn
+        #: when the cache is already populated on the underlying clients.
+        self._cached_capabilities: MCPCapabilities | None = None
 
     async def fetch(
         self,
@@ -236,7 +241,14 @@ class MCPDispatcher:
 
         The agentic loop always uses "LLM decides" semantics — the
         ``tool_call_strategy`` YAML setting is not consulted here.
+
+        Results are cached after the first successful call — subsequent
+        calls within the same session return the cached capabilities
+        without re-discovering from the MCP servers.
         """
+        if self._cached_capabilities is not None:
+            return self._cached_capabilities
+
         caps = MCPCapabilities()
         render_start = time.perf_counter()
         resource_entries: list[dict[str, str]] = []
@@ -376,6 +388,7 @@ class MCPDispatcher:
             len(self._configs),
             len(caps.raw_tools),
         )
+        self._cached_capabilities = caps
         return caps
 
     # ── MCP tools → litellm format ─────────────────────────────

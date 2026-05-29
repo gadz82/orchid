@@ -85,7 +85,7 @@ class OrchidSQLiteChatStorage(OrchidChatStorage):
     # ── Lifecycle ────────────────────────────────────────────
 
     async def init_db(self) -> None:
-        if self._db_path != ":memory:":
+        if not self._is_memory_db(self._db_path):
             os.makedirs(os.path.dirname(self._db_path) or ".", exist_ok=True)
 
         self._conn = await aiosqlite.connect(self._db_path)
@@ -94,6 +94,15 @@ class OrchidSQLiteChatStorage(OrchidChatStorage):
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._migrator.run_up(self._conn)
         logger.info("[OrchidChatStorage:sqlite] Initialised — %s", self._db_path)
+
+    @staticmethod
+    def _is_memory_db(path: str) -> bool:
+        """Detect in-memory SQLite databases.
+
+        Handles ``:memory:``, ``:memory:?cache=shared``, and
+        ``file::memory:`` URI variants.
+        """
+        return path == ":memory:" or path.startswith(":memory:?") or ":memory:" in path
 
     async def close(self) -> None:
         if self._conn:

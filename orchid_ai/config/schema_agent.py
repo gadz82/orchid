@@ -97,6 +97,12 @@ class OrchidAgentConfig(BaseModel):
     # rules.  Defaults to ``False`` to preserve today's serial behaviour.
     parallel_tools: bool = False
 
+    # Agentic loop limits — configurable so complex agents can opt
+    # into more rounds without monkeypatching module-level constants.
+    max_tool_rounds: int = Field(default=15, ge=1, le=100)
+    max_consecutive_dupes: int = Field(default=2, ge=1, le=10)
+    max_skill_depth: int = Field(default=3, ge=1, le=10)
+
     # Opt-in mini-agent (self-clone) configuration.  When
     # ``mini_agent.enabled=True``, the graph builder synthesises
     # ``{name}_mini`` and ``{name}_aggregator`` nodes alongside the
@@ -203,6 +209,12 @@ class OrchidAgentsConfig(BaseModel):
     mcp_gateway: OrchidMCPGatewayConfig = Field(default_factory=OrchidMCPGatewayConfig)
 
     agents: dict[str, OrchidAgentConfig] = Field(default_factory=dict)
+
+    # Security: restrict which hosts may receive passthrough bearer tokens.
+    # When non-empty, the MCP client checks the server URL's host against
+    # this list before forwarding the user's token.  An empty list (default)
+    # means no restriction — all hosts are trusted for passthrough.
+    allowed_passthrough_hosts: list[str] = Field(default_factory=list)
 
     # Pollen + Bloom — event-driven activation layer.  ``None`` (the
     # default) keeps the framework's existing zero-overhead behaviour:

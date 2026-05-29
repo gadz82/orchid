@@ -40,12 +40,14 @@ class SkillExecutor:
         builtin_tool_caller: Callable[..., Awaitable[Any]],
         agent_peers: dict[str, Any] | None = None,
         content_sources: Any = None,
+        max_skill_depth: int = MAX_AGENT_SKILL_DEPTH,
     ):
         self._agent_name = agent_name
         self._mcp_dispatcher = mcp_dispatcher
         self._builtin_tool_caller = builtin_tool_caller
         self._agent_peers = agent_peers or {}
         self._content_sources = content_sources
+        self._max_skill_depth = max_skill_depth
 
     @property
     def _skill_depth(self) -> int:
@@ -163,11 +165,11 @@ class SkillExecutor:
             raise ValueError(f"Agent '{agent_name}' not available. Available peers: {available}")
 
         current_depth = _skill_depth_var.get()
-        if current_depth >= MAX_AGENT_SKILL_DEPTH:
+        if current_depth >= self._max_skill_depth:
             raise RecursionError(
                 f"Agent skill depth exceeded ({current_depth}). "
                 f"'{self._agent_name}' tried to invoke '{agent_name}' but max depth of "
-                f"{MAX_AGENT_SKILL_DEPTH} reached."
+                f"{self._max_skill_depth} reached."
             )
 
         peer = self._agent_peers[agent_name]

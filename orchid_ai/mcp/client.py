@@ -48,6 +48,13 @@ class _CapabilitiesCache:
     #: the round-trip cost again — the failure is permanent until
     #: :meth:`invalidate_cache` is called.
     failed_resource_uris: set[str] = field(default_factory=set)
+    #: Per-capability discovery success flags.  When all three are
+    #: ``False`` after a discovery attempt, the cache is NOT marked
+    #: ``populated`` — a subsequent call will retry discovery rather
+    #: than reporting "no capabilities" forever.
+    tools_discovered: bool = False
+    prompts_discovered: bool = False
+    resources_discovered: bool = False
     populated: bool = False
 
 
@@ -76,6 +83,7 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
         auth_mode: str = "passthrough",
         token_store: Any | None = None,  # OrchidMCPTokenStore (lazy import to avoid circular)
         registration_store: Any | None = None,  # OrchidMCPClientRegistrationStore
+        allowed_passthrough_hosts: list[str] | None = None,
     ) -> None:
         self._url = url
         self._server_type = server_type
@@ -89,6 +97,9 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
         #: on every oauth-mode token refresh so we use the right
         #: endpoints and auth method without anything in YAML.
         self._registration_store = registration_store
+        #: Security: when non-empty, passthrough mode only sends the
+        #: bearer token if the server URL's host is in this list.
+        self._allowed_passthrough_hosts: list[str] = allowed_passthrough_hosts or []
 
     @property
     def server_url(self) -> str:
@@ -142,6 +153,7 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
                     }
                     for t in tools_result.tools
                 ]
+                self._cache.tools_discovered = True
                 logger.info("[MCP] Cached %d tools from %s", len(self._cache.tools), self._url)
             except Exception as exc:
                 logger.warning("[MCP] list_tools failed for %s: %s", self._url, exc)
@@ -160,6 +172,7 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
                     }
                     for p in prompts_result.prompts
                 ]
+                self._cache.prompts_discovered = True
                 logger.info("[MCP] Cached %d prompts from %s", len(self._cache.prompts), self._url)
 
                 # Pre-render prompts that have NO required arguments
@@ -193,6 +206,7 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
                     }
                     for r in resources_result.resources
                 ]
+                self._cache.resources_discovered = True
                 logger.info("[MCP] Cached %d resources from %s", len(self._cache.resources), self._url)
 
                 # Pre-read text resources
@@ -216,16 +230,29 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
             except Exception as exc:
                 logger.warning("[MCP] list_resources failed for %s: %s", self._url, exc)
 
-        self._cache.populated = True
-        logger.info(
-            "[MCP] Cache populated for %s: %d tools, %d prompts (%d rendered), %d resources (%d read)",
-            self._url,
-            len(self._cache.tools),
-            len(self._cache.prompts),
-            len(self._cache.rendered_prompts),
-            len(self._cache.resources),
-            len(self._cache.resource_contents),
+        # Only mark populated if at least one capability was discovered
+        # successfully.  When ALL three fail, the cache stays unpopulated
+        # so a subsequent call retries discovery rather than permanently
+        # reporting "no capabilities available".
+        any_discovered = (
+            self._cache.tools_discovered or self._cache.prompts_discovered or self._cache.resources_discovered
         )
+        if any_discovered:
+            self._cache.populated = True
+            logger.info(
+                "[MCP] Cache populated for %s: %d tools, %d prompts (%d rendered), %d resources (%d read)",
+                self._url,
+                len(self._cache.tools),
+                len(self._cache.prompts),
+                len(self._cache.rendered_prompts),
+                len(self._cache.resources),
+                len(self._cache.resource_contents),
+            )
+        else:
+            logger.warning(
+                "[MCP] All capability discovery failed for %s — cache NOT populated (will retry)",
+                self._url,
+            )
 
     # ── Auth ─────────────────────────────────────────────────
 
@@ -244,6 +271,17 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
             return {}
 
         if self._auth_mode == "passthrough":
+            if self._allowed_passthrough_hosts:
+                from urllib.parse import urlparse
+
+                host = urlparse(self._url).hostname or ""
+                if host not in self._allowed_passthrough_hosts:
+                    raise RuntimeError(
+                        f"MCP server '{self._server_name}' (host={host}) is not in "
+                        f"allowed_passthrough_hosts. Refusing to forward bearer token. "
+                        f"Add '{host}' to allowed_passthrough_hosts in agents.yaml or "
+                        f"change auth.mode to 'none'."
+                    )
             return auth.bearer_header
 
         from ..core.mcp import OrchidMCPAuthRequiredError, OrchidMCPTokenRecord

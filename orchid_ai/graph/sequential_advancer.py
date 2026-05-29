@@ -22,7 +22,7 @@ from langchain_core.messages import AIMessage
 
 from ..config.schema import OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
-from ..core.helpers import _filter_summary_messages
+from ..core.helpers import filter_summary_messages
 from ..core.memory import OrchidConversationMemory
 from ._supervisor_helpers import _llm_complete
 from .state import GraphState
@@ -122,7 +122,7 @@ class SequentialAdvancer:
                 chat_id = state.get("chat_id", "")
                 if chat_id:
                     try:
-                        delta = _filter_summary_messages(history)
+                        delta = filter_summary_messages(history)
                         await self._memory.update_running_summary(
                             chat_id,
                             delta,

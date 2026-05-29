@@ -336,6 +336,8 @@ async def _run_inner_loop(
         parallel_safety=parallel_safety,
         tool_subset=list(tool_map.keys()) if tool_subset else None,
         is_mini=True,
+        max_tool_rounds=parent_config.max_tool_rounds,
+        max_consecutive_dupes=parent_config.max_consecutive_dupes,
     )
 
     final_text, tool_results = await loop.run(messages)

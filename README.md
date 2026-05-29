@@ -263,7 +263,7 @@ graph = build_graph(config=config, runtime=runtime)
 
 | Field | Type | Default |
 |-------|------|---------|
-| `default_model` | `str` | `"ollama/llama3.2"` |
+| `default_model` | `str` | `""` (must be set explicitly) |
 | `reader` | `OrchidVectorReader \| None` | `NullVectorReader` (no RAG) |
 | `llm_service` | `LLMProvider \| None` | `LiteLLMProvider()` |
 | `mcp_client_factory` | `MCPClientFactory \| None` | `StreamableHttpMCPClient` factory |

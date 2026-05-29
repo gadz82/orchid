@@ -657,7 +657,7 @@ class Orchid:
         """
         self._runtime.signal_emitter = emitter
         for agent in self._agents.values():
-            agent._signal_emitter = emitter
+            agent.inject_signal_emitter(emitter)
 
     @property
     def config_storage(self) -> "OrchidConfigStorage | None":

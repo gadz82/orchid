@@ -28,11 +28,11 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langgraph.graph import END
 from langgraph.types import Send
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..config.schema import OrchidOrchestratorSkillConfig, OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
-from ..core.helpers import _filter_summary_messages
+from ..core.helpers import filter_summary_messages
 from ..core.memory import OrchidConversationMemory
 from .sequential_advancer import SequentialAdvancer
 from .state import GraphState
@@ -69,6 +69,25 @@ class OrchidRoutingDecision(BaseModel):
         default=None,
         description="Direct response to the user (only when no agent is needed)",
     )
+
+    @model_validator(mode="after")
+    def _check_exclusivity(self) -> "OrchidRoutingDecision":
+        """At most one of agents, skill, direct_response should be populated."""
+        populated = sum(
+            [
+                bool(self.agents),
+                self.skill is not None,
+                self.direct_response is not None,
+            ]
+        )
+        if populated > 1:
+            # LLM sometimes populates multiple — prefer direct_response > skill > agents
+            if self.direct_response is not None:
+                self.agents = []
+                self.skill = None
+            elif self.skill is not None:
+                self.agents = []
+        return self
 
 
 logger = logging.getLogger(__name__)
@@ -300,7 +319,7 @@ async def _extract_and_compress_history(
             chat_id = state.get("chat_id", "")
             if chat_id:
                 try:
-                    delta = _filter_summary_messages(history)
+                    delta = filter_summary_messages(history)
                     await memory.update_running_summary(
                         chat_id,
                         delta,
@@ -427,7 +446,7 @@ async def _route(
     auth_hint = _inject_auth_hints(state)
 
     system = routing_template.format(
-        assistant_name=sup.assistant_name,
+        assistant_name=sup.assistant_name or "assistant",
         agent_descriptions=desc_text + auth_hint,
         skill_descriptions=skill_text,
     )

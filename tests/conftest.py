@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pytest
 from datetime import datetime
 
@@ -13,6 +14,35 @@ from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
 from orchid_ai.rag.scopes import OrchidRAGScope
 from orchid_ai.rag.backends.null import NullVectorReader
 from orchid_ai.persistence.models import OrchidChatSession, OrchidChatMessage
+
+
+@pytest.fixture(autouse=True)
+def _isolate_env(monkeypatch):
+    """Snapshot and restore ``os.environ`` around every test.
+
+    Orchid's ``from_config_path`` and ``apply_yaml_to_env`` mutate
+    ``os.environ`` to flatten YAML values for downstream
+    pydantic-settings consumers.  Without this fixture, tests that
+    trigger config loading leak env vars into subsequent tests,
+    causing order-dependent failures.
+
+    Uses ``monkeypatch.setenv`` / ``monkeypatch.delenv`` semantics:
+    pytest automatically restores the original env on teardown.
+    """
+    # monkeypatch already snapshots env on first setenv/delenv call,
+    # but we need to ensure ALL mutations (including direct
+    # os.environ[k] = v) are reverted.  Capture the full snapshot
+    # and restore it in the finalizer.
+    original_env = dict(os.environ)
+    yield
+    # Restore: remove keys that were added, restore keys that changed
+    current_keys = set(os.environ.keys())
+    original_keys = set(original_env.keys())
+    for key in current_keys - original_keys:
+        del os.environ[key]
+    for key, value in original_env.items():
+        if os.environ.get(key) != value:
+            os.environ[key] = value
 
 
 @pytest.fixture(autouse=True)
@@ -128,6 +158,7 @@ class MockMCPClient(OrchidMCPClient):
     def __init__(self, tool_results=None):
         self._tool_results = tool_results or {}
         self.tool_calls = []
+        self._cache_warmed = False
 
     async def call_tool(self, tool_name, arguments, auth):
         self.tool_calls.append({"tool": tool_name, "args": arguments})
@@ -151,6 +182,12 @@ class MockMCPClient(OrchidMCPClient):
 
     async def read_resource(self, uri, auth):
         return ""
+
+    async def warm_cache(self, auth):
+        self._cache_warmed = True
+
+    def invalidate_cache(self):
+        self._cache_warmed = False
 
     @property
     def server_url(self):

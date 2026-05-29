@@ -78,14 +78,13 @@ async def test_render_capabilities_uses_cache_after_warmup():
     caps_a = await dispatcher.render_capabilities(auth, agent_name="catalog-agent")
     caps_b = await dispatcher.render_capabilities(auth, agent_name="catalog-agent")
 
-    # render_capabilities calls list_tools once per invocation — that is
-    # the OrchidMCPClient.list_tools surface, which the production
-    # ``StreamableHttpMCPClient`` implements as an in-memory cache hit
-    # once the cache is populated (see test_client_no_ttl.py).  The
-    # crucial assertion is that the dispatcher does NOT issue any
-    # extra list_prompts / list_resources beyond what the YAML config
-    # asks for.
-    assert client.list_tools_calls == 2
+    # render_capabilities caches its result after the first call — the
+    # second call returns the cached MCPCapabilities without touching
+    # the MCP client at all.  The underlying
+    # ``StreamableHttpMCPClient.list_tools`` is itself a cache hit
+    # (see test_client_no_ttl.py), so the total cost is one list_tools
+    # call for the lifetime of the dispatcher.
+    assert client.list_tools_calls == 1
     # No prompts/resources configured → no discovery initiated by the
     # dispatcher for those.
     assert client.list_prompts_calls == 0

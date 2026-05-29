@@ -30,7 +30,7 @@ from langchain_core.messages import AIMessage
 from ..config.schema import OrchidAgentConfig
 from ..core.agent import OrchidAgent
 from ..core.graph_store import OrchidGraphStore
-from ..core.helpers import _filter_summary_messages
+from ..core.helpers import filter_summary_messages
 from ..core.mcp import OrchidMCPClient
 from ..observability.mini_agent_events import make_event_message
 from ..core.repository import OrchidVectorReader
@@ -95,6 +95,7 @@ class GenericAgent(OrchidAgent):
             builtin_tool_caller=self.call_builtin_tool,
             agent_peers=self._agent_peers,
             content_sources=self._content_sources,
+            max_skill_depth=config.max_skill_depth,
         )
         self._rag_pipeline = RagPipeline(
             reader=reader,
@@ -438,7 +439,7 @@ class GenericAgent(OrchidAgent):
                 chat_id = state.get("chat_id", "")
                 if chat_id:
                     try:
-                        delta = _filter_summary_messages(history)
+                        delta = filter_summary_messages(history)
                         await memory.update_running_summary(
                             chat_id,
                             delta,
@@ -569,6 +570,8 @@ class GenericAgent(OrchidAgent):
             all_tool_defs=all_tool_defs,
             temperature=llm_config.temperature if llm_config else 0.2,
             parallel_safety=parallel_safety,
+            max_tool_rounds=self._config.max_tool_rounds,
+            max_consecutive_dupes=self._config.max_consecutive_dupes,
         )
         final_text, tool_results = await loop.run(messages)
         return final_text, tool_results, loop._events

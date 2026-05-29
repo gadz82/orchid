@@ -173,8 +173,8 @@ class _AgentNodeWrapper:
         decomp_start = time.perf_counter()
         update = await maybe_decompose(
             agent_config=self._agent_config,
-            chat_model=getattr(self._agent, "_chat_model", None),
-            mcp_clients=getattr(self._agent, "mcp_clients", None) or [],
+            chat_model=self._agent.chat_model,
+            mcp_clients=self._agent.mcp_clients or [],
             auth=auth,
             state=state,
         )
@@ -222,6 +222,7 @@ class _AgentNodeWrapper:
                         )
                     )
                 ],
+                "error": f"{type(exc).__name__}: {exc}",
             }
         finally:
             self._agent.reset_run_context(token)
@@ -466,6 +467,11 @@ def build_graph(
     # that via ``is_null`` and falls back to SimpleRetrieval.
     graph_store = runtime.get_graph_store()
     default_model = runtime.default_model
+
+    # Wire security setting from config → runtime so the MCP factory
+    # can enforce the passthrough host allowlist.
+    if config.allowed_passthrough_hosts and not runtime.allowed_passthrough_hosts:
+        runtime.allowed_passthrough_hosts = config.allowed_passthrough_hosts
 
     # ── Resolve default LLM config from YAML ──
     default_fallback = config.defaults.llm.fallback_model
@@ -721,14 +727,14 @@ def build_graph(
         # ``run()`` and runs its own focused agentic loop, so a custom
         # class's specialised flow is bypassed inside minis by design.
         mini_enabled = bool(agent_config and agent_config.mini_agent.enabled)
-        parent_chat_model = getattr(agent, "_chat_model", None)
+        parent_chat_model = agent.chat_model
         if mini_enabled and parent_chat_model is not None:
             _MiniAgentWiring.wire_mini_topology(
                 graph=g,
                 agent_name=agent.name,
                 agent_config=agent_config,
                 agent_chat_model=parent_chat_model,
-                agent_mcp_clients=getattr(agent, "mcp_clients", None),
+                agent_mcp_clients=agent.mcp_clients,
                 node_name=node_name,
             )
         else:

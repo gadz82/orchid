@@ -32,11 +32,17 @@ logger = logging.getLogger(__name__)
 
 
 def extract_user_query(state: OrchidAgentState) -> str:
-    """Walk messages in reverse to find the last human message."""
+    """Walk messages in reverse to find the last human message.
+
+    Uses a single canonical duck-type check via
+    ``getattr(msg, "type", None) == "human"`` which covers both
+    LangChain ``HumanMessage`` (which sets ``.type = "human"``) and
+    any compatible message object.  The ``isinstance`` check is
+    intentionally avoided here to keep ``core/`` free of
+    ``langchain_core`` imports.
+    """
     for msg in reversed(state.get("messages", [])):
-        if hasattr(msg, "type") and msg.type == "human":
-            return str(msg.content)
-        if type(msg).__name__ == "HumanMessage":
+        if getattr(msg, "type", None) == "human":
             return str(msg.content)
     return ""
 
@@ -62,14 +68,36 @@ def extract_conversation_history(
     When ``max_chars`` is set, individual messages longer than
     ``max_chars`` are truncated using ``truncation_strategy``
     (one of ``"hard"``, ``"middle"``, ``"llm"``, ``"semantic"``).
+
+    Iterates from the end and breaks early once ``max_turns`` pairs
+    are collected, avoiding O(n) full-list construction for long
+    histories (1000+ messages).
     """
     strategy = OrchidTruncationStrategy(truncation_strategy)
     messages = state.get("messages", [])
     if not messages:
         return []
 
+    max_messages = max_turns * 2
+    # Iterate from end, skip the last human message only if it's the
+    # current unanswered query (i.e., no AI message follows it).
     history: list[dict[str, str]] = []
-    for msg in messages:
+    skip_last_human = False
+
+    # Determine if the last relevant message is a human message (current query)
+    for msg in reversed(messages):
+        msg_type = getattr(msg, "type", None) or type(msg).__name__.lower()
+        content = str(msg.content) if hasattr(msg, "content") else str(msg)
+        if not content.strip():
+            continue
+        if any(content.startswith(prefix) for prefix in skip_prefixes):
+            continue
+        if msg_type in ("human", "humanmessage"):
+            skip_last_human = True
+        break
+
+    skipped = False
+    for msg in reversed(messages):
         msg_type = getattr(msg, "type", None) or type(msg).__name__.lower()
         content = str(msg.content) if hasattr(msg, "content") else str(msg)
 
@@ -80,6 +108,9 @@ def extract_conversation_history(
             continue
 
         if msg_type in ("human", "humanmessage"):
+            if skip_last_human and not skipped:
+                skipped = True
+                continue
             if max_chars is not None and len(content) > max_chars:
                 content = truncate_content(content, max_chars, strategy)
             history.append({"role": "user", "content": content})
@@ -92,13 +123,10 @@ def extract_conversation_history(
                 content = truncate_content(content, max_chars, strategy)
             history.append({"role": "assistant", "content": content})
 
-    if history and history[-1]["role"] == "user":
-        history = history[:-1]
+        if len(history) >= max_messages:
+            break
 
-    max_messages = max_turns * 2
-    if len(history) > max_messages:
-        history = history[-max_messages:]
-
+    history.reverse()
     return history
 
 
@@ -131,6 +159,22 @@ async def compress_conversation_history(
     parse failure the system falls back to a narrative-only summary.
 
     Prompt overrides (``*_prompt``) use ``None`` → module-level defaults.
+
+    PII / data residency responsibility
+    ------------------------------------
+    This function sends conversation content to an LLM for summarisation.
+    The framework does NOT automatically apply PII redaction before the
+    LLM call.  For multi-tenant deployments with strict data residency
+    or PII requirements, integrators are responsible for either:
+
+    1. Applying PII guardrails (``orchid_ai.guardrails``) to messages
+       BEFORE they enter the conversation history, or
+    2. Wrapping this function with a pre-processing step that redacts
+       sensitive fields before summarisation, or
+    3. Using a self-hosted LLM that satisfies data residency constraints.
+
+    The ``chat_model`` used here should be configured to route through
+    an LLM endpoint that meets the deployment's compliance requirements.
     """
     max_recent = recent_turns * 2
     if len(history) <= max_recent:
@@ -193,7 +237,7 @@ async def compress_conversation_history(
             temperature=0.0,
         )
         summary_text = result.content or ""
-    except Exception as exc:
+    except (ConnectionError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
         logger.warning("History compression failed (%s), falling back to truncation", exc)
         return recent
 
@@ -218,7 +262,7 @@ def _narrative_fallback(transcript: str) -> str:
     return DEFAULT_NARRATIVE_FALLBACK_PROMPT.format(transcript=transcript)
 
 
-def _filter_summary_messages(history: list[dict[str, str]]) -> list[dict[str, str]]:
+def filter_summary_messages(history: list[dict[str, str]]) -> list[dict[str, str]]:
     """Return only the non-summary messages from *history*.
 
     The ``[Conversation summary]`` prefix is an internal compression
@@ -226,6 +270,10 @@ def _filter_summary_messages(history: list[dict[str, str]]) -> list[dict[str, st
     were a real conversation turn.
     """
     return [m for m in history if not m.get("content", "").startswith("[Conversation summary]")]
+
+
+# Backward-compat alias (was private, now public)
+_filter_summary_messages = filter_summary_messages
 
 
 # ── RAG retrieval ──────────────────────────────────────────────

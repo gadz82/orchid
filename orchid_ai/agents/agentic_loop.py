@@ -66,10 +66,14 @@ class AgenticLoop:
         parallel_safety: dict[str, bool] | None = None,
         tool_subset: list[str] | None = None,
         is_mini: bool = False,
+        max_tool_rounds: int = _MAX_TOOL_ROUNDS,
+        max_consecutive_dupes: int = _MAX_CONSECUTIVE_DUPES,
     ) -> None:
         self._agent_name = agent_name
         self._chat_model = chat_model
         self._temperature = temperature
+        self._max_tool_rounds = max_tool_rounds
+        self._max_consecutive_dupes = max_consecutive_dupes
         # ``_events`` collects lifecycle event SystemMessages emitted
         # during tool dispatch.  ``GenericAgent`` drains this list
         # after ``loop.run()`` returns and includes them in the node
@@ -128,14 +132,16 @@ class AgenticLoop:
         response (caller should fall back to summarisation).
         """
         loop_start = time.perf_counter()
-        model_with_tools = self._chat_model.bind_tools(self._all_tool_defs)
+        if not hasattr(self, "_model_with_tools"):
+            self._model_with_tools = self._chat_model.bind_tools(self._all_tool_defs)
+        model_with_tools = self._model_with_tools
         perf_logger.info(
             "[PERF][agent=%s][loop] start tools_available=%d",
             self._agent_name,
             len(self._all_tool_defs),
         )
 
-        for round_num in range(_MAX_TOOL_ROUNDS):
+        for round_num in range(self._max_tool_rounds):
             active_model = self._pick_model(model_with_tools, round_num)
 
             llm_start = time.perf_counter()
@@ -189,17 +195,17 @@ class AgenticLoop:
         perf_logger.warning(
             "[PERF][agent=%s][loop] HIT_MAX_ROUNDS rounds=%d total=%.1f ms",
             self._agent_name,
-            _MAX_TOOL_ROUNDS,
+            self._max_tool_rounds,
             total_elapsed,
         )
-        logger.warning("[%s] Hit max tool rounds (%d)", self._agent_name, _MAX_TOOL_ROUNDS)
+        logger.warning("[%s] Hit max tool rounds (%d)", self._agent_name, self._max_tool_rounds)
         return None, self._tool_results
 
     # ── Internal helpers ───────────────────────────────────────
 
     def _pick_model(self, model_with_tools: Any, round_num: int) -> Any:
         """Strip tools after consecutive duplicate calls to force text output."""
-        if self._consecutive_dupes >= _MAX_CONSECUTIVE_DUPES:
+        if self._consecutive_dupes >= self._max_consecutive_dupes:
             logger.warning(
                 "[%s] %d consecutive duplicate calls — forcing text-only response",
                 self._agent_name,

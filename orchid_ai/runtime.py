@@ -55,8 +55,13 @@ logger = logging.getLogger(__name__)
 MCPClientFactory = Callable[["OrchidMCPServerConfig"], OrchidMCPClient]
 
 
-def _default_chat_model(model: str = "ollama/llama3.2", **kwargs) -> BaseChatModel:
+def _default_chat_model(model: str = "", **kwargs) -> BaseChatModel:
     """Create the default LangChain chat model via the factory."""
+    if not model:
+        raise RuntimeError(
+            "No LLM model configured. Set 'llm.model' in orchid.yml or pass "
+            "'model=' to OrchidRuntime (e.g. 'gemini/gemini-2.5-flash', 'openai/gpt-4o')."
+        )
     from .llm_factory import build_chat_model
 
     return build_chat_model(model, **kwargs)
@@ -89,7 +94,7 @@ class OrchidRuntime:
         to create one from a type string or dotted class path.
     """
 
-    default_model: str = "ollama/llama3.2"
+    default_model: str = ""
     reader: OrchidVectorReader | None = None
     chat_model: BaseChatModel | None = None
     mcp_client_factory: MCPClientFactory | None = None
@@ -119,6 +124,9 @@ class OrchidRuntime:
     #: the agent's own ``rag_namespace``.  Defaults to ``"uploads"`` for
     #: backward compatibility.
     upload_namespace: str = "uploads"
+    #: Security: hosts allowed to receive passthrough bearer tokens.
+    #: Empty list means no restriction (all hosts trusted).
+    allowed_passthrough_hosts: list[str] = field(default_factory=list)
     #: Optional signal emitter for the Pollen event subsystem.  When
     #: ``events.enabled: true`` in ``agents.yaml``, the bootstrap injects a
     #: :class:`DispatcherSignalEmitter` here — the ``Orchid`` facade then
@@ -183,10 +191,12 @@ class OrchidRuntime:
             return self.mcp_client_factory
         token_store = self.mcp_token_store
         registration_store = self.mcp_client_registration_store
+        allowed_hosts = self.allowed_passthrough_hosts
         return lambda cfg: self.default_mcp_client_factory(
             cfg,
             token_store=token_store,
             registration_store=registration_store,
+            allowed_passthrough_hosts=allowed_hosts,
         )
 
     # ── Default MCP factory (override in subclasses) ────────────
@@ -197,6 +207,7 @@ class OrchidRuntime:
         *,
         token_store: OrchidMCPTokenStore | None = None,
         registration_store: OrchidMCPClientRegistrationStore | None = None,
+        allowed_passthrough_hosts: list[str] | None = None,
     ) -> OrchidMCPClient:
         """Create a ``StreamableHttpMCPClient`` from the server config.
 
@@ -221,4 +232,5 @@ class OrchidRuntime:
             auth_mode=server_config.auth.mode,
             token_store=token_store,
             registration_store=registration_store,
+            allowed_passthrough_hosts=allowed_passthrough_hosts,
         )
