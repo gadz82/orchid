@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.8.4 (2026-05-29)
+
+### Bug Fixes
+
+- Add `langchain-text-splitters` dependency to pyproject for text splitting support
+  ([`7baa332`](https://github.com/gadz82/orchid/commit/7baa33233895cd0b34a9c17413c1c09573fd49a3))
+
+- Add comprehensive unit tests for guardrails, memory types, skill detection, RAG memory, and
+  truncation strategies
+  ([`6eb9f52`](https://github.com/gadz82/orchid/commit/6eb9f52505e5646da90ad9690ced2a2ac0d23a73))
+
+- Code reorg
+  ([`a1831ee`](https://github.com/gadz82/orchid/commit/a1831eef3f1acf70f5c9b7677a52157c40e25d61))
+
+- Introduce task-local skill depth tracking using `ContextVar`
+  ([`a0ca3b2`](https://github.com/gadz82/orchid/commit/a0ca3b20192abee229cfaa7888e90daf99ef4d48))
+
+- Remove legacy example config tests and improve support for configurable limits
+  ([`47316de`](https://github.com/gadz82/orchid/commit/47316de5f31eb4e86c99e15c0b3a68d8eebfdf34))
+
+- Skip APScheduler tests if APScheduler is not installed
+  ([`a608faa`](https://github.com/gadz82/orchid/commit/a608faa799097ce9fa60b21c587e3c7b0c5ea3f4))
+
+
 ## v1.8.3 (2026-05-27)
 
 ### Bug Fixes
