@@ -17,6 +17,8 @@ import datetime as _dt
 
 import pytest
 
+pytest.importorskip("apscheduler")
+
 from orchid_ai.events.schedulers.apscheduler import APSchedulerBackend
 
 

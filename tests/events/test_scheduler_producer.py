@@ -15,8 +15,11 @@ import asyncio
 import datetime as _dt
 from pathlib import Path
 
-import aiosqlite
 import pytest
+
+pytest.importorskip("apscheduler")
+
+import aiosqlite
 
 from orchid_ai.core.events.dispatcher import OrchidSignalDispatcher
 from orchid_ai.core.events.store import OrchidScheduleRecord
