@@ -494,6 +494,11 @@ class Orchid:
         """Database-backed config storage, or ``None``."""
         return self._lifecycle.config_storage
 
+    @property
+    def _agents(self) -> dict[str, "OrchidAgent"]:
+        """Backward-compat alias — delegates to ``OrchidLifecycle._agents``."""
+        return self._lifecycle.agents
+
     # ── Hot-reload ─────────────────────────────────────────
 
     async def reload_config(self) -> bool:
