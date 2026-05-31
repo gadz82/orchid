@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.8.5 (2026-05-31)
+
+### Bug Fixes
+
+- Add `_agents` property as backward-compatible alias for `OrchidLifecycle.agents`
+  ([`9917af7`](https://github.com/gadz82/orchid/commit/9917af780ca769e2e354d4a4ee36fc16c6e2586f))
+
+
 ## v1.8.4 (2026-05-29)
 
 ### Bug Fixes
