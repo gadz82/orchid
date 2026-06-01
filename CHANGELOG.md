@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.8.6 (2026-06-01)
+
+### Bug Fixes
+
+- Support string `limit` values and pass `agents_config` to startup hooks
+  ([`bf1022f`](https://github.com/gadz82/orchid/commit/bf1022f146b765b56abeda216083d82abf774a62))
+
+
 ## v1.8.5 (2026-05-31)
 
 ### Bug Fixes
