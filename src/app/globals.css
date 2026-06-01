@@ -45,6 +45,8 @@ body {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* iOS Safari: ensure sticky positioning works */
+    -webkit-overflow-scrolling: touch;
 }
 
 /* ── Scrollbar styling ─────────────────────────────────────── */
