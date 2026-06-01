@@ -165,6 +165,10 @@ All references to the repo URL, contact email, and license must go through `site
 
 When writing concept or package pages (Phase 2+), every non-obvious claim must be citable to a source file. List the source paths in the `sources: []` frontmatter field. Do not assert implementation details that can't be verified by reading the listed files.
 
+## No `## Sources` section in MDX pages
+
+**Do not add a `## Sources` section (or equivalent) to MDX content pages unless the user's prompt explicitly requests it.** The `sources: []` frontmatter field is the canonical way to record source file references; rendered source lists at the bottom of pages are visual clutter and have been intentionally removed.
+
 ## Brand-name prohibition
 
 **A specific integrator brand name is forbidden from appearing anywhere in committed files inside `orchid-website/`.** The exact term is defined in the root `AGENTS.md`; run `grep -ri <term> orchid-website/` before declaring any task done.

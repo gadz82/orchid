@@ -5009,13 +5009,6 @@ basketball analysis using the stats from your tools.
 - [Supervisor](/concepts/supervisor)
 - [Chat Persistence](/concepts/persistence)
 
-## Sources
-
-- examples/basketball/orchid.yml
-- examples/basketball/agents.yaml
-- examples/basketball/storage/sqlite.py
-- examples/basketball/tools/basketball.py
-
 ---
 
 ### Helpdesk Demo
@@ -5080,13 +5073,6 @@ Technical support agent with KB search and ticket status.
 - [Tool Call Strategies](/concepts/tool-strategies)
 - [Supervisor](/concepts/supervisor)
 
-## Sources
-
-- examples/helpdesk/config/orchid.yml
-- examples/helpdesk/config/agents.yaml
-- examples/helpdesk/agents/support.py
-- examples/helpdesk/tools/tickets.py
-
 ---
 
 ### Restaurant Demo
@@ -5131,13 +5117,6 @@ Agent configs show the three agents, their skills, and the event trigger:
 - [Hierarchical RAG](/concepts/rag)
 - [Tool Call Strategies](/concepts/tool-strategies)
 - [Supervisor](/concepts/supervisor)
-
-## Sources
-
-- examples/restaurant/config/orchid.yml
-- examples/restaurant/config/agents.yaml
-- examples/restaurant/agents/reviews.py
-- examples/restaurant/tools/menu.py
 
 ---
 
@@ -5261,12 +5240,6 @@ Both agents share the `recipes` namespace. The `query_transformers: [reformulate
 - [Embeddings](/concepts/embeddings) — supported models, dimension differences
 - [Agents](/concepts/agents) — YAML-driven agent configuration
 
-## Sources
-
-- `examples/recipes/orchid.yml`
-- `examples/recipes/agents.yaml`
-- `examples/recipes/hooks/startup.py`
-
 ---
 
 ### Education Studio
@@ -5323,24 +5296,6 @@ Agent configs define the four agents, their tools, three cross-agent skills, and
 - [Hierarchical RAG](/concepts/rag)
 - [Mini-Agents](/concepts/mini-agents)
 - [Pollen + Bloom](/concepts/pollen-bloom)
-
-## Sources
-
-- examples/education/orchid.yml
-- examples/education/agents.yaml
-- examples/education/identity.py
-- examples/education/tools/content/extract_concepts.py
-- examples/education/tools/content/generate_questions.py
-- examples/education/tools/content/validate.py
-- examples/education/tools/content/format_quiz.py
-- examples/education/tools/content/build_lesson.py
-- examples/education/tools/content/format_lesson.py
-- examples/education/tools/output/generate_pdf.py
-- examples/education/tools/output/generate_docx.py
-- examples/education/tools/output/generate_pptx.py
-- examples/education/tools/output/generate_markdown.py
-- examples/education/tools/output/generate_txt.py
-- examples/education/tests/
 
 ---
 
@@ -5437,12 +5392,6 @@ One stretch goal. Keep it under 150 words.
 - [Hierarchical RAG](/concepts/rag)
 - [Agents](/concepts/agents)
 
-## Sources
-
-- examples/learning/agents.yaml
-- examples/learning/producers/weekly_digest.py
-- examples/learning/tests/
-
 ---
 
 ### MCP Authentication Modes
@@ -5491,11 +5440,6 @@ Agent configs show all three auth modes:
 
 - [MCP Integration](/concepts/mcp)
 - [OAuth & Dynamic Client Registration](/concepts/oauth)
-
-## Sources
-
-- examples/mcp-auth/orchid.yml
-- examples/mcp-auth/agents.yaml
 
 ---
 
@@ -5688,14 +5632,6 @@ knowledge/
 - [Supervisor](/concepts/supervisor)
 - [Tool Strategies](/concepts/tool-strategies)
 
-## Sources
-
-- examples/orchid_experts/orchid.yml
-- examples/orchid_experts/agents.yaml
-- examples/orchid_experts/identity.py
-- examples/orchid_experts/hooks/startup.py
-- examples/orchid_experts/knowledge/ (86 files)
-
 ---
 
 ### Postgres Storage
@@ -5815,12 +5751,6 @@ persisted to a JSON file by the custom storage backend.
 
 - [Chat Persistence](/concepts/persistence)
 
-## Sources
-
-- examples/custom-storage/orchid.yml
-- examples/custom-storage/agents.yaml
-- examples/custom-storage/storage/json_file.py
-
 ---
 
 ### RAG Retrieval Strategies
@@ -5868,12 +5798,6 @@ Agent configs define four agents with identical prompts but different `rag.retri
 
 - [Hierarchical RAG](/concepts/rag)
 - [Embeddings](/concepts/embeddings)
-
-## Sources
-
-- examples/rag-strategies/orchid.yml
-- examples/rag-strategies/agents.yaml
-- examples/rag-strategies/hooks/startup.py
 
 ---
 
@@ -5923,13 +5847,6 @@ Agent configs show all four strategy modes plus `parallel_tools`:
 - [Tool Call Strategies](/concepts/tool-strategies)
 - [Agents](/concepts/agents)
 
-## Sources
-
-- examples/tool-strategies/orchid.yml
-- examples/tool-strategies/agents.yaml
-- examples/tool-strategies/hooks/startup.py
-- examples/tool-strategies/tools/metrics.py
-
 ---
 
 ### Prompt Customization
@@ -5974,11 +5891,6 @@ Agent configs show all customization layers, trimmed to the key fields:
 - [Supervisor](/concepts/supervisor)
 - [Agents](/concepts/agents)
 - [Hierarchical RAG](/concepts/rag)
-
-## Sources
-
-- examples/prompt-customization/orchid.yml
-- examples/prompt-customization/agents.yaml
 
 ---
 
@@ -6355,12 +6267,6 @@ If the question cannot be answered from the data, say so plainly.
 - [Hierarchical RAG](/concepts/rag)
 - [Embeddings](/concepts/embeddings)
 
-## Sources
-
-- examples/graph_kb/orchid.yml
-- examples/graph_kb/agents.yaml
-- examples/graph_kb/hooks/startup.py
-
 ---
 
 ### Wiki Document Ingestion
@@ -6407,13 +6313,6 @@ Agent configs show the two-tier corpus and the per-tool RAG override:
 - [Document Parsing](/concepts/document-parsing)
 - [Hierarchical RAG](/concepts/rag)
 - [Embeddings](/concepts/embeddings)
-
-## Sources
-
-- examples/wiki/orchid.yml
-- examples/wiki/agents.yaml
-- examples/wiki/hooks/startup.py
-- examples/wiki/hooks/tools.py
 
 ---
 
