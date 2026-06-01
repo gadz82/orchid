@@ -320,5 +320,6 @@ class TestRunStartupHook:
                 "runtime": runtime_sentinel,
                 "settings": "s",
                 "extra": 1,
+                "agents_config": None,
             }
         ]

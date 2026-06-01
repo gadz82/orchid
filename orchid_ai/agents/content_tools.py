@@ -24,20 +24,21 @@ async def list_content_files(
     *,
     path: str = "",
     recursive: bool = False,
-    limit: int = 100,
+    limit: int | str = 100,
     content_sources: list[OrchidContentSource] | None = None,
     **kwargs: Any,
 ) -> list[dict[str, Any]]:
     if not content_sources:
         return []
+    _limit = int(limit)
     results: list[dict[str, Any]] = []
     for source in content_sources:
         try:
-            items = await source.list(path=path, recursive=recursive, limit=limit)
+            items = await source.list(path=path, recursive=recursive, limit=_limit)
             for item in items:
                 results.append(_serialise_item(item))
-            if len(results) >= limit:
-                results = results[:limit]
+            if len(results) >= _limit:
+                results = results[:_limit]
                 break
         except Exception as exc:
             logger.warning("[ContentTools] list_content_files failed on source: %s", exc)
@@ -49,20 +50,21 @@ async def search_content_files(
     *,
     query: str,
     recursive: bool = True,
-    limit: int = 10,
+    limit: int | str = 10,
     content_sources: list[OrchidContentSource] | None = None,
     **kwargs: Any,
 ) -> list[dict[str, Any]]:
     if not content_sources:
         return []
+    _limit = int(limit)
     results: list[dict[str, Any]] = []
     for source in content_sources:
         try:
-            items = await source.search(query=query, recursive=recursive, limit=limit)
+            items = await source.search(query=query, recursive=recursive, limit=_limit)
             for item in items:
                 results.append(_serialise_item(item))
-            if len(results) >= limit:
-                results = results[:limit]
+            if len(results) >= _limit:
+                results = results[:_limit]
                 break
         except Exception as exc:
             logger.warning("[ContentTools] search_content_files failed on source: %s", exc)

@@ -270,7 +270,7 @@ async def _build_runtime(
     # Runs AFTER the runtime is assembled so hooks can inject
     # post-construction collaborators (e.g. seed an
     # ``InMemoryGraphStore`` and assign ``runtime.graph_store``).
-    await _run_startup_hook(overrides.startup_hook, reader, runtime, startup_hook_kwargs)
+    await _run_startup_hook(overrides.startup_hook, reader, runtime, startup_hook_kwargs, agents_config=agents_config)
 
     logger.info(
         "[Bootstrap] Ready — model=%s, backend=%s, storage=%s, agents=%s",
@@ -491,6 +491,7 @@ async def _run_startup_hook(
     reader: OrchidVectorReader,
     runtime: OrchidRuntime,
     extra_kwargs: dict[str, Any] | None,
+    agents_config: OrchidAgentsConfig | None = None,
 ) -> None:
     """Resolve and invoke the startup hook, validating its signature first.
 
@@ -510,7 +511,12 @@ async def _run_startup_hook(
         return
 
     hook_fn = import_class(hook_path)
-    hook_kwargs: dict[str, Any] = {"reader": reader, "settings": None, "runtime": runtime}
+    hook_kwargs: dict[str, Any] = {
+        "reader": reader,
+        "settings": None,
+        "runtime": runtime,
+        "agents_config": agents_config,
+    }
     hook_kwargs.update(extra_kwargs or {})
     _validate_startup_hook(hook_path, hook_fn, hook_kwargs)
     await hook_fn(**hook_kwargs)
