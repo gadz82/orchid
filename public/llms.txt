@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-05-28
+Last generated: 2026-06-01
 
 ## Overview
 
@@ -35,7 +35,7 @@ https://gadz82.github.io/orchid/concepts/embeddings
 Multi-LLM Support — Provider agnosticism via LiteLLM: configure any model per agent, swap at runtime.
 https://gadz82.github.io/orchid/concepts/multi-llm
 
-Chat Persistence — OrchidChatStorage ABC, built-in PostgreSQL and SQLite backends, and pluggable custom backends.
+Chat Persistence — OrchidChatStorage ABC, built-in SQLite backend, PostgreSQL via plugin, and pluggable custom backends.
 https://gadz82.github.io/orchid/concepts/persistence
 
 Tool Call Strategies — The all, sequential, and llm_decides strategies and how to register custom ones.

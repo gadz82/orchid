@@ -5,6 +5,7 @@ import { Search } from 'lucide-react';
 import { siteConfig } from '@/site-config';
 import OrchidIcon from '@/components/OrchidIcon';
 import SearchModal from '@/components/SearchModal';
+import MobileSidebar from '@/components/MobileSidebar';
 import { useState, useEffect } from 'react';
 
 const TOP_LINKS = [
@@ -32,10 +33,11 @@ export default function Header() {
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b border-orchid-border bg-orchid-bg/90 backdrop-blur">
-        <div className="flex h-14 items-center gap-4 px-6">
+        <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
+          <MobileSidebar />
           <Link href="/" className="flex items-center gap-2 font-semibold text-orchid-text hover:text-orchid-accent transition-colors">
             <OrchidIcon size={28} />
-            <span>Orchestrator Index</span>
+            <span className="hidden sm:inline">Orchestrator Index</span>
           </Link>
           <nav aria-label="Top navigation" className="hidden md:flex items-center gap-1 ml-4">
             {TOP_LINKS.map((link) => (

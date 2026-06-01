@@ -92,7 +92,7 @@
   {
     "route": "/concepts/persistence",
     "title": "Chat Persistence",
-    "description": "OrchidChatStorage ABC, built-in PostgreSQL and SQLite backends, and pluggable custom backends.",
+    "description": "OrchidChatStorage ABC, built-in SQLite backend, PostgreSQL via plugin, and pluggable custom backends.",
     "package": "orchid",
     "section": "concepts",
     "tags": [],

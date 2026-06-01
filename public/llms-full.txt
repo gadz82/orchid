@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-05-28
+Last generated: 2026-06-01
 
 ## Overview
 
@@ -557,7 +557,7 @@ The graph builder creates LangChain `BaseChatModel` instances via `build_chat_mo
 
 ### Chat Persistence
 URL: https://gadz82.github.io/orchid/concepts/persistence
-Description: OrchidChatStorage ABC, built-in PostgreSQL and SQLite backends, and pluggable custom backends.
+Description: OrchidChatStorage ABC, built-in SQLite backend, PostgreSQL via plugin, and pluggable custom backends.
 
 Orchid persists chat sessions and messages through the `OrchidChatStorage` ABC. The library ships two built-in backends; consumers can supply their own by pointing `storage.class` at any importable subclass.
 
@@ -6508,17 +6508,22 @@ See [Tool Strategies](/concepts/tool-strategies) for implementation details.
 
 ## Persistence
 
-Orchid ships a built-in PostgreSQL backend (`orchid_ai.persistence.postgres`). It is production-ready for most deployments.
+Orchid ships a built-in SQLite backend (`orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage`) as the default. PostgreSQL is available via the `orchid-storage-postgres` plugin (`pip install orchid-storage-postgres`).
 
 **Write a custom `OrchidChatStorage`** when:
-- You need a different database engine (SQLite for local demos, DynamoDB for serverless).
+- You need a different database engine (DynamoDB for serverless, Redis for ephemeral sessions).
 - Your platform has an existing chat/session store you must integrate with.
-- You need custom retention policies or encryption at rest beyond what PostgreSQL provides.
+- You need custom retention policies or encryption at rest beyond what the built-in backends provide.
 
-**Use the built-in PostgreSQL backend** when:
+**Use the `orchid-storage-postgres` plugin** when:
 - You already run PostgreSQL (or can add it).
-- You want zero-maintenance schema migrations (the library ships `v001_initial_schema.py` and future migrations).
+- You want zero-maintenance schema migrations (the plugin ships `v001_initial_schema.py` and future migrations).
 - Multi-tenant isolation via `tenant_key` is sufficient.
+- You need multi-replica API deployments sharing state.
+
+**Use the built-in SQLite backend** when:
+- Single-process deployments (development, demos, CLI).
+- No external database dependency desired.
 
 The `OrchidChatStorage` ABC defines the full contract. Implement all methods — partial implementations will fail at runtime when the supervisor calls an unimplemented method.
 
