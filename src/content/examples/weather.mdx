@@ -1,0 +1,319 @@
+---
+title: "Weather Fleet"
+description: "Three-agent weather fleet: remote MCP server for live forecasts, built-in safety tools, RAG-backed outfit advice, PostgreSQL storage, and sliding-window chat summarization."
+package: "cross-cutting"
+section: "examples"
+order: 59
+tags: ["agents", "mcp", "persistence", "rag", "supervisor", "chat-summarization"]
+sources:
+  - examples/weather/orchid.yml
+  - examples/weather/agents.yaml
+  - examples/weather/agents/outfit.py
+  - examples/weather/tools/clothing.py
+  - examples/weather/tools/safety.py
+  - examples/weather/hooks/startup.py
+  - examples/weather/mcp-weather/index.js
+related:
+  - /concepts/agents
+  - /concepts/mcp
+  - /concepts/supervisor
+  - /concepts/rag
+  - /concepts/persistence
+  - /concepts/chat-summarization
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The weather fleet example shows how to integrate a **remote MCP server** into an Orchid multi-agent pipeline. A dedicated weather MCP server — a lightweight Node.js service wrapping the free Open-Meteo API — runs in its own Docker container and exposes forecast and current-conditions tools. Three agents consume those tools alongside built-in Python tools, RAG-augmented clothing knowledge, and sliding-window chat summarization. PostgreSQL persists chat history; Qdrant backs the RAG namespaces with startup-seeded clothing and safety guides.
+
+## Run it
+
+```bash
+cp examples/weather/.env.example .env   # fill in GEMINI_API_KEY (or use ollama)
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Or use the dedicated compose file:
+
+```bash
+cd examples/weather
+docker compose up --build
+```
+
+Stack: `agents-api` (port 8080), `weather-mcp` (port 3002), `qdrant` (6333), `postgres` (5432), `frontend` (3000), `orchid-mcp` (9000).
+
+To run the CLI directly:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/weather/orchid.yml
+```
+
+## Configuration walkthrough
+
+`orchid.yml` configures the runtime — Ollama LLM, Qdrant RAG backend, PostgreSQL storage, and the startup hook that seeds the RAG namespaces:
+
+<CodePair
+  yaml={`# orchid.yml (trimmed)
+agents:
+  config_path: examples/weather/agents.yaml
+
+llm:
+  model: ollama/llama3.2
+  ollama_api_base: http://host.docker.internal:11434
+
+auth:
+  dev_bypass: true
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: ollama/nomic-embed-text
+
+storage:
+  class: orchid_storage_postgres.OrchidPostgresChatStorage
+  dsn: postgresql://orchid:\${POSTGRES_PASSWORD}@postgres:5432/orchid
+
+startup:
+  hook: examples.weather.hooks.startup.bootstrap_weather
+
+# ...truncated`}
+  yamlLabel="orchid.yml"
+  md={`---
+llm:
+  model: ollama/llama3.2
+  ollama_api_base: http://host.docker.internal:11434
+
+auth:
+  dev_bypass: true
+
+rag:
+  vector_backend: qdrant
+  qdrant_url: http://qdrant:6333
+  embedding_model: ollama/nomic-embed-text
+
+storage:
+  class: orchid_storage_postgres.OrchidPostgresChatStorage
+  dsn: postgresql://orchid/:password@postgres:5432/orchid
+
+startup:
+  hook: examples.weather.hooks.startup.bootstrap_weather
+---`}
+  mdLabel="orchid.md"
+/>
+
+The supervisor config shows sliding-window chat summarization — older turns are compressed into an LLM-generated summary while the most recent exchanges are kept verbatim:
+
+<CodePair
+  yaml={`# agents.yaml — supervisor section
+supervisor:
+  assistant_name: "Weather Assistant"
+  streaming_enabled: true
+  history_summary_enabled: true
+  history_summary_recent_turns: 10
+  history_max_turns: 30
+  history_max_chars: 2000
+
+# ...truncated`}
+  yamlLabel="supervisor section"
+  md={`---
+supervisor:
+  assistant_name: "Weather Assistant"
+  streaming_enabled: true
+  history_summary_enabled: true
+  history_summary_recent_turns: 10
+  history_max_turns: 30
+  history_max_chars: 2000
+---`}
+  mdLabel="orchid.md"
+/>
+
+The `weather-forecast` agent connects to the remote MCP server (`weather-mcp`) with `auth.mode: none` — the Open-Meteo API is free and unauthenticated. `weather-alerts` combines the same MCP server with two built-in safety tools:
+
+<CodePair
+  yaml={`# agents.yaml — weather agents
+agents:
+
+  weather-forecast:
+    description: "Weather forecast specialist."
+    prompt: |
+      You are a Weather Forecast specialist AI assistant.
+      Use the available MCP tools to get current conditions
+      and multi-day forecasts.
+    mcp_servers:
+      - name: weather-api
+        type: remote
+        url: "http://weather-mcp:3002/mcp"
+        tools: "*"
+        auth:
+          mode: none
+
+  weather-alerts:
+    description: "Extreme weather and safety specialist."
+    tools: [get_safety_tips, assess_weather_risk]
+    mcp_servers:
+      - name: weather-api
+        type: remote
+        url: "http://weather-mcp:3002/mcp"
+        tools: "*"
+        auth:
+          mode: none
+
+  outfit-advisor:
+    class: examples.weather.agents.outfit.OutfitAdvisorAgent
+    tools: [recommend_outfit]
+    rag:
+      namespace: clothing-guides
+      enabled: true
+      k: 3
+
+# ...truncated`}
+  yamlLabel="agents.yaml"
+  md={`---
+agents:
+
+  weather-forecast:
+    description: "Weather forecast specialist."
+    mcp_servers:
+      - name: weather-api
+        url: "http://weather-mcp:3002/mcp"
+        tools: "*"
+        auth:
+          mode: none
+
+  weather-alerts:
+    description: "Extreme weather and safety specialist."
+    tools: [get_safety_tips, assess_weather_risk]
+    mcp_servers:
+      - name: weather-api
+        url: "http://weather-mcp:3002/mcp"
+        tools: "*"
+        auth:
+          mode: none
+
+  outfit-advisor:
+    class: examples.weather.agents.outfit.OutfitAdvisorAgent
+    tools: [recommend_outfit]
+    rag:
+      namespace: clothing-guides
+      enabled: true
+      k: 3
+---`}
+  mdLabel="orchid.md"
+/>
+
+Two cross-agent orchestrator skills chain the agents in sequence. `prepare_for_day` runs the full pipeline (forecast → alerts → outfit). `emergency_check` runs a fast safety assessment:
+
+```yaml
+skills:
+  prepare_for_day:
+    description: "Full morning briefing: forecast → alerts → outfit."
+    steps:
+      - agent: weather-forecast
+        instruction: "Get current weather and multi-day forecast."
+      - agent: weather-alerts
+        instruction: "Review the forecast for extreme conditions."
+      - agent: outfit-advisor
+        instruction: "Recommend a full outfit based on weather data."
+
+  emergency_check:
+    description: "Rapid safety assessment: forecast → alerts."
+    steps:
+      - agent: weather-forecast
+        instruction: "Get current weather and 24h forecast."
+      - agent: weather-alerts
+        instruction: "Assess for safety risks immediately."
+```
+
+The `outfit-advisor` is a custom `OrchidAgent` subclass. It reads weather data from sibling agents (via `state["mcp_context"]`) and uses the inherited `fetch_rag_context()`, `extract_conversation_history()`, and `summarise()` helpers:
+
+```python
+class OutfitAdvisorAgent(OrchidAgent):
+    def __init__(self, *, config=None, **kwargs):
+        super().__init__(**kwargs)
+
+    @property
+    def name(self) -> str:
+        return "outfit-advisor"
+
+    @property
+    def rag_namespace(self) -> str:
+        return "clothing-guides"
+
+    async def run(self, state):
+        query = self.extract_user_query(state)
+
+        # Read weather data from sibling agents
+        mcp_context = state.get("mcp_context", {})
+        weather_data = self._extract_weather_data(mcp_context)
+
+        if not weather_data:
+            return {"messages": [AIMessage(
+                content="Please ask weather-forecast first."
+            )]}
+
+        scope = OrchidRAGScope(
+            tenant_id=auth.tenant_key, user_id=auth.user_id,
+            chat_id=state.get("chat_id", ""), agent_id=self.name,
+        )
+        rag_data = await self.fetch_rag_context(query, scope, k=3)
+        history = self.extract_conversation_history(state)
+
+        summary = await self.summarise(
+            query=query, mcp_data=weather_data,
+            rag_data=rag_data, conversation_history=history,
+        )
+
+        return {"messages": [AIMessage(content=summary)]}
+```
+
+The weather MCP server is a standalone Node.js service using the `@modelcontextprotocol/sdk`. It wraps the free Open-Meteo API and exposes two tools — `get_forecast` and `get_current_weather` — each accepting a city name that is resolved via the Open-Meteo geocoding API:
+
+```javascript
+server.tool(
+  "get_forecast",
+  "7-day weather forecast for any city.",
+  { city: z.string().describe("City name") },
+  async ({ city }) => {
+    const loc = await geocode(city);
+    const url = new URL("https://api.open-meteo.com/v1/forecast");
+    url.searchParams.set("latitude", loc.lat.toString());
+    url.searchParams.set("longitude", loc.lon.toString());
+    // ... daily parameters ...
+    const res = await fetch(url);
+    return { content: [{ type: "text", text: JSON.stringify(result) }] };
+  }
+);
+```
+
+Startup hook `bootstrap_weather()` seeds two RAG namespaces — `clothing-guides` (articles on dressing for hot, cold, rainy, windy, snowy weather) and `safety-guides` (emergency kit lists, heat safety, flood safety, winter storm safety) — into Qdrant:
+
+```python
+async def bootstrap_weather(reader, settings, **_):
+    if not isinstance(reader, OrchidVectorWriter):
+        return
+
+    await reader.upsert(clothing_docs, "clothing-guides")
+    await reader.upsert(safety_docs, "safety-guides")
+```
+
+## What to look for
+
+- `mcp_servers[].type: remote` → remote MCP servers are wired identically to local ones; only the URL scheme differs.
+- `auth.mode: none` → the weather MCP server requires no authentication (Open-Meteo is free and public).
+- `supervisor.history_summary_enabled: true` → sliding-window chat summarization compresses older turns; `history_summary_recent_turns` controls how many exchanges stay verbatim.
+- `outfit-advisor.class: examples.weather.agents.outfit.OutfitAdvisorAgent` → custom `OrchidAgent` subclass reads sibling agent results from `state["mcp_context"]`.
+- `skills.prepare_for_day.steps` → three-agent sequential chain; each step receives the previous agent's output as context.
+- `startup.hook: examples.weather.hooks.startup.bootstrap_weather` → RAG data is seeded at process startup; no manual indexing required.
+- `storage.class: orchid_storage_postgres.OrchidPostgresChatStorage` → PostgreSQL plugin replaces the default SQLite backend.
+
+## Related concepts
+
+- [Agents](/concepts/agents)
+- [MCP Integration](/concepts/mcp)
+- [Supervisor](/concepts/supervisor)
+- [Hierarchical RAG](/concepts/rag)
+- [Chat Persistence](/concepts/persistence)
+- [Chat Summarization](/concepts/chat-summarization)

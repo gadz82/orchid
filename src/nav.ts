@@ -58,6 +58,7 @@ export const navNodes: NavNode[] = [
   { href: '/examples/festival-producer', label: 'Festival Producer', group: 'examples', order: 56 },
   { href: '/examples/architecture-review', label: 'Architecture Review', group: 'examples', order: 57 },
   { href: '/examples/postgres-storage', label: 'Postgres Storage', group: 'examples', order: 58 },
+  { href: '/examples/weather', label: 'Weather Fleet', group: 'examples', order: 59 },
 
   { href: '/best-practices', label: 'Best Practices', group: 'meta', order: 60 },
   { href: '/glossary', label: 'Glossary', group: 'meta', order: 61 },
