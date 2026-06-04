@@ -50,6 +50,20 @@ class TestBuildCheckpointerSQLite:
         with pytest.raises(ValueError, match="DSN"):
             await build_checkpointer("sqlite", dsn="")
 
+    @pytest.mark.asyncio
+    async def test_sqlite_builds_real_saver(self, tmp_path):
+        # Regression: from_conn_string returns an async context manager, not a
+        # saver — the factory must construct AsyncSqliteSaver from a live
+        # connection so .setup() works and the saver is usable/closeable.
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+        from orchid_ai.checkpointing import build_checkpointer, shutdown_checkpointer
+
+        dsn = str(tmp_path / "cp.db")
+        saver = await build_checkpointer("sqlite", dsn=dsn)
+        assert isinstance(saver, AsyncSqliteSaver)
+        await shutdown_checkpointer(saver)  # closes the underlying connection
+
 
 class TestBuildCheckpointerPostgres:
     """build_checkpointer('postgres') — requires plugin."""

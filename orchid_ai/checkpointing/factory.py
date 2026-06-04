@@ -137,11 +137,17 @@ async def build_checkpointer(
         return MemorySaver()
 
     if checkpointer_type == "sqlite":
+        import aiosqlite
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
         if not resolved_dsn:
             raise ValueError("DSN is required for sqlite checkpointer (e.g. ~/.orchid/checkpoints.db)")
-        checkpointer = AsyncSqliteSaver.from_conn_string(resolved_dsn)
+        # ``AsyncSqliteSaver.from_conn_string`` is an async *context manager*,
+        # not a saver — awaiting ``.setup()`` on it raises AttributeError.
+        # Construct the saver from a long-lived connection so it outlives
+        # this call; ``shutdown_checkpointer`` closes the connection.
+        conn = await aiosqlite.connect(resolved_dsn)
+        checkpointer = AsyncSqliteSaver(conn)
         await checkpointer.setup()
         logger.info("[Checkpointer] SQLite checkpointer ready — %s", _mask_dsn(resolved_dsn))
         return checkpointer
@@ -184,6 +190,9 @@ async def shutdown_checkpointer(saver: BaseCheckpointSaver | None) -> None:
             saver.close()
         elif hasattr(saver, "__aexit__"):
             await saver.__aexit__(None, None, None)
+        elif (conn := getattr(saver, "conn", None)) is not None and hasattr(conn, "close"):
+            # e.g. AsyncSqliteSaver wraps an aiosqlite.Connection
+            await conn.close()
         logger.info("[Checkpointer] %s shut down", name)
     except Exception as exc:
         logger.warning("[Checkpointer] Error shutting down %s: %s", name, exc)
