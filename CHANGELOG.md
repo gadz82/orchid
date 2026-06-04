@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.8.7 (2026-06-04)
+
+### Bug Fixes
+
+- Correct SQLite checkpointer construction to ensure usability and proper shutdown
+  ([`0a0077c`](https://github.com/gadz82/orchid/commit/0a0077c31e86382072211a1f157de1600a4e584f))
+
+
 ## v1.8.6 (2026-06-01)
 
 ### Bug Fixes
