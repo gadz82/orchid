@@ -118,7 +118,7 @@ def mini_agent_node_factory(
     parent_name = parent_config.name
     timeout = parent_config.mini_agent.timeout_seconds
 
-    async def mini_agent_node(state: dict[str, Any], config: RunnableConfig | None = None) -> dict[str, Any]:
+    async def mini_agent_node(state: dict[str, Any], config: RunnableConfig = None) -> dict[str, Any]:
         start = time.perf_counter()
         sub_task_payload = state.get("_active_mini_subtask") or {}
         mini_id = state.get("_active_mini_id") or sub_task_payload.get("id") or "mini_unknown"

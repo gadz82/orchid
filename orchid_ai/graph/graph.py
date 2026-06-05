@@ -121,7 +121,7 @@ class _AgentNodeWrapper:
         self._agent_config = agent_config
         self.__name__ = f"{agent.name}_agent"
 
-    async def __call__(self, state: GraphState, config: RunnableConfig | None = None) -> GraphState:
+    async def __call__(self, state: GraphState, config: RunnableConfig = None) -> GraphState:
         auth = auth_from_config(config)
 
         blocked = await self._run_input_guardrails(state, auth)

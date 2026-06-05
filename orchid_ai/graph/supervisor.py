@@ -25,7 +25,7 @@ import time
 from typing import Literal
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END
 from langgraph.types import Send
@@ -179,14 +179,20 @@ def create_supervisor_node(
         memory=memory,
     )
 
-    async def supervisor_node(state: GraphState, config: RunnableConfig | None = None) -> GraphState:
+    async def supervisor_node(state: GraphState, config: RunnableConfig = None) -> GraphState:
         auth = auth_from_config(config)
         pending = state.get("pending_agents", [])
-        has_mcp_data = bool(state.get("mcp_context"))
+        # Whether a sub-agent produced output for THIS turn — NOT raw
+        # mcp_context presence.  Under a checkpointer mcp_context persists
+        # across turns (merge_dicts reducer), so a fresh turn would look
+        # like "agents already ran" and skip routing → the supervisor would
+        # answer everything itself.  Anchor the decision to agent messages
+        # emitted after the latest user message instead.
+        produced = _current_turn_has_agent_output(state)
         start = time.perf_counter()
 
         # ── Case 1: Sequential pipeline in progress — advance to next agent ──
-        if pending and has_mcp_data:
+        if pending and produced:
             perf_logger.info(
                 "[PERF][supervisor] phase=advance_sequential next=%s pending=%s",
                 pending[0],
@@ -198,7 +204,7 @@ def create_supervisor_node(
             return result
 
         # ── Case 2: All agents done (no pending) + data collected → synthesise ──
-        if has_mcp_data and not pending and not state.get("active_agents"):
+        if produced and not pending and not state.get("active_agents"):
             perf_logger.info(
                 "[PERF][supervisor] phase=synthesise (mcp_keys=%s)",
                 list(state.get("mcp_context", {}).keys()),
@@ -226,6 +232,30 @@ def create_supervisor_node(
 # ── Routing function (conditional edges) ─────────────────────
 
 
+def _current_turn_has_agent_output(state: GraphState) -> bool:
+    """Return ``True`` when a sub-agent produced output for the CURRENT turn.
+
+    Scans messages emitted after the latest ``HumanMessage`` for an
+    ``[X Agent]\\n…`` AIMessage (the prefix ``GenericAgent.run`` adds).
+    Used by the supervisor to decide synthesise/advance vs route — robust
+    against ``mcp_context`` left over in a checkpoint from prior turns.
+    """
+    messages = state.get("messages", [])
+    if not messages:
+        return False
+    last_human = -1
+    for i, msg in enumerate(messages):
+        if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
+            last_human = i
+    for msg in messages[last_human + 1 :]:
+        if not (isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai")):
+            continue
+        content = str(getattr(msg, "content", "") or "")
+        if content.startswith("[") and "Agent]\n" in content[:80]:
+            return True
+    return False
+
+
 def route_to_agents(state: GraphState) -> list[Send] | str:
     """
     LangGraph conditional-edge function.
@@ -238,6 +268,23 @@ def route_to_agents(state: GraphState) -> list[Send] | str:
       - A list of ``Send`` objects for parallel fan-out.
       - A single ``Send`` for sequential execution.
     """
+    active = state.get("active_agents", [])
+
+    # Freshly-activated agents ALWAYS dispatch — this must win over any
+    # ``final_response`` still sitting in a resumed checkpoint from a prior
+    # turn.  (The supervisor's dispatch delta also clears it, but guard here
+    # so a sticky checkpoint value can never abort a dispatch.)
+    if active:
+        mode = state.get("execution_mode", "parallel")
+        if mode == "parallel":
+            # Fan-out: all active agents run simultaneously
+            logger.info("[Route] parallel dispatch → %s", active)
+            return [Send(f"{agent}_agent", state) for agent in active]
+        # Sequential: run only the first active agent
+        logger.info("[Route] sequential dispatch → %s", active[0])
+        return f"{active[0]}_agent"
+
+    # No agents activated this turn.
     if state.get("final_response"):
         # If the graph has an output_guardrails node, route there.
         # We use a sentinel in state to detect this (set by build_graph).
@@ -245,25 +292,12 @@ def route_to_agents(state: GraphState) -> list[Send] | str:
             return "output_guardrails"
         return END
 
-    active = state.get("active_agents", [])
-    if not active:
-        # No active agents but pending → re-enter supervisor to advance
-        if state.get("pending_agents"):
-            return "supervisor"
-        if state.get("_has_output_guardrails"):
-            return "output_guardrails"
-        return END
-
-    mode = state.get("execution_mode", "parallel")
-
-    if mode == "parallel":
-        # Fan-out: all active agents run simultaneously
-        logger.info("[Route] parallel dispatch → %s", active)
-        return [Send(f"{agent}_agent", state) for agent in active]
-    else:
-        # Sequential: run only the first active agent
-        logger.info("[Route] sequential dispatch → %s", active[0])
-        return f"{active[0]}_agent"
+    # No active agents but pending → re-enter supervisor to advance
+    if state.get("pending_agents"):
+        return "supervisor"
+    if state.get("_has_output_guardrails"):
+        return "output_guardrails"
+    return END
 
 
 # ── Routing phase ────────────────────────────────────────────
@@ -553,6 +587,7 @@ async def _route(
             "active_agents": [first],
             "pending_agents": rest,
             "execution_mode": "sequential",
+            "final_response": None,
             "messages": [AIMessage(content=(f"[Supervisor] Sequential pipeline: {' → '.join(valid)}"))],
         }
     else:
@@ -562,5 +597,6 @@ async def _route(
             "active_agents": valid,
             "pending_agents": [],
             "execution_mode": "parallel",
+            "final_response": None,
             "messages": [AIMessage(content=f"[Supervisor] Parallel dispatch: {', '.join(valid)}")],
         }

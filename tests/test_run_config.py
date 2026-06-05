@@ -65,3 +65,39 @@ def test_state_schemas_have_no_auth_channel():
 
     assert "auth_context" not in OrchidAgentState.__annotations__
     assert "auth_context" not in GraphState.__annotations__
+
+
+def test_node_config_param_is_langgraph_injectable():
+    """Node `config` params must use an annotation LangGraph accepts, else it
+    silently does NOT inject config and auth_from_config(config) sees None.
+
+    Regression for the `RunnableConfig | None` (PEP 604 union string under
+    `from __future__ import annotations`) that LangGraph does not match.
+    """
+    import warnings
+
+    from orchid_ai import OrchidRuntime
+    from orchid_ai.config.schema import (
+        OrchidAgentConfig,
+        OrchidAgentsConfig,
+        OrchidLLMConfig,
+        OrchidRAGConfig,
+    )
+    from orchid_ai.graph.graph import build_graph
+
+    cfg = OrchidAgentsConfig(
+        agents={
+            "a": OrchidAgentConfig(
+                description="d",
+                prompt="p",
+                rag=OrchidRAGConfig(enabled=False),
+                llm=OrchidLLMConfig(model="ollama/llama3.2"),
+            )
+        }
+    )
+    runtime = OrchidRuntime(default_model="ollama/llama3.2")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        build_graph(config=cfg, runtime=runtime)
+    typing_warnings = [str(w.message) for w in caught if "config' parameter should be typed" in str(w.message)]
+    assert typing_warnings == [], typing_warnings

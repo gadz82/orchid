@@ -46,7 +46,7 @@ class _GuardrailWiring:
     def create_global_input_node(chain: OrchidGuardrailChain):
         """Create a LangGraph node that runs global input guardrails."""
 
-        async def input_guardrails_node(state: GraphState, config: RunnableConfig | None = None) -> GraphState:
+        async def input_guardrails_node(state: GraphState, config: RunnableConfig = None) -> GraphState:
             from ..core.agent import OrchidAgent
 
             query = OrchidAgent.extract_user_query(state)
@@ -86,7 +86,7 @@ class _GuardrailWiring:
     def create_global_output_node(chain: OrchidGuardrailChain):
         """Create a LangGraph node that runs global output guardrails."""
 
-        async def output_guardrails_node(state: GraphState, config: RunnableConfig | None = None) -> GraphState:
+        async def output_guardrails_node(state: GraphState, config: RunnableConfig = None) -> GraphState:
             final = state.get("final_response")
             if not final:
                 return state
