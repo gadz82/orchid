@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.8.8 (2026-06-05)
+
+### Bug Fixes
+
+- Add CLI-specific RAG environment overrides to YAML configuration
+  ([`596f41d`](https://github.com/gadz82/orchid/commit/596f41db5eea021d439a8109b557dc8bafebc017))
+
+- Comprehensive unit tests for YAML-to-env mapping logic
+  ([`6b651d0`](https://github.com/gadz82/orchid/commit/6b651d05efaf9ae010e25153a5d7a8e005f17b3a))
+
+- Improve supervisor routing logic and add regression tests for dispatch behavior
+  ([`788d9c7`](https://github.com/gadz82/orchid/commit/788d9c723f252c028d1edfb6492181b872d46716))
+
+- Moved OrchidAuthContext from the graph state into LangGraph’s RunnableConfig. This fixes
+  serialization errors ("not msgpack serializable"), prevents tokens from being checkpointed, and
+  allows human-in-the-loop (resume()) calls to inject fresh, unexpired tokens.
+  ([`38425dd`](https://github.com/gadz82/orchid/commit/38425dd5ee1578ab24c07531161c141bfca82c8d))
+
+
 ## v1.8.7 (2026-06-04)
 
 ### Bug Fixes
