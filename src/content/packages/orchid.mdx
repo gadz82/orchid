@@ -35,6 +35,34 @@ pip install orchid-rag-chroma         # ChromaDB on-disk vector store
 pip install orchid-rag-neo4j          # Neo4j graph store
 ```
 
+## Public API: two tiers
+
+The library exposes two distinct surfaces — and `Orchid` is the front door.
+
+**Run** — the single facade `Orchid` bootstraps config, wires the graph, and runs turns. `orchid-api`, `orchid-cli`, and in-process integrators all route through it:
+
+```python
+from orchid_ai import Orchid
+
+async with Orchid.from_config_path("orchid.yml") as orchid:
+    result = await orchid.invoke("Hello!", user_id="alice", tenant_id="acme")
+    print(result.response)
+```
+
+`Orchid` owns construction (`from_config_path` / `from_md_config`), execution (`invoke` / `stream` / `resume`), lifecycle (`close` / `reload_config` / `async with`), and read-only accessors (`graph`, `runtime`, `config`, `chat_repo`, …).
+
+**Extend** — subclass the ABCs and call the `register_*` hooks exported at the top level (`OrchidAgent`, `OrchidIdentityResolver`, `OrchidChatStorage`, `OrchidVectorReader`, the guardrail / ingestion / retrieval contracts, …). These are *import-time* extension points: you subclass or register them **before** an `Orchid` instance exists, so they sit alongside the facade rather than behind it.
+
+Lower-level plumbing (the `build_*` factories, concrete built-in backends, LangChain adapters, observability handlers) is intentionally **not** re-exported at the top level — import it from its submodule when you need it:
+
+```python
+from orchid_ai.checkpointing import build_checkpointer
+from orchid_ai.rag.factory import build_reader
+from orchid_ai.persistence.sqlite import OrchidSQLiteChatStorage
+```
+
+> **Auth is execution context, not graph state.** It travels in the LangGraph `RunnableConfig` (`config["configurable"]["auth_context"]`), never in `OrchidAgentState`, so it is never written to a checkpoint. Inside a custom agent, read it via `self._current_auth`; entry points attach it with `with_auth(...)`.
+
 ## Module map
 
 ### `core/`
