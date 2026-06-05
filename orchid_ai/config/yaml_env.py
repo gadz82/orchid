@@ -63,6 +63,12 @@ YAML_TO_ENV: dict[tuple[str, str], str] = {
     ("rag", "embedding_model"): "EMBEDDING_MODEL",
     ("rag", "openai_api_key"): "OPENAI_API_KEY",
     ("rag", "gemini_api_key"): "GEMINI_API_KEY",
+    # ── cli_rag (CLI-specific RAG override) ──────────────────
+    ("cli_rag", "vector_backend"): "VECTOR_BACKEND",
+    ("cli_rag", "qdrant_url"): "QDRANT_URL",
+    ("cli_rag", "embedding_model"): "EMBEDDING_MODEL",
+    ("cli_rag", "openai_api_key"): "OPENAI_API_KEY",
+    ("cli_rag", "gemini_api_key"): "GEMINI_API_KEY",
     # ── upload ────────────────────────────────────────────────
     ("upload", "vision_model"): "VISION_MODEL",
     ("upload", "namespace"): "UPLOAD_NAMESPACE",
