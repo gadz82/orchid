@@ -43,6 +43,9 @@ external: []
   - [`rag.openai_api_key`](#orchid-yml__rag.openai_api_key)
   - [`rag.gemini_api_key`](#orchid-yml__rag.gemini_api_key)
 
+**cli_rag** (optional — CLI-specific RAG override)
+  - [`cli_rag`](#orchid-yml__cli_rag)
+
 **upload**
   - [`upload.vision_model`](#orchid-yml__upload.vision_model)
   - [`upload.namespace`](#orchid-yml__upload.namespace)
@@ -393,6 +396,38 @@ rag:
 | **Detailed** | Required when `embedding_model` is a Gemini embedding model. |
 | **Default** | `null` |
 | **Env var** | `GEMINI_API_KEY` |
+
+---
+
+<a id="orchid-yml__cli_rag"></a>
+## `cli_rag` (optional)
+
+CLI-specific RAG override. When present, `orchid-cli` uses these values instead of `rag:`. The API ignores this section entirely. This allows Docker-based examples (with `rag.vector_backend: qdrant`) to run locally via the CLI without requiring Qdrant infrastructure.
+
+Same keys as `rag:`:
+
+| Key | Type | Default | Env Var |
+|-----|------|---------|---------|
+| `cli_rag.vector_backend` | string | (inherits from `rag:`) | `VECTOR_BACKEND` |
+| `cli_rag.qdrant_url` | string | (inherits from `rag:`) | `QDRANT_URL` |
+| `cli_rag.embedding_model` | string | (inherits from `rag:`) | `EMBEDDING_MODEL` |
+| `cli_rag.openai_api_key` | string | (inherits from `rag:`) | `OPENAI_API_KEY` |
+| `cli_rag.gemini_api_key` | string | (inherits from `rag:`) | `GEMINI_API_KEY` |
+
+```yaml
+rag:
+  vector_backend: qdrant           # used by orchid-api (Docker)
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
+
+cli_rag:
+  vector_backend: chroma           # used by orchid-cli (local, on-disk)
+  embedding_model: ollama/nomic-embed-text
+```
+
+<Callout variant="info" title="Precedence">
+CLI args > env vars > `cli_rag:` (if present) > `rag:` > CLI defaults (`chroma`).
+</Callout>
 
 ---
 

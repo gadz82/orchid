@@ -152,3 +152,22 @@ Every `chat`, `index`, and `mcp` command goes through `commands/_session.py:reso
 
 The CLI is an independent OAuth 2.0 client: it runs a full Authorization Code + PKCE flow against the upstream IdP, stores tokens in `~/.orchid/tokens.json` (permissions `0o600`), and refreshes them automatically when they expire. It never delegates auth to `orchid-api`.
 
+## CLI-specific RAG configuration
+
+When `orchid.yml` includes a `cli_rag:` section, the CLI uses it instead of `rag:`. This lets you run Docker-based examples locally without Qdrant:
+
+```yaml
+rag:
+  vector_backend: qdrant           # used by orchid-api (Docker)
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
+
+cli_rag:
+  vector_backend: chroma           # used by orchid-cli (local, on-disk)
+  embedding_model: ollama/nomic-embed-text
+```
+
+When `cli_rag:` is absent, the CLI falls back to `rag:` as usual. The `cli_rag:` section supports the same keys as `rag:`: `vector_backend`, `qdrant_url`, `embedding_model`, `openai_api_key`, and `gemini_api_key`.
+
+**Precedence:** CLI args > env vars > `cli_rag:` (if present) > `rag:` > CLI defaults (`chroma`).
+

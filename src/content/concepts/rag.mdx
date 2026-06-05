@@ -298,6 +298,22 @@ The framework ships two concrete backends:
 
 Both implement all three ABCs. Never import `qdrant_client` or `chromadb` outside of their respective backend modules — all access goes through these ABCs. (The ChromaDB backend lives in `orchid-cli/` — the CLI registers it in `VECTOR_BACKEND_REGISTRY` at startup so the library never imports it directly.)
 
+<Callout variant="info" title="Local development with cli_rag">
+When running Docker-based examples locally via the CLI, add a `cli_rag:` section to `orchid.yml` to use ChromaDB instead of Qdrant:
+
+```yaml
+rag:
+  vector_backend: qdrant           # used by orchid-api (Docker)
+  embedding_model: gemini/gemini-embedding-001
+
+cli_rag:
+  vector_backend: chroma           # used by orchid-cli (local, on-disk)
+  embedding_model: ollama/nomic-embed-text
+```
+
+The CLI automatically uses `cli_rag:` when present, falling back to `rag:` otherwise. See the [orchid-cli package page](/packages/orchid-cli) for details.
+</Callout>
+
 ## Namespace conventions
 
 Namespaces are vector store collection prefixes that separate different kinds of knowledge:

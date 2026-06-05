@@ -142,9 +142,72 @@
     "description": "LangGraph state persistence backend ('memory', 'sqlite', 'postgres', or class path).",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
+    ]
+  },
+  {
+    "file": "orchid.yml",
+    "path": "cli_rag.embedding_model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "Maps to environment variable EMBEDDING_MODEL.",
+    "deprecated": false,
+    "examples": [
+      "/examples/basketball",
+      "/examples/graph-kb",
+      "/examples/helpdesk"
+    ]
+  },
+  {
+    "file": "orchid.yml",
+    "path": "cli_rag.gemini_api_key",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "Maps to environment variable GEMINI_API_KEY.",
+    "deprecated": false,
+    "examples": [
+      "/examples/helpdesk",
+      "/examples/restaurant"
+    ]
+  },
+  {
+    "file": "orchid.yml",
+    "path": "cli_rag.openai_api_key",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "Maps to environment variable OPENAI_API_KEY.",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "orchid.yml",
+    "path": "cli_rag.qdrant_url",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "Maps to environment variable QDRANT_URL.",
+    "deprecated": false,
+    "examples": [
+      "/examples/basketball",
+      "/examples/graph-kb",
+      "/examples/helpdesk"
+    ]
+  },
+  {
+    "file": "orchid.yml",
+    "path": "cli_rag.vector_backend",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "Maps to environment variable VECTOR_BACKEND.",
+    "deprecated": false,
+    "examples": [
+      "/examples/basketball",
+      "/examples/graph-kb",
+      "/examples/helpdesk"
     ]
   },
   {
@@ -909,17 +972,27 @@
   },
   {
     "file": "agents.yaml",
-    "path": "tools[].handler",
+    "path": "tools[].class",
     "type": "string",
-    "required": true,
+    "required": false,
     "default": null,
-    "description": "Dotted import path to the Python function implementing this tool.",
+    "description": "",
     "deprecated": false,
     "examples": [
       "/examples/basketball",
       "/examples/helpdesk",
-      "/examples/restaurant"
+      "/examples/learning"
     ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "tools[].handler",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "Dotted import path to the Python function implementing this tool.",
+    "deprecated": false,
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -943,11 +1016,7 @@
     "default": {},
     "description": "Parameter declarations for this tool (auto-extracted from Python signature when omitted).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -958,8 +1027,6 @@
     "description": "Parameter type: 'string', 'int', 'float', or 'bool'.",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
     ]
   },
@@ -985,11 +1052,7 @@
     "default": true,
     "description": "Whether this parameter must be provided.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -999,11 +1062,7 @@
     "default": null,
     "description": "Default value when the parameter is not provided.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1626,6 +1685,130 @@
   },
   {
     "file": "agents.yaml",
+    "path": "supervisor.memory.strategy",
+    "type": "\"none\" | \"running_summary\" | \"rag_augmented\"",
+    "required": false,
+    "default": "none",
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/graph-kb",
+      "/examples/prompt-customization",
+      "/examples/rag-strategies"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.summary_recent_turns",
+    "type": "int",
+    "required": false,
+    "default": 10,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.summary_model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.summary_prompt",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.persist_summary",
+    "type": "boolean",
+    "required": false,
+    "default": true,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.structured_output",
+    "type": "boolean",
+    "required": false,
+    "default": true,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.rag_namespace",
+    "type": "string",
+    "required": false,
+    "default": "__memory__",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.rag_k",
+    "type": "int",
+    "required": false,
+    "default": 5,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.rag_similarity_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.5,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.store_turns",
+    "type": "boolean",
+    "required": false,
+    "default": true,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.truncation_strategy",
+    "type": "\"hard\" | \"middle\" | \"llm\" | \"semantic\"",
+    "required": false,
+    "default": "hard",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "supervisor.memory.truncation_max_chars",
+    "type": "int",
+    "required": false,
+    "default": 1000,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
     "path": "guardrails.input",
     "type": "list[object]",
     "required": false,
@@ -1647,8 +1830,6 @@
     "description": "Guardrail type name (e.g. 'content_safety', 'pii_detection', 'prompt_injection').",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
     ]
   },
@@ -1703,8 +1884,6 @@
     "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
     ]
   },
@@ -1871,11 +2050,7 @@
     "default": false,
     "description": "Whether this argument must be provided.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2349,8 +2524,6 @@
     "description": "Server type: 'local' (same host) or 'remote'.",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
     ]
   },
@@ -3082,8 +3255,6 @@
     "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
     ]
   },
@@ -3138,8 +3309,6 @@
     "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
     ]
   },
@@ -3627,8 +3796,6 @@
     "description": "Server type: 'local' (same host) or 'remote'.",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
     ]
   },
@@ -4216,8 +4383,6 @@
     "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
     ]
   },
@@ -4272,8 +4437,6 @@
     "description": "Guardrail type name.",
     "deprecated": false,
     "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
       "/examples/mcp-auth"
     ]
   },
@@ -4317,6 +4480,36 @@
       "/examples/helpdesk",
       "/examples/tool-strategies"
     ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].max_tool_rounds",
+    "type": "int",
+    "required": false,
+    "default": 15,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].max_consecutive_dupes",
+    "type": "int",
+    "required": false,
+    "default": 2,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].max_skill_depth",
+    "type": "int",
+    "required": false,
+    "default": 3,
+    "description": "",
+    "deprecated": false,
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4585,6 +4778,56 @@
   },
   {
     "file": "agents.yaml",
+    "path": "agents[].children[].prompt_sections.summary_compression_system_prompt",
+    "type": "string",
+    "required": false,
+    "default": "You are a conversation summarizer that produces structured summaries. Output ONLY valid JSON with this schema:\n{\n  \"topics\": [\"topic1\", \"topic2\"],\n  \"entities\": [\n    {\"name\": \"entity_name\", \"type\": \"person|product|concept|other\", \"details\": \"key information\"}\n  ],\n  \"actions_taken\": [\"action1\", \"action2\"],\n  \"decisions\": [\"decision1\"],\n  \"open_questions\": [\"question1\"],\n  \"user_preferences\": [\"preference1\"],\n  \"narrative\": \"A brief prose summary of the conversation flow (2-3 sentences)\",\n  \"covered_turns\": 5\n}\n\nBe factual and concise. Extract all entities, topics, and decisions mentioned.",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].prompt_sections.summary_compression_user_prompt",
+    "type": "string",
+    "required": false,
+    "default": "Summarise the following conversation excerpt in structured JSON format. Focus on: (1) the key topics discussed, (2) any entities or names mentioned, (3) actions taken or decisions made, (4) any outstanding questions. Be factual and concise.\n\n{transcript}",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].prompt_sections.summary_extension_system_prompt",
+    "type": "string",
+    "required": false,
+    "default": "You are a conversation summarizer that produces structured summaries. You have an existing summary and new messages to incorporate. Update the summary to reflect new information, remove contradicted facts, and merge duplicate entities.\n\nOutput ONLY valid JSON with this schema:\n{\n  \"topics\": [\"topic1\", \"topic2\"],\n  \"entities\": [\n    {\"name\": \"entity_name\", \"type\": \"person|product|concept|other\", \"details\": \"key information\"}\n  ],\n  \"actions_taken\": [\"action1\", \"action2\"],\n  \"decisions\": [\"decision1\"],\n  \"open_questions\": [\"question1\"],\n  \"user_preferences\": [\"preference1\"],\n  \"narrative\": \"A brief prose summary of the conversation flow (2-3 sentences)\",\n  \"covered_turns\": 5\n}",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].prompt_sections.summary_extension_user_prompt",
+    "type": "string",
+    "required": false,
+    "default": "Given the existing summary below and the new conversation messages, produce an updated summary that incorporates all new information.\n\nExisting summary:\n{existing_summary}\n\nNew messages:\n{new_messages}",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].prompt_sections.summary_narrative_fallback_prompt",
+    "type": "string",
+    "required": false,
+    "default": "Summarise the following conversation excerpt in 2-4 sentences. Focus on: (1) the key topics discussed, (2) any entities or names mentioned, (3) actions taken or decisions made, (4) any outstanding questions. Be factual and concise.\n\n{transcript}",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
     "path": "agents[].parallel_tools",
     "type": "boolean",
     "required": false,
@@ -4595,6 +4838,36 @@
       "/examples/helpdesk",
       "/examples/tool-strategies"
     ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].max_tool_rounds",
+    "type": "int",
+    "required": false,
+    "default": 15,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].max_consecutive_dupes",
+    "type": "int",
+    "required": false,
+    "default": 2,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].max_skill_depth",
+    "type": "int",
+    "required": false,
+    "default": 3,
+    "description": "",
+    "deprecated": false,
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4860,6 +5133,66 @@
     "examples": [
       "/examples/prompt-customization"
     ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].prompt_sections.summary_compression_system_prompt",
+    "type": "string",
+    "required": false,
+    "default": "You are a conversation summarizer that produces structured summaries. Output ONLY valid JSON with this schema:\n{\n  \"topics\": [\"topic1\", \"topic2\"],\n  \"entities\": [\n    {\"name\": \"entity_name\", \"type\": \"person|product|concept|other\", \"details\": \"key information\"}\n  ],\n  \"actions_taken\": [\"action1\", \"action2\"],\n  \"decisions\": [\"decision1\"],\n  \"open_questions\": [\"question1\"],\n  \"user_preferences\": [\"preference1\"],\n  \"narrative\": \"A brief prose summary of the conversation flow (2-3 sentences)\",\n  \"covered_turns\": 5\n}\n\nBe factual and concise. Extract all entities, topics, and decisions mentioned.",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].prompt_sections.summary_compression_user_prompt",
+    "type": "string",
+    "required": false,
+    "default": "Summarise the following conversation excerpt in structured JSON format. Focus on: (1) the key topics discussed, (2) any entities or names mentioned, (3) actions taken or decisions made, (4) any outstanding questions. Be factual and concise.\n\n{transcript}",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].prompt_sections.summary_extension_system_prompt",
+    "type": "string",
+    "required": false,
+    "default": "You are a conversation summarizer that produces structured summaries. You have an existing summary and new messages to incorporate. Update the summary to reflect new information, remove contradicted facts, and merge duplicate entities.\n\nOutput ONLY valid JSON with this schema:\n{\n  \"topics\": [\"topic1\", \"topic2\"],\n  \"entities\": [\n    {\"name\": \"entity_name\", \"type\": \"person|product|concept|other\", \"details\": \"key information\"}\n  ],\n  \"actions_taken\": [\"action1\", \"action2\"],\n  \"decisions\": [\"decision1\"],\n  \"open_questions\": [\"question1\"],\n  \"user_preferences\": [\"preference1\"],\n  \"narrative\": \"A brief prose summary of the conversation flow (2-3 sentences)\",\n  \"covered_turns\": 5\n}",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].prompt_sections.summary_extension_user_prompt",
+    "type": "string",
+    "required": false,
+    "default": "Given the existing summary below and the new conversation messages, produce an updated summary that incorporates all new information.\n\nExisting summary:\n{existing_summary}\n\nNew messages:\n{new_messages}",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].prompt_sections.summary_narrative_fallback_prompt",
+    "type": "string",
+    "required": false,
+    "default": "Summarise the following conversation excerpt in 2-4 sentences. Focus on: (1) the key topics discussed, (2) any entities or names mentioned, (3) actions taken or decisions made, (4) any outstanding questions. Be factual and concise.\n\n{transcript}",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "allowed_passthrough_hosts",
+    "type": "list[string]",
+    "required": false,
+    "default": [],
+    "description": "",
+    "deprecated": false,
+    "examples": []
   },
   {
     "file": "agents.yaml",
