@@ -30,12 +30,15 @@ from orchid_ai.config.schema import (
     OrchidRAGConfig,
 )
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.core.run_config import with_auth
 from orchid_ai.observability import (
     MINI_AGENT_EVENT_KEY,
     extract_event,
     is_event_message,
     make_event_message,
 )
+
+_AUTH_CFG = with_auth(OrchidAuthContext(access_token="t", tenant_key="x", user_id="u"))
 
 
 # ── Wire-format helpers ───────────────────────────────────────
@@ -241,6 +244,7 @@ async def test_mini_node_emits_started_and_finished_on_success(monkeypatch):
             },
             tool_subset=[],
         ),
+        config=_AUTH_CFG,
     )
 
     msgs = update["messages"]
@@ -287,6 +291,7 @@ async def test_mini_node_emits_finished_with_error_on_failure(monkeypatch):
             },
             tool_subset=[],
         ),
+        config=_AUTH_CFG,
     )
 
     msgs = update["messages"]

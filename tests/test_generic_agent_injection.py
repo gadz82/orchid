@@ -16,6 +16,21 @@ from orchid_ai.config.schema import (
     OrchidToolConfig,
 )
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.core.agent import OrchidAgentRunContext
+
+
+async def _run_with_auth(agent, state):
+    """Run an agent with auth bound on the run-context ContextVar.
+
+    Auth is no longer carried in graph state — in production the graph
+    node wrapper binds it from ``config["configurable"]["auth_context"]``
+    before calling ``run``.  Tests reproduce that here.
+    """
+    token = agent.set_run_context(OrchidAgentRunContext(auth=state.get("auth_context"), chat_id=state.get("chat_id")))
+    try:
+        return await agent.run(state)
+    finally:
+        agent.reset_run_context(token)
 
 
 def _make_state(query: str = "test query") -> dict[str, Any]:
@@ -66,7 +81,7 @@ async def test_no_injection_when_no_injectable_tools():
         ),
         patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
-        await agent.run(_make_state())
+        await _run_with_auth(agent, _make_state())
         mock_inject.assert_not_called()
 
 
@@ -104,7 +119,7 @@ async def test_injection_only_for_opted_in_mcp_tools():
         ),
         patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
-        await agent.run(_make_state())
+        await _run_with_auth(agent, _make_state())
         # One inject_to_rag call per opted-in tool.
         assert mock_inject.await_count == 1
         kwargs = mock_inject.call_args.kwargs
@@ -139,7 +154,7 @@ async def test_injection_only_for_opted_in_builtin_tools():
         ),
         patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
-        await agent.run(_make_state())
+        await _run_with_auth(agent, _make_state())
         assert mock_inject.await_count == 1
         kwargs = mock_inject.call_args.kwargs
         assert kwargs["tool_name"] == "format_date"
@@ -175,7 +190,7 @@ async def test_no_injection_when_rag_disabled():
         ),
         patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
     ):
-        await agent.run(_make_state())
+        await _run_with_auth(agent, _make_state())
         mock_inject.assert_not_called()
 
 
@@ -216,7 +231,7 @@ async def test_cache_hit_skips_tool_in_agentic_loop():
         ) as mock_loop,
         patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock),
     ):
-        await agent.run(_make_state())
+        await _run_with_auth(agent, _make_state())
         mock_loop.assert_called_once()
         # skip_tools should contain the cached tool
         assert "cached_tool" in mock_loop.call_args.kwargs["skip_tools"]
@@ -253,7 +268,7 @@ async def test_cache_miss_calls_tool_normally():
         ) as mock_loop,
         patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock),
     ):
-        await agent.run(_make_state())
+        await _run_with_auth(agent, _make_state())
         # skip_tools should be empty (no cache hits)
         assert mock_loop.call_args.kwargs["skip_tools"] == set()
 
@@ -278,5 +293,5 @@ async def test_no_cache_check_when_no_ttls():
         new_callable=AsyncMock,
         return_value=(None, {}, []),
     ):
-        await agent.run(_make_state())
+        await _run_with_auth(agent, _make_state())
         agent.reader.lookup_cached_tool_results.assert_not_called()

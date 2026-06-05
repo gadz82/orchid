@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 
 from ..config.schema import OrchidGuardrailsConfig
 from ..core.guardrails import (
@@ -17,6 +18,7 @@ from ..core.guardrails import (
     OrchidGuardrailContext,
     OrchidGuardrailDirection,
 )
+from ..core.run_config import auth_from_config
 from .state import GraphState
 
 logger = logging.getLogger(__name__)
@@ -44,14 +46,14 @@ class _GuardrailWiring:
     def create_global_input_node(chain: OrchidGuardrailChain):
         """Create a LangGraph node that runs global input guardrails."""
 
-        async def input_guardrails_node(state: GraphState) -> GraphState:
+        async def input_guardrails_node(state: GraphState, config: RunnableConfig | None = None) -> GraphState:
             from ..core.agent import OrchidAgent
 
             query = OrchidAgent.extract_user_query(state)
             if not query:
                 return state
 
-            auth = state.get("auth_context")
+            auth = auth_from_config(config)
             ctx = OrchidGuardrailContext(
                 direction=OrchidGuardrailDirection.INPUT,
                 tenant_key=auth.tenant_key if auth else "default",
@@ -84,12 +86,12 @@ class _GuardrailWiring:
     def create_global_output_node(chain: OrchidGuardrailChain):
         """Create a LangGraph node that runs global output guardrails."""
 
-        async def output_guardrails_node(state: GraphState) -> GraphState:
+        async def output_guardrails_node(state: GraphState, config: RunnableConfig | None = None) -> GraphState:
             final = state.get("final_response")
             if not final:
                 return state
 
-            auth = state.get("auth_context")
+            auth = auth_from_config(config)
             ctx = OrchidGuardrailContext(
                 direction=OrchidGuardrailDirection.OUTPUT,
                 tenant_key=auth.tenant_key if auth else "default",

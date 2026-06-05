@@ -94,18 +94,28 @@ agents:
 
 ### 2. Use Programmatically
 
+`Orchid` is the **single entry point** — it loads config, wires the graph, and
+runs turns. Use `async with` so DB / checkpointer connections close cleanly.
+
 ```python
-from orchid_ai import OrchidRuntime, build_graph, load_config
+from orchid_ai import Orchid
 
-config = load_config("agents.yaml")
-runtime = OrchidRuntime(default_model="ollama/llama3.2")
-graph = build_graph(config=config, runtime=runtime)
-
-result = await graph.ainvoke({
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "auth_context": auth,
-})
+async with Orchid.from_config_path("orchid.yml") as orchid:
+    result = await orchid.invoke(
+        "Hello!",
+        user_id="alice",
+        tenant_id="acme",
+    )
+    print(result.response)
 ```
+
+`from_config_path` auto-detects YAML (`orchid.yml`) vs Markdown (`orchid.md`)
+and accepts overrides (`model=`, `agents_config_path=`, `checkpointer_type=`, …).
+Auth is **execution context, not graph state**: pass `user_id` / `tenant_id`
+(or a resolved `OrchidAuthContext` via `auth=`) to `invoke` / `stream` /
+`resume` and the framework attaches it to the run config — it is never written
+to a checkpoint. For a fully custom runtime, build an `OrchidRuntime` and pass
+it to `Orchid(config=…, runtime=…)` (see [OrchidRuntime](#orchidruntime)).
 
 ### 3. Or Use via orchid-cli / orchid-api
 
@@ -186,12 +196,16 @@ public PKCE clients (the MCP gateway, Next.js frontends).
 
 ## OrchidRuntime
 
-`OrchidRuntime` is the single integration point for consumers. It holds all resolved
-dependencies needed by `build_graph()` — override only what you need, everything else
-gets a sensible default.
+`OrchidRuntime` is the **advanced customization point** — it holds the resolved
+dependencies the `Orchid` facade wires together (LLM provider, vector reader, MCP
+client factory). `Orchid.from_config_path` builds one for you from `orchid.yml`;
+override only what you need and pass it to `Orchid(config=…, runtime=…)` when you
+want full programmatic control. (`build_graph()` is the low-level builder the
+facade calls under the hood — import it from `orchid_ai.graph.graph` if you really
+need it directly.)
 
 ```python
-from orchid_ai import OrchidRuntime, build_graph, load_config
+from orchid_ai import Orchid, OrchidRuntime, load_config
 ```
 
 ### Minimal (all defaults)
@@ -202,7 +216,7 @@ for MCP servers:
 ```python
 config = load_config("agents.yaml")
 runtime = OrchidRuntime(default_model="ollama/llama3.2")
-graph = build_graph(config=config, runtime=runtime)
+orchid = Orchid(config=config, runtime=runtime)
 ```
 
 ### Custom Vector Store
@@ -258,7 +272,7 @@ runtime = OrchidRuntime(
     llm_service=MyCustomProvider(),        # LLMProvider | None
     mcp_client_factory=my_factory,         # Callable[[OrchidMCPServerConfig], OrchidMCPClient] | None
 )
-graph = build_graph(config=config, runtime=runtime)
+orchid = Orchid(config=config, runtime=runtime)
 ```
 
 | Field | Type | Default |
@@ -1228,22 +1242,28 @@ agents:
 Register custom guardrails by subclassing `Guardrail` and calling `register_guardrail()`:
 
 ```python
-from orchid_ai import Guardrail, GuardrailContext, GuardrailResult, register_guardrail
+from orchid_ai import (
+    OrchidGuardrail,
+    OrchidGuardrailAction,
+    OrchidGuardrailContext,
+    OrchidGuardrailResult,
+    register_guardrail,
+)
 
-class MyCustomGuardrail(Guardrail):
+class MyCustomGuardrail(OrchidGuardrail):
     @property
     def name(self) -> str:
         return "my_custom"
 
-    async def check(self, content: str, context: GuardrailContext) -> GuardrailResult:
+    async def check(self, content: str, context: OrchidGuardrailContext) -> OrchidGuardrailResult:
         if "forbidden" in content.lower():
-            return GuardrailResult(
+            return OrchidGuardrailResult(
                 triggered=True,
-                action=self._fail_action,
+                action=OrchidGuardrailAction.BLOCK,
                 guardrail_name=self.name,
                 message="Forbidden content detected.",
             )
-        return GuardrailResult.passed(self.name)
+        return OrchidGuardrailResult.passed(self.name)
 
 register_guardrail("my_custom", MyCustomGuardrail)
 ```

@@ -26,6 +26,7 @@ from typing import Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END
 from langgraph.types import Send
 from pydantic import BaseModel, Field, model_validator
@@ -34,6 +35,8 @@ from ..config.schema import OrchidOrchestratorSkillConfig, OrchidSupervisorConfi
 from ..core.agent import OrchidAgent
 from ..core.helpers import filter_summary_messages
 from ..core.memory import OrchidConversationMemory
+from ..core.run_config import auth_from_config
+from ..core.state import OrchidAuthContext
 from .sequential_advancer import SequentialAdvancer
 from .state import GraphState
 from .synthesizer import ResponseSynthesizer
@@ -176,7 +179,8 @@ def create_supervisor_node(
         memory=memory,
     )
 
-    async def supervisor_node(state: GraphState) -> GraphState:
+    async def supervisor_node(state: GraphState, config: RunnableConfig | None = None) -> GraphState:
+        auth = auth_from_config(config)
         pending = state.get("pending_agents", [])
         has_mcp_data = bool(state.get("mcp_context"))
         start = time.perf_counter()
@@ -199,14 +203,14 @@ def create_supervisor_node(
                 "[PERF][supervisor] phase=synthesise (mcp_keys=%s)",
                 list(state.get("mcp_context", {}).keys()),
             )
-            result = await synthesizer.synthesise(state)
+            result = await synthesizer.synthesise(state, auth=auth)
             elapsed = (time.perf_counter() - start) * 1000
             perf_logger.info("[PERF][supervisor] phase=synthesise took %.1f ms", elapsed)
             return result
 
         # ── Case 3: First entry — analyse intent and route ──
         perf_logger.info("[PERF][supervisor] phase=route (initial intent analysis)")
-        result = await _route(state, model, agent_descriptions, skills, sup_config, route_chat_model, memory)
+        result = await _route(state, model, agent_descriptions, skills, sup_config, route_chat_model, memory, auth=auth)
         elapsed = (time.perf_counter() - start) * 1000
         perf_logger.info(
             "[PERF][supervisor] phase=route took %.1f ms (active=%s pending=%s)",
@@ -291,6 +295,8 @@ async def _extract_and_compress_history(
     sup: OrchidSupervisorConfig,
     chat_model: BaseChatModel | None = None,
     memory: OrchidConversationMemory | None = None,
+    *,
+    auth: OrchidAuthContext | None = None,
 ) -> list[dict[str, str]]:
     """Extract conversation history, optionally compressing older turns."""
     history = OrchidAgent.extract_conversation_history(
@@ -334,7 +340,6 @@ async def _extract_and_compress_history(
             user_query = OrchidAgent.extract_user_query(state)
             if user_query:
                 try:
-                    auth = state.get("auth_context")
                     tenant_id = auth.tenant_key if auth else "default"
                     user_id = auth.user_id if auth else ""
                     # Use the get_relevant_history_merged method on the RAG memory
@@ -430,6 +435,8 @@ async def _route(
     supervisor_config: OrchidSupervisorConfig | None = None,
     chat_model: BaseChatModel | None = None,
     memory: OrchidConversationMemory | None = None,
+    *,
+    auth: OrchidAuthContext | None = None,
 ) -> GraphState:
     """Analyse user intent, choose execution mode, and activate agents."""
     desc_text = "\n".join(f"- **{name}**: {desc}" for name, desc in agent_descriptions.items())
@@ -451,7 +458,7 @@ async def _route(
         skill_descriptions=skill_text,
     )
 
-    clean_history = await _extract_and_compress_history(state, sup, chat_model, memory)
+    clean_history = await _extract_and_compress_history(state, sup, chat_model, memory, auth=auth)
 
     llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     if clean_history:

@@ -17,8 +17,6 @@ from typing import Annotated, Any, Literal, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
-from ..core.state import OrchidAuthContext
-
 
 # ── Reducers ─────────────────────────────────────────────────
 
@@ -53,7 +51,8 @@ class GraphState(TypedDict, total=False):
     """
 
     messages: Annotated[list[BaseMessage], add_messages]
-    auth_context: OrchidAuthContext  # tenant key = auth_context.tenant_key (installation_id)
+    # auth is execution context (RunnableConfig), never checkpointed state —
+    # see orchid_ai.core.run_config.
     chat_id: str  # chat session identifier for RAG scoping
     active_agents: Annotated[list[str], replace_list]
     mcp_context: Annotated[dict[str, Any], merge_dicts]

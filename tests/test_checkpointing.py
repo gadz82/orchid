@@ -194,13 +194,15 @@ class TestGraphCompileWithCheckpointer:
 
 
 class TestSDKImports:
-    """build_checkpointer is importable from the SDK surface."""
+    """Checkpointer factories live in the orchid_ai.checkpointing submodule."""
 
-    def test_import_from_orchid_ai(self):
-        from orchid_ai import build_checkpointer, shutdown_checkpointer
+    def test_not_on_curated_top_level(self):
+        # build_checkpointer is plumbing — reachable from its submodule,
+        # deliberately NOT on the curated top-level orchid_ai surface.
+        import orchid_ai
 
-        assert callable(build_checkpointer)
-        assert callable(shutdown_checkpointer)
+        assert "build_checkpointer" not in orchid_ai.__all__
+        assert not hasattr(orchid_ai, "build_checkpointer")
 
     def test_import_from_checkpointing(self):
         from orchid_ai.checkpointing import build_checkpointer, shutdown_checkpointer

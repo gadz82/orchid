@@ -115,7 +115,10 @@ class TestInvoke:
             await client.invoke("hi", chat_id=chat_id, persist=False)
 
         call_kwargs = graph.ainvoke.call_args.kwargs
-        assert call_kwargs["config"] == {"configurable": {"thread_id": chat_id}}
+        configurable = call_kwargs["config"]["configurable"]
+        assert configurable["thread_id"] == chat_id
+        # Auth now travels in the config, not the state.
+        assert isinstance(configurable["auth_context"], OrchidAuthContext)
 
     @pytest.mark.asyncio
     async def test_auth_fallback_is_auth_context(self, minimal_config, noop_runtime):
@@ -133,8 +136,7 @@ class TestInvoke:
                 persist=False,
             )
 
-        initial = graph.ainvoke.call_args.args[0]
-        auth_ctx = initial["auth_context"]
+        auth_ctx = graph.ainvoke.call_args.kwargs["config"]["configurable"]["auth_context"]
         assert isinstance(auth_ctx, OrchidAuthContext)
         assert auth_ctx.user_id == "u-42"
         assert auth_ctx.tenant_key == "acme"
@@ -157,7 +159,7 @@ class TestInvoke:
                 persist=False,
             )
 
-        assert graph.ainvoke.call_args.args[0]["auth_context"] is custom
+        assert graph.ainvoke.call_args.kwargs["config"]["configurable"]["auth_context"] is custom
 
     @pytest.mark.asyncio
     async def test_explicit_history_passed_through(self, minimal_config, noop_runtime):
@@ -250,6 +252,25 @@ class TestResume:
         cmd = graph.ainvoke.call_args.args[0]
         assert hasattr(cmd, "resume")
         assert cmd.resume == {"approved": True}
+
+    @pytest.mark.asyncio
+    async def test_resume_injects_auth_via_config(self, minimal_config):
+        """Resume re-supplies a fresh auth via config — never read from the checkpoint."""
+        from langgraph.checkpoint.memory import MemorySaver
+
+        runtime = OrchidRuntime(default_model="ollama/llama3.2", checkpointer=MemorySaver())
+        auth = OrchidAuthContext(access_token="fresh", tenant_key="acme", user_id="u-1")
+
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
+            graph = _fake_graph(response="done")
+            build.return_value = graph
+            client = Orchid(config=minimal_config, runtime=runtime)
+
+            await client.resume("c-1", auth=auth, approved=True, persist=False)
+
+        config = graph.ainvoke.call_args.kwargs["config"]
+        assert config["configurable"]["auth_context"] is auth
+        assert config["configurable"]["thread_id"] == "c-1"
 
 
 # ── Persistence ────────────────────────────────────────────────

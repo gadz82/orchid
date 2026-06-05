@@ -265,10 +265,13 @@ class OrchidAgent(ABC):
     async def run(self, state: OrchidAgentState) -> OrchidAgentState:
         """
         Agent-specific logic.
-        Receives the full graph state, returns the updated state.
+        Receives the graph state, returns the updated state.
 
-        The ``auth_context`` in state carries the Bearer token.
-        Pass it to ``self.mcp_clients`` when calling tools.
+        Auth is execution context, not state: read the current
+        :class:`OrchidAuthContext` via ``self._current_auth`` (the graph
+        node wrapper binds it from ``config["configurable"]["auth_context"]``
+        before calling ``run``).  Pass it to ``self.mcp_clients`` when
+        calling tools.
         """
         ...
 

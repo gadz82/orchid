@@ -17,6 +17,7 @@ Architectural rule:
 from __future__ import annotations
 
 from .state import OrchidAgentState, OrchidAuthContext
+from .run_config import CONFIG_KEY_AUTH, auth_from_config, with_auth
 from .agent import OrchidAgent
 from .tool import OrchidTool, OrchidToolInput, OrchidToolOutput
 from .repository import (
@@ -34,6 +35,9 @@ from .content import OrchidContentItem, OrchidContentSource
 __all__ = [
     "OrchidAgentState",
     "OrchidAuthContext",
+    "CONFIG_KEY_AUTH",
+    "auth_from_config",
+    "with_auth",
     "OrchidAgent",
     "OrchidTool",
     "OrchidToolInput",

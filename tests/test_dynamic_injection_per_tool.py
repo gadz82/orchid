@@ -11,6 +11,17 @@ import yaml
 from orchid_ai.agents.generic_agent import GenericAgent
 from orchid_ai.config.schema import OrchidAgentsConfig
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.core.agent import OrchidAgentRunContext
+
+
+async def _run_with_auth(agent, state):
+    """Run an agent with auth bound on the run-context ContextVar (auth is
+    execution context now, not graph state)."""
+    token = agent.set_run_context(OrchidAgentRunContext(auth=state.get("auth_context"), chat_id=state.get("chat_id")))
+    try:
+        return await agent.run(state)
+    finally:
+        agent.reset_run_context(token)
 
 
 def _state(query: str = "go") -> dict[str, Any]:
@@ -74,7 +85,7 @@ async def test_mcp_tool_override_namespace_reaches_inject_to_rag():
         sentinel = MagicMock(name="ingestion-strategy")
         mock_build.return_value = sentinel
 
-        await agent.run(_state())
+        await _run_with_auth(agent, _state())
 
         mock_inject.assert_awaited_once()
         kwargs = mock_inject.call_args.kwargs
@@ -119,7 +130,7 @@ async def test_no_override_uses_agent_namespace():
         patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
         patch("orchid_ai.agents.rag_pipeline.build_ingestion_strategy", return_value=MagicMock()),
     ):
-        await agent.run(_state())
+        await _run_with_auth(agent, _state())
         kwargs = mock_inject.call_args.kwargs
         assert kwargs["namespace"] == "kb-default"
 
@@ -154,7 +165,7 @@ async def test_builtin_tool_override_namespace_reaches_inject_to_rag():
         patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
         patch("orchid_ai.agents.rag_pipeline.build_ingestion_strategy", return_value=MagicMock()),
     ):
-        await agent.run(_state())
+        await _run_with_auth(agent, _state())
         mock_inject.assert_awaited_once()
         kwargs = mock_inject.call_args.kwargs
         assert kwargs["tool_name"] == "format_date"
@@ -190,7 +201,7 @@ async def test_mixed_injectable_and_non_injectable_tools_iterate_only_injectable
         patch("orchid_ai.agents.rag_pipeline.inject_to_rag", new_callable=AsyncMock) as mock_inject,
         patch("orchid_ai.agents.rag_pipeline.build_ingestion_strategy", return_value=MagicMock()),
     ):
-        await agent.run(_state())
+        await _run_with_auth(agent, _state())
         # Two injectable tools → two calls; t_skip was filtered out.
         assert mock_inject.await_count == 2
         names = [c.kwargs["tool_name"] for c in mock_inject.call_args_list]

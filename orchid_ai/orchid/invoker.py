@@ -16,6 +16,7 @@ from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
 
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.core.run_config import with_auth
 from orchid_ai.persistence.base import OrchidChatStorage
 
 logger = logging.getLogger(__name__)
@@ -126,17 +127,24 @@ class OrchidInvoker:
         self,
         chat_id: str,
         *,
+        auth: OrchidAuthContext | None = None,
         approved: bool = True,
         persist: bool = True,
     ) -> OrchidInvokeResult:
-        """Continue a graph previously paused by ``interrupt()``."""
+        """Continue a graph previously paused by ``interrupt()``.
+
+        ``auth`` is the freshly-resolved identity for the (authenticated)
+        resume request.  It is injected via the RunnableConfig so the
+        resumed run uses a live token — auth is never read from the
+        checkpoint, which by design holds no credentials.
+        """
         if self._checkpointer is None:
             raise RuntimeError(
                 "Cannot resume without a checkpointer — "
                 "construct the client with checkpointer_type='memory' (or 'sqlite'/'postgres')."
             )
 
-        graph_config = {"configurable": {"thread_id": chat_id}}
+        graph_config = with_auth(auth, thread_id=chat_id)
 
         try:
             result = await self._graph.ainvoke(
@@ -250,10 +258,11 @@ class OrchidInvoker:
         new_user_msg = HumanMessage(content=message)
         state: dict[str, Any] = {
             "messages": [*resolved_history, new_user_msg],
-            "auth_context": auth_ctx,
             "chat_id": effective_chat_id,
         }
-        graph_config = {"configurable": {"thread_id": effective_chat_id}}
+        # Auth travels as execution context in the RunnableConfig — never
+        # in the (checkpointed) graph state.
+        graph_config = with_auth(auth_ctx, thread_id=effective_chat_id)
 
         return _PreparedInvocation(
             auth_ctx=auth_ctx,

@@ -23,6 +23,7 @@ from ..config.schema import OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
 from ..core.helpers import filter_summary_messages
 from ..core.memory import OrchidConversationMemory
+from ..core.state import OrchidAuthContext
 from ..agents.memory_rag import OrchidRAGConversationMemory
 from ._supervisor_helpers import _extract_single_agent_response, _llm_complete
 from .state import GraphState
@@ -68,13 +69,13 @@ class ResponseSynthesizer:
         self._chat_model = chat_model
         self._memory = memory
 
-    async def synthesise(self, state: GraphState) -> GraphState:
+    async def synthesise(self, state: GraphState, *, auth: OrchidAuthContext | None = None) -> GraphState:
         """Return the final-response state delta, taking the fast path when possible."""
         fast = self._try_single_agent_fast_path(state)
         if fast is not None:
-            await self._store_turn_if_rag(state, fast.get("final_response", ""))
+            await self._store_turn_if_rag(state, fast.get("final_response", ""), auth)
             return fast
-        return await self._llm_synthesise(state)
+        return await self._llm_synthesise(state, auth=auth)
 
     def _try_single_agent_fast_path(self, state: GraphState) -> GraphState | None:
         """Skip the synthesis LLM call when exactly one agent produced final text.
@@ -103,7 +104,7 @@ class ResponseSynthesizer:
             "pending_agents": [],
         }
 
-    async def _llm_synthesise(self, state: GraphState) -> GraphState:
+    async def _llm_synthesise(self, state: GraphState, *, auth: OrchidAuthContext | None = None) -> GraphState:
         """Run the synthesis LLM call and return the resulting state delta."""
         sup = self._supervisor_config
         all_messages = state.get("messages", [])
@@ -220,7 +221,7 @@ class ResponseSynthesizer:
                     "Please try again later."
                 )
 
-        await self._store_turn_if_rag(state, final)
+        await self._store_turn_if_rag(state, final, auth)
 
         return {
             "messages": [AIMessage(content=final)],
@@ -229,7 +230,9 @@ class ResponseSynthesizer:
             "pending_agents": [],
         }
 
-    async def _store_turn_if_rag(self, state: GraphState, final_response: str) -> None:
+    async def _store_turn_if_rag(
+        self, state: GraphState, final_response: str, auth: OrchidAuthContext | None = None
+    ) -> None:
         sup = self._supervisor_config
         if self._memory is None or sup.memory.strategy != "rag_augmented" or not sup.memory.store_turns:
             return
@@ -238,7 +241,6 @@ class ResponseSynthesizer:
         chat_id = state.get("chat_id", "")
         if not chat_id:
             return
-        auth = state.get("auth_context")
         tenant_id = auth.tenant_key if auth else "default"
         user_id = auth.user_id if auth else ""
 

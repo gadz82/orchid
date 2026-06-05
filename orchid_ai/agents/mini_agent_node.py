@@ -36,10 +36,12 @@ import time
 from typing import Any, Callable, Literal
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..config.schema import OrchidAgentConfig
 from ..core.mcp import OrchidMCPClient
+from ..core.run_config import auth_from_config
 from ..core.state import OrchidAuthContext
 
 logger = logging.getLogger(__name__)
@@ -116,7 +118,7 @@ def mini_agent_node_factory(
     parent_name = parent_config.name
     timeout = parent_config.mini_agent.timeout_seconds
 
-    async def mini_agent_node(state: dict[str, Any]) -> dict[str, Any]:
+    async def mini_agent_node(state: dict[str, Any], config: RunnableConfig | None = None) -> dict[str, Any]:
         start = time.perf_counter()
         sub_task_payload = state.get("_active_mini_subtask") or {}
         mini_id = state.get("_active_mini_id") or sub_task_payload.get("id") or "mini_unknown"
@@ -135,14 +137,14 @@ def mini_agent_node_factory(
             sub_task_payload.get("allowed_tools") or [],
         )
 
-        auth: OrchidAuthContext | None = state.get("auth_context")
+        auth: OrchidAuthContext | None = auth_from_config(config)
         if auth is None:
             return _emit_outcome(
                 parent_name=parent_name,
                 mini_id=mini_id,
                 description=description,
                 status="failed",
-                error="missing auth_context on state",
+                error="missing auth_context in config",
                 duration_ms=_elapsed_ms(start),
             )
 

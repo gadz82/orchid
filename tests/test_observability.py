@@ -246,12 +246,15 @@ class TestReset:
 
 
 class TestImportFromSDK:
-    """OrchidMetricsHandler is importable from the SDK surface."""
+    """OrchidMetricsHandler is importable from the orchid_ai.observability submodule."""
 
-    def test_import_from_orchid_ai(self):
-        from orchid_ai import OrchidMetricsHandler as H
+    def test_not_on_curated_top_level(self):
+        # Observability handlers are plumbing — reachable from their
+        # submodule, deliberately NOT on the curated top-level surface.
+        import orchid_ai
 
-        assert H is OrchidMetricsHandler
+        assert "OrchidMetricsHandler" not in orchid_ai.__all__
+        assert not hasattr(orchid_ai, "OrchidMetricsHandler")
 
     def test_import_from_observability(self):
         from orchid_ai.observability import OrchidMetricsHandler as H

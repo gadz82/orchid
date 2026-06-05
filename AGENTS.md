@@ -9,7 +9,10 @@
 ```
 orchid/
   orchid_ai/              Package root (import as `from orchid_ai.xxx`)
-    __init__.py           SDK surface: OrchidAgent, OrchidAuthContext, build_graph, load_config, etc.
+    __init__.py           Curated SDK surface: the `Orchid` facade (single run entry point)
+                            + extension ABCs (OrchidAgent, OrchidAuthContext, …) + `register_*`
+                            hooks + `load_config`. Plumbing (build_*/get_*/concrete backends)
+                            lives in submodules, not the top level.
     core/                 Pure ABCs — ZERO external dependencies (only stdlib)
       agent.py            OrchidAgent ABC
       state.py            OrchidAuthContext + OrchidAgentState

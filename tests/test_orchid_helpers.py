@@ -56,7 +56,11 @@ class TestPrepareInvocation:
             persist=False,
         )
         assert prepared.chat_id  # uuid
-        assert prepared.graph_config == {"configurable": {"thread_id": prepared.chat_id}}
+        configurable = prepared.graph_config["configurable"]
+        assert configurable["thread_id"] == prepared.chat_id
+        # Auth is carried in the config, not the state.
+        assert configurable["auth_context"] is prepared.auth_ctx
+        assert "auth_context" not in prepared.state
         assert isinstance(prepared.auth_ctx, OrchidAuthContext)
         assert prepared.auth_ctx.user_id == "u"
 

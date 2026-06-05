@@ -134,8 +134,13 @@ class GenericAgent(OrchidAgent):
     # ── Execution ────────────────────────────────────────────
 
     async def run(self, state: OrchidAgentState) -> OrchidAgentState:
-        """Execute the pipeline: RAG → skill check → agentic loop → inject → summarise."""
-        auth: OrchidAuthContext | None = state.get("auth_context")
+        """Execute the pipeline: RAG → skill check → agentic loop → inject → summarise.
+
+        Auth is execution context: the graph node wrapper binds it on the
+        run-context ContextVar before calling ``run``, so it is read via
+        ``self._current_auth`` rather than from the (checkpointed) state.
+        """
+        auth: OrchidAuthContext | None = self._current_auth
         if not auth:
             return {
                 "messages": [AIMessage(content=f"[{self.name}] Error: no auth context")],
@@ -323,7 +328,7 @@ class GenericAgent(OrchidAgent):
             chat_id = state.get("chat_id", "")
             if not chat_id:
                 return
-            auth = state.get("auth_context")
+            auth = self._current_auth
             tenant_id = auth.tenant_key if auth else "default"
             user_id = auth.user_id if auth else ""
             query = self.extract_user_query(state)

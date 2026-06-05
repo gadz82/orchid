@@ -551,13 +551,20 @@ class Orchid:
         self,
         chat_id: str,
         *,
+        auth: OrchidAuthContext | None = None,
         approved: bool = True,
         persist: bool = True,
     ) -> OrchidInvokeResult:
-        """Continue a graph previously paused by ``interrupt()``."""
+        """Continue a graph previously paused by ``interrupt()``.
+
+        ``auth`` is the freshly-resolved identity from the authenticated
+        resume request, injected into the run via config (never read from
+        the checkpoint).
+        """
         self._ensure_open()
         return await self._invoker.resume(
             chat_id=chat_id,
+            auth=auth,
             approved=approved,
             persist=persist,
         )

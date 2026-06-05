@@ -20,7 +20,10 @@ Assembles the LangGraph state machine: supervisor routing, graph state with anno
 ```python
 class GraphState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]  # auto-merge + dedup
-    auth_context: OrchidAuthContext
+    # NOTE: auth is NOT a state channel.  It travels in the RunnableConfig
+    # (config["configurable"]["auth_context"]); node callables read it via
+    # auth_from_config(config) and agents via self._current_auth.  Keeping
+    # auth out of state means it is never written to a checkpoint.
     chat_id: str
     active_agents: list[str]
     execution_mode: Literal["parallel", "sequential"]

@@ -11,6 +11,17 @@ from langchain_core.messages import AIMessage, HumanMessage
 from orchid_ai.agents.generic_agent import GenericAgent
 from orchid_ai.config.schema import OrchidAgentConfig, OrchidLLMConfig, OrchidRAGConfig
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.core.agent import OrchidAgentRunContext
+
+
+async def _run_with_auth(agent, state):
+    """Run an agent with auth bound on the run-context ContextVar (auth is
+    execution context now, not graph state)."""
+    token = agent.set_run_context(OrchidAgentRunContext(auth=state.get("auth_context"), chat_id=state.get("chat_id")))
+    try:
+        return await agent.run(state)
+    finally:
+        agent.reset_run_context(token)
 
 
 def _make_agent() -> GenericAgent:
@@ -69,7 +80,7 @@ async def test_summarise_receives_conversation_history() -> None:
     )
 
     with patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}):
-        await agent.run(state)
+        await _run_with_auth(agent, state)
 
     # Check that ainvoke was called with conversation_history
     call_args = agent._chat_model.ainvoke.call_args
@@ -98,7 +109,7 @@ async def test_summarise_receives_prior_tool_context() -> None:
     )
 
     with patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}):
-        await agent.run(state)
+        await _run_with_auth(agent, state)
 
     system_content = agent._chat_model.ainvoke.call_args.args[0][0]["content"]
     assert "Previous Tool Results" in system_content
@@ -113,7 +124,7 @@ async def test_no_prior_context_when_mcp_context_empty() -> None:
     state = _make_state("hello")
 
     with patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}):
-        await agent.run(state)
+        await _run_with_auth(agent, state)
 
     system_content = agent._chat_model.ainvoke.call_args.args[0][0]["content"]
     assert "Previous Tool Results" not in system_content
@@ -131,7 +142,7 @@ async def test_no_prior_context_for_different_agent() -> None:
     )
 
     with patch.object(agent._mcp_dispatcher, "fetch", new_callable=AsyncMock, return_value={}):
-        await agent.run(state)
+        await _run_with_auth(agent, state)
 
     system_content = agent._chat_model.ainvoke.call_args.args[0][0]["content"]
     # Should NOT contain notifications data — it belongs to a different agent

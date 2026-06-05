@@ -178,19 +178,29 @@ class SkillExecutor:
             context_str = json.dumps(previous_results, indent=2, default=str)
             effective_query += f"\n\nContext from previous steps:\n```json\n{context_str}\n```"
 
+        from ..core.agent import OrchidAgentRunContext
         from ..core.state import OrchidAgentState
 
         mini_state: OrchidAgentState = {
             "messages": [HumanMessage(content=effective_query)],
-            "auth_context": auth,
             "chat_id": "",
             "mcp_context": {},
         }
 
+        # Auth is execution context, not graph state — bind it on the
+        # peer for this direct ``run`` call so the peer reads
+        # ``self._current_auth`` exactly as the graph node wrapper would.
+        # Other run-context fields are inherited from the current
+        # (parent) activation.
+        run_token = peer.set_run_context(
+            OrchidAgentRunContext(
+                auth=auth,
+                correlation_id=peer._current_correlation_id,
+                chat_id=peer._current_chat_id,
+                message_id=peer._current_message_id,
+            )
+        )
         # Increment task-local depth via the ContextVar.  The Token
-        # returned by ``set`` is reset in ``finally`` so the prior
-        # depth (not ``0``) is restored — fixes the pre-existing
-        # bug where two-level nesting unwound to ``0`` mid-chain.
         depth_token = _skill_depth_var.set(current_depth + 1)
         try:
             logger.info(
@@ -203,6 +213,7 @@ class SkillExecutor:
             result_state = await peer.run(mini_state)
         finally:
             _skill_depth_var.reset(depth_token)
+            peer.reset_run_context(run_token)
 
         mcp_data = result_state.get("mcp_context", {})
         messages = result_state.get("messages", [])

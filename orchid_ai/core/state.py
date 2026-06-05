@@ -227,8 +227,9 @@ class OrchidAgentState(TypedDict, total=False):
     """
 
     messages: list[Any]  # populated as Annotated[list, add_messages] in graph/
-    auth_context: OrchidAuthContext  # one token for the whole session
-    # tenant key = auth_context.tenant_key
+    # NOTE: auth is NOT graph state.  It travels as execution context in
+    # the RunnableConfig (``config["configurable"]["auth_context"]``, see
+    # ``core/run_config.py``) so it is never serialised into a checkpoint.
     chat_id: str  # chat session identifier for RAG scoping
     active_agents: list[str]
     mcp_context: dict[str, Any]  # raw data from MCP tool calls

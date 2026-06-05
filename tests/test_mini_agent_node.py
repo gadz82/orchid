@@ -31,6 +31,7 @@ from orchid_ai.config.schema import (
     OrchidRAGConfig,
 )
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.core.run_config import with_auth
 
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -160,7 +161,7 @@ async def test_tool_subset_filters_inventory(monkeypatch):
         tool_subset=["lookup_user"],
     )
 
-    update = await node(payload)
+    update = await node(payload, config=with_auth(payload.get("auth_context")))
 
     # Loop saw exactly one tool def — the subset.
     assert len(init_calls) == 1
@@ -209,7 +210,7 @@ async def test_timeout_sets_status_timeout(monkeypatch):
         tool_subset=[],
     )
 
-    update = await node(payload)
+    update = await node(payload, config=with_auth(payload.get("auth_context")))
     outcome = update["mini_agent_outcomes"][f"{cfg.name}#mini_slow"]
     assert outcome["status"] == "timeout"
     assert "timed out" in (outcome["error"] or "")
@@ -239,7 +240,7 @@ async def test_unhandled_exception_sets_status_failed(monkeypatch):
         sub_task={"id": "mini_boom", "description": "boom", "instruction": "x", "allowed_tools": [], "rationale": "r"},
         tool_subset=[],
     )
-    update = await node(payload)
+    update = await node(payload, config=with_auth(payload.get("auth_context")))
     outcome = update["mini_agent_outcomes"][f"{cfg.name}#mini_boom"]
     assert outcome["status"] == "failed"
     assert "kaboom" in (outcome["error"] or "")
@@ -291,7 +292,7 @@ async def test_mini_node_does_not_invoke_decomposer(monkeypatch):
         sub_task={"id": "mini_nested", "description": "x", "instruction": "x", "allowed_tools": [], "rationale": "r"},
         tool_subset=[],
     )
-    update = await node(payload)
+    update = await node(payload, config=with_auth(payload.get("auth_context")))
 
     assert update["mini_agent_outcomes"][f"{cfg.name}#mini_nested"]["status"] == "ok"
     # Decomposer was NEVER instantiated or invoked from inside the mini.
@@ -323,7 +324,7 @@ async def test_missing_auth_marks_failed(monkeypatch):
         sub_task={"id": "mini_0", "description": "x", "instruction": "x", "allowed_tools": [], "rationale": "r"},
         tool_subset=[],
     )
-    update = await node(payload)
+    update = await node(payload, config=with_auth(payload.get("auth_context")))
     outcome = update["mini_agent_outcomes"][f"{cfg.name}#mini_0"]
     assert outcome["status"] == "failed"
     assert "auth_context" in (outcome["error"] or "")

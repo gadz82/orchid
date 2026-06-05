@@ -36,6 +36,9 @@ from orchid_ai.config.schema import (
     OrchidRAGConfig,
 )
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.core.run_config import with_auth
+
+_AUTH_CFG = with_auth(OrchidAuthContext(access_token="t", tenant_key="x", user_id="u"))
 
 
 def _parent_config() -> OrchidAgentConfig:
@@ -127,7 +130,7 @@ async def test_graph_interrupt_propagates_through_mini_node(monkeypatch):
     node = mini_agent_node_factory(parent_config=cfg, chat_model=MagicMock(), mcp_clients=[])
 
     with pytest.raises(GraphInterrupt) as excinfo:
-        await node(_payload("support", "mini_0"))
+        await node(_payload("support", "mini_0"), config=_AUTH_CFG)
 
     # The interrupt's payload survives the round-trip — LangGraph
     # would attach this to the suspended state for the frontend.
@@ -155,7 +158,7 @@ async def test_non_interrupt_exception_still_recorded_as_failed(monkeypatch):
     cfg = _parent_config()
     node = mini_agent_node_factory(parent_config=cfg, chat_model=MagicMock(), mcp_clients=[])
 
-    update = await node(_payload("support", "mini_0"))
+    update = await node(_payload("support", "mini_0"), config=_AUTH_CFG)
     outcome = update["mini_agent_outcomes"]["support#mini_0"]
     assert outcome["status"] == "failed"
     assert "normal failure" in (outcome["error"] or "")

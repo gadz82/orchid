@@ -1,14 +1,38 @@
 """
 Orchid — platform-agnostic multi-agent AI framework.
 
-Public SDK surface — import the canonical entry point plus common types::
+The public API has two tiers.
 
-    from orchid_ai import Orchid, OrchidAgent, OrchidAuthContext, load_config
+**RUN** — drive the framework through the single facade :class:`Orchid`::
 
-:class:`Orchid` is the **mandatory** integrator bootstrap class. The
-library does NOT export a free ``build_runtime`` function anymore —
-``orchid-api``, ``orchid-cli``, and in-process integrators all route
-through :class:`Orchid` so the three surfaces stay in lock-step.
+    from orchid_ai import Orchid
+
+    async with Orchid.from_config_path("orchid.yml") as orchid:
+        result = await orchid.invoke("Hello", user_id="alice", tenant_id="acme")
+        print(result.response)
+
+:class:`Orchid` is the one bootstrap/runtime entry point — ``orchid-api``,
+``orchid-cli`` and in-process integrators all route through it (there is no
+free ``build_runtime``). It owns construction (:meth:`Orchid.from_config_path`
+/ :meth:`Orchid.from_md_config`), execution (``invoke`` / ``stream`` /
+``resume``), lifecycle (``close`` / ``reload_config`` / ``async with``) and
+read-only accessors (``graph`` / ``runtime`` / ``config`` / ``chat_repo`` / …).
+
+**EXTEND** — subclass the ABCs and register implementations exported below
+(:class:`OrchidAgent`, :class:`OrchidIdentityResolver`,
+:class:`OrchidChatStorage`, :class:`OrchidVectorReader`, the guardrail /
+ingestion / retrieval contracts, and the ``register_*`` hooks). These are
+*import-time* extension points: you subclass or register them **before** an
+``Orchid`` instance exists, so they live alongside the facade rather than
+behind it.
+
+Everything else is lower-level plumbing and is intentionally **not**
+re-exported here — import it from its submodule when you genuinely need it::
+
+    from orchid_ai.checkpointing import build_checkpointer
+    from orchid_ai.rag.factory import build_reader
+    from orchid_ai.persistence.sqlite import OrchidSQLiteChatStorage
+    from orchid_ai.observability import OrchidMetricsHandler
 """
 
 from __future__ import annotations
@@ -20,28 +44,22 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0+local"
 
-from .checkpointing.factory import build_checkpointer, shutdown_checkpointer
-from .config.frontmatter import MarkdownFile, load_markdown_file, parse_frontmatter
+# ── RUN — the single facade ──────────────────────────────────
+from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
+
+# ── CONFIGURE / BOOTSTRAP ────────────────────────────────────
 from .config.loader import load_config
 from .config.errors import OrchidConfigError
-from .config.md_loader import load_md_config, md_infrastructure_to_env
-from .config.watcher import (
-    ConfigSnapshot,
-    OrchidConfigSnapshot,
-    OrchidConfigWatcher,
-    OrchidConfigWatcherBase,
-    OrchidYamlConfigWatcher,
-    YamlConfigWatcher,
-)
+from .runtime import OrchidRuntime
+
+# ── EXTEND — agents ──────────────────────────────────────────
 from .core.agent import OrchidAgent
-from .core.guardrails import (
-    OrchidGuardrail,
-    OrchidGuardrailAction,
-    OrchidGuardrailChain,
-    OrchidGuardrailContext,
-    OrchidGuardrailDirection,
-    OrchidGuardrailResult,
-)
+from .core.state import OrchidAgentState, OrchidAuthContext
+from .core.run_config import CONFIG_KEY_AUTH, auth_from_config, with_auth
+from .agents.generic_agent import GenericAgent
+
+# ── EXTEND — identity & auth ─────────────────────────────────
+from .core.identity import OrchidIdentityError, OrchidIdentityResolver
 from .core.auth_config import (
     OrchidAuthConfigProvider,
     OrchidAuthExchangeClient,
@@ -49,35 +67,12 @@ from .core.auth_config import (
     OrchidUpstreamOAuthConfig,
     OrchidUpstreamTokenResponse,
 )
-from .core.doc_store import OrchidDocStore
-from .core.graph_store import (
-    OrchidEdge,
-    OrchidEntity,
-    OrchidEntityExtractor,
-    OrchidGraphStore,
-)
-from .core.identity import OrchidIdentityError, OrchidIdentityResolver
-from .core.ingestion import OrchidChunk, OrchidChunkPostProcessor, OrchidIngestionStrategy
-from .core.mcp import (
-    OrchidMCPAuthRequiredError,
-    OrchidMCPClient,
-    OrchidMCPClientRegistration,
-    OrchidMCPClientRegistrationStore,
-    OrchidMCPDiscoverable,
-    OrchidMCPDiscoveryError,
-    OrchidMCPTokenRecord,
-    OrchidMCPTokenStore,
-    OrchidMCPToolCaller,
-    OrchidMCPToolResult,
-)
-from .core.mcp_gateway_state import (
-    OrchidMCPGatewayAuthCode,
-    OrchidMCPGatewayAuthCodeStore,
-    OrchidMCPGatewayClient,
-    OrchidMCPGatewayClientStore,
-    OrchidMCPGatewayToken,
-    OrchidMCPGatewayTokenStore,
-)
+
+# ── EXTEND — storage ─────────────────────────────────────────
+from .persistence.base import OrchidChatStorage
+from .config.storage import OrchidConfigStorage
+
+# ── EXTEND — vector / RAG / documents ────────────────────────
 from .core.repository import (
     Document,
     OrchidDocument,
@@ -87,257 +82,154 @@ from .core.repository import (
     OrchidVectorStoreRepository,
     OrchidVectorWriter,
 )
+from .core.doc_store import OrchidDocStore
+from .core.graph_store import OrchidEdge, OrchidEntity, OrchidEntityExtractor, OrchidGraphStore
+from .core.ingestion import OrchidChunk, OrchidChunkPostProcessor, OrchidIngestionStrategy
 from .core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
 from .core.sparse import OrchidSparseEncoder, OrchidSparseVector
-from .core.state import OrchidAgentState, OrchidAuthContext
+from .rag.scopes import OrchidRAGScope
+
+# ── EXTEND — MCP ─────────────────────────────────────────────
+from .core.mcp import (
+    OrchidMCPAuthRequiredError,
+    OrchidMCPClient,
+    OrchidMCPClientRegistration,
+    OrchidMCPClientRegistrationStore,
+    OrchidMCPDiscoverable,
+    OrchidMCPTokenRecord,
+    OrchidMCPTokenStore,
+    OrchidMCPToolCaller,
+    OrchidMCPToolResult,
+)
+from .core.mcp_gateway_state import (
+    OrchidMCPGatewayAuthCodeStore,
+    OrchidMCPGatewayClientStore,
+    OrchidMCPGatewayTokenStore,
+)
+from .mcp.oauth_state import OrchidOAuthStateStore, register_oauth_state_store
+
+# ── EXTEND — tools ───────────────────────────────────────────
 from .core.tool import OrchidTool, OrchidToolInput, OrchidToolOutput
-from .graph.graph import build_graph
-from .graph.supervisor import OrchidRoutingDecision
-from .guardrails import build_guardrail_chain, register_guardrail
-from .llm_factory import build_chat_model
-from .mcp.auth_registry import OrchidMCPAuthRegistry, OrchidMCPOAuthServerInfo
-from .mcp.discovery import (
-    OrchidMCPAuthDiscovery,
-    extract_resource_metadata_url,
-    probe_mcp_server_for_resource_metadata,
+
+# ── EXTEND — guardrails ──────────────────────────────────────
+from .core.guardrails import (
+    OrchidGuardrail,
+    OrchidGuardrailAction,
+    OrchidGuardrailChain,
+    OrchidGuardrailContext,
+    OrchidGuardrailDirection,
+    OrchidGuardrailResult,
 )
-from .mcp.inventory import OrchidMCPServerEntry, OrchidMCPServerInventory
-from .mcp.oauth_state import (
-    OrchidInMemoryOAuthStateStore,
-    OrchidOAuthPendingState,
-    OrchidOAuthStateStore,
-    build_oauth_state_store,
-    register_oauth_state_store,
-)
-from .mcp.session_warmer import OrchidSessionWarmer, OrchidWarmReport
-from .observability.callbacks import OrchidMetricsHandler
-from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
-from .persistence.base import OrchidChatStorage
-from .persistence.factory import build_chat_storage
-from .config.storage import OrchidConfigStorage
-from .config.storage_factory import build_config_storage
-from .config.schema_storage import OrchidConfigStorageConfig
-from .persistence.mcp_client_registration_factory import build_mcp_client_registration_store
-from .persistence.mcp_client_registration_sqlite import OrchidSQLiteMCPClientRegistrationStore
-from .persistence.mcp_token_factory import build_mcp_token_store
-from .persistence.mcp_token_sqlite import OrchidSQLiteMCPTokenStore
-from .persistence.config_sqlite import OrchidSQLiteConfigStorage
-from .persistence.sqlite import OrchidSQLiteChatStorage
-from .plugins import iter_entry_point_plugins
-from .documents.post_processors import (
-    ContextualHeaderPostProcessor,
-    EntityExtractionPostProcessor,
-    LLMEntityExtractor,
-    OrchidExtractedGraph,
-)
-from .documents.strategies import (
-    HeaderedIngestion,
-    HierarchicalIngestion,
-    RecursiveIngestion,
-    SemanticIngestion,
-    get_ingestion_strategy,
-    get_post_processor,
-    register_ingestion_strategy,
-    register_post_processor,
-)
+
+# ── EXTEND — content ─────────────────────────────────────────
+from .core.content import OrchidContentItem, OrchidContentSource
+
+# ── EXTEND — registries (register implementations at import time) ──
+from .guardrails import register_guardrail
+from .documents.strategies import register_ingestion_strategy, register_post_processor
 from .rag.factory import (
-    build_doc_store,
-    build_graph_store,
-    build_reader,
-    build_sparse_encoder,
     register_doc_store_backend,
     register_graph_store_backend,
     register_sparse_encoder_backend,
     register_vector_backend,
 )
-from .rag.adapters import (
-    from_langchain_document,
-    from_langchain_documents,
-    to_langchain_document,
-    to_langchain_documents,
-)
-from .rag.scopes import OrchidRAGScope
-from .rag.strategies import (
-    GraphRAGRetrieval,
-    HybridRetrieval,
-    HyDERetrieval,
-    MultiQueryRetrieval,
-    SimpleRetrieval,
-    get_retrieval_strategy,
-    register_retrieval_strategy,
-)
-from .rag.transformers import (
-    DecomposeTransformer,
-    HyDETransformer,
-    MultiQueryTransformer,
-    ReformulateTransformer,
-    get_query_transformer,
-    register_query_transformer,
-)
-from .runtime import OrchidRuntime
-from .tools import FunctionTool, OrchidToolRegistry
+from .rag.strategies import register_retrieval_strategy
+from .rag.transformers import register_query_transformer
 
-# ``utils.import_class`` is intentionally NOT re-exported on the top-level
-# ``orchid_ai`` namespace — it's an implementation detail used by the
-# framework's own factories (chat storage, MCP store, checkpointers,
-# identity resolver) and can change without notice.  Integrators who
-# genuinely need dynamic dotted-path resolution should import it
-# explicitly from :mod:`orchid_ai.utils`.
+# ``utils.import_class`` and the ``build_*`` / ``get_*`` factories,
+# LangChain adapters, concrete built-in backends/strategies, config
+# watchers and observability handlers are deliberately NOT re-exported
+# here.  They are implementation/plumbing details reachable from their
+# own submodules (see the module docstring).  This keeps ``Orchid`` and
+# the extension ABCs the obvious top-level surface.
 
 __all__ = [
-    # ── Mandatory entry point ─────────────────────────
+    "__version__",
+    # ── RUN — the single facade ───────────────────────
     "Orchid",
     "OrchidInvokeResult",
     "OrchidPendingApproval",
-    # ── Core ABCs (integrator subclass targets) ───────
+    # ── Configure / bootstrap ─────────────────────────
+    "load_config",
+    "OrchidConfigError",
+    "OrchidRuntime",
+    # ── EXTEND — agents ───────────────────────────────
     "OrchidAgent",
+    "GenericAgent",
     "OrchidAgentState",
-    "OrchidAuthConfigProvider",
     "OrchidAuthContext",
+    "CONFIG_KEY_AUTH",
+    "auth_from_config",
+    "with_auth",
+    # ── EXTEND — identity & auth ──────────────────────
+    "OrchidIdentityResolver",
+    "OrchidIdentityError",
+    "OrchidAuthConfigProvider",
     "OrchidAuthExchangeClient",
     "OrchidAuthExchangeError",
+    "OrchidUpstreamOAuthConfig",
+    "OrchidUpstreamTokenResponse",
+    # ── EXTEND — storage ──────────────────────────────
     "OrchidChatStorage",
-    "OrchidConfigError",
+    "OrchidConfigStorage",
+    # ── EXTEND — vector / RAG / documents ─────────────
+    "Document",
+    "OrchidDocument",
+    "OrchidSearchResult",
+    "OrchidVectorReader",
+    "OrchidVectorWriter",
+    "OrchidVectorStoreAdmin",
+    "OrchidVectorStoreRepository",
+    "OrchidDocStore",
+    "OrchidGraphStore",
+    "OrchidEntity",
+    "OrchidEdge",
+    "OrchidEntityExtractor",
+    "OrchidIngestionStrategy",
     "OrchidChunk",
     "OrchidChunkPostProcessor",
-    "OrchidDocStore",
-    "OrchidEdge",
-    "OrchidEntity",
-    "OrchidEntityExtractor",
-    "OrchidGraphStore",
-    "OrchidIdentityError",
-    "OrchidIdentityResolver",
-    "OrchidIngestionStrategy",
+    "OrchidRetrievalStrategy",
+    "OrchidQueryTransformer",
+    "OrchidSparseEncoder",
+    "OrchidSparseVector",
+    "OrchidRAGScope",
+    # ── EXTEND — MCP ──────────────────────────────────
     "OrchidMCPClient",
-    "OrchidMCPClientRegistrationStore",
+    "OrchidMCPToolCaller",
     "OrchidMCPDiscoverable",
+    "OrchidMCPToolResult",
+    "OrchidMCPTokenStore",
+    "OrchidMCPTokenRecord",
+    "OrchidMCPClientRegistrationStore",
+    "OrchidMCPClientRegistration",
+    "OrchidMCPAuthRequiredError",
     "OrchidMCPGatewayAuthCodeStore",
     "OrchidMCPGatewayClientStore",
     "OrchidMCPGatewayTokenStore",
-    "OrchidMCPToolCaller",
-    "OrchidMCPTokenStore",
-    "OrchidQueryTransformer",
-    "OrchidRetrievalStrategy",
-    "OrchidSparseEncoder",
-    "OrchidSparseVector",
+    "OrchidOAuthStateStore",
+    # ── EXTEND — tools ────────────────────────────────
     "OrchidTool",
     "OrchidToolInput",
     "OrchidToolOutput",
-    "OrchidToolRegistry",
-    "OrchidVectorReader",
-    "OrchidVectorStoreAdmin",
-    "OrchidVectorStoreRepository",
-    "OrchidVectorWriter",
-    # ── Data / result types ───────────────────────────
-    "Document",
-    "OrchidDocument",
-    "OrchidMCPAuthDiscovery",
-    "OrchidMCPAuthRegistry",
-    "OrchidMCPAuthRequiredError",
-    "OrchidMCPClientRegistration",
-    "OrchidMCPDiscoveryError",
-    "OrchidMCPGatewayAuthCode",
-    "OrchidMCPGatewayClient",
-    "OrchidMCPGatewayToken",
-    "OrchidMCPOAuthServerInfo",
-    "OrchidMCPServerEntry",
-    "OrchidMCPServerInventory",
-    "OrchidSessionWarmer",
-    "OrchidWarmReport",
-    "extract_resource_metadata_url",
-    "probe_mcp_server_for_resource_metadata",
-    "OrchidMCPTokenRecord",
-    "OrchidMCPToolResult",
-    "OrchidRAGScope",
-    "OrchidRoutingDecision",
-    "OrchidSearchResult",
-    "OrchidUpstreamOAuthConfig",
-    "OrchidUpstreamTokenResponse",
-    # ── MCP OAuth state store ─────────────────────────
-    "OrchidInMemoryOAuthStateStore",
-    "OrchidOAuthPendingState",
-    "OrchidOAuthStateStore",
-    "build_oauth_state_store",
-    "register_oauth_state_store",
-    # ── Guardrails ────────────────────────────────────
+    # ── EXTEND — guardrails ───────────────────────────
     "OrchidGuardrail",
     "OrchidGuardrailAction",
     "OrchidGuardrailChain",
     "OrchidGuardrailContext",
     "OrchidGuardrailDirection",
     "OrchidGuardrailResult",
-    "build_guardrail_chain",
+    # ── EXTEND — content ──────────────────────────────
+    "OrchidContentItem",
+    "OrchidContentSource",
+    # ── EXTEND — registries ───────────────────────────
     "register_guardrail",
-    # ── Built-in backends ─────────────────────────────
-    "OrchidConfigStorage",
-    "OrchidConfigStorageConfig",
-    "OrchidSQLiteChatStorage",
-    "OrchidSQLiteConfigStorage",
-    "OrchidSQLiteMCPClientRegistrationStore",
-    "OrchidSQLiteMCPTokenStore",
-    # ── Runtime + observability ───────────────────────
-    "OrchidRuntime",
-    "OrchidMetricsHandler",
-    # ── Built-in ingestion strategies + post-processors ─
-    "ContextualHeaderPostProcessor",
-    "EntityExtractionPostProcessor",
-    "HeaderedIngestion",
-    "HierarchicalIngestion",
-    "LLMEntityExtractor",
-    "OrchidExtractedGraph",
-    "RecursiveIngestion",
-    "SemanticIngestion",
-    # ── Built-in retrieval strategies + transformers ──
-    "DecomposeTransformer",
-    "GraphRAGRetrieval",
-    "HybridRetrieval",
-    "HyDERetrieval",
-    "HyDETransformer",
-    "MultiQueryRetrieval",
-    "MultiQueryTransformer",
-    "ReformulateTransformer",
-    "SimpleRetrieval",
-    # ── Factories + RAG registries ────────────────────
-    "ConfigSnapshot",
-    "FunctionTool",
-    "OrchidConfigSnapshot",
-    "OrchidConfigWatcher",
-    "OrchidConfigWatcherBase",
-    "OrchidYamlConfigWatcher",
-    "YamlConfigWatcher",
-    "build_chat_model",
-    "build_chat_storage",
-    "build_checkpointer",
-    "build_config_storage",
-    "build_doc_store",
-    "build_graph",
-    "build_graph_store",
-    "build_mcp_client_registration_store",
-    "build_mcp_token_store",
-    "build_reader",
-    "build_sparse_encoder",
-    "from_langchain_document",
-    "from_langchain_documents",
-    "get_ingestion_strategy",
-    "get_post_processor",
-    "get_query_transformer",
-    "get_retrieval_strategy",
-    "iter_entry_point_plugins",
-    "load_config",
-    "load_markdown_file",
-    "load_md_config",
-    "MarkdownFile",
-    "md_infrastructure_to_env",
-    "parse_frontmatter",
-    "register_doc_store_backend",
-    "register_graph_store_backend",
     "register_ingestion_strategy",
     "register_post_processor",
-    "register_query_transformer",
     "register_retrieval_strategy",
-    "register_sparse_encoder_backend",
+    "register_query_transformer",
     "register_vector_backend",
-    "shutdown_checkpointer",
-    "to_langchain_document",
-    "to_langchain_documents",
+    "register_doc_store_backend",
+    "register_graph_store_backend",
+    "register_sparse_encoder_backend",
+    "register_oauth_state_store",
 ]

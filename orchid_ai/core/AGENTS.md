@@ -34,7 +34,8 @@ MyPlatformAuthContext(OrchidAuthContext)
 
 OrchidAgentState(TypedDict)      # Flows through LangGraph. Extended by GraphState.
   .messages                # list of LangChain messages
-  .auth_context            # OrchidAuthContext
+  # auth is NOT in state — it travels in the RunnableConfig (see
+  # run_config.py: with_auth / auth_from_config; agents read self._current_auth).
   .chat_id                 # current chat session UUID
   .active_agents           # agents activated this round
   .mcp_context             # dict of tool results (agent_name → data)
@@ -42,6 +43,23 @@ OrchidAgentState(TypedDict)      # Flows through LangGraph. Extended by GraphSta
   .final_response          # set when supervisor is done
   .skill_instructions      # per-agent instructions for orchestrator skills
 ```
+
+### `run_config.py` — Auth as execution context
+
+Auth is not graph state — it rides in the LangGraph ``RunnableConfig`` so it
+reaches every node at runtime but is never serialised into a checkpoint.
+
+```python
+CONFIG_KEY_AUTH = "auth_context"            # config["configurable"] key
+
+with_auth(auth, *, thread_id=None, base=None) -> dict   # build/extend a RunnableConfig
+auth_from_config(config) -> OrchidAuthContext | None    # read it back (None-safe)
+```
+
+Entry points (`Orchid.invoke/stream/resume`, the API routers, the events
+runner) attach auth with `with_auth(...)`; node callables read
+`auth_from_config(config)`, and agents read the inherited `self._current_auth`
+(the graph wrapper binds it on a ContextVar before calling `run`).
 
 ### `repository.py` — Vector Store Interfaces
 

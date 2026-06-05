@@ -43,12 +43,14 @@ import time
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
 from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig
 from ..config.registry import get_class
 from ..config.tool_registry import load_tools_from_config
 from ..core.agent import OrchidAgent, OrchidAgentRunContext
+from ..core.run_config import auth_from_config
 from ..core.guardrails import (
     OrchidGuardrailAction,
     OrchidGuardrailChain,
@@ -119,8 +121,8 @@ class _AgentNodeWrapper:
         self._agent_config = agent_config
         self.__name__ = f"{agent.name}_agent"
 
-    async def __call__(self, state: GraphState) -> GraphState:
-        auth = state.get("auth_context")
+    async def __call__(self, state: GraphState, config: RunnableConfig | None = None) -> GraphState:
+        auth = auth_from_config(config)
 
         blocked = await self._run_input_guardrails(state, auth)
         if blocked is not None:
