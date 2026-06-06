@@ -87,10 +87,6 @@ YAML_TO_ENV: dict[tuple[str, str], str] = {
     # ── checkpointer ─────────────────────────────────────────
     ("checkpointer", "type"): "CHECKPOINTER_TYPE",
     ("checkpointer", "dsn"): "CHECKPOINTER_DSN",
-    # ── api ───────────────────────────────────────────────────
-    ("api", "base_url"): "API_BASE_URL",
-    ("api", "cors_allowed_origins"): "CORS_ALLOWED_ORIGINS",
-    ("api", "allow_index_endpoint"): "ALLOW_INDEX_ENDPOINT",
     # ── tracing ───────────────────────────────────────────────
     ("tracing", "langsmith_tracing"): "LANGSMITH_TRACING",
     ("tracing", "langsmith_api_key"): "LANGSMITH_API_KEY",
