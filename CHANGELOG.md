@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.8.9 (2026-06-06)
+
+### Bug Fixes
+
+- Remove unused API fields from YAML-to-env mapping
+  ([`c2967d1`](https://github.com/gadz82/orchid/commit/c2967d121ace3e0a5467ce295ae2560bc1a20190))
+
+
 ## v1.8.8 (2026-06-05)
 
 ### Bug Fixes
