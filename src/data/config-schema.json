@@ -15,38 +15,6 @@
   },
   {
     "file": "orchid.yml",
-    "path": "api.allow_index_endpoint",
-    "type": "boolean",
-    "required": false,
-    "default": false,
-    "description": "Enable the POST /index admin endpoint for full reindexing.",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "orchid.yml",
-    "path": "api.base_url",
-    "type": "string",
-    "required": false,
-    "default": "http://localhost:8000",
-    "description": "Public API URL used for OAuth callback construction.",
-    "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
-  },
-  {
-    "file": "orchid.yml",
-    "path": "api.cors_allowed_origins",
-    "type": "string",
-    "required": false,
-    "default": "http://localhost:3000,http://frontend:3000",
-    "description": "Comma-separated list of allowed CORS browser origins.",
-    "deprecated": false,
-    "examples": []
-  },
-  {
-    "file": "orchid.yml",
     "path": "auth.auth_config_provider_class",
     "type": "string",
     "required": false,

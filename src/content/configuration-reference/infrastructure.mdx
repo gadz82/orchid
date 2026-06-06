@@ -73,11 +73,6 @@ external: []
   - [`checkpointer.type`](#orchid-yml__checkpointer.type)
   - [`checkpointer.dsn`](#orchid-yml__checkpointer.dsn)
 
-**api**
-  - [`api.base_url`](#orchid-yml__api.base_url)
-  - [`api.cors_allowed_origins`](#orchid-yml__api.cors_allowed_origins)
-  - [`api.allow_index_endpoint`](#orchid-yml__api.allow_index_endpoint)
-
 **tracing**
   - [`tracing.langsmith_tracing`](#orchid-yml__tracing.langsmith_tracing)
   - [`tracing.langsmith_api_key`](#orchid-yml__tracing.langsmith_api_key)
@@ -660,48 +655,6 @@ checkpointer:
 
 <Callout variant="warning" title="State loss without checkpointer">
 If `checkpointer.type` is null and the API process restarts, all in-progress conversations lose their graph state. Users will see errors or stale responses. Always configure a durable checkpointer (`sqlite` minimum) for production deployments.
-</Callout>
-
----
-
-<a id="orchid-yml__api.base_url"></a>
-### `api.base_url`
-
-| | |
-|---|---|
-| **Short** | Public API URL used for OAuth callback construction. |
-| **Detailed** | The canonical URL of the Orchid API as seen by clients. Used when building OAuth redirect URIs and constructing absolute links in MCP gateway responses. |
-| **Default** | `http://localhost:8000` |
-| **Env var** | `API_BASE_URL` |
-
-```yaml
-api:
-  base_url: https://api.acme.example.com
-```
-
-<a id="orchid-yml__api.cors_allowed_origins"></a>
-### `api.cors_allowed_origins`
-
-| | |
-|---|---|
-| **Short** | Comma-separated list of allowed CORS browser origins. |
-| **Detailed** | Controls which frontend origins may call the API from a browser. The default allows the standard Next.js dev server on both `localhost` and Docker network hostnames. |
-| **Default** | `http://localhost:3000,http://frontend:3000` |
-| **Env var** | `CORS_ALLOWED_ORIGINS` |
-
-<a id="orchid-yml__api.allow_index_endpoint"></a>
-### `api.allow_index_endpoint`
-
-| | |
-|---|---|
-| **Short** | Enable the `POST /index` admin endpoint. |
-| **Detailed** | When enabled, the API exposes an endpoint that triggers full reindexing of all RAG documents. Disabled by default to prevent accidental or malicious denial-of-service via expensive indexing operations. |
-| **Default** | `false` |
-| **Available values** | `true`, `false` |
-| **Env var** | `ALLOW_INDEX_ENDPOINT` |
-
-<Callout variant="warning" title="Security">
-Enable only in dev or behind admin authentication. Full reindexing can be expensive (many LLM calls for embedding generation) and should not be exposed to untrusted callers.
 </Callout>
 
 ---
