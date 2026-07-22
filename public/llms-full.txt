@@ -1405,15 +1405,6 @@ Use this in CI pipelines to catch schema errors before deployment.
 | `orchid index text "..." -n <ns> --config <path>` | Index inline text |
 | `orchid index json-file <path> -n <ns> --config <path>` | Bulk-index from a JSON entries file |
 
-### `orchid skill` — Claude Code skill export
-
-| Command | Purpose |
-|---------|---------|
-| `orchid skill generate <agents.yaml>` | Generate Claude Code skill folders from an agents.yaml |
-| `orchid skill generate <agents.yaml> -o ./out` | Write to a custom output directory |
-| `orchid skill generate <agents.yaml> --include agent1,agent2` | Filter by agent name |
-| `orchid skill generate <agents.yaml> --zip` | Create a zip archive |
-
 ### `orchid generate-flower` — Project scaffolding wizard
 
 Interactive wizard that guides you through creating a complete Orchid project skeleton — `orchid.yml`, `agents.yaml`, and Python scaffold files — packaged as a zip or written directly to a directory.
