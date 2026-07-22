@@ -15,7 +15,7 @@ const PUBLIC_DIR = join(ROOT, 'public');
 // Canonical site URL used to build absolute <loc> entries in sitemap.xml.
 // Mirrors siteConfig.siteUrl (the file lives in TS so we can't import here).
 // Trailing slash is intentionally omitted — paths joined below already start with "/".
-const BASE_URL = 'https://gadz82.github.io/orchid';
+const BASE_URL = 'https://orchestratorindex.com';
 
 mkdirSync(PUBLIC_DIR, { recursive: true });
 

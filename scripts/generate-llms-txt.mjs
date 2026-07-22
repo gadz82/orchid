@@ -14,7 +14,7 @@ const CONTENT_DIR = join(ROOT, 'src', 'content');
 const PUBLIC_DIR = join(ROOT, 'public');
 // Canonical site URL used to build absolute URLs in llms.txt / llms-full.txt.
 // Kept in sync with scripts/generate-sitemap.mjs and siteConfig.siteUrl.
-const BASE_URL = 'https://gadz82.github.io/orchid';
+const BASE_URL = 'https://orchestratorindex.com';
 
 mkdirSync(PUBLIC_DIR, { recursive: true });
 
