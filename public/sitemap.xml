@@ -1,313 +1,313 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://gadz82.github.io/orchid/</loc>
+    <loc>https://orchestratorindex.com/</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/ecosystem</loc>
+    <loc>https://orchestratorindex.com/ecosystem</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/quickstart</loc>
+    <loc>https://orchestratorindex.com/quickstart</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/agents</loc>
+    <loc>https://orchestratorindex.com/concepts/agents</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/supervisor</loc>
+    <loc>https://orchestratorindex.com/concepts/supervisor</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/rag</loc>
+    <loc>https://orchestratorindex.com/concepts/rag</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/mcp</loc>
+    <loc>https://orchestratorindex.com/concepts/mcp</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/oauth</loc>
+    <loc>https://orchestratorindex.com/concepts/oauth</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/embeddings</loc>
+    <loc>https://orchestratorindex.com/concepts/embeddings</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/multi-llm</loc>
+    <loc>https://orchestratorindex.com/concepts/multi-llm</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/persistence</loc>
+    <loc>https://orchestratorindex.com/concepts/persistence</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/tool-strategies</loc>
+    <loc>https://orchestratorindex.com/concepts/tool-strategies</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/document-parsing</loc>
+    <loc>https://orchestratorindex.com/concepts/document-parsing</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/mini-agents</loc>
+    <loc>https://orchestratorindex.com/concepts/mini-agents</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/pollen-bloom</loc>
+    <loc>https://orchestratorindex.com/concepts/pollen-bloom</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/concepts/chat-summarization</loc>
+    <loc>https://orchestratorindex.com/concepts/chat-summarization</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/packages/orchid</loc>
+    <loc>https://orchestratorindex.com/packages/orchid</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/packages/orchid-api</loc>
+    <loc>https://orchestratorindex.com/packages/orchid-api</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/packages/orchid-cli</loc>
+    <loc>https://orchestratorindex.com/packages/orchid-cli</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/packages/orchid-mcp</loc>
+    <loc>https://orchestratorindex.com/packages/orchid-mcp</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/packages/orchid-frontend</loc>
+    <loc>https://orchestratorindex.com/packages/orchid-frontend</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/packages/orchid-storage-postgres</loc>
+    <loc>https://orchestratorindex.com/packages/orchid-storage-postgres</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/packages/orchid-rag-qdrant</loc>
+    <loc>https://orchestratorindex.com/packages/orchid-rag-qdrant</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/packages/orchid-rag-chroma</loc>
+    <loc>https://orchestratorindex.com/packages/orchid-rag-chroma</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/packages/orchid-rag-neo4j</loc>
+    <loc>https://orchestratorindex.com/packages/orchid-rag-neo4j</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/configuration</loc>
+    <loc>https://orchestratorindex.com/configuration</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/configuration-reference</loc>
+    <loc>https://orchestratorindex.com/configuration-reference</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/configuration-reference/infrastructure</loc>
+    <loc>https://orchestratorindex.com/configuration-reference/infrastructure</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/configuration-reference/agents</loc>
+    <loc>https://orchestratorindex.com/configuration-reference/agents</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples</loc>
+    <loc>https://orchestratorindex.com/examples</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/basketball</loc>
+    <loc>https://orchestratorindex.com/examples/basketball</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/helpdesk</loc>
+    <loc>https://orchestratorindex.com/examples/helpdesk</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/restaurant</loc>
+    <loc>https://orchestratorindex.com/examples/restaurant</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/recipes</loc>
+    <loc>https://orchestratorindex.com/examples/recipes</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/learning</loc>
+    <loc>https://orchestratorindex.com/examples/learning</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/education</loc>
+    <loc>https://orchestratorindex.com/examples/education</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/mcp-auth</loc>
+    <loc>https://orchestratorindex.com/examples/mcp-auth</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/custom-storage</loc>
+    <loc>https://orchestratorindex.com/examples/custom-storage</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/rag-strategies</loc>
+    <loc>https://orchestratorindex.com/examples/rag-strategies</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/tool-strategies</loc>
+    <loc>https://orchestratorindex.com/examples/tool-strategies</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/prompt-customization</loc>
+    <loc>https://orchestratorindex.com/examples/prompt-customization</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/graph-kb</loc>
+    <loc>https://orchestratorindex.com/examples/graph-kb</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/wiki</loc>
+    <loc>https://orchestratorindex.com/examples/wiki</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/orchid-experts</loc>
+    <loc>https://orchestratorindex.com/examples/orchid-experts</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/gallery-curator</loc>
+    <loc>https://orchestratorindex.com/examples/gallery-curator</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/festival-producer</loc>
+    <loc>https://orchestratorindex.com/examples/festival-producer</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/architecture-review</loc>
+    <loc>https://orchestratorindex.com/examples/architecture-review</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/postgres-storage</loc>
+    <loc>https://orchestratorindex.com/examples/postgres-storage</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/examples/weather</loc>
+    <loc>https://orchestratorindex.com/examples/weather</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/best-practices</loc>
+    <loc>https://orchestratorindex.com/best-practices</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/glossary</loc>
+    <loc>https://orchestratorindex.com/glossary</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gadz82.github.io/orchid/contact</loc>
+    <loc>https://orchestratorindex.com/contact</loc>
     <lastmod>2026-07-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

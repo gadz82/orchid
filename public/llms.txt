@@ -7,164 +7,164 @@ Last generated: 2026-07-22
 ## Overview
 
 Ecosystem Overview — Five packages, one coherent framework: library, API, CLI, MCP gateway, and frontend.
-https://gadz82.github.io/orchid/ecosystem
+https://orchestratorindex.com/ecosystem
 
 Quickstart — Run Orchid locally in under ten minutes with the basketball demo.
-https://gadz82.github.io/orchid/quickstart
+https://orchestratorindex.com/quickstart
 
 ## Concepts
 
 Agents — How OrchidAgent works: YAML configuration, skills, MCP tools, and the run lifecycle.
-https://gadz82.github.io/orchid/concepts/agents
+https://orchestratorindex.com/concepts/agents
 
 Supervisor — The LangGraph supervisor: routing, history limits, and sliding-window summarisation.
-https://gadz82.github.io/orchid/concepts/supervisor
+https://orchestratorindex.com/concepts/supervisor
 
 Hierarchical RAG — OrchidRAGScope, the 5-level hierarchy, retrieval strategies, ingestion pipelines, and the parse-once pattern.
-https://gadz82.github.io/orchid/concepts/rag
+https://orchestratorindex.com/concepts/rag
 
 MCP Integration — Connecting MCP servers to Orchid agents: none, passthrough, and OAuth auth modes.
-https://gadz82.github.io/orchid/concepts/mcp
+https://orchestratorindex.com/concepts/mcp
 
 OAuth & Dynamic Client Registration — How auth.mode: oauth triggers RFC 9728 → 8414 → 7591 discovery and manages per-user tokens.
-https://gadz82.github.io/orchid/concepts/oauth
+https://orchestratorindex.com/concepts/oauth
 
 Embeddings — Supported embedding models, dimension differences, and re-indexing requirements.
-https://gadz82.github.io/orchid/concepts/embeddings
+https://orchestratorindex.com/concepts/embeddings
 
 Multi-LLM Support — Provider agnosticism via LiteLLM: configure any model per agent, swap at runtime.
-https://gadz82.github.io/orchid/concepts/multi-llm
+https://orchestratorindex.com/concepts/multi-llm
 
 Chat Persistence — OrchidChatStorage ABC, built-in SQLite backend, PostgreSQL via plugin, and pluggable custom backends.
-https://gadz82.github.io/orchid/concepts/persistence
+https://orchestratorindex.com/concepts/persistence
 
 Tool Call Strategies — The all, sequential, and llm_decides strategies and how to register custom ones.
-https://gadz82.github.io/orchid/concepts/tool-strategies
+https://orchestratorindex.com/concepts/tool-strategies
 
 Document Parsing — PDF and image parsing with the parse-once pattern and the pluggable parser registry.
-https://gadz82.github.io/orchid/concepts/document-parsing
+https://orchestratorindex.com/concepts/document-parsing
 
 Mini-Agents — Per-agent opt-in fan-out: decompose a multi-part request into parallel sub-agents, each running its own focused agentic loop.
-https://gadz82.github.io/orchid/concepts/mini-agents
+https://orchestratorindex.com/concepts/mini-agents
 
 Pollen + Bloom — Event-driven AI jobs: Pollen ingests and persists signals; Bloom matches them to triggers and runs them through the supervisor.
-https://gadz82.github.io/orchid/concepts/pollen-bloom
+https://orchestratorindex.com/concepts/pollen-bloom
 
 Chat Summarization — Running summaries, structured entity extraction, RAG-augmented conversation memory, and configurable truncation strategies.
-https://gadz82.github.io/orchid/concepts/chat-summarization
+https://orchestratorindex.com/concepts/chat-summarization
 
 ## Packages
 
 orchid — The core Python library: ABCs, agents, graph builder, RAG, and persistence.
-https://gadz82.github.io/orchid/packages/orchid
+https://orchestratorindex.com/packages/orchid
 
 orchid-api — FastAPI server exposing the Orchid framework over HTTP with SSE streaming.
-https://gadz82.github.io/orchid/packages/orchid-api
+https://orchestratorindex.com/packages/orchid-api
 
 orchid-cli — Command-line interface for interacting with Orchid without running the API.
-https://gadz82.github.io/orchid/packages/orchid-cli
+https://orchestratorindex.com/packages/orchid-cli
 
 orchid-mcp — Node.js MCP gateway that exposes Orchid to any MCP-capable host LLM.
-https://gadz82.github.io/orchid/packages/orchid-mcp
+https://orchestratorindex.com/packages/orchid-mcp
 
 orchid-frontend — Next.js 15 multi-chat UI with SSE streaming and file upload support.
-https://gadz82.github.io/orchid/packages/orchid-frontend
+https://orchestratorindex.com/packages/orchid-frontend
 
 orchid-storage-postgres — PostgreSQL storage plugin: chat persistence, checkpointer, and visibility fragment.
-https://gadz82.github.io/orchid/packages/orchid-storage-postgres
+https://orchestratorindex.com/packages/orchid-storage-postgres
 
 orchid-rag-qdrant — Qdrant vector and doc-store plugin for the Orchid AI framework.
-https://gadz82.github.io/orchid/packages/orchid-rag-qdrant
+https://orchestratorindex.com/packages/orchid-rag-qdrant
 
 orchid-rag-chroma — ChromaDB vector-backend plugin for on-disk, zero-infrastructure RAG.
-https://gadz82.github.io/orchid/packages/orchid-rag-chroma
+https://orchestratorindex.com/packages/orchid-rag-chroma
 
 orchid-rag-neo4j — Neo4j graph-store plugin for knowledge-graph RAG.
-https://gadz82.github.io/orchid/packages/orchid-rag-neo4j
+https://orchestratorindex.com/packages/orchid-rag-neo4j
 
 ## Configuration
 
 Configuration Atlas — Searchable table of every configuration key across orchid.yml and agents.yaml — filter by name, type, or description.
-https://gadz82.github.io/orchid/configuration
+https://orchestratorindex.com/configuration
 
 Infrastructure Configuration — Detailed reference for every orchid.yml property — runtime, auth, LLM, RAG, storage, MCP, tracing.
-https://gadz82.github.io/orchid/configuration-reference/infrastructure
+https://orchestratorindex.com/configuration-reference/infrastructure
 
 Configuration Reference — Detailed reference for every configuration property in orchid.yml and agents.yaml — split by file with searchable indexes and deep-links.
-https://gadz82.github.io/orchid/configuration-reference
+https://orchestratorindex.com/configuration-reference
 
 Agents Configuration — Detailed reference for every agents.yaml property — defaults, supervisor, agents, tools, skills, guardrails, events.
-https://gadz82.github.io/orchid/configuration-reference/agents
+https://orchestratorindex.com/configuration-reference/agents
 
 ## Examples
 
 Basketball Demo — Minimal end-to-end Orchid example: two GenericAgents, built-in tools, SQLite storage, and cross-agent skills.
-https://gadz82.github.io/orchid/examples/basketball
+https://orchestratorindex.com/examples/basketball
 
 Helpdesk Demo — Custom agent class, cross-agent skills, sequential routing, and event-driven ticket triage.
-https://gadz82.github.io/orchid/examples/helpdesk
+https://orchestratorindex.com/examples/helpdesk
 
 Restaurant Demo — RAG with dynamic injection, multi-agent sequential routing, custom agent class, and event-driven deep research.
-https://gadz82.github.io/orchid/examples/restaurant
+https://orchestratorindex.com/examples/restaurant
 
 Recipes — Zero-infrastructure RAG cookbook example using ChromaDB and Ollama — no Docker, no external services.
-https://gadz82.github.io/orchid/examples/recipes
+https://orchestratorindex.com/examples/recipes
 
 Education Studio — Four-agent teaching workflow with concept extraction, quiz generation, lesson planning, and multi-format export via PDF, DOCX, PPTX, and Markdown.
-https://gadz82.github.io/orchid/examples/education
+https://orchestratorindex.com/examples/education
 
 Examples — Working examples showing different Orchid capabilities and integration patterns.
-https://gadz82.github.io/orchid/examples
+https://orchestratorindex.com/examples
 
 Learning Digest Fan-out — Pollen + Bloom event pattern: a weekly cron emits one signal per learner, each running as that user.
-https://gadz82.github.io/orchid/examples/learning
+https://orchestratorindex.com/examples/learning
 
 MCP Authentication Modes — All three MCP auth modes in one example: none, passthrough, and OAuth 2.0 with dynamic client registration.
-https://gadz82.github.io/orchid/examples/mcp-auth
+https://orchestratorindex.com/examples/mcp-auth
 
 Orchid Experts — Fleet of ten RAG-powered GenericAgent experts covering every Orchid concept — pure YAML + Markdown, zero custom agent code.
-https://gadz82.github.io/orchid/examples/orchid-experts
+https://orchestratorindex.com/examples/orchid-experts
 
 Postgres Storage — Demonstrates the orchid-storage-postgres plugin: asyncpg chat persistence, PostgreSQL checkpointer, and visibility.
-https://gadz82.github.io/orchid/examples/postgres-storage
+https://orchestratorindex.com/examples/postgres-storage
 
 Weather Fleet — Three-agent weather fleet: remote MCP server for live forecasts, built-in safety tools, RAG-backed outfit advice, PostgreSQL storage, and sliding-window chat summarization.
-https://gadz82.github.io/orchid/examples/weather
+https://orchestratorindex.com/examples/weather
 
 Custom Storage Backend — Plug in a custom OrchidChatStorage subclass via the storage.class field.
-https://gadz82.github.io/orchid/examples/custom-storage
+https://orchestratorindex.com/examples/custom-storage
 
 RAG Retrieval Strategies — Side-by-side comparison of simple, multi_query, hyde, and a custom recency-weighted retrieval strategy.
-https://gadz82.github.io/orchid/examples/rag-strategies
+https://orchestratorindex.com/examples/rag-strategies
 
 Tool Call Strategies — all, sequential, llm_decides, and a custom priority strategy in one example.
-https://gadz82.github.io/orchid/examples/tool-strategies
+https://orchestratorindex.com/examples/tool-strategies
 
 Prompt Customization — Every supervisor and agent prompt extension point — assistant_name, routing/synthesis prompts, prompt_sections, and transformer prompts.
-https://gadz82.github.io/orchid/examples/prompt-customization
+https://orchestratorindex.com/examples/prompt-customization
 
 Gallery Curator — A multi-session art gallery curator that remembers artists, exhibitions, and decisions across sessions using Orchid's full conversation summarization pipeline.
-https://gadz82.github.io/orchid/examples/gallery-curator
+https://orchestratorindex.com/examples/gallery-curator
 
 Festival Producer — Multi-agent festival planning with artist booking, logistics, and marketing agents — backed by rag_augmented conversation memory, orchestrator skills, and structured entity extraction.
-https://gadz82.github.io/orchid/examples/festival-producer
+https://orchestratorindex.com/examples/festival-producer
 
 Architecture Review Board — Multi-agent design review with structural engineering, cost estimation, and sustainability consulting — orchestrator skills and rag_augmented memory across design iterations.
-https://gadz82.github.io/orchid/examples/architecture-review
+https://orchestratorindex.com/examples/architecture-review
 
 Graph Knowledge Base — GraphRAG retrieval strategy: graph traversal fused with dense vector search for multi-hop relationship queries.
-https://gadz82.github.io/orchid/examples/graph-kb
+https://orchestratorindex.com/examples/graph-kb
 
 Wiki Document Ingestion — Two-tier corpus ingestion (headered + recursive), hybrid retrieval, and per-tool RAG overrides with the parse-once pattern.
-https://gadz82.github.io/orchid/examples/wiki
+https://orchestratorindex.com/examples/wiki
 
 ## Reference
 
 Best Practices — Recommended patterns for production-grade Orchid deployments.
-https://gadz82.github.io/orchid/best-practices
+https://orchestratorindex.com/best-practices
 
 Glossary — Definitions of key terms used throughout the Orchid documentation.
-https://gadz82.github.io/orchid/glossary
+https://orchestratorindex.com/glossary
 
 Contact — Get in touch with the Orchid maintainer or open an issue on GitHub.
-https://gadz82.github.io/orchid/contact
+https://orchestratorindex.com/contact
