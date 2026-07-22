@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-06-01
+Last generated: 2026-07-22
 
 ## Overview
 
@@ -127,6 +127,9 @@ https://gadz82.github.io/orchid/examples/orchid-experts
 
 Postgres Storage — Demonstrates the orchid-storage-postgres plugin: asyncpg chat persistence, PostgreSQL checkpointer, and visibility.
 https://gadz82.github.io/orchid/examples/postgres-storage
+
+Weather Fleet — Three-agent weather fleet: remote MCP server for live forecasts, built-in safety tools, RAG-backed outfit advice, PostgreSQL storage, and sliding-window chat summarization.
+https://gadz82.github.io/orchid/examples/weather
 
 Custom Storage Backend — Plug in a custom OrchidChatStorage subclass via the storage.class field.
 https://gadz82.github.io/orchid/examples/custom-storage

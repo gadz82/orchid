@@ -550,6 +550,22 @@
     "sources": ""
   },
   {
+    "route": "/examples/weather",
+    "title": "Weather Fleet",
+    "description": "Three-agent weather fleet: remote MCP server for live forecasts, built-in safety tools, RAG-backed outfit advice, PostgreSQL storage, and sliding-window chat summarization.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "agents",
+      "mcp",
+      "persistence",
+      "rag",
+      "supervisor",
+      "chat-summarization"
+    ],
+    "sources": ""
+  },
+  {
     "route": "/best-practices",
     "title": "Best Practices",
     "description": "Recommended patterns for production-grade Orchid deployments.",

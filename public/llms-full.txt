@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-06-01
+Last generated: 2026-07-22
 
 ## Overview
 
@@ -333,6 +333,21 @@ Orchid ships five retrieval strategies, each implementing the `OrchidRetrievalSt
 
 The default. One `reader.retrieve()` call with the user query as-is. Fastest path, best for well-formed queries where the corpus contains a near-verbatim match.
 
+## Namespace conventions
+
+Namespaces are vector store collection prefixes that separate different kinds of knowledge:
+
+| Namespace | Contents |
+|---|---|
+| `learning` | Tenant knowledge base (documents, wikis) |
+| `notifications` | Agent-generated structured data |
+| `uploads` | User-uploaded files (scoped to the uploading user's chat) |
+
+Set an agent's namespace via `rag.namespace`. Leave it empty to skip RAG retrieval.
+
+## External reading
+
+- 
 - 
 - 
 - 
@@ -1125,6 +1140,34 @@ pip install orchid-rag-chroma         # ChromaDB on-disk vector store
 pip install orchid-rag-neo4j          # Neo4j graph store
 ```
 
+## Public API: two tiers
+
+The library exposes two distinct surfaces — and `Orchid` is the front door.
+
+**Run** — the single facade `Orchid` bootstraps config, wires the graph, and runs turns. `orchid-api`, `orchid-cli`, and in-process integrators all route through it:
+
+```python
+from orchid_ai import Orchid
+
+async with Orchid.from_config_path("orchid.yml") as orchid:
+    result = await orchid.invoke("Hello!", user_id="alice", tenant_id="acme")
+    print(result.response)
+```
+
+`Orchid` owns construction (`from_config_path` / `from_md_config`), execution (`invoke` / `stream` / `resume`), lifecycle (`close` / `reload_config` / `async with`), and read-only accessors (`graph`, `runtime`, `config`, `chat_repo`, …).
+
+**Extend** — subclass the ABCs and call the `register_*` hooks exported at the top level (`OrchidAgent`, `OrchidIdentityResolver`, `OrchidChatStorage`, `OrchidVectorReader`, the guardrail / ingestion / retrieval contracts, …). These are *import-time* extension points: you subclass or register them **before** an `Orchid` instance exists, so they sit alongside the facade rather than behind it.
+
+Lower-level plumbing (the `build_*` factories, concrete built-in backends, LangChain adapters, observability handlers) is intentionally **not** re-exported at the top level — import it from its submodule when you need it:
+
+```python
+from orchid_ai.checkpointing import build_checkpointer
+from orchid_ai.rag.factory import build_reader
+from orchid_ai.persistence.sqlite import OrchidSQLiteChatStorage
+```
+
+> **Auth is execution context, not graph state.** It travels in the LangGraph `RunnableConfig` (`config["configurable"]["auth_context"]`), never in `OrchidAgentState`, so it is never written to a checkpoint. Inside a custom agent, read it via `self._current_auth`; entry points attach it with `with_auth(...)`.
+
 ## Module map
 
 ### `core/`
@@ -1461,6 +1504,25 @@ Goodbye.
 Every `chat`, `index`, and `mcp` command goes through `commands/_session.py:resolve_session()`, which bootstraps the framework, resolves auth, and warms `passthrough`/`oauth` MCP caches once per `(tenant_key, user_id)`. The result is an `Orchid` facade and an `OrchidAuthContext` — the same objects the API hands to its routers.
 
 The CLI is an independent OAuth 2.0 client: it runs a full Authorization Code + PKCE flow against the upstream IdP, stores tokens in `~/.orchid/tokens.json` (permissions `0o600`), and refreshes them automatically when they expire. It never delegates auth to `orchid-api`.
+
+## CLI-specific RAG configuration
+
+When `orchid.yml` includes a `cli_rag:` section, the CLI uses it instead of `rag:`. This lets you run Docker-based examples locally without Qdrant:
+
+```yaml
+rag:
+  vector_backend: qdrant           # used by orchid-api (Docker)
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
+
+cli_rag:
+  vector_backend: chroma           # used by orchid-cli (local, on-disk)
+  embedding_model: ollama/nomic-embed-text
+```
+
+When `cli_rag:` is absent, the CLI falls back to `rag:` as usual. The `cli_rag:` section supports the same keys as `rag:`: `vector_backend`, `qdrant_url`, `embedding_model`, `openai_api_key`, and `gemini_api_key`.
+
+**Precedence:** CLI args > env vars > `cli_rag:` (if present) > `rag:` > CLI defaults (`chroma`).
 
 ---
 
@@ -1966,6 +2028,9 @@ Description: Detailed reference for every orchid.yml property — runtime, auth,
   - [`rag.openai_api_key`](#orchid-yml__rag.openai_api_key)
   - [`rag.gemini_api_key`](#orchid-yml__rag.gemini_api_key)
 
+**cli_rag** (optional — CLI-specific RAG override)
+  - [`cli_rag`](#orchid-yml__cli_rag)
+
 **upload**
   - [`upload.vision_model`](#orchid-yml__upload.vision_model)
   - [`upload.namespace`](#orchid-yml__upload.namespace)
@@ -1992,11 +2057,6 @@ Description: Detailed reference for every orchid.yml property — runtime, auth,
 **checkpointer**
   - [`checkpointer.type`](#orchid-yml__checkpointer.type)
   - [`checkpointer.dsn`](#orchid-yml__checkpointer.dsn)
-
-**api**
-  - [`api.base_url`](#orchid-yml__api.base_url)
-  - [`api.cors_allowed_origins`](#orchid-yml__api.cors_allowed_origins)
-  - [`api.allow_index_endpoint`](#orchid-yml__api.allow_index_endpoint)
 
 **tracing**
   - [`tracing.langsmith_tracing`](#orchid-yml__tracing.langsmith_tracing)
@@ -2306,6 +2366,34 @@ rag:
 
 ---
 
+<a id="orchid-yml__cli_rag"></a>
+## `cli_rag` (optional)
+
+CLI-specific RAG override. When present, `orchid-cli` uses these values instead of `rag:`. The API ignores this section entirely. This allows Docker-based examples (with `rag.vector_backend: qdrant`) to run locally via the CLI without requiring Qdrant infrastructure.
+
+Same keys as `rag:`:
+
+| Key | Type | Default | Env Var |
+|-----|------|---------|---------|
+| `cli_rag.vector_backend` | string | (inherits from `rag:`) | `VECTOR_BACKEND` |
+| `cli_rag.qdrant_url` | string | (inherits from `rag:`) | `QDRANT_URL` |
+| `cli_rag.embedding_model` | string | (inherits from `rag:`) | `EMBEDDING_MODEL` |
+| `cli_rag.openai_api_key` | string | (inherits from `rag:`) | `OPENAI_API_KEY` |
+| `cli_rag.gemini_api_key` | string | (inherits from `rag:`) | `GEMINI_API_KEY` |
+
+```yaml
+rag:
+  vector_backend: qdrant           # used by orchid-api (Docker)
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
+
+cli_rag:
+  vector_backend: chroma           # used by orchid-cli (local, on-disk)
+  embedding_model: ollama/nomic-embed-text
+```
+
+---
+
 <a id="orchid-yml__upload.vision_model"></a>
 ### `upload.vision_model`
 
@@ -2516,44 +2604,6 @@ checkpointer:
 | **Detailed** | For `sqlite` this is a file path. For `postgres` this is a `postgresql://` URI. |
 | **Default** | `null` |
 | **Env var** | `CHECKPOINTER_DSN` |
-
----
-
-<a id="orchid-yml__api.base_url"></a>
-### `api.base_url`
-
-| | |
-|---|---|
-| **Short** | Public API URL used for OAuth callback construction. |
-| **Detailed** | The canonical URL of the Orchid API as seen by clients. Used when building OAuth redirect URIs and constructing absolute links in MCP gateway responses. |
-| **Default** | `http://localhost:8000` |
-| **Env var** | `API_BASE_URL` |
-
-```yaml
-api:
-  base_url: https://api.acme.example.com
-```
-
-<a id="orchid-yml__api.cors_allowed_origins"></a>
-### `api.cors_allowed_origins`
-
-| | |
-|---|---|
-| **Short** | Comma-separated list of allowed CORS browser origins. |
-| **Detailed** | Controls which frontend origins may call the API from a browser. The default allows the standard Next.js dev server on both `localhost` and Docker network hostnames. |
-| **Default** | `http://localhost:3000,http://frontend:3000` |
-| **Env var** | `CORS_ALLOWED_ORIGINS` |
-
-<a id="orchid-yml__api.allow_index_endpoint"></a>
-### `api.allow_index_endpoint`
-
-| | |
-|---|---|
-| **Short** | Enable the `POST /index` admin endpoint. |
-| **Detailed** | When enabled, the API exposes an endpoint that triggers full reindexing of all RAG documents. Disabled by default to prevent accidental or malicious denial-of-service via expensive indexing operations. |
-| **Default** | `false` |
-| **Available values** | `true`, `false` |
-| **Env var** | `ALLOW_INDEX_ENDPOINT` |
 
 ---
 
@@ -5682,6 +5732,161 @@ SELECT id, title, tenant_key, user_id, created_at FROM chat_sessions;
 # LangGraph checkpoints
 SELECT count(*) FROM checkpoints;
 ```
+
+---
+
+### Weather Fleet
+URL: https://gadz82.github.io/orchid/examples/weather
+Description: Three-agent weather fleet: remote MCP server for live forecasts, built-in safety tools, RAG-backed outfit advice, PostgreSQL storage, and sliding-window chat summarization.
+
+## What this demonstrates
+
+The weather fleet example shows how to integrate a **remote MCP server** into an Orchid multi-agent pipeline. A dedicated weather MCP server — a lightweight Node.js service wrapping the free Open-Meteo API — runs in its own Docker container and exposes forecast and current-conditions tools. Three agents consume those tools alongside built-in Python tools, RAG-augmented clothing knowledge, and sliding-window chat summarization. PostgreSQL persists chat history; Qdrant backs the RAG namespaces with startup-seeded clothing and safety guides.
+
+## Run it
+
+```bash
+cp examples/weather/.env.example .env   # fill in GEMINI_API_KEY (or use ollama)
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Or use the dedicated compose file:
+
+```bash
+cd examples/weather
+docker compose up --build
+```
+
+Stack: `agents-api` (port 8080), `weather-mcp` (port 3002), `qdrant` (6333), `postgres` (5432), `frontend` (3000), `orchid-mcp` (9000).
+
+To run the CLI directly:
+
+```bash
+pip install -e ./orchid -e ./orchid-cli
+orchid chat interactive --config examples/weather/orchid.yml
+```
+
+## Configuration walkthrough
+
+`orchid.yml` configures the runtime — Ollama LLM, Qdrant RAG backend, PostgreSQL storage, and the startup hook that seeds the RAG namespaces:
+
+The supervisor config shows sliding-window chat summarization — older turns are compressed into an LLM-generated summary while the most recent exchanges are kept verbatim:
+
+The `weather-forecast` agent connects to the remote MCP server (`weather-mcp`) with `auth.mode: none` — the Open-Meteo API is free and unauthenticated. `weather-alerts` combines the same MCP server with two built-in safety tools:
+
+Two cross-agent orchestrator skills chain the agents in sequence. `prepare_for_day` runs the full pipeline (forecast → alerts → outfit). `emergency_check` runs a fast safety assessment:
+
+```yaml
+skills:
+  prepare_for_day:
+    description: "Full morning briefing: forecast → alerts → outfit."
+    steps:
+      - agent: weather-forecast
+        instruction: "Get current weather and multi-day forecast."
+      - agent: weather-alerts
+        instruction: "Review the forecast for extreme conditions."
+      - agent: outfit-advisor
+        instruction: "Recommend a full outfit based on weather data."
+
+  emergency_check:
+    description: "Rapid safety assessment: forecast → alerts."
+    steps:
+      - agent: weather-forecast
+        instruction: "Get current weather and 24h forecast."
+      - agent: weather-alerts
+        instruction: "Assess for safety risks immediately."
+```
+
+The `outfit-advisor` is a custom `OrchidAgent` subclass. It reads weather data from sibling agents (via `state["mcp_context"]`) and uses the inherited `fetch_rag_context()`, `extract_conversation_history()`, and `summarise()` helpers:
+
+```python
+class OutfitAdvisorAgent(OrchidAgent):
+    def __init__(self, *, config=None, **kwargs):
+        super().__init__(**kwargs)
+
+    @property
+    def name(self) -> str:
+        return "outfit-advisor"
+
+    @property
+    def rag_namespace(self) -> str:
+        return "clothing-guides"
+
+    async def run(self, state):
+        query = self.extract_user_query(state)
+
+        # Read weather data from sibling agents
+        mcp_context = state.get("mcp_context", {})
+        weather_data = self._extract_weather_data(mcp_context)
+
+        if not weather_data:
+            return {"messages": [AIMessage(
+                content="Please ask weather-forecast first."
+            )]}
+
+        scope = OrchidRAGScope(
+            tenant_id=auth.tenant_key, user_id=auth.user_id,
+            chat_id=state.get("chat_id", ""), agent_id=self.name,
+        )
+        rag_data = await self.fetch_rag_context(query, scope, k=3)
+        history = self.extract_conversation_history(state)
+
+        summary = await self.summarise(
+            query=query, mcp_data=weather_data,
+            rag_data=rag_data, conversation_history=history,
+        )
+
+        return {"messages": [AIMessage(content=summary)]}
+```
+
+The weather MCP server is a standalone Node.js service using the `@modelcontextprotocol/sdk`. It wraps the free Open-Meteo API and exposes two tools — `get_forecast` and `get_current_weather` — each accepting a city name that is resolved via the Open-Meteo geocoding API:
+
+```javascript
+server.tool(
+  "get_forecast",
+  "7-day weather forecast for any city.",
+  { city: z.string().describe("City name") },
+  async ({ city }) => {
+    const loc = await geocode(city);
+    const url = new URL("https://api.open-meteo.com/v1/forecast");
+    url.searchParams.set("latitude", loc.lat.toString());
+    url.searchParams.set("longitude", loc.lon.toString());
+    // ... daily parameters ...
+    const res = await fetch(url);
+    return { content: [{ type: "text", text: JSON.stringify(result) }] };
+  }
+);
+```
+
+Startup hook `bootstrap_weather()` seeds two RAG namespaces — `clothing-guides` (articles on dressing for hot, cold, rainy, windy, snowy weather) and `safety-guides` (emergency kit lists, heat safety, flood safety, winter storm safety) — into Qdrant:
+
+```python
+async def bootstrap_weather(reader, settings, **_):
+    if not isinstance(reader, OrchidVectorWriter):
+        return
+
+    await reader.upsert(clothing_docs, "clothing-guides")
+    await reader.upsert(safety_docs, "safety-guides")
+```
+
+## What to look for
+
+- `mcp_servers[].type: remote` → remote MCP servers are wired identically to local ones; only the URL scheme differs.
+- `auth.mode: none` → the weather MCP server requires no authentication (Open-Meteo is free and public).
+- `supervisor.history_summary_enabled: true` → sliding-window chat summarization compresses older turns; `history_summary_recent_turns` controls how many exchanges stay verbatim.
+- `outfit-advisor.class: examples.weather.agents.outfit.OutfitAdvisorAgent` → custom `OrchidAgent` subclass reads sibling agent results from `state["mcp_context"]`.
+- `skills.prepare_for_day.steps` → three-agent sequential chain; each step receives the previous agent's output as context.
+- `startup.hook: examples.weather.hooks.startup.bootstrap_weather` → RAG data is seeded at process startup; no manual indexing required.
+- `storage.class: orchid_storage_postgres.OrchidPostgresChatStorage` → PostgreSQL plugin replaces the default SQLite backend.
+
+## Related concepts
+
+- [Agents](/concepts/agents)
+- [MCP Integration](/concepts/mcp)
+- [Supervisor](/concepts/supervisor)
+- [Hierarchical RAG](/concepts/rag)
+- [Chat Persistence](/concepts/persistence)
+- [Chat Summarization](/concepts/chat-summarization)
 
 ---
 
