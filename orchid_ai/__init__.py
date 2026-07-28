@@ -37,7 +37,7 @@ re-exported here — import it from its submodule when you genuinely need it::
 
 from __future__ import annotations
 
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 
 try:
     __version__ = version("orchid-ai")
