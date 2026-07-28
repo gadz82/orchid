@@ -48,18 +48,17 @@ except PackageNotFoundError:
 from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
 
 # ── CONFIGURE / BOOTSTRAP ────────────────────────────────────
-from .config.loader import load_config
 from .config.errors import OrchidConfigError
+from .config.loader import load_config
 from .runtime import OrchidRuntime
 
 # ── EXTEND — agents ──────────────────────────────────────────
-from .core.agent import OrchidAgent
-from .core.state import OrchidAgentState, OrchidAuthContext
-from .core.run_config import CONFIG_KEY_AUTH, auth_from_config, with_auth
 from .agents.generic_agent import GenericAgent
+from .core.agent import OrchidAgent
+from .core.run_config import CONFIG_KEY_AUTH, auth_from_config, with_auth
+from .core.state import OrchidAgentState, OrchidAuthContext
 
 # ── EXTEND — identity & auth ─────────────────────────────────
-from .core.identity import OrchidIdentityError, OrchidIdentityResolver
 from .core.auth_config import (
     OrchidAuthConfigProvider,
     OrchidAuthExchangeClient,
@@ -67,12 +66,16 @@ from .core.auth_config import (
     OrchidUpstreamOAuthConfig,
     OrchidUpstreamTokenResponse,
 )
+from .core.identity import OrchidIdentityError, OrchidIdentityResolver
 
 # ── EXTEND — storage ─────────────────────────────────────────
-from .persistence.base import OrchidChatStorage
 from .config.storage import OrchidConfigStorage
+from .persistence.base import OrchidChatStorage
 
 # ── EXTEND — vector / RAG / documents ────────────────────────
+from .core.doc_store import OrchidDocStore
+from .core.graph_store import OrchidEdge, OrchidEntity, OrchidEntityExtractor, OrchidGraphStore
+from .core.ingestion import OrchidChunk, OrchidChunkPostProcessor, OrchidIngestionStrategy
 from .core.repository import (
     Document,
     OrchidDocument,
@@ -82,9 +85,6 @@ from .core.repository import (
     OrchidVectorStoreRepository,
     OrchidVectorWriter,
 )
-from .core.doc_store import OrchidDocStore
-from .core.graph_store import OrchidEdge, OrchidEntity, OrchidEntityExtractor, OrchidGraphStore
-from .core.ingestion import OrchidChunk, OrchidChunkPostProcessor, OrchidIngestionStrategy
 from .core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
 from .core.sparse import OrchidSparseEncoder, OrchidSparseVector
 from .rag.scopes import OrchidRAGScope
