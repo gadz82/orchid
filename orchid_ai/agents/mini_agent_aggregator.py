@@ -30,7 +30,8 @@ Single-responsibility: synthesis only — decomposition lives in
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
@@ -112,12 +113,10 @@ def aggregator_node_factory(
         try:
             response = await chat_model.ainvoke([{"role": "system", "content": prompt}])
             synthesis = getattr(response, "content", "") or ""
-        except Exception as exc:  # noqa: BLE001 — fault isolation
-            logger.error(
-                "[%s/aggregator] synthesis LLM call failed: %s",
+        except Exception:
+            logger.exception(
+                "[%s/aggregator] synthesis LLM call failed",
                 parent_name,
-                exc,
-                exc_info=True,
             )
             synthesis = _fallback_synthesis(outcomes)
 

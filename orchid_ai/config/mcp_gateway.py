@@ -26,7 +26,6 @@ import re
 
 from pydantic import BaseModel, Field, model_validator
 
-
 _PROMPT_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]*$")
 
 

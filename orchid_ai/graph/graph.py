@@ -42,15 +42,15 @@ import logging
 import time
 from typing import Any
 
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
-from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig
 from ..config.registry import get_class
+from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig
 from ..config.tool_registry import load_tools_from_config
 from ..core.agent import OrchidAgent, OrchidAgentRunContext
-from ..core.run_config import auth_from_config
 from ..core.guardrails import (
     OrchidGuardrailAction,
     OrchidGuardrailChain,
@@ -58,14 +58,13 @@ from ..core.guardrails import (
     OrchidGuardrailDirection,
 )
 from ..core.repository import OrchidVectorReader
-
-from langchain_core.language_models import BaseChatModel
+from ..core.run_config import auth_from_config
 from ..mcp.auth_registry import OrchidMCPAuthRegistry
 from ..runtime import MCPClientFactory, OrchidRuntime
-from .state import GraphState
-from .supervisor import create_supervisor_node, route_to_agents
 from .guardrail_wiring import _GuardrailWiring
 from .mini_agent_wiring import _MiniAgentWiring
+from .state import GraphState
+from .supervisor import create_supervisor_node, route_to_agents
 
 # Backward-compat re-exports (moved to dedicated modules in M2 refactoring)
 _make_fork_router = _MiniAgentWiring.make_fork_router
@@ -209,11 +208,9 @@ class _AgentNodeWrapper:
         try:
             result = await self._agent.run(state)
         except Exception as exc:
-            logger.error(
-                "[Graph] Agent '%s' raised an unhandled exception: %s",
+            logger.exception(
+                "[Graph] Agent '%s' raised an unhandled exception",
                 self._agent.name,
-                exc,
-                exc_info=True,
             )
             result = {
                 "messages": [

@@ -45,18 +45,16 @@ except PackageNotFoundError:
     __version__ = "0.0.0+local"
 
 # ── RUN — the single facade ──────────────────────────────────
-from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
+# ── EXTEND — agents ──────────────────────────────────────────
+from .agents.generic_agent import GenericAgent
 
 # ── CONFIGURE / BOOTSTRAP ────────────────────────────────────
 from .config.errors import OrchidConfigError
 from .config.loader import load_config
-from .runtime import OrchidRuntime
 
-# ── EXTEND — agents ──────────────────────────────────────────
-from .agents.generic_agent import GenericAgent
+# ── EXTEND — storage ─────────────────────────────────────────
+from .config.storage import OrchidConfigStorage
 from .core.agent import OrchidAgent
-from .core.run_config import CONFIG_KEY_AUTH, auth_from_config, with_auth
-from .core.state import OrchidAgentState, OrchidAuthContext
 
 # ── EXTEND — identity & auth ─────────────────────────────────
 from .core.auth_config import (
@@ -66,28 +64,25 @@ from .core.auth_config import (
     OrchidUpstreamOAuthConfig,
     OrchidUpstreamTokenResponse,
 )
-from .core.identity import OrchidIdentityError, OrchidIdentityResolver
 
-# ── EXTEND — storage ─────────────────────────────────────────
-from .config.storage import OrchidConfigStorage
-from .persistence.base import OrchidChatStorage
+# ── EXTEND — content ─────────────────────────────────────────
+from .core.content import OrchidContentItem, OrchidContentSource
 
 # ── EXTEND — vector / RAG / documents ────────────────────────
 from .core.doc_store import OrchidDocStore
 from .core.graph_store import OrchidEdge, OrchidEntity, OrchidEntityExtractor, OrchidGraphStore
-from .core.ingestion import OrchidChunk, OrchidChunkPostProcessor, OrchidIngestionStrategy
-from .core.repository import (
-    Document,
-    OrchidDocument,
-    OrchidSearchResult,
-    OrchidVectorReader,
-    OrchidVectorStoreAdmin,
-    OrchidVectorStoreRepository,
-    OrchidVectorWriter,
+
+# ── EXTEND — guardrails ──────────────────────────────────────
+from .core.guardrails import (
+    OrchidGuardrail,
+    OrchidGuardrailAction,
+    OrchidGuardrailChain,
+    OrchidGuardrailContext,
+    OrchidGuardrailDirection,
+    OrchidGuardrailResult,
 )
-from .core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
-from .core.sparse import OrchidSparseEncoder, OrchidSparseVector
-from .rag.scopes import OrchidRAGScope
+from .core.identity import OrchidIdentityError, OrchidIdentityResolver
+from .core.ingestion import OrchidChunk, OrchidChunkPostProcessor, OrchidIngestionStrategy
 
 # ── EXTEND — MCP ─────────────────────────────────────────────
 from .core.mcp import (
@@ -106,35 +101,39 @@ from .core.mcp_gateway_state import (
     OrchidMCPGatewayClientStore,
     OrchidMCPGatewayTokenStore,
 )
-from .mcp.oauth_state import OrchidOAuthStateStore, register_oauth_state_store
+from .core.repository import (
+    Document,
+    OrchidDocument,
+    OrchidSearchResult,
+    OrchidVectorReader,
+    OrchidVectorStoreAdmin,
+    OrchidVectorStoreRepository,
+    OrchidVectorWriter,
+)
+from .core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
+from .core.run_config import CONFIG_KEY_AUTH, auth_from_config, with_auth
+from .core.sparse import OrchidSparseEncoder, OrchidSparseVector
+from .core.state import OrchidAgentState, OrchidAuthContext
 
 # ── EXTEND — tools ───────────────────────────────────────────
 from .core.tool import OrchidTool, OrchidToolInput, OrchidToolOutput
-
-# ── EXTEND — guardrails ──────────────────────────────────────
-from .core.guardrails import (
-    OrchidGuardrail,
-    OrchidGuardrailAction,
-    OrchidGuardrailChain,
-    OrchidGuardrailContext,
-    OrchidGuardrailDirection,
-    OrchidGuardrailResult,
-)
-
-# ── EXTEND — content ─────────────────────────────────────────
-from .core.content import OrchidContentItem, OrchidContentSource
+from .documents.strategies import register_ingestion_strategy, register_post_processor
 
 # ── EXTEND — registries (register implementations at import time) ──
 from .guardrails import register_guardrail
-from .documents.strategies import register_ingestion_strategy, register_post_processor
+from .mcp.oauth_state import OrchidOAuthStateStore, register_oauth_state_store
+from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
+from .persistence.base import OrchidChatStorage
 from .rag.factory import (
     register_doc_store_backend,
     register_graph_store_backend,
     register_sparse_encoder_backend,
     register_vector_backend,
 )
+from .rag.scopes import OrchidRAGScope
 from .rag.strategies import register_retrieval_strategy
 from .rag.transformers import register_query_transformer
+from .runtime import OrchidRuntime
 
 # ``utils.import_class`` and the ``build_*`` / ``get_*`` factories,
 # LangChain adapters, concrete built-in backends/strategies, config
@@ -143,7 +142,7 @@ from .rag.transformers import register_query_transformer
 # own submodules (see the module docstring).  This keeps ``Orchid`` and
 # the extension ABCs the obvious top-level surface.
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     "__version__",
     # ── RUN — the single facade ───────────────────────
     "Orchid",
@@ -154,19 +153,19 @@ __all__ = [
     "OrchidConfigError",
     "OrchidRuntime",
     # ── EXTEND — agents ───────────────────────────────
-    "OrchidAgent",
+    "CONFIG_KEY_AUTH",
     "GenericAgent",
+    "OrchidAgent",
     "OrchidAgentState",
     "OrchidAuthContext",
-    "CONFIG_KEY_AUTH",
     "auth_from_config",
     "with_auth",
     # ── EXTEND — identity & auth ──────────────────────
-    "OrchidIdentityResolver",
-    "OrchidIdentityError",
     "OrchidAuthConfigProvider",
     "OrchidAuthExchangeClient",
     "OrchidAuthExchangeError",
+    "OrchidIdentityError",
+    "OrchidIdentityResolver",
     "OrchidUpstreamOAuthConfig",
     "OrchidUpstreamTokenResponse",
     # ── EXTEND — storage ──────────────────────────────
@@ -174,38 +173,38 @@ __all__ = [
     "OrchidConfigStorage",
     # ── EXTEND — vector / RAG / documents ─────────────
     "Document",
-    "OrchidDocument",
-    "OrchidSearchResult",
-    "OrchidVectorReader",
-    "OrchidVectorWriter",
-    "OrchidVectorStoreAdmin",
-    "OrchidVectorStoreRepository",
-    "OrchidDocStore",
-    "OrchidGraphStore",
-    "OrchidEntity",
-    "OrchidEdge",
-    "OrchidEntityExtractor",
-    "OrchidIngestionStrategy",
     "OrchidChunk",
     "OrchidChunkPostProcessor",
-    "OrchidRetrievalStrategy",
+    "OrchidDocStore",
+    "OrchidDocument",
+    "OrchidEdge",
+    "OrchidEntity",
+    "OrchidEntityExtractor",
+    "OrchidGraphStore",
+    "OrchidIngestionStrategy",
     "OrchidQueryTransformer",
+    "OrchidRAGScope",
+    "OrchidRetrievalStrategy",
+    "OrchidSearchResult",
     "OrchidSparseEncoder",
     "OrchidSparseVector",
-    "OrchidRAGScope",
+    "OrchidVectorReader",
+    "OrchidVectorStoreAdmin",
+    "OrchidVectorStoreRepository",
+    "OrchidVectorWriter",
     # ── EXTEND — MCP ──────────────────────────────────
-    "OrchidMCPClient",
-    "OrchidMCPToolCaller",
-    "OrchidMCPDiscoverable",
-    "OrchidMCPToolResult",
-    "OrchidMCPTokenStore",
-    "OrchidMCPTokenRecord",
-    "OrchidMCPClientRegistrationStore",
-    "OrchidMCPClientRegistration",
     "OrchidMCPAuthRequiredError",
+    "OrchidMCPClient",
+    "OrchidMCPClientRegistration",
+    "OrchidMCPClientRegistrationStore",
+    "OrchidMCPDiscoverable",
     "OrchidMCPGatewayAuthCodeStore",
     "OrchidMCPGatewayClientStore",
     "OrchidMCPGatewayTokenStore",
+    "OrchidMCPTokenRecord",
+    "OrchidMCPTokenStore",
+    "OrchidMCPToolCaller",
+    "OrchidMCPToolResult",
     "OrchidOAuthStateStore",
     # ── EXTEND — tools ────────────────────────────────
     "OrchidTool",
@@ -222,14 +221,14 @@ __all__ = [
     "OrchidContentItem",
     "OrchidContentSource",
     # ── EXTEND — registries ───────────────────────────
-    "register_guardrail",
-    "register_ingestion_strategy",
-    "register_post_processor",
-    "register_retrieval_strategy",
-    "register_query_transformer",
-    "register_vector_backend",
     "register_doc_store_backend",
     "register_graph_store_backend",
-    "register_sparse_encoder_backend",
+    "register_guardrail",
+    "register_ingestion_strategy",
     "register_oauth_state_store",
+    "register_post_processor",
+    "register_query_transformer",
+    "register_retrieval_strategy",
+    "register_sparse_encoder_backend",
+    "register_vector_backend",
 ]

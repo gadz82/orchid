@@ -60,7 +60,7 @@ class OrchidAuthContext:
         user_id: str = "",
         expires_at: float = 0.0,
         extra: dict[str, Any] | None = None,
-        roles: "frozenset[str] | set[str] | tuple[str, ...] | list[str] | None" = None,
+        roles: frozenset[str] | set[str] | tuple[str, ...] | list[str] | None = None,
     ) -> None:
         self.access_token = access_token
         self._tenant_key = tenant_key
@@ -154,7 +154,7 @@ class OrchidAuthContext:
         access_token: str,
         expires_at: float,
         state: dict[str, Any],
-    ) -> "OrchidAuthContext":
+    ) -> OrchidAuthContext:
         """Reconstruct an instance from :meth:`to_storage_dict` output.
 
         ``access_token`` and ``expires_at`` are passed fresh from the
@@ -202,7 +202,7 @@ class OrchidAuthContext:
         """
         return hash((self.tenant_key, self.user_id))
 
-    def same_principal(self, other: "OrchidAuthContext") -> bool:
+    def same_principal(self, other: OrchidAuthContext) -> bool:
         """Return ``True`` if *other* represents the same person.
 
         Explicit alternative to ``==`` for callers that want

@@ -17,9 +17,8 @@ from __future__ import annotations
 import asyncio
 import datetime as _dt
 import uuid as _uuid
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Sequence
 
 from ...core.events.errors import SignalDuplicateError
 from ...core.events.job import JobRun
@@ -215,7 +214,7 @@ class InMemorySignalQueue(OrchidSignalQueue):
 
     # ── helpers ──────────────────────────────────────────
 
-    def _move_to_dead_letter(self, msg: "_MutableQueuedSignal", *, reason: str) -> None:
+    def _move_to_dead_letter(self, msg: _MutableQueuedSignal, *, reason: str) -> None:
         self._dead[msg.queue_msg_id] = _DeadLetter(
             queue_msg_id=msg.queue_msg_id,
             signal_id=msg.signal_id,
@@ -226,7 +225,7 @@ class InMemorySignalQueue(OrchidSignalQueue):
         self._messages.pop(msg.queue_msg_id, None)
 
     @property
-    def dead_letters(self) -> dict[str, "_DeadLetter"]:
+    def dead_letters(self) -> dict[str, _DeadLetter]:
         """Test-only view of the dead-letter list."""
         return dict(self._dead)
 
@@ -245,13 +244,13 @@ class _MutableQueuedSignal:
     """Mutable internal counterpart of :class:`QueuedSignal`."""
 
     __slots__ = (
+        "attempt",
+        "enqueued_at",
+        "lease_until",
+        "priority",
         "queue_msg_id",
         "signal_id",
-        "priority",
-        "enqueued_at",
         "visible_after",
-        "lease_until",
-        "attempt",
     )
 
     def __init__(
@@ -282,7 +281,7 @@ class _MutableQueuedSignal:
 
 
 class _DeadLetter:
-    __slots__ = ("queue_msg_id", "signal_id", "reason", "failed_at", "attempts")
+    __slots__ = ("attempts", "failed_at", "queue_msg_id", "reason", "signal_id")
 
     def __init__(
         self,

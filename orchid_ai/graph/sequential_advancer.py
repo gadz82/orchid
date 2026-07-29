@@ -159,8 +159,8 @@ class SequentialAdvancer:
                 remaining,
                 handoff[:100],
             )
-        except Exception as exc:
-            logger.error("[Supervisor] LLM API error during sequential handoff: %s", exc, exc_info=True)
+        except Exception:
+            logger.exception("[Supervisor] LLM API error during sequential handoff")
             handoff = f"Continue with {next_agent} to address the user's request."
 
         return {

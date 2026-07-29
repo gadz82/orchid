@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from .mcp_gateway import OrchidMCPGatewayConfig
 from .schema_events import OrchidEventsConfig
-from .schema_storage import OrchidConfigStorageConfig
 from .schema_guardrails import OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPServerConfig, OrchidToolConfig
@@ -20,6 +19,7 @@ from .schema_skills import (
     OrchidBuiltinToolConfig,
     OrchidOrchestratorSkillConfig,
 )
+from .schema_storage import OrchidConfigStorageConfig
 from .schema_supervisor import ExecutionHints, OrchidSupervisorConfig
 
 

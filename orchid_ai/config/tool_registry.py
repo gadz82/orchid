@@ -5,13 +5,14 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ..core.tool import OrchidTool, OrchidToolInput
 from ..tools.function_tool import FunctionTool
 from ..tools.registry import (
-    ToolParameter,
     OrchidToolRegistry,
+    ToolParameter,
     clone_schema,
     coerce_parameters_from_schema,
     filter_to_schema,

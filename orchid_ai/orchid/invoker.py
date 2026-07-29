@@ -8,15 +8,16 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
 
-from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.core.run_config import with_auth
+from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.persistence.base import OrchidChatStorage
 
 logger = logging.getLogger(__name__)

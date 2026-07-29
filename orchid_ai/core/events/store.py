@@ -13,9 +13,9 @@ from __future__ import annotations
 import datetime as _dt
 import uuid as _uuid
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 from .job import JobRun
 from .queue import DBTransaction

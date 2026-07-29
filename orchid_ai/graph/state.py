@@ -17,7 +17,6 @@ from typing import Annotated, Any, Literal, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
-
 # ── Reducers ─────────────────────────────────────────────────
 
 

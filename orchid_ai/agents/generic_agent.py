@@ -32,17 +32,16 @@ from ..core.agent import OrchidAgent
 from ..core.graph_store import OrchidGraphStore
 from ..core.helpers import filter_summary_messages
 from ..core.mcp import OrchidMCPClient
-from ..observability.mini_agent_events import make_event_message
 from ..core.repository import OrchidVectorReader
 from ..core.retrieval import apply_pre_strategy
 from ..core.state import OrchidAgentState, OrchidAuthContext
+from ..observability.mini_agent_events import make_event_message
 from ..rag.scopes import OrchidRAGScope
 from ..rag.transformers import (
     TRANSFORMER_REGISTRY,
     get_query_transformer,
     resolve_transformer_kwargs,
 )
-
 from .mcp_dispatcher import MCPCapabilities, MCPDispatcher
 from .prompt_builder import SystemPromptBuilder
 from .rag_pipeline import RagPipeline
@@ -692,7 +691,7 @@ class GenericAgent(OrchidAgent):
             logger.info("[%s] Built-in tool '%s' succeeded", self.name, fn_name)
             return result_text
         except Exception as exc:
-            logger.error("[%s] Built-in tool '%s' error: %s", self.name, fn_name, exc, exc_info=True)
+            logger.exception("[%s] Built-in tool '%s' error", self.name, fn_name)
             return f"[Tool error] {exc}"
 
     # ── Skill detection ──────────────────────────────────────

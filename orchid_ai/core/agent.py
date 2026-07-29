@@ -129,7 +129,7 @@ class OrchidAgent(ABC):
         from functools import wraps
 
         @wraps(original_init)
-        def _checked_init(self: "OrchidAgent", *args: Any, **kw: Any) -> None:
+        def _checked_init(self: OrchidAgent, *args: Any, **kw: Any) -> None:
             original_init(self, *args, **kw)
             if not getattr(self, "_orchid_initialized", False):
                 raise TypeError(
@@ -286,7 +286,7 @@ class OrchidAgent(ABC):
         """
         return False
 
-    def wire_peers(self, peers: dict[str, "OrchidAgent"]) -> None:
+    def wire_peers(self, peers: dict[str, OrchidAgent]) -> None:
         """Receive a mapping of peer agent names to instances.
 
         Called by the graph builder after all agents are instantiated
@@ -294,7 +294,6 @@ class OrchidAgent(ABC):
         :meth:`needs_peer_wiring` should also override this method to
         store the peer mapping.
         """
-        pass
 
     # ── Shared helpers ──────────────────────────────────────
 

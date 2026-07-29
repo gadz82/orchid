@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ..core.tool import OrchidTool, OrchidToolInput, OrchidToolOutput
 from .registry import OrchidToolRegistry, clone_schema, filter_to_signature, schema_to_parameters

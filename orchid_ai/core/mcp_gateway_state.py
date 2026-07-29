@@ -44,7 +44,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-
 # ── RFC 7591 DCR client registration (INBOUND) ────────────────────
 
 

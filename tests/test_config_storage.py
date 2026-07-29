@@ -79,7 +79,7 @@ class TestBuildConfigStorage:
             build_config_storage("does.not.Exist", "dsn")
 
     def test_wrong_type_raises(self):
-        with pytest.raises(ValueError, match="not a subclass of OrchidConfigStorage"):
+        with pytest.raises(TypeError, match="not a subclass of OrchidConfigStorage"):
             build_config_storage("orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage", "dsn")
 
     def test_valid_class_returns_instance(self):

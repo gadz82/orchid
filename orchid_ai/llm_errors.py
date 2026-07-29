@@ -31,9 +31,9 @@ def format_llm_error(exc: Exception, *, context: str = "") -> str:
     error_lower = error_msg.lower()
 
     if context:
-        logger.error("[%s] LLM API error: %s", context, error_msg, exc_info=True)
+        logger.error("[%s] LLM API error: %s", context, error_msg)
     else:
-        logger.error("LLM API error: %s", error_msg, exc_info=True)
+        logger.error("LLM API error: %s", error_msg)
 
     if "503" in error_msg or "high demand" in error_lower:
         return "Currently experiencing high demand. Please try again shortly."

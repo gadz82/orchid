@@ -84,12 +84,12 @@ def get_retrieval_strategy(
 
 
 __all__ = [
+    "RETRIEVAL_REGISTRY",
     "GraphRAGRetrieval",
-    "HybridRetrieval",
     "HyDERetrieval",
+    "HybridRetrieval",
     "MultiQueryRetrieval",
     "OrchidRetrievalStrategy",
-    "RETRIEVAL_REGISTRY",
     "SimpleRetrieval",
     "clear_retrieval_strategies",
     "get_retrieval_strategy",

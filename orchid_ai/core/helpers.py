@@ -16,10 +16,10 @@ import logging
 from typing import Any
 
 from .memory_types import (
-    OrchidConversationSummary,
     DEFAULT_NARRATIVE_FALLBACK_PROMPT,
     DEFAULT_STRUCTURED_SUMMARY_SYSTEM_PROMPT,
     DEFAULT_STRUCTURED_SUMMARY_USER_PROMPT,
+    OrchidConversationSummary,
 )
 from .scopes import OrchidRAGScope
 from .state import OrchidAgentState

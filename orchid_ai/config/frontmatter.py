@@ -58,8 +58,7 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         whitespace and leading/trailing blank lines from the
         frontmatter delimiters.
     """
-    if text.startswith("\ufeff"):
-        text = text[1:]
+    text = text.removeprefix("\ufeff")
 
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
@@ -86,8 +85,7 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     body = parts[1]
 
     # Strip the leading newline on body (everything after \n--- starts with \n)
-    if body.startswith("\n"):
-        body = body[1:]
+    body = body.removeprefix("\n")
     body = body.strip()
 
     if not fm_text.strip():

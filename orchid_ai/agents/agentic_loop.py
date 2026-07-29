@@ -21,7 +21,6 @@ from typing import Any
 
 from orchid_ai.observability.mini_agent_events import make_event_message
 
-
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
 
@@ -460,9 +459,7 @@ class AgenticLoop:
         if call_key in self._seen_calls:
             return False
         tool = self._tool_map[fn_name]
-        if getattr(tool, "requires_approval", False):
-            return False
-        return True
+        return not getattr(tool, "requires_approval", False)
 
     async def _execute_one(
         self,

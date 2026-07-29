@@ -13,11 +13,11 @@ from typing import Any
 
 from ..core.memory import OrchidConversationMemory
 from ..core.memory_types import (
-    OrchidConversationSummary,
     DEFAULT_STRUCTURED_EXTENSION_SYSTEM_PROMPT,
     DEFAULT_STRUCTURED_EXTENSION_USER_PROMPT,
     DEFAULT_STRUCTURED_SUMMARY_SYSTEM_PROMPT,
     DEFAULT_STRUCTURED_SUMMARY_USER_PROMPT,
+    OrchidConversationSummary,
 )
 
 logger = logging.getLogger(__name__)

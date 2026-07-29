@@ -75,5 +75,5 @@ agents:
     def test_invalid_yaml_structure(self, tmp_path):
         yaml_file = tmp_path / "bad.yaml"
         yaml_file.write_text("- just\n- a\n- list\n", encoding="utf-8")
-        with pytest.raises(ValueError, match="Expected YAML dict"):
+        with pytest.raises(TypeError, match="Expected YAML dict"):
             load_config(yaml_file)

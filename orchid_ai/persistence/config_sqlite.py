@@ -16,13 +16,13 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
 
-from orchid_ai.config.storage import OrchidConfigStorage
 from orchid_ai.config.schema_agent import OrchidAgentConfig, _deep_merge
+from orchid_ai.config.storage import OrchidConfigStorage
 from orchid_ai.persistence.migrations.runner import OrchidMigrationRunner
 
 logger = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ class OrchidSQLiteConfigStorage(OrchidConfigStorage):
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _row_to_config(row: aiosqlite.Row) -> dict:

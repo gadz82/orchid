@@ -28,7 +28,6 @@ from typing import Any
 
 from ...core.ingestion import OrchidChunk, OrchidChunkPostProcessor
 
-
 _HEADING_LINE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 
 

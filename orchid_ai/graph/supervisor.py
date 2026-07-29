@@ -42,8 +42,8 @@ from .state import GraphState
 from .synthesizer import ResponseSynthesizer
 
 __all__ = [
-    "OrchidRoutingDecision",
     "ROUTING_SYSTEM_PROMPT",
+    "OrchidRoutingDecision",
     "create_supervisor_node",
     "route_to_agents",
 ]
@@ -74,7 +74,7 @@ class OrchidRoutingDecision(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_exclusivity(self) -> "OrchidRoutingDecision":
+    def _check_exclusivity(self) -> OrchidRoutingDecision:
         """At most one of agents, skill, direct_response should be populated."""
         populated = sum(
             [
@@ -515,7 +515,7 @@ async def _route(
         logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
     except Exception as exc:
         # Handle LLM API failures gracefully
-        logger.error("[Supervisor] LLM API error during routing: %s", exc, exc_info=True)
+        logger.exception("[Supervisor] LLM API error during routing")
         error_msg = str(exc)
         if "503" in error_msg or "high demand" in error_msg.lower():
             response_text = (

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import copy
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ class OrchidTool(ABC):
 
     name: str = ""
     description: str = ""
-    parameters_schema: dict[str, Any] = {"type": "object", "properties": {}}
+    parameters_schema: ClassVar[dict[str, Any]] = {"type": "object", "properties": {}}
 
     requires_approval: bool = False
     parallel_safe: bool = False

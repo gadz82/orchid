@@ -67,7 +67,7 @@ class HybridRetrieval(OrchidRetrievalStrategy):
         self._lane_multiplier = lane_multiplier
 
     @classmethod
-    def from_config(cls, config: Any) -> "HybridRetrieval":
+    def from_config(cls, config: Any) -> HybridRetrieval:
         """Read ``config.hybrid`` (sparse_encoder name, fusion, weights)."""
         hybrid_cfg = getattr(config, "hybrid", None) if config is not None else None
         if hybrid_cfg is None:

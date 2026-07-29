@@ -33,8 +33,9 @@ import asyncio
 import datetime as _dt
 import logging
 import uuid as _uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Literal
+from typing import Any, Literal
 
 _logger = logging.getLogger(__name__)
 
@@ -241,7 +242,7 @@ class BloomEventStream:
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=self._idle)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # No traffic for ``idle_timeout_seconds`` — close
                     # the stream rather than hang indefinitely.
                     return

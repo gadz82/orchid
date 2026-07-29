@@ -24,11 +24,13 @@ Example — custom chat model and MCP factory::
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.language_models import BaseChatModel
 
+from .core.content import OrchidContentSource
 from .core.doc_store import OrchidDocStore
 from .core.graph_store import OrchidGraphStore
 from .core.mcp import OrchidMCPClient, OrchidMCPClientRegistrationStore, OrchidMCPTokenStore
@@ -37,7 +39,6 @@ from .core.mcp_gateway_state import (
     OrchidMCPGatewayClientStore,
     OrchidMCPGatewayTokenStore,
 )
-from .core.content import OrchidContentSource
 from .core.repository import OrchidVectorReader
 from .core.sparse import OrchidSparseEncoder
 

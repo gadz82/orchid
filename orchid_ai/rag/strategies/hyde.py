@@ -39,7 +39,7 @@ class HyDERetrieval(OrchidRetrievalStrategy):
         self._retrieval_timeout = retrieval_timeout
 
     @classmethod
-    def from_config(cls, config: Any) -> "HyDERetrieval":
+    def from_config(cls, config: Any) -> HyDERetrieval:
         """Read ``config.hyde.n_hypothetical`` when available."""
         n = getattr(getattr(config, "hyde", None), "n_hypothetical", 1) if config else 1
         return cls(n_hypothetical=n)

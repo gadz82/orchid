@@ -104,6 +104,18 @@ packages = ["orchid_ai"]
 target-version = "py311"
 line-length = 120
 
+[tool.ruff.lint]
+# Intentional architectural patterns — see orchid_ai/mcp/AGENTS.md §10:
+#   "MCP communication boundaries use broad exception handling ... always use
+#   `except Exception` at these boundaries; never narrow it to a specific tuple"
+#
+# S110 (try-except-pass) is also intentional for best-effort operations
+# (memory.get_running_summary, memory.update_running_summary, etc.)
+ignore = [
+    "BLE001",   # blind except Exception — intentional at MCP/fault-isolation boundaries
+    "S110",     # try-except-pass — intentional for best-effort fallback ops
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

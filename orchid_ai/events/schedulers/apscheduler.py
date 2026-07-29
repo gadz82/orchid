@@ -31,7 +31,8 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 _logger = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ class APSchedulerBackend:
         BaseScheduler.shutdown(self._scheduler, wait=wait)
         # Cancel the AsyncIOScheduler-specific timer if it's still set.
         try:
-            self._scheduler._stop_timer()  # noqa: SLF001
+            self._scheduler._stop_timer()
         except Exception:
             pass
 

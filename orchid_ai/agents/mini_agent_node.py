@@ -33,7 +33,8 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from typing import Any, Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
@@ -173,7 +174,7 @@ def mini_agent_node_factory(
             # checkpointer + thread_id machinery picks the same mini
             # back up via ``Command(resume=...)``.
             raise
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "[%s/%s] mini-agent exceeded timeout of %ds",
                 parent_name,
@@ -189,14 +190,12 @@ def mini_agent_node_factory(
                 duration_ms=_elapsed_ms(start),
                 slot_key=slot_key,
             )
-        except Exception as exc:  # noqa: BLE001 — fault isolation
-            logger.error(
-                "[%s/%s] mini-agent raised %s: %s",
+        except Exception as exc:
+            logger.exception(
+                "[%s/%s] mini-agent raised %s",
                 parent_name,
                 mini_id,
                 type(exc).__name__,
-                exc,
-                exc_info=True,
             )
             return _emit_outcome(
                 parent_name=parent_name,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def utcnow() -> datetime:
@@ -25,7 +25,7 @@ def utcnow() -> datetime:
     timezone-naive columns, prefer ``datetime.now(timezone.utc)``
     directly.
     """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass

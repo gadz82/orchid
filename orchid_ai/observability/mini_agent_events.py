@@ -24,13 +24,12 @@ from typing import Any, Final, Literal
 
 from langchain_core.messages import BaseMessage, SystemMessage
 
-
 __all__ = [
     "MINI_AGENT_EVENT_KEY",
     "MiniAgentEventName",
-    "make_event_message",
     "extract_event",
     "is_event_message",
+    "make_event_message",
 ]
 
 

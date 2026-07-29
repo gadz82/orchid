@@ -99,7 +99,7 @@ class OrchidRetrievalStrategy(ABC):
     """
 
     @classmethod
-    def from_config(cls, config: Any) -> "OrchidRetrievalStrategy":
+    def from_config(cls, config: Any) -> OrchidRetrievalStrategy:
         """Build a strategy instance from an :class:`OrchidRetrievalConfig`.
 
         ``config`` is duck-typed (``Any``) so this ABC stays free of

@@ -30,8 +30,8 @@ import json
 import logging
 import os
 import uuid as _uuid
-from collections.abc import Iterable
-from typing import Any, Sequence
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 import aiosqlite
 
@@ -129,25 +129,25 @@ class SQLiteEventStorage:
     # ── Store accessors ──────────────────────────────────
 
     @property
-    def signals(self) -> "SQLiteSignalStore":
+    def signals(self) -> SQLiteSignalStore:
         if self._signals is None:
             raise RuntimeError("SQLiteEventStorage used before init_db()")
         return self._signals
 
     @property
-    def jobs(self) -> "SQLiteJobStore":
+    def jobs(self) -> SQLiteJobStore:
         if self._jobs is None:
             raise RuntimeError("SQLiteEventStorage used before init_db()")
         return self._jobs
 
     @property
-    def schedules(self) -> "SQLiteScheduleStore":
+    def schedules(self) -> SQLiteScheduleStore:
         if self._schedules is None:
             raise RuntimeError("SQLiteEventStorage used before init_db()")
         return self._schedules
 
     @property
-    def triggers(self) -> "SQLiteTriggerStore":
+    def triggers(self) -> SQLiteTriggerStore:
         if self._triggers is None:
             raise RuntimeError("SQLiteEventStorage used before init_db()")
         return self._triggers

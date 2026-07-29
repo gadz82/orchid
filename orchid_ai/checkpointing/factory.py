@@ -38,8 +38,8 @@ from __future__ import annotations
 
 import logging
 import os
-
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 

@@ -28,11 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    "MiniAgentSubTask",
-    "MiniAgentDecomposition",
-    "MiniAgentDecomposer",
-    "MiniAgentDecompositionError",
     "DEFAULT_DECOMPOSER_PROMPT",
+    "MiniAgentDecomposer",
+    "MiniAgentDecomposition",
+    "MiniAgentDecompositionError",
+    "MiniAgentSubTask",
     "maybe_decompose",
 ]
 
@@ -372,7 +372,7 @@ async def maybe_decompose(
             mcp_clients=mcp_clients,
             auth=auth,
         )
-    except Exception as exc:  # noqa: BLE001 — capability rendering is best-effort
+    except Exception as exc:
         logger.warning(
             "[%s] decomposer: tool inventory rendering failed (%s) — running without tools list",
             agent_config.name,
@@ -412,7 +412,7 @@ async def maybe_decompose(
             ],
             "mcp_context": {agent_config.name: {"summary": str(exc)}},
         }
-    except Exception as exc:  # noqa: BLE001 — decomposer is non-critical
+    except Exception as exc:
         logger.warning(
             "[%s] decomposer LLM call failed (%s) — falling back to normal flow",
             agent_config.name,

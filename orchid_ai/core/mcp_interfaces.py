@@ -79,8 +79,6 @@ class OrchidMCPClient(OrchidMCPToolCaller, OrchidMCPDiscoverable, ABC):
     depend on ``OrchidMCPToolCaller`` instead for better interface segregation.
     """
 
-    pass
-
 
 class OrchidCacheableMCPClient(OrchidMCPClient, ABC):
     """MCP client that supports proactive capability-cache warming.

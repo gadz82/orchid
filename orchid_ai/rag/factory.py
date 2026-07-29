@@ -25,7 +25,8 @@ passing ``vector_backend=…, qdrant_url=…, embedding_model=…`` unchanged.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ..core.doc_store import OrchidDocStore
 from ..core.graph_store import OrchidGraphStore
@@ -229,11 +230,11 @@ def _load_entry_point_backends() -> None:
 
 __all__ = [
     "DOC_STORE_BACKEND_REGISTRY",
-    "DocStoreBackendBuilder",
     "GRAPH_STORE_BACKEND_REGISTRY",
+    "VECTOR_BACKEND_REGISTRY",
+    "DocStoreBackendBuilder",
     "GraphStoreBackendBuilder",
     "SparseEncoderBackendBuilder",
-    "VECTOR_BACKEND_REGISTRY",
     "VectorBackendBuilder",
     "build_doc_store",
     "build_graph_store",

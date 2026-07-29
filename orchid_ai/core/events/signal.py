@@ -91,7 +91,7 @@ class Signal:
         signal_id: _uuid.UUID,
         persisted_at: _dt.datetime,
         relay_status: str = "committed",
-    ) -> "Signal":
+    ) -> Signal:
         return cls(
             type=envelope.type,
             payload=envelope.payload,

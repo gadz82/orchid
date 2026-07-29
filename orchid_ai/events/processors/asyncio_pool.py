@@ -30,7 +30,8 @@ import datetime as _dt
 import logging
 import random
 import uuid as _uuid
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from ...core.events.errors import (
     JobRunnerError,
@@ -138,7 +139,7 @@ class AsyncioWorkerPoolProcessor(OrchidSignalProcessor):
                 asyncio.gather(*self._workers, return_exceptions=True),
                 timeout=self._drain_timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             for task in self._workers:
                 if not task.done():
                     task.cancel()
@@ -264,7 +265,7 @@ class AsyncioWorkerPoolProcessor(OrchidSignalProcessor):
         # would just produce another identical failure.
         await self._queue.ack(msg.queue_msg_id)
 
-    async def _run_trigger(self, *, trigger: OrchidTrigger, signal: Signal, attempt: int) -> "_TriggerOutcome":
+    async def _run_trigger(self, *, trigger: OrchidTrigger, signal: Signal, attempt: int) -> _TriggerOutcome:
         assert self._job_store is not None
         assert self._job_runner is not None
 
@@ -544,5 +545,5 @@ def _make_finished_event(run: JobRun) -> Any:
 # Suppress an unused-import lint for ``RetryPolicy`` — it's part of the
 # public surface of the module via type annotations on JobRun and we
 # import it eagerly to keep the type names available to IDE tooling.
-_unused: type[RetryPolicy] = RetryPolicy  # noqa: F841
-_unused_awaitable: type[Awaitable] = Awaitable  # noqa: F841
+_unused: type[RetryPolicy] = RetryPolicy
+_unused_awaitable: type[Awaitable] = Awaitable

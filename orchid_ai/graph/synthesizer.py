@@ -19,12 +19,12 @@ import time
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
+from ..agents.memory_rag import OrchidRAGConversationMemory
 from ..config.schema import OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
 from ..core.helpers import filter_summary_messages
 from ..core.memory import OrchidConversationMemory
 from ..core.state import OrchidAuthContext
-from ..agents.memory_rag import OrchidRAGConversationMemory
 from ._supervisor_helpers import _extract_single_agent_response, _llm_complete
 from .state import GraphState
 
@@ -181,7 +181,7 @@ class ResponseSynthesizer:
             if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
                 llm_messages.append({"role": "user", "content": content})
             elif isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai"):
-                if content.startswith("[Supervisor") or content.startswith("[Conversation summary]"):
+                if content.startswith(("[Supervisor", "[Conversation summary]")):
                     continue
                 llm_messages.append({"role": "assistant", "content": content})
 
@@ -206,7 +206,7 @@ class ResponseSynthesizer:
             )
             logger.info("[Supervisor] synthesis complete (%d chars)", len(final))
         except Exception as exc:
-            logger.error("[Supervisor] LLM API error during synthesis: %s", exc, exc_info=True)
+            logger.exception("[Supervisor] LLM API error during synthesis")
             error_msg = str(exc)
             if "503" in error_msg or "high demand" in error_msg.lower():
                 final = (

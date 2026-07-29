@@ -19,6 +19,7 @@ Concrete runners:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from .job import JobRun
 
@@ -27,7 +28,7 @@ class OrchidJobRunner(ABC):
     """Executes one attempt of a :class:`JobRun`."""
 
     @abstractmethod
-    async def run(self, run: JobRun, *, auth: "Any") -> None:
+    async def run(self, run: JobRun, *, auth: Any) -> None:
         """Execute the job under ``auth``.  Mutates ``run`` in place.
 
         On success: ``run.status = SUCCEEDED`` and ``run.result`` set.
@@ -42,6 +43,3 @@ class OrchidJobRunner(ABC):
         importing :class:`OrchidAuthContext` directly; concrete runners
         narrow the type at the call boundary.
         """
-
-
-from typing import Any  # noqa: E402  (used only in the annotation above)

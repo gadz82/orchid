@@ -27,10 +27,9 @@ boot — same pattern as the rest of the framework.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
 
 # ── Identity claim — discriminated union ─────────────────────
 
@@ -68,7 +67,7 @@ class ActAsUserIdentity(_IdentityClaimBase):
 
 
 IdentityClaim = Annotated[
-    Union[ServiceAccountIdentity, AddressedToUserIdentity, ActAsUserIdentity],
+    ServiceAccountIdentity | AddressedToUserIdentity | ActAsUserIdentity,
     Field(discriminator="mode"),
 ]
 
@@ -92,7 +91,7 @@ class OrchidTriggerMatchConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def _cron_only_with_cron_signal(self) -> "OrchidTriggerMatchConfig":
+    def _cron_only_with_cron_signal(self) -> OrchidTriggerMatchConfig:
         if self.cron is not None and self.signal != "cron":
             raise ValueError("trigger.on.cron is only valid when trigger.on.signal == 'cron'")
         if self.signal == "cron" and self.cron is None:
@@ -170,7 +169,7 @@ class OrchidTriggerEmitConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def _binding_requires_user_identity(self) -> "OrchidTriggerEmitConfig":
+    def _binding_requires_user_identity(self) -> OrchidTriggerEmitConfig:
         # Privilege-escalation guard, §25.3 rule 1.  Same check is
         # repeated at trigger-registry time so a hand-crafted YAML
         # bypassing Pydantic still fails at boot.
@@ -188,7 +187,7 @@ class OrchidTriggerEmitConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _visibility_matches_identity(self) -> "OrchidTriggerEmitConfig":
+    def _visibility_matches_identity(self) -> OrchidTriggerEmitConfig:
         # §26.3 — reject forbidden (identity, visibility) combos at
         # config load.  Default visibility (None) is always allowed;
         # the registry computes it.
@@ -218,7 +217,7 @@ class OrchidTriggerRetryConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def _max_ge_initial(self) -> "OrchidTriggerRetryConfig":
+    def _max_ge_initial(self) -> OrchidTriggerRetryConfig:
         if self.max_delay_seconds < self.initial_delay_seconds:
             raise ValueError("trigger.retry.max_delay_seconds must be >= initial_delay_seconds")
         return self
@@ -251,7 +250,7 @@ class OrchidScheduleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def _exactly_one_timing(self) -> "OrchidScheduleConfig":
+    def _exactly_one_timing(self) -> OrchidScheduleConfig:
         cron_set = self.cron is not None
         interval_set = self.interval_seconds is not None
         if cron_set == interval_set:
@@ -362,7 +361,7 @@ class OrchidEventsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def _required_when_enabled(self) -> "OrchidEventsConfig":
+    def _required_when_enabled(self) -> OrchidEventsConfig:
         if not self.enabled:
             return self
         missing: list[str] = []

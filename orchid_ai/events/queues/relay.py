@@ -33,8 +33,8 @@ import datetime as _dt
 import logging
 import uuid as _uuid
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from ...core.events.queue import (
     DBTransaction,

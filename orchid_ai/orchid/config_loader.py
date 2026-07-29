@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from orchid_ai.bootstrap import _build_runtime, _BootstrapResult
+from orchid_ai.bootstrap import _BootstrapResult, _build_runtime
 from orchid_ai.config.schema import OrchidAgentsConfig
 from orchid_ai.orchid.overrides import OrchidFactoryOverrides
 
@@ -257,7 +257,7 @@ class OrchidConfigLoader:
         # Read orchid.yml for top-level agent config
         yaml_data: dict[str, Any] = {}
         try:
-            with open(orchid_yml_path, encoding="utf-8") as f:
+            with open(orchid_yml_path, encoding="utf-8") as f:  # noqa: ASYNC230
                 yaml_data = yaml.safe_load(f) or {}
         except FileNotFoundError:
             pass

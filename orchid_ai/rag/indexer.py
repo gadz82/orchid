@@ -20,8 +20,8 @@ Usage (startup hook):
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from ..core.repository import OrchidDocument, OrchidVectorWriter
 

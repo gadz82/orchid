@@ -83,12 +83,10 @@ class MCPToolWrapper(BaseTool):
                 elapsed,
                 type(exc).__name__,
             )
-            logger.error(
-                "[%s] MCP tool '%s' exception: %s",
+            logger.exception(
+                "[%s] MCP tool '%s' exception",
                 self.agent_name,
                 self.name,
-                exc,
-                exc_info=True,
             )
             return f"[Tool error] {exc}"
 

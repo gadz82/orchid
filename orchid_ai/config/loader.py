@@ -112,7 +112,7 @@ def load_config(path: str | Path) -> OrchidAgentsConfig:
 
     data = yaml.safe_load(interpolated)
     if not isinstance(data, dict):
-        raise ValueError(f"Expected YAML dict at top level, got {type(data).__name__}")
+        raise TypeError(f"Expected YAML dict at top level, got {type(data).__name__}")
 
     config = OrchidAgentsConfig.model_validate(data)
 

@@ -33,7 +33,8 @@ Design notes
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 __all__ = ["iter_entry_point_plugins", "lazy_init_plugins"]
 

@@ -42,7 +42,7 @@ class OrchidTrigger(ABC):
 
     @property
     @abstractmethod
-    def identity_claim(self) -> dict[str, "object"]:
+    def identity_claim(self) -> dict[str, object]:
         """The serialised identity claim (the same shape stored on
         ``Signal.identity_claim`` when the trigger fires synthetically
         for a schedule).  ``mode`` is one of ``service_account``,

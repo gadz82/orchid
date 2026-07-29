@@ -15,8 +15,9 @@ compatibility — they populate ``OrchidFactoryOverrides`` internally.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Self
 
 from langchain_core.messages import BaseMessage
 from langgraph.errors import GraphInterrupt
@@ -27,12 +28,10 @@ from orchid_ai.core.content import OrchidContentSource
 from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.mcp.inventory import OrchidMCPServerInventory
 from orchid_ai.mcp.session_warmer import OrchidSessionWarmer, OrchidWarmReport
-from orchid_ai.persistence.base import OrchidChatStorage
-from orchid_ai.runtime import OrchidRuntime
 
 # Collaborators (M1 refactoring)
 from orchid_ai.orchid.config_loader import OrchidConfigLoader
-from orchid_ai.orchid.invoker import OrchidInvokeResult, OrchidInvoker, OrchidPendingApproval
+from orchid_ai.orchid.invoker import OrchidInvoker, OrchidInvokeResult, OrchidPendingApproval
 from orchid_ai.orchid.lifecycle import OrchidLifecycle
 from orchid_ai.orchid.overrides import (
     CheckpointerOverrides,
@@ -41,10 +40,12 @@ from orchid_ai.orchid.overrides import (
     StartupOverrides,
     StorageOverrides,
 )
+from orchid_ai.persistence.base import OrchidChatStorage
+from orchid_ai.runtime import OrchidRuntime
 
 if TYPE_CHECKING:
     from .config.storage import OrchidConfigStorage
-    from .core.agent import OrchidAgent  # noqa: F401
+    from .core.agent import OrchidAgent
     from .core.mcp import OrchidMCPTokenStore
 
 logger = logging.getLogger(__name__)
@@ -96,10 +97,10 @@ class Orchid:
         config: OrchidAgentsConfig,
         runtime: OrchidRuntime,
         chat_repo: OrchidChatStorage | None = None,
-        mcp_token_store: "OrchidMCPTokenStore | None" = None,
+        mcp_token_store: OrchidMCPTokenStore | None = None,
         _owns_resources: bool = False,
         _config_file_hashes: dict[str, str] | None = None,
-        _config_storage: "OrchidConfigStorage | None" = None,
+        _config_storage: OrchidConfigStorage | None = None,
         _config_watcher: OrchidConfigWatcherBase | None = None,
     ) -> None:
         """Low-level constructor — prefer :meth:`from_config_path` for most uses.
@@ -187,7 +188,7 @@ class Orchid:
         checkpointer_overrides: CheckpointerOverrides | None = None,
         startup_overrides: StartupOverrides | None = None,
         factory_overrides: OrchidFactoryOverrides | None = None,
-    ) -> "Orchid":
+    ) -> Orchid:
         """Build a fully-initialised :class:`Orchid` from an ``orchid.yml`` path.
 
         The **mandatory** integrator bootstrap path.  All string parameters
@@ -365,7 +366,7 @@ class Orchid:
         startup_hook_kwargs: dict[str, Any] | None = None,
         runtime_overrides: dict[str, Any] | None = None,
         skip_yaml_sections: set[str] | None = None,
-    ) -> "Orchid":
+    ) -> Orchid:
         """Build a fully-initialised :class:`Orchid` from ``orchid.md`` + ``agents/*.md``.
 
         The Markdown-equivalent of :meth:`from_config_path`.
@@ -438,7 +439,7 @@ class Orchid:
 
     # ── Async context manager ───────────────────────────────
 
-    async def __aenter__(self) -> "Orchid":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
@@ -481,7 +482,7 @@ class Orchid:
         return await self._lifecycle.session_warmer.warm_unauthenticated()
 
     @property
-    def mcp_token_store(self) -> "OrchidMCPTokenStore | None":
+    def mcp_token_store(self) -> OrchidMCPTokenStore | None:
         """MCP per-server OAuth token store, or ``None``."""
         return self._lifecycle.mcp_token_store
 
@@ -490,12 +491,12 @@ class Orchid:
         self._lifecycle.inject_signal_emitter(emitter)
 
     @property
-    def config_storage(self) -> "OrchidConfigStorage | None":
+    def config_storage(self) -> OrchidConfigStorage | None:
         """Database-backed config storage, or ``None``."""
         return self._lifecycle.config_storage
 
     @property
-    def _agents(self) -> dict[str, "OrchidAgent"]:
+    def _agents(self) -> dict[str, OrchidAgent]:
         """Backward-compat alias — delegates to ``OrchidLifecycle._agents``."""
         return self._lifecycle.agents
 
@@ -613,12 +614,12 @@ class Orchid:
 # by tests and downstream code.
 
 __all__ = [
+    "CheckpointerOverrides",
+    "MCPStorageOverrides",
     "Orchid",
+    "OrchidFactoryOverrides",
     "OrchidInvokeResult",
     "OrchidPendingApproval",
-    "OrchidFactoryOverrides",
-    "StorageOverrides",
-    "MCPStorageOverrides",
-    "CheckpointerOverrides",
     "StartupOverrides",
+    "StorageOverrides",
 ]

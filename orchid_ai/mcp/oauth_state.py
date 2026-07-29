@@ -24,8 +24,9 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 from ..utils import import_class
 
@@ -85,11 +86,11 @@ class OrchidOAuthStateStore(ABC):
         support (Redis) should override; the in-memory store does its
         own sweep on every access.
         """
-        return None
+        return
 
     async def close(self) -> None:
         """Release any underlying resources.  Default no-op."""
-        return None
+        return
 
 
 class OrchidInMemoryOAuthStateStore(OrchidOAuthStateStore):

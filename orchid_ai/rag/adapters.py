@@ -22,7 +22,8 @@ so callers who later mutate one side don't surprise the other.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterable
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any
 
 from ..core.repository import OrchidDocument
 
@@ -38,7 +39,7 @@ __all__ = [
 ]
 
 
-def to_langchain_document(doc: OrchidDocument) -> "_LCDocument":
+def to_langchain_document(doc: OrchidDocument) -> _LCDocument:
     """Convert an :class:`OrchidDocument` to a ``langchain_core.Document``.
 
     The langchain Document is constructed lazily — the import happens
@@ -72,7 +73,7 @@ def from_langchain_document(doc: Any) -> OrchidDocument:
     )
 
 
-def to_langchain_documents(docs: Iterable[OrchidDocument]) -> list["_LCDocument"]:
+def to_langchain_documents(docs: Iterable[OrchidDocument]) -> list[_LCDocument]:
     """Batch wrapper around :func:`to_langchain_document`."""
     return [to_langchain_document(d) for d in docs]
 

@@ -16,43 +16,43 @@ Architectural rule:
 
 from __future__ import annotations
 
-from .state import OrchidAgentState, OrchidAuthContext
-from .run_config import CONFIG_KEY_AUTH, auth_from_config, with_auth
 from .agent import OrchidAgent
-from .tool import OrchidTool, OrchidToolInput, OrchidToolOutput
+from .content import OrchidContentItem, OrchidContentSource
+from .mcp import OrchidMCPClient, OrchidMCPDiscoverable, OrchidMCPToolCaller, OrchidMCPToolResult
 from .repository import (
     Document,
     OrchidDocument,
     OrchidSearchResult,
     OrchidVectorReader,
-    OrchidVectorWriter,
     OrchidVectorStoreRepository,
+    OrchidVectorWriter,
 )
+from .run_config import CONFIG_KEY_AUTH, auth_from_config, with_auth
 from .scopes import OrchidRAGScope
-from .mcp import OrchidMCPClient, OrchidMCPDiscoverable, OrchidMCPToolCaller, OrchidMCPToolResult
-from .content import OrchidContentItem, OrchidContentSource
+from .state import OrchidAgentState, OrchidAuthContext
+from .tool import OrchidTool, OrchidToolInput, OrchidToolOutput
 
 __all__ = [
+    "CONFIG_KEY_AUTH",
+    "Document",
+    "OrchidAgent",
     "OrchidAgentState",
     "OrchidAuthContext",
-    "CONFIG_KEY_AUTH",
-    "auth_from_config",
-    "with_auth",
-    "OrchidAgent",
-    "OrchidTool",
-    "OrchidToolInput",
-    "OrchidToolOutput",
-    "Document",
+    "OrchidContentItem",
+    "OrchidContentSource",
     "OrchidDocument",
-    "OrchidRAGScope",
-    "OrchidSearchResult",
-    "OrchidVectorReader",
-    "OrchidVectorWriter",
-    "OrchidVectorStoreRepository",
     "OrchidMCPClient",
     "OrchidMCPDiscoverable",
     "OrchidMCPToolCaller",
     "OrchidMCPToolResult",
-    "OrchidContentItem",
-    "OrchidContentSource",
+    "OrchidRAGScope",
+    "OrchidSearchResult",
+    "OrchidTool",
+    "OrchidToolInput",
+    "OrchidToolOutput",
+    "OrchidVectorReader",
+    "OrchidVectorStoreRepository",
+    "OrchidVectorWriter",
+    "auth_from_config",
+    "with_auth",
 ]

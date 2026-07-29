@@ -24,7 +24,7 @@ from __future__ import annotations
 import datetime as _dt
 import logging
 import uuid as _uuid
-from typing import Iterable
+from collections.abc import Iterable
 
 from .errors import SignalDuplicateError
 from .middleware import SignalIngestMiddleware
@@ -45,7 +45,7 @@ class OrchidSignalDispatcher:
         store: OrchidSignalStore,
         queue: OrchidSignalQueue,
         middleware: Iterable[SignalIngestMiddleware] | None = None,
-        clock: "object" = None,
+        clock: object = None,
     ) -> None:
         self._store = store
         self._queue = queue

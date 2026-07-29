@@ -5,12 +5,13 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from ..config.schema import OrchidAgentSkillStepConfig
 from ..config.tool_registry import filter_to_schema, get_tool
-from ..core.tool import OrchidToolInput
 from ..core.state import OrchidAuthContext
+from ..core.tool import OrchidToolInput
 
 logger = logging.getLogger(__name__)
 

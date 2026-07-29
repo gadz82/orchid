@@ -205,7 +205,7 @@ class OrchidSessionWarmer:
                     await client.warm_cache(auth)
         except OrchidMCPAuthRequiredError:
             return ("skipped", None)
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             reason = f"timeout after {self._per_server_timeout:.1f}s"
             logger.warning(
                 "[OrchidSessionWarmer] warm '%s' (%s) %s",

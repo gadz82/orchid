@@ -95,7 +95,7 @@ class RelayRecoveryProducer(OrchidSignalProducer):
         if self._task is not None:
             try:
                 await asyncio.wait_for(self._task, timeout=self._poll * 2)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._task.cancel()
                 try:
                     await self._task
@@ -115,7 +115,7 @@ class RelayRecoveryProducer(OrchidSignalProducer):
                 await asyncio.wait_for(self._stopping.wait(), timeout=self._poll)
                 # ``wait`` returned because ``stopping`` was set; exit.
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Normal path: the timeout expired, run another sweep.
                 continue
 

@@ -42,8 +42,7 @@ class RetryPolicy:
     def delay_for(self, attempt: int) -> float:
         """Compute the wait before the *next* attempt.  ``attempt`` is
         the 1-based attempt number that just failed."""
-        if attempt < 1:
-            attempt = 1
+        attempt = max(attempt, 1)
         if self.backoff == "fixed":
             base = self.initial_delay_seconds
         elif self.backoff == "linear":

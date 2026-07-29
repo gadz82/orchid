@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
 import inspect
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 from types import MappingProxyType, NoneType, UnionType
-from typing import Any, Callable, Union, get_args, get_origin
+from typing import Any, Union, get_args, get_origin
 
 from ..core.tool import OrchidTool
 

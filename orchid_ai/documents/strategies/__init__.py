@@ -161,14 +161,14 @@ def get_post_processor(name: str) -> OrchidChunkPostProcessor:
 
 
 __all__ = [
+    "INGESTION_REGISTRY",
+    "POST_PROCESSOR_REGISTRY",
     "ContextualHeaderPostProcessor",
     "EntityExtractionPostProcessor",
     "HeaderedIngestion",
     "HierarchicalIngestion",
-    "INGESTION_REGISTRY",
     "OrchidChunkPostProcessor",
     "OrchidIngestionStrategy",
-    "POST_PROCESSOR_REGISTRY",
     "RecursiveIngestion",
     "SemanticIngestion",
     "build_ingestion_strategy",

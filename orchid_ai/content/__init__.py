@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from ..core.content import OrchidContentSource
+from .local import LocalFileContentSource
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,5 @@ def build_content_source(name: str, **settings: Any) -> OrchidContentSource:
         )
     return cls(**settings)
 
-
-from .local import LocalFileContentSource  # noqa: E402
 
 register_content_source("local", LocalFileContentSource)

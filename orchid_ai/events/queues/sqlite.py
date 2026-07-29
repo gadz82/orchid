@@ -33,8 +33,8 @@ import datetime as _dt
 import logging
 import os
 import uuid as _uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import aiosqlite
 

@@ -17,6 +17,7 @@ Concrete implementations live under ``orchid_ai/events/processors/``:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from .queue import OrchidSignalQueue
 from .runner import OrchidJobRunner
@@ -34,7 +35,7 @@ class OrchidSignalProcessor(ABC):
         queue: OrchidSignalQueue,
         signal_store: OrchidSignalStore,
         triggers: TriggerRegistry,
-        identity_resolver: "Any",  # OrchidIdentityResolver — kept loose to avoid a core/identity import cycle
+        identity_resolver: Any,  # OrchidIdentityResolver — kept loose to avoid a core/identity import cycle
         job_store: OrchidJobStore,
         job_runner: OrchidJobRunner,
     ) -> None:
@@ -46,8 +47,3 @@ class OrchidSignalProcessor(ABC):
         """Signal workers to drain and stop.  Idempotent.  After
         ``stop`` returns, no new ``ack`` / ``nack`` calls happen against
         the queue."""
-
-
-# Type-checking helper — kept out of the runtime import graph so the
-# core package stays free of cycles between events/ and identity/.
-from typing import Any  # noqa: E402  (intentional bottom placement)

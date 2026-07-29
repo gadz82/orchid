@@ -127,12 +127,12 @@ def resolve_transformer_kwargs(name: str, prompts: Any) -> dict[str, Any]:
 
 
 __all__ = [
+    "TRANSFORMER_REGISTRY",
     "DecomposeTransformer",
     "HyDETransformer",
     "MultiQueryTransformer",
     "OrchidQueryTransformer",
     "ReformulateTransformer",
-    "TRANSFORMER_REGISTRY",
     "clear_query_transformers",
     "get_query_transformer",
     "register_query_transformer",

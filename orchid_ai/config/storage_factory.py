@@ -36,5 +36,5 @@ def build_config_storage(class_path: str, dsn: str) -> OrchidConfigStorage:
     """
     cls = import_class(class_path)
     if not issubclass(cls, OrchidConfigStorage):
-        raise ValueError(f"Class '{class_path}' is not a subclass of OrchidConfigStorage. Found: {cls.__mro__}")
+        raise TypeError(f"Class '{class_path}' is not a subclass of OrchidConfigStorage. Found: {cls.__mro__}")
     return cls(dsn=dsn)

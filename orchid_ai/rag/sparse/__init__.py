@@ -66,9 +66,9 @@ def get_sparse_encoder(name: str) -> OrchidSparseEncoder:
 
 
 __all__ = [
+    "SPARSE_ENCODER_REGISTRY",
     "BM25Encoder",
     "OrchidSparseEncoder",
-    "SPARSE_ENCODER_REGISTRY",
     "SpladeEncoder",
     "clear_sparse_encoders",
     "get_sparse_encoder",

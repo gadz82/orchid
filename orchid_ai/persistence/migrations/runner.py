@@ -21,8 +21,9 @@ import importlib
 import logging
 import pkgutil
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,8 @@ def discover_migrations(package: str | None = None) -> list[Migration]:
     exposes ``VERSION``, ``up()``, and ``down()`` is collected.
     """
     if package is None:
-        from . import __path__ as pkg_path, __name__ as pkg_name
+        from . import __name__ as pkg_name
+        from . import __path__ as pkg_path
     else:
         mod = importlib.import_module(package)
         pkg_path = mod.__path__

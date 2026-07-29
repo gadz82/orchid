@@ -37,7 +37,6 @@ from dataclasses import dataclass, field
 
 from ...core.sparse import OrchidSparseEncoder, OrchidSparseVector
 
-
 # Standard BM25-Okapi parameters (Robertson et al., 1995).
 _K1 = 1.5
 _B = 0.75

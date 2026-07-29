@@ -403,15 +403,19 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
 
         async with asyncio.timeout(timeout):
             if self._transport == "sse":
-                async with sse_client(self._url, headers=headers) as (read_stream, write_stream):
-                    async with ClientSession(read_stream, write_stream) as session:
-                        await session.initialize()
-                        yield session
+                async with (
+                    sse_client(self._url, headers=headers) as (read_stream, write_stream),
+                    ClientSession(read_stream, write_stream) as session,
+                ):
+                    await session.initialize()
+                    yield session
             else:
-                async with streamablehttp_client(self._url, headers=headers) as (read_stream, write_stream, _):
-                    async with ClientSession(read_stream, write_stream) as session:
-                        await session.initialize()
-                        yield session
+                async with (
+                    streamablehttp_client(self._url, headers=headers) as (read_stream, write_stream, _),
+                    ClientSession(read_stream, write_stream) as session,
+                ):
+                    await session.initialize()
+                    yield session
 
     # ── Tool execution (always live — not cached) ────────────
 

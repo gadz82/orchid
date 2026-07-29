@@ -34,7 +34,6 @@ from ..config.schema import OrchidMCPServerConfig, OrchidToolConfig
 from ..core.mcp import OrchidMCPToolCaller
 from ..core.state import OrchidAuthContext
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -203,8 +202,8 @@ class LLMDecidesStrategy(OrchidToolCallStrategy):
                 temperature=0,
                 response_format={"type": "json_object"},
             )
-        except Exception as exc:
-            logger.error("[%s] LLM API error during tool decision: %s", agent_name, exc, exc_info=True)
+        except Exception:
+            logger.exception("[%s] LLM API error during tool decision", agent_name)
             # Fallback: call all tools
             return await get_strategy("all").execute(client, tools, query, auth, agent_name=agent_name)
 

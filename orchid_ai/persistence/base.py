@@ -93,7 +93,7 @@ class OrchidChatStorage(ABC):
     # ._resolve_chat_binding``) calls these to enforce per-call
     # authorization.
 
-    async def get_chat_metadata(self, chat_id: str) -> "OrchidChatSession | None":
+    async def get_chat_metadata(self, chat_id: str) -> OrchidChatSession | None:
         """Return the chat-session metadata or ``None`` when missing.
 
         Default: alias for :meth:`get_chat`.  Backends with separate
@@ -105,7 +105,7 @@ class OrchidChatStorage(ABC):
     async def can_write(
         self,
         chat: OrchidChatSession,
-        auth: "OrchidAuthContext",
+        auth: OrchidAuthContext,
     ) -> bool:
         """Authorize ``auth`` to append messages to ``chat``.
 
@@ -126,9 +126,7 @@ class OrchidChatStorage(ABC):
             return False
         if chat.user_id == auth.user_id:
             return True
-        if "admin" in getattr(auth, "roles", frozenset()):
-            return True
-        return False
+        return "admin" in getattr(auth, "roles", frozenset())
 
     # ── Conversation summaries (running-summary memory) ──────
 
@@ -146,4 +144,3 @@ class OrchidChatStorage(ABC):
         Default: no-op for backward compat.  Concrete backends that
         support running-summary persistence override this.
         """
-        pass

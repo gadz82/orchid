@@ -27,7 +27,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ...core.doc_store import OrchidDocStore
 from ...core.graph_store import OrchidEdge, OrchidEntity, OrchidGraphStore
@@ -65,7 +66,7 @@ class GraphRAGRetrieval(OrchidRetrievalStrategy):
         self._serialiser = entity_serializer or _default_serialise
 
     @classmethod
-    def from_config(cls, config: Any) -> "GraphRAGRetrieval":
+    def from_config(cls, config: Any) -> GraphRAGRetrieval:
         graph_cfg = getattr(config, "graph", None) if config is not None else None
         if graph_cfg is None:
             return cls()
