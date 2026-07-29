@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v1.8.10 (2026-07-29)
+
+### Bug Fixes
+
+- Handle compatibility for `streamablehttp_client` imports across mcp versions
+  ([`d381d19`](https://github.com/gadz82/orchid/commit/d381d190bb1644ea7d7fa22e41c48d7b42a0d8f8))
+
+- Refine imports, type annotations, and exception handling
+  ([`ee02cd7`](https://github.com/gadz82/orchid/commit/ee02cd77aef3f8063be976ab52291afc3860652b))
+
+- Refine imports, type annotations, and exception handling
+  ([`b047682`](https://github.com/gadz82/orchid/commit/b04768282559feae4eba8dd26bf0011061ae9796))
+
+- Refine imports, type annotations, and exception handling
+  ([`471a412`](https://github.com/gadz82/orchid/commit/471a4124c272334837549ab20ccc5527ab2fd123))
+
+- Refine RAG query reformulation
+  ([`e0b62ed`](https://github.com/gadz82/orchid/commit/e0b62edb8c669ca633e5dc2d0022a843a628ad61))
+
+- Reorder imports for readability and consistency
+  ([`eedd082`](https://github.com/gadz82/orchid/commit/eedd08237e88a2415bc5f276ced9ed0bf440621d))
+
+- Simplify imports and add missing blank lines in tests
+  ([`89fb936`](https://github.com/gadz82/orchid/commit/89fb936cb4ce6d2fc7c7dcd1e469167fefe1f105))
+
+
 ## v1.8.9 (2026-06-06)
 
 ### Bug Fixes
