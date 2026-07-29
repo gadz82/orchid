@@ -27,8 +27,8 @@ class GraphState(TypedDict, total=False):
     chat_id: str
     active_agents: list[str]
     execution_mode: Literal["parallel", "sequential"]
-    pending_agents: Annotated[list[str], replace_list]    # NOT merged, replaced
-    mcp_context: Annotated[dict, merge_dicts]             # shallow merge
+    pending_agents: Annotated[list[str], replace_list]  # NOT merged, replaced
+    mcp_context: Annotated[dict, merge_dicts]  # shallow merge
     rag_context: Annotated[dict, merge_dicts]
     skill_instructions: Annotated[dict, merge_dicts]
     final_response: str | None

@@ -76,7 +76,9 @@ rag_data = await self.fetch_rag_context(query, scope)
 history = self.extract_conversation_history(state, max_turns=10, max_chars=1000)
 prior_ctx = (state.get("mcp_context") or {}).get(self.name)
 summary = await self.summarise(
-    query, mcp_data, rag_data,
+    query,
+    mcp_data,
+    rag_data,
     system_prompt=PROMPT,
     conversation_history=history or None,
     prior_tool_context=prior_ctx,

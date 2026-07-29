@@ -169,11 +169,11 @@ Async static method that implements the **sliding-window with summarization** pa
 compressed = await OrchidAgent.compress_conversation_history(
     history,
     chat_model=llm_provider,
-    recent_turns=10,                        # keep last 10 exchanges verbatim
-    running_summary=existing_summary,       # extend incrementally (Phase 1)
-    structured_output=True,                 # JSON with entities (Phase 2)
-    compression_system_prompt="...",        # custom system prompt (Phase 4)
-    extension_user_prompt="...",            # custom extension prompt (Phase 4)
+    recent_turns=10,  # keep last 10 exchanges verbatim
+    running_summary=existing_summary,  # extend incrementally (Phase 1)
+    structured_output=True,  # JSON with entities (Phase 2)
+    compression_system_prompt="...",  # custom system prompt (Phase 4)
+    extension_user_prompt="...",  # custom extension prompt (Phase 4)
 )
 # Result: [{"role": "assistant", "content": "[Conversation summary]\n..."}, ...recent messages]
 ```
