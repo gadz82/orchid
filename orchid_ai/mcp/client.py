@@ -24,7 +24,12 @@ from typing import Any
 
 from mcp import ClientSession
 from mcp.client.sse import sse_client
-from mcp.client.streamable_http import streamablehttp_client
+
+try:
+    from mcp.client.streamable_http import streamablehttp_client  # mcp v1.x
+except ImportError:
+    from mcp.client.streamable_http import streamable_http_client as streamablehttp_client  # mcp v2.x
+
 
 from ..core.mcp import OrchidCacheableMCPClient, OrchidMCPToolResult
 from ..core.state import OrchidAuthContext
