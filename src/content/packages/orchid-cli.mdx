@@ -109,6 +109,22 @@ Generated projects include valid `orchid.yml` and `agents.yaml`, Python scaffold
 | `orchid mcp status --config <path>` | Show OAuth auth status for all configured MCP servers |
 | `orchid mcp revoke <server> --config <path>` | Revoke the stored token for a specific server |
 
+### `orchid external-agents` — External CLI delegation
+
+Let an Orchid agent delegate sub-tasks to external AI CLIs installed on
+your machine.  Configured via the `external_agents:` block in `agents.yaml`
+and referenced by name in `agent.tools:` like any built-in tool.
+
+| Command | Purpose |
+|---------|---------|
+| `orchid external-agents list <agents.yaml>` | List all configured external-agent CLI tools with their commands, timeouts, and PATH-resolved availability |
+
+**Security:** The external CLI runs as an argv list (`subprocess_exec`, never
+`shell=True`).  The executable path, flags, timeout, and working directory
+come from trusted operator YAML — only the `prompt` argument is
+LLM-controlled.  `requires_approval` defaults to `true`, so every
+delegation pauses for operator confirmation in the terminal (HITL).
+
 ## Example session
 
 ```text

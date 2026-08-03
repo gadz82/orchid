@@ -7,11 +7,7 @@
     "default": "agents.yaml",
     "description": "Path to the agents.yaml configuration file.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -41,11 +37,7 @@
     "default": false,
     "description": "Bypass authentication \u2014 for development only; never set in production.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -95,11 +87,7 @@
     "default": null,
     "description": "Connection string or file path for the LangGraph checkpointer.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -109,9 +97,7 @@
     "default": null,
     "description": "LangGraph state persistence backend ('memory', 'sqlite', 'postgres', or class path).",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -121,11 +107,7 @@
     "default": null,
     "description": "Maps to environment variable EMBEDDING_MODEL.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/graph-kb",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -135,10 +117,7 @@
     "default": null,
     "description": "Maps to environment variable GEMINI_API_KEY.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -158,11 +137,7 @@
     "default": null,
     "description": "Maps to environment variable QDRANT_URL.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/graph-kb",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -172,11 +147,7 @@
     "default": null,
     "description": "Maps to environment variable VECTOR_BACKEND.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/graph-kb",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -196,10 +167,7 @@
     "default": null,
     "description": "Google AI (Gemini) API key.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -219,11 +187,7 @@
     "default": "ollama/llama3.2",
     "description": "Default LLM model in LiteLLM format (e.g. 'ollama/llama3.2', 'gemini/gemini-2.5-flash').",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -233,11 +197,7 @@
     "default": null,
     "description": "Ollama server base URL for local model serving.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -277,9 +237,7 @@
     "default": "orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore",
     "description": "Dotted import path to an OrchidMCPTokenStore subclass.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -289,9 +247,7 @@
     "default": "~/.orchid/chats.db",
     "description": "Database DSN for per-user outbound MCP OAuth tokens.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -301,11 +257,7 @@
     "default": "text-embedding-3-small",
     "description": "Embedding model in LiteLLM format (e.g. 'ollama/nomic-embed-text').",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/graph-kb",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -315,10 +267,7 @@
     "default": null,
     "description": "Google AI (Gemini) API key used by the embedding model.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -338,11 +287,7 @@
     "default": "http://qdrant:6333",
     "description": "Qdrant server URL.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/graph-kb",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -352,11 +297,7 @@
     "default": "qdrant",
     "description": "Vector database backend \u2014 'qdrant' is the only supported backend.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/graph-kb",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -366,11 +307,7 @@
     "default": null,
     "description": "Dotted import path to a startup hook function called after graph init.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/rag-strategies",
-      "/examples/tool-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -380,11 +317,7 @@
     "default": "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
     "description": "Dotted import path to an OrchidChatStorage subclass.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -394,11 +327,7 @@
     "default": "~/.orchid/chats.db",
     "description": "Database connection string for chat persistence (SQLite path or Postgres URL).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -438,11 +367,7 @@
     "default": false,
     "description": "Enable LangSmith tracing for debugging and observability.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -452,11 +377,7 @@
     "default": 200,
     "description": "Character overlap between consecutive chunks.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -466,11 +387,7 @@
     "default": 1000,
     "description": "Text chunk size in characters for document ingestion.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -480,11 +397,7 @@
     "default": 20,
     "description": "Maximum upload size in megabytes.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/graph-kb",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -494,11 +407,7 @@
     "default": "uploads",
     "description": "Qdrant namespace for uploaded documents.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "orchid.yml",
@@ -508,11 +417,7 @@
     "default": null,
     "description": "Vision model for PDF/image OCR (e.g. 'ollama/minicpm-v').",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -522,11 +427,7 @@
     "default": "1",
     "description": "Schema version \u2014 only '1' is currently supported.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -536,11 +437,7 @@
     "default": "gemini/gemini-2.5-flash",
     "description": "Default LLM model for all agents (LiteLLM format).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -550,11 +447,7 @@
     "default": 0.2,
     "description": "Sampling temperature (0.0\u20131.0). Lower = more deterministic.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -584,11 +477,7 @@
     "default": 5,
     "description": "Number of chunks retrieved per RAG query.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -598,11 +487,7 @@
     "default": true,
     "description": "Enable RAG context retrieval for all agents.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -612,9 +497,7 @@
     "default": 0,
     "description": "Cache TTL for RAG results in seconds (0 = no cache).",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -634,11 +517,7 @@
     "default": null,
     "description": "Default chunking strategy: 'recursive', 'semantic', 'hierarchical', 'headered'.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -648,11 +527,7 @@
     "default": 1000,
     "description": "Default text chunk size in characters.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -662,11 +537,7 @@
     "default": 200,
     "description": "Default character overlap between chunks.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -706,11 +577,7 @@
     "default": null,
     "description": "Default retrieval strategy: 'simple', 'multi_query', 'hyde', 'hybrid', 'graph_rag'.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -720,11 +587,7 @@
     "default": null,
     "description": "Ordered list of query transformers (e.g. 'multi_query', 'hyde', 'reformulate').",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -754,9 +617,7 @@
     "default": 1,
     "description": "Number of hypothetical answers generated per HyDE query.",
     "deprecated": false,
-    "examples": [
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -766,9 +627,7 @@
     "default": "bm25",
     "description": "Sparse encoder for hybrid retrieval: 'bm25' or 'splade'.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -788,9 +647,7 @@
     "default": "rrf",
     "description": "Fusion method for hybrid retrieval: 'rrf' (Reciprocal Rank Fusion) or 'linear'.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -800,9 +657,7 @@
     "default": 60,
     "description": "RRF constant k (default 60, per Cormack et al.).",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -812,11 +667,7 @@
     "default": false,
     "description": "Enable graph entity extraction and traversal for retrieval.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -826,9 +677,7 @@
     "default": 2,
     "description": "Maximum BFS depth from seed entities during graph traversal.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -838,9 +687,7 @@
     "default": true,
     "description": "Merge graph context with vector hits in the response.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -850,9 +697,7 @@
     "default": [],
     "description": "Restrict graph traversal to these edge labels (empty = all).",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -862,9 +707,7 @@
     "default": null,
     "description": "Override prompt for the multi-query query transformer.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -874,9 +717,7 @@
     "default": null,
     "description": "HyDE prompt for a single hypothetical answer (n_hypothetical=1).",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -886,9 +727,7 @@
     "default": null,
     "description": "HyDE prompt for multiple hypothetical answers (uses {n} placeholder).",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -898,9 +737,7 @@
     "default": null,
     "description": "Override prompt for the decompose query transformer.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -910,9 +747,7 @@
     "default": null,
     "description": "Override prompt for the reformulate query transformer.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -932,11 +767,7 @@
     "default": {},
     "description": "Global built-in tool declarations, keyed by tool name.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -946,11 +777,7 @@
     "default": null,
     "description": "",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -970,11 +797,7 @@
     "default": "",
     "description": "Tool description shown to the LLM for invocation decisions.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -994,9 +817,7 @@
     "default": "string",
     "description": "Parameter type: 'string', 'int', 'float', or 'bool'.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1006,11 +827,7 @@
     "default": "",
     "description": "Human-readable parameter description.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1040,9 +857,7 @@
     "default": false,
     "description": "Store this tool's results in the RAG context store.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1052,9 +867,7 @@
     "default": null,
     "description": "Cache TTL for RAG-stored tool results (None = agent default).",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1074,11 +887,7 @@
     "default": null,
     "description": "Declare the tool safe for parallel dispatch.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1088,11 +897,7 @@
     "default": "",
     "description": "Qdrant namespace for this tool's RAG data.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1102,11 +907,7 @@
     "default": 5,
     "description": "Number of chunks retrieved for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1116,11 +917,7 @@
     "default": true,
     "description": "Enable RAG for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1130,9 +927,7 @@
     "default": 0,
     "description": "RAG cache TTL for this tool in seconds.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1152,11 +947,7 @@
     "default": null,
     "description": "Chunking strategy for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1166,11 +957,7 @@
     "default": 1000,
     "description": "Chunk size for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1180,11 +967,7 @@
     "default": 200,
     "description": "Chunk overlap for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1224,11 +1007,7 @@
     "default": null,
     "description": "Retrieval strategy for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1238,11 +1017,7 @@
     "default": null,
     "description": "Query transformer chain for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1272,9 +1047,7 @@
     "default": 1,
     "description": "Number of hypothetical answers for HyDE queries.",
     "deprecated": false,
-    "examples": [
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1284,9 +1057,7 @@
     "default": "bm25",
     "description": "Sparse encoder for hybrid retrieval.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1306,9 +1077,7 @@
     "default": "rrf",
     "description": "Fusion method for hybrid retrieval.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1318,9 +1087,7 @@
     "default": 60,
     "description": "RRF constant k.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1330,11 +1097,7 @@
     "default": false,
     "description": "Enable graph-based retrieval.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1344,9 +1107,7 @@
     "default": 2,
     "description": "Maximum BFS depth for graph traversal.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1356,9 +1117,7 @@
     "default": true,
     "description": "Merge graph context with vector hits.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1368,9 +1127,7 @@
     "default": [],
     "description": "Restrict graph traversal to these edge labels.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1380,9 +1137,7 @@
     "default": null,
     "description": "Override multi-query prompt for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1392,9 +1147,7 @@
     "default": null,
     "description": "HyDE single-answer prompt for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1404,9 +1157,7 @@
     "default": null,
     "description": "HyDE multi-answer prompt for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1416,9 +1167,7 @@
     "default": null,
     "description": "Override decompose prompt for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1428,9 +1177,7 @@
     "default": null,
     "description": "Override reformulate prompt for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1450,11 +1197,7 @@
     "default": {},
     "description": "Orchestrator-level cross-agent skill definitions.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1464,11 +1207,7 @@
     "default": "",
     "description": "Human-readable skill purpose.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1478,11 +1217,7 @@
     "default": null,
     "description": "Ordered list of agent invocations forming this cross-agent skill.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1492,11 +1227,7 @@
     "default": null,
     "description": "Agent name to invoke in this step.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1506,11 +1237,7 @@
     "default": "",
     "description": "Hint passed to the invoked agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1520,11 +1247,7 @@
     "default": "AI assistant",
     "description": "Display name for the orchestrating supervisor.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/mcp-auth",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1554,10 +1277,7 @@
     "default": null,
     "description": "Custom system prompt for the supervisor's routing phase.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1567,9 +1287,7 @@
     "default": null,
     "description": "Custom system prompt for the synthesis phase.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1659,11 +1377,7 @@
     "default": "none",
     "description": "",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1783,11 +1497,7 @@
     "default": [],
     "description": "Guardrail rules applied to user input before any agent processes it.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1797,9 +1507,7 @@
     "default": null,
     "description": "Guardrail type name (e.g. 'content_safety', 'pii_detection', 'prompt_injection').",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1809,11 +1517,7 @@
     "default": "block",
     "description": "Action on guardrail failure: 'block', 'warn', 'redact', or 'log'.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1823,11 +1527,7 @@
     "default": {},
     "description": "Keyword arguments passed to the guardrail constructor.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1837,11 +1537,7 @@
     "default": [],
     "description": "Guardrail rules applied to agent responses before delivery.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1851,9 +1547,7 @@
     "default": null,
     "description": "Guardrail type name.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1863,11 +1557,7 @@
     "default": "block",
     "description": "Action on guardrail failure.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1877,11 +1567,7 @@
     "default": {},
     "description": "Keyword arguments passed to the guardrail constructor.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1891,11 +1577,7 @@
     "default": {},
     "description": "Tool title/description overrides keyed by MCP tool name.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1905,10 +1587,7 @@
     "default": null,
     "description": "Override title for the MCP tool shown to host LLMs.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1918,11 +1597,7 @@
     "default": null,
     "description": "Override description for the MCP tool shown to host LLMs.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1932,10 +1607,7 @@
     "default": [],
     "description": "Pre-canned MCP Prompt templates exposed by the gateway.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1955,10 +1627,7 @@
     "default": null,
     "description": "Display title for the prompt.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1968,11 +1637,7 @@
     "default": null,
     "description": "Description of what this prompt does.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -1982,9 +1647,7 @@
     "default": [],
     "description": "Arguments accepted by this prompt template.",
     "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2004,11 +1667,7 @@
     "default": null,
     "description": "Description of this argument.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2028,9 +1687,7 @@
     "default": null,
     "description": "Prompt body with {{arg_name}} placeholders.",
     "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2040,11 +1697,7 @@
     "default": {},
     "description": "Map of agent name \u2192 agent configuration. Every key becomes a routable agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2064,11 +1717,7 @@
     "default": null,
     "description": "Human-readable purpose shown to the supervisor for routing.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2078,11 +1727,7 @@
     "default": null,
     "description": "System prompt injected into the agent's agentic loop.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2092,11 +1737,7 @@
     "default": null,
     "description": "Dotted import path to a custom OrchidAgent subclass.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2106,11 +1747,7 @@
     "default": "",
     "description": "Qdrant collection namespace for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2120,11 +1757,7 @@
     "default": 5,
     "description": "Number of chunks retrieved per RAG query for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2134,11 +1767,7 @@
     "default": true,
     "description": "Enable RAG for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2148,9 +1777,7 @@
     "default": 0,
     "description": "RAG cache TTL for this agent in seconds.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2170,11 +1797,7 @@
     "default": null,
     "description": "Chunking strategy for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2184,11 +1807,7 @@
     "default": 1000,
     "description": "Chunk size for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2198,11 +1817,7 @@
     "default": 200,
     "description": "Chunk overlap for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2242,11 +1857,7 @@
     "default": null,
     "description": "Retrieval strategy for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2256,11 +1867,7 @@
     "default": null,
     "description": "Query transformer chain for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2290,9 +1897,7 @@
     "default": 1,
     "description": "Number of hypothetical answers for HyDE queries.",
     "deprecated": false,
-    "examples": [
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2302,9 +1907,7 @@
     "default": "bm25",
     "description": "Sparse encoder: 'bm25' or 'splade'.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2324,9 +1927,7 @@
     "default": "rrf",
     "description": "Fusion strategy: 'rrf' or 'linear'.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2336,9 +1937,7 @@
     "default": 60,
     "description": "RRF constant k.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2348,11 +1947,7 @@
     "default": false,
     "description": "Enable graph-based retrieval.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2362,9 +1957,7 @@
     "default": 2,
     "description": "Maximum BFS depth for graph traversal.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2374,9 +1967,7 @@
     "default": true,
     "description": "Merge graph context with vector hits.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2386,9 +1977,7 @@
     "default": [],
     "description": "Restrict graph traversal to these edge labels.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2398,9 +1987,7 @@
     "default": null,
     "description": "Override prompt for the multi-query transformer for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2410,9 +1997,7 @@
     "default": null,
     "description": "HyDE single-answer prompt for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2422,9 +2007,7 @@
     "default": null,
     "description": "HyDE multi-answer prompt for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2434,9 +2017,7 @@
     "default": null,
     "description": "Override prompt for the decompose transformer for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2446,9 +2027,7 @@
     "default": null,
     "description": "Override prompt for the reformulate transformer for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2468,10 +2047,7 @@
     "default": [],
     "description": "MCP servers this agent can call tools on.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2491,9 +2067,7 @@
     "default": "local",
     "description": "Server type: 'local' (same host) or 'remote'.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2513,10 +2087,7 @@
     "default": null,
     "description": "MCP server URL. Supports ${ENV_VAR} interpolation.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2526,10 +2097,7 @@
     "default": "none",
     "description": "Auth mode: 'none', 'passthrough', or 'oauth'.",
     "deprecated": false,
-    "examples": [
-      "/examples/learning",
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2539,11 +2107,7 @@
     "default": [],
     "description": "MCP tools this agent is allowed to call on this server.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2563,9 +2127,7 @@
     "default": {},
     "description": "Default arguments passed to this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2575,9 +2137,7 @@
     "default": false,
     "description": "Store this tool's results in the RAG context store.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2587,9 +2147,7 @@
     "default": null,
     "description": "Per-tool RAG cache TTL (None = agent default).",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2609,11 +2167,7 @@
     "default": null,
     "description": "Override parallel-safety for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2623,11 +2177,7 @@
     "default": "",
     "description": "Qdrant namespace for this tool's RAG data.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2637,11 +2187,7 @@
     "default": 5,
     "description": "Number of chunks retrieved for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2651,11 +2197,7 @@
     "default": true,
     "description": "Enable RAG for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2665,9 +2207,7 @@
     "default": 0,
     "description": "RAG cache TTL for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2687,11 +2227,7 @@
     "default": null,
     "description": "Chunking strategy for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2701,11 +2237,7 @@
     "default": 1000,
     "description": "Chunk size for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2715,11 +2247,7 @@
     "default": 200,
     "description": "Chunk overlap for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2759,11 +2287,7 @@
     "default": null,
     "description": "Retrieval strategy for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2773,11 +2297,7 @@
     "default": null,
     "description": "Query transformers for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2807,9 +2327,7 @@
     "default": 1,
     "description": "HyDE hypothetical answer count.",
     "deprecated": false,
-    "examples": [
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2819,9 +2337,7 @@
     "default": "bm25",
     "description": "Sparse encoder for hybrid retrieval.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2841,9 +2357,7 @@
     "default": "rrf",
     "description": "Fusion method.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2853,9 +2367,7 @@
     "default": 60,
     "description": "RRF constant k.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2865,11 +2377,7 @@
     "default": false,
     "description": "Enable graph retrieval.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2879,9 +2387,7 @@
     "default": 2,
     "description": "Graph traversal depth.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2891,9 +2397,7 @@
     "default": true,
     "description": "Merge graph with vector hits.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2903,9 +2407,7 @@
     "default": [],
     "description": "Edge label filter.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2915,9 +2417,7 @@
     "default": null,
     "description": "Override multi-query prompt.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2927,9 +2427,7 @@
     "default": null,
     "description": "Override decompose prompt.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2939,9 +2437,7 @@
     "default": null,
     "description": "Override reformulate prompt.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2961,10 +2457,7 @@
     "default": [],
     "description": "MCP prompt names to load ('*' = discover all).",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -2984,9 +2477,7 @@
     "default": "all",
     "description": "How tools are dispatched: 'all', 'sequential', 'llm_decides'.",
     "deprecated": false,
-    "examples": [
-      "/examples/tool-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3026,11 +2517,7 @@
     "default": "gemini/gemini-2.5-flash",
     "description": "Per-agent LLM model override.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3040,11 +2527,7 @@
     "default": 0.2,
     "description": "Per-agent sampling temperature.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3074,11 +2557,7 @@
     "default": true,
     "description": "Mark this agent safe to run in parallel with other agents.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3088,11 +2567,7 @@
     "default": [],
     "description": "Built-in tool names available to this agent (must match keys in top-level tools:).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3102,11 +2577,7 @@
     "default": {},
     "description": "Per-agent skill definitions (multi-step workflows within this agent).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3116,11 +2587,7 @@
     "default": "",
     "description": "Human-readable skill description.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3130,11 +2597,7 @@
     "default": null,
     "description": "Ordered steps: tool calls or agent invocations.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3154,11 +2617,7 @@
     "default": null,
     "description": "MCP server name, 'builtin', or None (= builtin).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3168,9 +2627,7 @@
     "default": {},
     "description": "Static arguments for this tool call.",
     "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3180,11 +2637,7 @@
     "default": null,
     "description": "Agent name to invoke directly (bypasses supervisor).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3194,11 +2647,7 @@
     "default": "",
     "description": "Query/instruction sent to the invoked agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3208,11 +2657,7 @@
     "default": [],
     "description": "Per-agent input guardrail rules.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3222,9 +2667,7 @@
     "default": null,
     "description": "Guardrail type name.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3234,11 +2677,7 @@
     "default": "block",
     "description": "Action on guardrail failure.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3248,11 +2687,7 @@
     "default": {},
     "description": "Guardrail constructor kwargs.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3262,11 +2697,7 @@
     "default": [],
     "description": "Per-agent output guardrail rules.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3276,9 +2707,7 @@
     "default": null,
     "description": "Guardrail type name.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3288,11 +2717,7 @@
     "default": "block",
     "description": "Action on guardrail failure.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3302,11 +2727,7 @@
     "default": {},
     "description": "Guardrail constructor kwargs.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3336,11 +2757,7 @@
     "default": null,
     "description": "Human-readable purpose shown to the supervisor for routing.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3350,11 +2767,7 @@
     "default": null,
     "description": "System prompt injected into the agent's agentic loop.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3364,11 +2777,7 @@
     "default": null,
     "description": "Dotted import path to a custom OrchidAgent subclass.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3378,11 +2787,7 @@
     "default": "",
     "description": "Qdrant collection namespace for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3392,11 +2797,7 @@
     "default": 5,
     "description": "Number of chunks retrieved per RAG query for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3406,11 +2807,7 @@
     "default": true,
     "description": "Enable RAG for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3420,9 +2817,7 @@
     "default": 0,
     "description": "RAG cache TTL for this agent in seconds.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3442,11 +2837,7 @@
     "default": null,
     "description": "Chunking strategy for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3456,11 +2847,7 @@
     "default": 1000,
     "description": "Chunk size for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3470,11 +2857,7 @@
     "default": 200,
     "description": "Chunk overlap for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3514,11 +2897,7 @@
     "default": null,
     "description": "Retrieval strategy for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3528,11 +2907,7 @@
     "default": null,
     "description": "Query transformer chain for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3562,9 +2937,7 @@
     "default": 1,
     "description": "Number of hypothetical answers for HyDE queries.",
     "deprecated": false,
-    "examples": [
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3574,9 +2947,7 @@
     "default": "bm25",
     "description": "Sparse encoder: 'bm25' or 'splade'.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3596,9 +2967,7 @@
     "default": "rrf",
     "description": "Fusion strategy: 'rrf' or 'linear'.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3608,9 +2977,7 @@
     "default": 60,
     "description": "RRF constant k.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3620,11 +2987,7 @@
     "default": false,
     "description": "Enable graph-based retrieval.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3634,9 +2997,7 @@
     "default": 2,
     "description": "Maximum BFS depth for graph traversal.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3646,9 +3007,7 @@
     "default": true,
     "description": "Merge graph context with vector hits.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3658,9 +3017,7 @@
     "default": [],
     "description": "Restrict graph traversal to these edge labels.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3670,9 +3027,7 @@
     "default": null,
     "description": "Override prompt for the multi-query transformer for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3682,9 +3037,7 @@
     "default": null,
     "description": "HyDE single-answer prompt for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3694,9 +3047,7 @@
     "default": null,
     "description": "HyDE multi-answer prompt for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3706,9 +3057,7 @@
     "default": null,
     "description": "Override prompt for the decompose transformer for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3718,9 +3067,7 @@
     "default": null,
     "description": "Override prompt for the reformulate transformer for this agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3740,10 +3087,7 @@
     "default": [],
     "description": "MCP servers this agent can call tools on.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3763,9 +3107,7 @@
     "default": "local",
     "description": "Server type: 'local' (same host) or 'remote'.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3785,10 +3127,7 @@
     "default": null,
     "description": "MCP server URL. Supports ${ENV_VAR} interpolation.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/tool-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3798,10 +3137,7 @@
     "default": "none",
     "description": "Auth mode: 'none', 'passthrough', or 'oauth'.",
     "deprecated": false,
-    "examples": [
-      "/examples/learning",
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3811,11 +3147,7 @@
     "default": [],
     "description": "MCP tools this agent is allowed to call on this server.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3835,9 +3167,7 @@
     "default": {},
     "description": "Default arguments passed to this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3847,9 +3177,7 @@
     "default": false,
     "description": "Store this tool's results in the RAG context store.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3859,9 +3187,7 @@
     "default": null,
     "description": "Per-tool RAG cache TTL (None = agent default).",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3881,11 +3207,7 @@
     "default": null,
     "description": "Override parallel-safety for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3895,11 +3217,7 @@
     "default": "",
     "description": "Qdrant namespace for this tool's RAG data.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3909,11 +3227,7 @@
     "default": 5,
     "description": "Number of chunks retrieved for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3923,11 +3237,7 @@
     "default": true,
     "description": "Enable RAG for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3937,9 +3247,7 @@
     "default": 0,
     "description": "RAG cache TTL for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3959,11 +3267,7 @@
     "default": null,
     "description": "Chunking strategy for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3973,11 +3277,7 @@
     "default": 1000,
     "description": "Chunk size for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -3987,11 +3287,7 @@
     "default": 200,
     "description": "Chunk overlap for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/wiki",
-      "/examples/basketball",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4031,11 +3327,7 @@
     "default": null,
     "description": "Retrieval strategy for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/graph-kb",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4045,11 +3337,7 @@
     "default": null,
     "description": "Query transformers for this tool.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization",
-      "/examples/rag-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4089,10 +3377,7 @@
     "default": [],
     "description": "MCP prompt names to load ('*' = discover all).",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4112,9 +3397,7 @@
     "default": "all",
     "description": "How tools are dispatched: 'all', 'sequential', 'llm_decides'.",
     "deprecated": false,
-    "examples": [
-      "/examples/tool-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4154,11 +3437,7 @@
     "default": "gemini/gemini-2.5-flash",
     "description": "Per-agent LLM model override.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4168,11 +3447,7 @@
     "default": 0.2,
     "description": "Per-agent sampling temperature.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4202,11 +3477,7 @@
     "default": true,
     "description": "Mark this agent safe to run in parallel with other agents.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4216,11 +3487,7 @@
     "default": [],
     "description": "Built-in tool names available to this agent (must match keys in top-level tools:).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4230,11 +3497,7 @@
     "default": {},
     "description": "Per-agent skill definitions (multi-step workflows within this agent).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4244,11 +3507,7 @@
     "default": "",
     "description": "Human-readable skill description.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4258,11 +3517,7 @@
     "default": null,
     "description": "Ordered steps: tool calls or agent invocations.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4282,11 +3537,7 @@
     "default": null,
     "description": "MCP server name, 'builtin', or None (= builtin).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4296,9 +3547,7 @@
     "default": {},
     "description": "Static arguments for this tool call.",
     "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4308,11 +3557,7 @@
     "default": null,
     "description": "Agent name to invoke directly (bypasses supervisor).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4322,11 +3567,7 @@
     "default": "",
     "description": "Query/instruction sent to the invoked agent.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4336,11 +3577,7 @@
     "default": [],
     "description": "Per-agent input guardrail rules.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4350,9 +3587,7 @@
     "default": null,
     "description": "Guardrail type name.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4362,11 +3597,7 @@
     "default": "block",
     "description": "Action on guardrail failure.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4376,11 +3607,7 @@
     "default": {},
     "description": "Guardrail constructor kwargs.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4390,11 +3617,7 @@
     "default": [],
     "description": "Per-agent output guardrail rules.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4404,9 +3627,7 @@
     "default": null,
     "description": "Guardrail type name.",
     "deprecated": false,
-    "examples": [
-      "/examples/mcp-auth"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4416,11 +3637,7 @@
     "default": "block",
     "description": "Action on guardrail failure.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4430,11 +3647,7 @@
     "default": {},
     "description": "Guardrail constructor kwargs.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4444,10 +3657,7 @@
     "default": false,
     "description": "Dispatch independent read-only tool calls in parallel within one turn.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/tool-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4487,11 +3697,7 @@
     "default": false,
     "description": "Enable the mini-agent (self-clone) decomposition pattern.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4501,10 +3707,7 @@
     "default": 3,
     "description": "Maximum number of parallel mini-agents (2\u20138).",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4514,9 +3717,7 @@
     "default": null,
     "description": "LLM model for the mini-agent decomposer (None = agent model).",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4526,9 +3727,7 @@
     "default": 60,
     "description": "Per-mini-agent timeout in seconds.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4538,9 +3737,7 @@
     "default": "strict",
     "description": "Tool exposure mode: 'strict', 'parent_full', or 'inferred'.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4560,9 +3757,7 @@
     "default": null,
     "description": "Custom prompt for the decomposer step.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4572,9 +3767,7 @@
     "default": null,
     "description": "Custom prompt for the aggregator step.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4584,9 +3777,7 @@
     "default": null,
     "description": "Template for each mini's system prompt ({parent_prompt}, {instruction}, {tool_list}).",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4596,9 +3787,7 @@
     "default": "\n--- Previous Tool Results (from prior turns) ---",
     "description": "Header shown before the prior tool-results JSON block.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4608,9 +3797,7 @@
     "default": "\n--- MCP Prompt: {name} ---\n{text}",
     "description": "Template for rendered MCP prompts.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4620,9 +3807,7 @@
     "default": "\n[Available prompt: {name}] {description} (requires: {required_args})",
     "description": "Template for MCP prompts that require arguments (shown as available, not rendered).",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4632,9 +3817,7 @@
     "default": "\n--- Available Resources ---",
     "description": "Header shown before the MCP resources block.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4644,9 +3827,7 @@
     "default": "\n[{name}]\n{content}",
     "description": "Template for each MCP resource body.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4656,9 +3837,7 @@
     "default": "\n--- Background Knowledge (RAG) ---",
     "description": "Header shown before the RAG context block.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4668,9 +3847,7 @@
     "default": 4000,
     "description": "Character cap on the prior tool-results JSON block.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4680,9 +3857,7 @@
     "default": 2000,
     "description": "Character cap per MCP resource body.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4692,9 +3867,7 @@
     "default": "\n\nIMPORTANT: The conversation history below shows prior exchanges. Always focus on the user's LATEST message and its relationship to the most recent topic. Do NOT change topic or introduce unrelated content unless the user explicitly asks for something new.",
     "description": "Reminder block appended to the summarise system prompt when conversation history is present.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4704,9 +3877,7 @@
     "default": "\n\n--- Previous Tool Results (from prior turns) ---\n",
     "description": "Header for prior-turn tool results in the summarise system prompt.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4716,9 +3887,7 @@
     "default": "Background knowledge (from RAG):\n",
     "description": "Header for the RAG block in the summarise user message.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4728,9 +3897,7 @@
     "default": "User query: {query}\n\n{rag_section}Live data (from API):\n{mcp_data}",
     "description": "User-content template for the summarise call ({query}, {rag_section}, {mcp_data}).",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4740,9 +3907,7 @@
     "default": 4000,
     "description": "Max characters of prior-tool-results JSON in the summarise prompt.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4802,10 +3967,7 @@
     "default": false,
     "description": "Dispatch independent read-only tool calls in parallel within one turn.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/tool-strategies"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4845,11 +4007,7 @@
     "default": false,
     "description": "Enable the mini-agent (self-clone) decomposition pattern.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4859,10 +4017,7 @@
     "default": 3,
     "description": "Maximum number of parallel mini-agents (2\u20138).",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4872,9 +4027,7 @@
     "default": null,
     "description": "LLM model for the mini-agent decomposer (None = agent model).",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4884,9 +4037,7 @@
     "default": 60,
     "description": "Per-mini-agent timeout in seconds.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4896,9 +4047,7 @@
     "default": "strict",
     "description": "Tool exposure mode: 'strict', 'parent_full', or 'inferred'.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4918,9 +4067,7 @@
     "default": null,
     "description": "Custom prompt for the decomposer step.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4930,9 +4077,7 @@
     "default": null,
     "description": "Custom prompt for the aggregator step.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4942,9 +4087,7 @@
     "default": null,
     "description": "Template for each mini's system prompt ({parent_prompt}, {instruction}, {tool_list}).",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4954,9 +4097,7 @@
     "default": "\n--- Previous Tool Results (from prior turns) ---",
     "description": "Header shown before the prior tool-results JSON block.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4966,9 +4107,7 @@
     "default": "\n--- MCP Prompt: {name} ---\n{text}",
     "description": "Template for rendered MCP prompts.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4978,9 +4117,7 @@
     "default": "\n[Available prompt: {name}] {description} (requires: {required_args})",
     "description": "Template for MCP prompts that require arguments (shown as available, not rendered).",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4990,9 +4127,7 @@
     "default": "\n--- Available Resources ---",
     "description": "Header shown before the MCP resources block.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5002,9 +4137,7 @@
     "default": "\n[{name}]\n{content}",
     "description": "Template for each MCP resource body.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5014,9 +4147,7 @@
     "default": "\n--- Background Knowledge (RAG) ---",
     "description": "Header shown before the RAG context block.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5026,9 +4157,7 @@
     "default": 4000,
     "description": "Character cap on the prior tool-results JSON block.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5038,9 +4167,7 @@
     "default": 2000,
     "description": "Character cap per MCP resource body.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5050,9 +4177,7 @@
     "default": "\n\nIMPORTANT: The conversation history below shows prior exchanges. Always focus on the user's LATEST message and its relationship to the most recent topic. Do NOT change topic or introduce unrelated content unless the user explicitly asks for something new.",
     "description": "Reminder block appended to the summarise system prompt when conversation history is present.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5062,9 +4187,7 @@
     "default": "\n\n--- Previous Tool Results (from prior turns) ---\n",
     "description": "Header for prior-turn tool results in the summarise system prompt.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5074,9 +4197,7 @@
     "default": "Background knowledge (from RAG):\n",
     "description": "Header for the RAG block in the summarise user message.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5086,9 +4207,7 @@
     "default": "User query: {query}\n\n{rag_section}Live data (from API):\n{mcp_data}",
     "description": "User-content template for the summarise call ({query}, {rag_section}, {mcp_data}).",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5098,9 +4217,7 @@
     "default": 4000,
     "description": "Max characters of prior-tool-results JSON in the summarise prompt.",
     "deprecated": false,
-    "examples": [
-      "/examples/prompt-customization"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5164,17 +4281,163 @@
   },
   {
     "file": "agents.yaml",
+    "path": "external_agents",
+    "type": "dict[string, object]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].command",
+    "type": "list[string]",
+    "required": true,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].args",
+    "type": "list[string]",
+    "required": false,
+    "default": [],
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].cwd",
+    "type": "string",
+    "required": false,
+    "default": "",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].timeout",
+    "type": "float",
+    "required": false,
+    "default": 120.0,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].env",
+    "type": "dict[string, string]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].stdin_mode",
+    "type": "string",
+    "required": false,
+    "default": "arg",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].normalizer",
+    "type": "string",
+    "required": false,
+    "default": "passthrough",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].normalizer_instruction",
+    "type": "string",
+    "required": false,
+    "default": "",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].normalizer_model",
+    "type": "string",
+    "required": false,
+    "default": "",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].description",
+    "type": "string",
+    "required": false,
+    "default": "",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].requires_approval",
+    "type": "boolean",
+    "required": false,
+    "default": true,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].parallel_safe",
+    "type": "boolean",
+    "required": false,
+    "default": false,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].inject_to_rag",
+    "type": "boolean",
+    "required": false,
+    "default": false,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "external_agents[].rag_ttl",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
     "path": "events.enabled",
     "type": "boolean",
     "required": false,
     "default": false,
     "description": "Enable the Pollen + Bloom event-driven activation layer.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5184,11 +4447,7 @@
     "default": null,
     "description": "Dotted import path for the event store backend.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5198,11 +4457,7 @@
     "default": {},
     "description": "Additional keyword arguments for the store constructor.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5212,11 +4467,7 @@
     "default": null,
     "description": "Dotted import path for the queue backend.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5226,9 +4477,7 @@
     "default": true,
     "description": "Enable queue notifications.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5238,11 +4487,7 @@
     "default": 200,
     "description": "Queue poll interval in milliseconds (min 10).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5252,11 +4497,7 @@
     "default": 30,
     "description": "Message lease duration in seconds (min 1).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5266,11 +4507,7 @@
     "default": 5,
     "description": "Maximum processing attempts per message (min 1).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5290,11 +4527,7 @@
     "default": null,
     "description": "Dotted import path for the scheduler backend.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5304,11 +4537,7 @@
     "default": {},
     "description": "Additional keyword arguments for the scheduler constructor.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5318,11 +4547,7 @@
     "default": [],
     "description": "List of signal producer configurations.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5332,11 +4557,7 @@
     "default": null,
     "description": "Dotted import path for the producer.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5346,11 +4567,7 @@
     "default": {},
     "description": "Additional keyword arguments for the producer constructor.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5360,11 +4577,7 @@
     "default": [],
     "description": "List of signal processor / worker-pool configurations.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5374,11 +4587,7 @@
     "default": null,
     "description": "Dotted import path for the processor.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5388,11 +4597,7 @@
     "default": 4,
     "description": "Number of concurrent worker tasks (min 1).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5402,11 +4607,7 @@
     "default": 200,
     "description": "Processor poll interval in milliseconds (min 10).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5416,11 +4617,7 @@
     "default": 30,
     "description": "Message lease duration in seconds (min 1).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5430,11 +4627,7 @@
     "default": 5,
     "description": "Maximum processing attempts (min 1).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5464,11 +4657,7 @@
     "default": null,
     "description": "Dotted import path for the middleware.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5478,11 +4667,7 @@
     "default": {},
     "description": "Additional keyword arguments for the middleware constructor.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5492,9 +4677,7 @@
     "default": [],
     "description": "Registered webhook sources.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5514,11 +4697,7 @@
     "default": null,
     "description": "Dotted import path for the validator class (HMAC, bearer, mTLS, etc.).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5528,9 +4707,7 @@
     "default": null,
     "description": "Secret reference for the validator (e.g. HMAC key).",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5540,11 +4717,7 @@
     "default": {},
     "description": "Additional keyword arguments for the validator.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5554,9 +4727,7 @@
     "default": [],
     "description": "Signal types accepted from this source.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5566,9 +4737,7 @@
     "default": [],
     "description": "Cron/interval schedule definitions.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5588,10 +4757,7 @@
     "default": null,
     "description": "Cron expression (e.g. '0 7 * * 1-5' for weekday 07:00 UTC). Mutually exclusive with interval_seconds.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5611,9 +4777,7 @@
     "default": null,
     "description": "ID of the trigger this schedule fires (must reference a trigger with signal: cron).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5623,11 +4787,7 @@
     "default": null,
     "description": "Identity claim for the scheduled run.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5637,11 +4797,7 @@
     "default": true,
     "description": "Whether this schedule is active.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5651,11 +4807,7 @@
     "default": [],
     "description": "Trigger definitions that map signals to agent activations.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5675,10 +4827,7 @@
     "default": null,
     "description": "Signal name to match ('cron' reserved for time-driven triggers).",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk",
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5688,10 +4837,7 @@
     "default": null,
     "description": "Cron expression (required when signal='cron', rejected otherwise).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5701,9 +4847,7 @@
     "default": null,
     "description": "JMESPath boolean expression for conditional matching.",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5713,11 +4857,7 @@
     "default": null,
     "description": "Agent to activate when this trigger fires.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5727,11 +4867,7 @@
     "default": null,
     "description": "Prompt template sent to the agent at activation.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5741,11 +4877,7 @@
     "default": null,
     "description": "Identity claim for the triggered run.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5755,9 +4887,7 @@
     "default": false,
     "description": "Respect chat_binding from the signal envelope (requires non-service-account identity).",
     "deprecated": false,
-    "examples": [
-      "/examples/restaurant"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5767,9 +4897,7 @@
     "default": false,
     "description": "Create a new chat for the resolved user (requires non-service-account identity).",
     "deprecated": false,
-    "examples": [
-      "/examples/helpdesk"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5779,9 +4907,7 @@
     "default": null,
     "description": "Visibility override: 'actor', 'addressed', 'tenant', 'admin'.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5841,11 +4967,7 @@
     "default": "per_user",
     "description": "Parallelism mode: 'per_user', 'per_tenant', or 'unbounded'.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5855,11 +4977,7 @@
     "default": false,
     "description": "Enable database-backed agent configuration store (PostgreSQL CRUD for agent definitions).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/custom-storage",
-      "/examples/graph-kb"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5869,11 +4987,7 @@
     "default": "",
     "description": "Dotted import path to an OrchidConfigStorage subclass for agent config persistence.",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5883,10 +4997,6 @@
     "default": "",
     "description": "Database connection string for agent config storage (PostgreSQL URL).",
     "deprecated": false,
-    "examples": [
-      "/examples/basketball",
-      "/examples/helpdesk",
-      "/examples/learning"
-    ]
+    "examples": []
   }
 ]

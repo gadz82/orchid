@@ -85,6 +85,23 @@ external: []
   - [`tools[].requires_approval`](#agents-yaml__tools[].requires_approval)
   - [`tools[].parallel_safe`](#agents-yaml__tools[].parallel_safe)
 
+**external_agents[]**
+- [`external_agents[]`](#agents-yaml__external_agents[])
+  - [`external_agents[].command`](#agents-yaml__external_agents[].command)
+  - [`external_agents[].args`](#agents-yaml__external_agents[].args)
+  - [`external_agents[].cwd`](#agents-yaml__external_agents[].cwd)
+  - [`external_agents[].timeout`](#agents-yaml__external_agents[].timeout)
+  - [`external_agents[].env`](#agents-yaml__external_agents[].env)
+  - [`external_agents[].stdin_mode`](#agents-yaml__external_agents[].stdin_mode)
+  - [`external_agents[].normalizer`](#agents-yaml__external_agents[].normalizer)
+  - [`external_agents[].normalizer_instruction`](#agents-yaml__external_agents[].normalizer_instruction)
+  - [`external_agents[].normalizer_model`](#agents-yaml__external_agents[].normalizer_model)
+  - [`external_agents[].description`](#agents-yaml__external_agents[].description)
+  - [`external_agents[].requires_approval`](#agents-yaml__external_agents[].requires_approval)
+  - [`external_agents[].parallel_safe`](#agents-yaml__external_agents[].parallel_safe)
+  - [`external_agents[].inject_to_rag`](#agents-yaml__external_agents[].inject_to_rag)
+  - [`external_agents[].rag_ttl`](#agents-yaml__external_agents[].rag_ttl)
+
 **skills[]**
 - [`skills[]`](#agents-yaml__skills[])
   - [`skills[].description`](#agents-yaml__skills[].description)
@@ -1555,6 +1572,137 @@ tools:
     inject_to_rag: false
     requires_approval: false
     parallel_safe: true
+```
+
+---
+
+<a id="agents-yaml__external_agents[]"></a>
+### `external_agents[]`
+
+External-agent CLI delegation tools. Each entry registers an `ExternalAgentCLITool` that runs a local CLI subprocess for sub-task delegation. Agents reference these tools by name in their `tools:` list. `requires_approval` defaults to `true` — every delegation pauses for operator confirmation.
+
+<a id="agents-yaml__external_agents[].command"></a>
+#### `external_agents[].command`
+
+| | |
+|---|---|
+| **Short** | The CLI binary and its base arguments. |
+| **Detailed** | An argv list — the executable plus any fixed flags. Not shell-interpolated (run via `subprocess_exec`). The LLM does **not** control this field. |
+| **Default** | *(required)* |
+
+<a id="agents-yaml__external_agents[].args"></a>
+#### `external_agents[].args`
+
+| | |
+|---|---|
+| **Short** | Extra fixed arguments appended to `command`. |
+| **Default** | `[]` |
+
+<a id="agents-yaml__external_agents[].cwd"></a>
+#### `external_agents[].cwd`
+
+| | |
+|---|---|
+| **Short** | Working directory for the subprocess. |
+| **Default** | `""` |
+
+<a id="agents-yaml__external_agents[].timeout"></a>
+#### `external_agents[].timeout`
+
+| | |
+|---|---|
+| **Short** | Maximum runtime in seconds. Runaway processes killed on timeout. |
+| **Default** | `600.0` |
+
+<a id="agents-yaml__external_agents[].env"></a>
+#### `external_agents[].env`
+
+| | |
+|---|---|
+| **Short** | Extra environment variables merged over `os.environ`. |
+| **Default** | `{}` |
+
+<a id="agents-yaml__external_agents[].stdin_mode"></a>
+#### `external_agents[].stdin_mode`
+
+| | |
+|---|---|
+| **Short** | How the prompt reaches the subprocess: `"arg"` or `"stdin"`. |
+| **Default** | `"arg"` |
+
+<a id="agents-yaml__external_agents[].normalizer"></a>
+#### `external_agents[].normalizer`
+
+| | |
+|---|---|
+| **Short** | Prompt reformulation strategy: `"passthrough"` or `"llm"`. |
+| **Default** | `"passthrough"` |
+
+<a id="agents-yaml__external_agents[].normalizer_instruction"></a>
+#### `external_agents[].normalizer_instruction`
+
+| | |
+|---|---|
+| **Short** | System instruction when `normalizer: llm`. |
+| **Default** | `""` |
+
+<a id="agents-yaml__external_agents[].normalizer_model"></a>
+#### `external_agents[].normalizer_model`
+
+| | |
+|---|---|
+| **Short** | Reserved for per-agent normalizer model selection (future). |
+| **Default** | `""` |
+
+<a id="agents-yaml__external_agents[].description"></a>
+#### `external_agents[].description`
+
+| | |
+|---|---|
+| **Short** | Human-readable description. Falls back to the entry name when empty. |
+| **Default** | `""` |
+
+<a id="agents-yaml__external_agents[].requires_approval"></a>
+#### `external_agents[].requires_approval`
+
+| | |
+|---|---|
+| **Short** | Require operator confirmation before every delegation (HITL). |
+| **Default** | `true` |
+
+<a id="agents-yaml__external_agents[].parallel_safe"></a>
+#### `external_agents[].parallel_safe`
+
+| | |
+|---|---|
+| **Short** | Declare the tool safe for parallel dispatch within a round. |
+| **Default** | `false` |
+
+<a id="agents-yaml__external_agents[].inject_to_rag"></a>
+#### `external_agents[].inject_to_rag`
+
+| | |
+|---|---|
+| **Short** | Store the subprocess output in RAG for future retrieval. |
+| **Default** | `false` |
+
+<a id="agents-yaml__external_agents[].rag_ttl"></a>
+#### `external_agents[].rag_ttl`
+
+| | |
+|---|---|
+| **Short** | Per-tool TTL override for injected RAG chunks (null inherits agent default). |
+| **Default** | `null` |
+
+```yaml
+external_agents:
+  ask_assistant:
+    command: ["python", "-c"]
+    args: ["print('delegated response')"]
+    timeout: 30
+    description: "Delegate a sub-task to an external AI CLI."
+    requires_approval: true
+    stdin_mode: arg
 ```
 
 ---
