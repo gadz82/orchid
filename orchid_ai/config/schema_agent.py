@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from .mcp_gateway import OrchidMCPGatewayConfig
 from .schema_events import OrchidEventsConfig
+from .schema_external_agent import OrchidExternalAgentConfig
 from .schema_guardrails import OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPServerConfig, OrchidToolConfig
@@ -215,6 +216,11 @@ class OrchidAgentsConfig(BaseModel):
     # this list before forwarding the user's token.  An empty list (default)
     # means no restriction — all hosts are trusted for passthrough.
     allowed_passthrough_hosts: list[str] = Field(default_factory=list)
+
+    # External-agent CLI delegation tools — declared at the top level,
+    # registered into TOOL_REGISTRY at graph build, and referenced by
+    # name in ``agent.tools:`` like any built-in tool.
+    external_agents: dict[str, OrchidExternalAgentConfig] = Field(default_factory=dict)
 
     # Pollen + Bloom — event-driven activation layer.  ``None`` (the
     # default) keeps the framework's existing zero-overhead behaviour:

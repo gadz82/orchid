@@ -180,6 +180,22 @@ Integrators override only what they need. All fields have sensible defaults.
 
 `all`, `sequential`, `llm_decides` are registered strategies. New ones: subclass `OrchidToolCallStrategy` + `register_strategy()`.
 
+### Built-in Tool System
+
+Tools are `OrchidTool` subclasses registered into the module-level `TOOL_REGISTRY` (`config/tool_registry.py`). The graph builder calls `load_tools_from_config(config.tools)` at build time; each tool exposes a `parameters_schema` (JSON Schema) that becomes the LLM's function-calling definition. At runtime, `AgenticLoop._dispatch_tool_calls` flows through `BuiltinToolWrapper._arun` → `get_tool(name)` → `build_tool_input()` → `tool.invoke()`.
+
+**Framework-provided tools under `orchid_ai/tools/`:**
+
+| Module | Class | Purpose |
+|--------|-------|---------|
+| `function_tool.py` | `FunctionTool` | Adapter — wraps a plain Python callable as an `OrchidTool` |
+| `external_cli.py` | `ExternalAgentCLITool` | Delegates sub-tasks to an external AI CLI subprocess |
+| `cli_runner.py` | `CLIRunner` (ABC), `AsyncSubprocessCLIRunner` | Subprocess execution abstraction — injectable for testing |
+| `normalizer.py` | `PromptNormalizer` (ABC), `PassthroughNormalizer`, `LLMNormalizer` | Prompt reformulation strategies before delegation |
+| `external_cli_config.py` | `load_external_agents_from_config()` | Loads `external_agents:` YAML → registers tools into `TOOL_REGISTRY` |
+
+**External-agent CLI tools** are declared in the `external_agents:` YAML block (alongside `tools:`) and are registered at graph build time alongside built-in tools. They expose only a `prompt` parameter to the LLM (the command path, flags, timeout, and working directory come from trusted operator YAML). `requires_approval` defaults to `true` — every delegation gates behind the existing HITL `interrupt()` path.
+
 ### LLM Usage
 
 - **Simple completions** (summarization, routing): Use `self.summarise()` which calls `self._chat_model.ainvoke()`. A `BaseChatModel` must be injected via `chat_model=` — there is no fallback.

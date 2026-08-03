@@ -61,6 +61,7 @@ from ..core.repository import OrchidVectorReader
 from ..core.run_config import auth_from_config
 from ..mcp.auth_registry import OrchidMCPAuthRegistry
 from ..runtime import MCPClientFactory, OrchidRuntime
+from ..tools.external_cli_config import load_external_agents_from_config
 from .guardrail_wiring import _GuardrailWiring
 from .mini_agent_wiring import _MiniAgentWiring
 from .state import GraphState
@@ -496,6 +497,11 @@ def build_graph(
     if config.tools:
         load_tools_from_config(config.tools)
         logger.info("[Graph] registered %d built-in tools", len(config.tools))
+
+    # ── Register external-agent CLI tools ──
+    if getattr(config, "external_agents", None):
+        load_external_agents_from_config(config.external_agents, chat_model=default_chat_model)
+        logger.info("[Graph] registered %d external-agent tools", len(config.external_agents))
 
     # ── Build global guardrail chains ──
     global_input_chain, global_output_chain = _GuardrailWiring.build_chains(config.guardrails)
