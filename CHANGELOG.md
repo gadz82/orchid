@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.9.0 (2026-08-03)
+
+### Features
+
+- Add support for external-agent CLI tools
+  ([`1db39c7`](https://github.com/gadz82/orchid/commit/1db39c7526e6c7be089b9be5cd9ff14cc947840e))
+
+
 ## v1.8.10 (2026-07-29)
 
 ### Bug Fixes
