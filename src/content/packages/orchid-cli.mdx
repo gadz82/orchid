@@ -111,19 +111,75 @@ Generated projects include valid `orchid.yml` and `agents.yaml`, Python scaffold
 
 ### `orchid external-agents` — External CLI delegation
 
-Let an Orchid agent delegate sub-tasks to external AI CLIs installed on
-your machine.  Configured via the `external_agents:` block in `agents.yaml`
-and referenced by name in `agent.tools:` like any built-in tool.
+Delegates sub-tasks from an Orchid agent to third-party AI CLIs (like Copilot,
+Gemini CLI, or any local assistant binary) installed on the operator's machine.
+The Orchid agent's LLM emits a `tool_call`, the CLI runs as a subprocess with
+the delegated prompt, and the captured output flows back into the agentic loop
+as a `ToolMessage` — exactly like any built-in or MCP tool.
 
-| Command | Purpose |
-|---------|---------|
-| `orchid external-agents list <agents.yaml>` | List all configured external-agent CLI tools with their commands, timeouts, and PATH-resolved availability |
+**Declared in `agents.yaml`** via the `external_agents:` top-level block:
 
-**Security:** The external CLI runs as an argv list (`subprocess_exec`, never
-`shell=True`).  The executable path, flags, timeout, and working directory
-come from trusted operator YAML — only the `prompt` argument is
-LLM-controlled.  `requires_approval` defaults to `true`, so every
-delegation pauses for operator confirmation in the terminal (HITL).
+```yaml
+external_agents:
+  ask_assistant:
+    command: ["my-cli-tool"]        # argv list — never shell-interpolated
+    args: ["--non-interactive"]     # extra fixed flags
+    timeout: 600                    # seconds (default 600, 10 minutes)
+    description: "Delegate to an external AI assistant."
+    requires_approval: true         # HITL gate (default: true)
+    stdin_mode: arg                 # "arg" (append to argv) or "stdin" (pipe)
+    normalizer: passthrough         # "passthrough" | "llm"
+    normalizer_instruction: ""      # system prompt when normalizer: llm
+```
+
+Agents reference external-agent tools by name in their `tools:` list:
+
+```yaml
+agents:
+  orchestrator:
+    tools:
+      - ask_assistant
+```
+
+**Configuration reference:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `command` | `list[str]` | *(required)* | Executable path and base flags |
+| `args` | `list[str]` | `[]` | Extra fixed arguments merged with `command` |
+| `timeout` | `float` | `600.0` | Seconds before the process is killed |
+| `description` | `str` | `""` | Tool description shown to the LLM and in `external-agents list` |
+| `requires_approval` | `bool` | `true` | Pause for operator confirmation before every delegation |
+| `cwd` | `str` | `""` | Working directory (empty = inherit orchid-cli CWD) |
+| `env` | `dict` | `{}` | Extra env vars merged over `os.environ` |
+| `stdin_mode` | `"arg"`\|`"stdin"` | `"arg"` | How the prompt reaches the subprocess |
+| `normalizer` | `str` | `"passthrough"` | Prompt reformulation: `"passthrough"` or `"llm"` |
+| `normalizer_instruction` | `str` | `""` | System instruction for `normalizer: llm` |
+| `parallel_safe` | `bool` | `false` | Declare the tool safe for parallel dispatch |
+| `inject_to_rag` | `bool` | `false` | Store subprocess output in RAG for future retrieval |
+| `rag_ttl` | `int\|null` | `null` | TTL override for injected chunks |
+
+**Security model:**
+
+- **Approval gate** — `requires_approval: true` (default) triggers the existing
+  HITL `interrupt()`. The operator must confirm every delegation in the terminal
+  before the subprocess runs.
+- **No shell** — the command runs via `asyncio.create_subprocess_exec` with an
+  argv list. Never `shell=True`. The executable, flags, working directory, and
+  timeout come from trusted operator YAML — only `prompt` is LLM-controlled.
+- **Timeout kill** — runaway processes are killed after the configured timeout.
+  The tool result is `{"error": "timeout", "timeout_s": …}`.
+- **Per-tool allowlisting** — each external CLI must be explicitly declared in
+  YAML. An agent only sees tools listed in its `tools:` array.
+
+**Listing configured tools:** `orchid external-agents list <agents.yaml>`
+renders a Rich table with the command, timeout, approval status, and whether
+the binary is resolvable on `PATH` (`✓`/`✗`).
+
+**Tips:** Use `stdin_mode: stdin` for CLIs that read prompts from standard
+input. Increase `timeout` for long-running delegations. When the external CLI
+requires authentication, either bake it into `env:` or use a wrapper
+script.
 
 ## Example session
 
