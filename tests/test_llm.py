@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from orchid_ai.llm import get_embedding_kwargs, get_llm_kwargs
 
-
 # ── get_llm_kwargs ──────────────────────────────────────────
 
 

@@ -49,7 +49,6 @@ from orchid_ai.events.registry import build_registry_from_config
 from orchid_ai.events.runners.graph_runner import GraphJobRunner
 from orchid_ai.persistence.models import OrchidChatSession
 
-
 # ── Pydantic-level ──────────────────────────────────────────
 
 
@@ -502,12 +501,12 @@ async def test_emit_signal_self_outside_chat_run_raises() -> None:
     """``chat_id='self'`` requires a current chat — when emitted
     outside one (e.g. from a background producer), it must raise."""
     from orchid_ai.core.agent import OrchidAgent
+    from orchid_ai.core.events.dispatcher import OrchidSignalDispatcher
     from orchid_ai.events.producers.internal import DispatcherSignalEmitter
     from orchid_ai.events.queues.inmemory import (
         InMemorySignalQueue,
         InMemorySignalStore,
     )
-    from orchid_ai.core.events.dispatcher import OrchidSignalDispatcher
 
     class _Agent(OrchidAgent):
         @property

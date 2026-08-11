@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from .agent import OrchidAgent
 from .content import OrchidContentItem, OrchidContentSource
+from .ingestion_manifest import OrchidIngestionManifest
 from .mcp import OrchidMCPClient, OrchidMCPDiscoverable, OrchidMCPToolCaller, OrchidMCPToolResult
 from .repository import (
     Document,
@@ -41,6 +42,7 @@ __all__ = [
     "OrchidContentItem",
     "OrchidContentSource",
     "OrchidDocument",
+    "OrchidIngestionManifest",
     "OrchidMCPClient",
     "OrchidMCPDiscoverable",
     "OrchidMCPToolCaller",

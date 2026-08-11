@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from typing import ClassVar
 
 import pytest
 
@@ -10,7 +11,7 @@ from orchid_ai.core.tool import OrchidTool, OrchidToolInput, OrchidToolOutput
 class SampleTool(OrchidTool):
     name = "sample"
     description = "Sample tool"
-    parameters_schema = {
+    parameters_schema: ClassVar[dict] = {
         "type": "object",
         "properties": {
             "value": {"type": "string", "description": "Input value"},

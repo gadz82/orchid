@@ -7,7 +7,6 @@ import pytest
 from orchid_ai.core.identity import OrchidIdentityError, OrchidIdentityResolver
 from orchid_ai.core.state import OrchidAuthContext
 
-
 # ── OrchidIdentityResolver is abstract ──
 
 

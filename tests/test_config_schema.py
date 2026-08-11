@@ -6,20 +6,19 @@ import pytest
 from pydantic import ValidationError
 
 from orchid_ai.config.schema import (
+    ExecutionHints,
     OrchidAgentConfig,
-    OrchidAgentSkillStepConfig,
     OrchidAgentsConfig,
+    OrchidAgentSkillStepConfig,
     OrchidBuiltinToolConfig,
     OrchidConfigStorageConfig,
     OrchidDefaultsConfig,
-    ExecutionHints,
     OrchidLLMConfig,
     OrchidMCPServerConfig,
     OrchidRAGConfig,
     OrchidSupervisorConfig,
     OrchidToolConfig,
 )
-
 
 # ── OrchidLLMConfig ───────────────────────────────────────────────
 
@@ -534,7 +533,7 @@ class TestMergeFromDb:
 
     def test_invalid_config_raises_validation_error(self):
         cfg = OrchidAgentsConfig(agents={})
-        with pytest.raises(Exception):  # ValidationError from pydantic
+        with pytest.raises(ValidationError):  # ValidationError from pydantic
             cfg.merge_from_db([{"name": "bad", "config": {"description": 123}}])  # type: ignore[arg-type]
 
     def test_empty_db_list_leaves_agents_unchanged(self):

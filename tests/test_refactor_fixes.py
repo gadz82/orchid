@@ -12,7 +12,6 @@ from orchid_ai.config.schema import OrchidToolConfig
 from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
 from orchid_ai.core.state import OrchidAuthContext
 
-
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
@@ -422,7 +421,8 @@ class TestRenderCapabilitiesResilience:
         import httpx
 
         from orchid_ai.agents.mcp_dispatcher import MCPDispatcher
-        from orchid_ai.config.schema import OrchidMCPServerConfig, OrchidToolConfig as TC
+        from orchid_ai.config.schema import OrchidMCPServerConfig
+        from orchid_ai.config.schema import OrchidToolConfig as TC
 
         class _Http500Client(OrchidMCPClient):
             async def call_tool(self, name, args, auth):

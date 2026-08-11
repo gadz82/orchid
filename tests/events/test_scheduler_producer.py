@@ -28,7 +28,6 @@ from orchid_ai.events.producers.scheduler import SchedulerProducer
 from orchid_ai.events.queues.sqlite import SQLiteSignalQueue
 from orchid_ai.events.schedulers.apscheduler import APSchedulerBackend
 
-
 # ── Fixtures ────────────────────────────────────────────────
 
 
@@ -80,7 +79,7 @@ async def test_producer_fires_cron_signal_end_to_end(shared_db) -> None:
     backend.add_interval(
         schedule_id="test-cron",
         seconds=1,
-        callback=producer._make_callback(  # noqa: SLF001 — test reaches inside
+        callback=producer._make_callback(
             schedule_id="test-cron",
             identity_claim=record.identity_claim,
             tenant_key="t-1",
@@ -180,18 +179,18 @@ async def test_producer_dedup_protects_against_duplicate_fires(shared_db) -> Non
     producer = SchedulerProducer(schedule_store=storage.schedules)
     await producer.start(dispatcher)
 
-    callback = producer._make_callback(  # noqa: SLF001 — test reaches inside
+    callback = producer._make_callback(
         schedule_id="dedup-test",
         identity_claim=record.identity_claim,
         tenant_key="t-1",
     )
     # Pin clock so both fires share the same dedupe key.
     fixed = _dt.datetime(2026, 5, 6, 7, 0, 0, tzinfo=_dt.UTC)
-    producer._clock = lambda: fixed  # noqa: SLF001
+    producer._clock = lambda: fixed
 
     # Re-build the callback now that the clock has been replaced;
     # ``_make_callback`` closes over ``self._clock``.
-    callback = producer._make_callback(  # noqa: SLF001
+    callback = producer._make_callback(
         schedule_id="dedup-test",
         identity_claim=record.identity_claim,
         tenant_key="t-1",

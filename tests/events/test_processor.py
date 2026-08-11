@@ -5,7 +5,6 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Any
 
-
 from orchid_ai.config.schema_events import (
     ActAsUserIdentity,
     OrchidTriggerConfig,
@@ -18,7 +17,6 @@ from orchid_ai.core.events.job import JobRun, JobStatus
 from orchid_ai.core.events.runner import OrchidJobRunner
 from orchid_ai.events.processors.asyncio_pool import AsyncioWorkerPoolProcessor
 from orchid_ai.events.registry import build_registry_from_config
-
 
 # ── Tiny fake runners ───────────────────────────────────────
 

@@ -30,7 +30,6 @@ from orchid_ai.mcp.discovery import (
     probe_mcp_server_for_resource_metadata,
 )
 
-
 # ── Header parsing ───────────────────────────────────────────
 
 
@@ -156,12 +155,14 @@ class TestProbeMcpServerForResourceMetadata:
         mock_client.__aenter__.return_value = mock_client
         mock_client.__aexit__.return_value = None
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(OrchidMCPDiscoveryError, match="expected 401"):
-                await probe_mcp_server_for_resource_metadata(
-                    mcp_url="https://mcp.example.com/mcp",
-                    server_name="crm",
-                )
+        with (
+            patch("httpx.AsyncClient", return_value=mock_client),
+            pytest.raises(OrchidMCPDiscoveryError, match="expected 401"),
+        ):
+            await probe_mcp_server_for_resource_metadata(
+                mcp_url="https://mcp.example.com/mcp",
+                server_name="crm",
+            )
 
     @pytest.mark.asyncio
     async def test_401_without_www_authenticate_raises(self):
@@ -173,12 +174,14 @@ class TestProbeMcpServerForResourceMetadata:
         mock_client.__aenter__.return_value = mock_client
         mock_client.__aexit__.return_value = None
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(OrchidMCPDiscoveryError, match="resource_metadata"):
-                await probe_mcp_server_for_resource_metadata(
-                    mcp_url="https://mcp.example.com/mcp",
-                    server_name="crm",
-                )
+        with (
+            patch("httpx.AsyncClient", return_value=mock_client),
+            pytest.raises(OrchidMCPDiscoveryError, match="resource_metadata"),
+        ):
+            await probe_mcp_server_for_resource_metadata(
+                mcp_url="https://mcp.example.com/mcp",
+                server_name="crm",
+            )
 
 
 class TestEnsureRegistration:
@@ -271,12 +274,14 @@ class TestEnsureRegistration:
         mock_client.__aenter__.return_value = mock_client
         mock_client.__aexit__.return_value = None
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(OrchidMCPDiscoveryError, match="registration_endpoint"):
-                await discovery.ensure_registration(
-                    server_name="crm-backend",
-                    resource_metadata_url="https://mcp.example.com/.well-known/oauth-protected-resource",
-                )
+        with (
+            patch("httpx.AsyncClient", return_value=mock_client),
+            pytest.raises(OrchidMCPDiscoveryError, match="registration_endpoint"),
+        ):
+            await discovery.ensure_registration(
+                server_name="crm-backend",
+                resource_metadata_url="https://mcp.example.com/.well-known/oauth-protected-resource",
+            )
 
         # Must NOT have cached anything on failure.
         assert (await store.get("crm-backend")) is None
@@ -305,12 +310,14 @@ class TestEnsureRegistration:
         mock_client.__aenter__.return_value = mock_client
         mock_client.__aexit__.return_value = None
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(OrchidMCPDiscoveryError, match="registration rejected"):
-                await discovery.ensure_registration(
-                    server_name="crm-backend",
-                    resource_metadata_url="https://mcp.example.com/.well-known/oauth-protected-resource",
-                )
+        with (
+            patch("httpx.AsyncClient", return_value=mock_client),
+            pytest.raises(OrchidMCPDiscoveryError, match="registration rejected"),
+        ):
+            await discovery.ensure_registration(
+                server_name="crm-backend",
+                resource_metadata_url="https://mcp.example.com/.well-known/oauth-protected-resource",
+            )
         assert (await store.get("crm-backend")) is None
 
     @pytest.mark.asyncio
@@ -327,9 +334,11 @@ class TestEnsureRegistration:
         mock_client.__aenter__.return_value = mock_client
         mock_client.__aexit__.return_value = None
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(OrchidMCPDiscoveryError, match="authorization_servers"):
-                await discovery.ensure_registration(
-                    server_name="srv",
-                    resource_metadata_url="https://mcp.example.com/.well-known/oauth-protected-resource",
-                )
+        with (
+            patch("httpx.AsyncClient", return_value=mock_client),
+            pytest.raises(OrchidMCPDiscoveryError, match="authorization_servers"),
+        ):
+            await discovery.ensure_registration(
+                server_name="srv",
+                resource_metadata_url="https://mcp.example.com/.well-known/oauth-protected-resource",
+            )

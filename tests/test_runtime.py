@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-
 from orchid_ai.core.mcp import OrchidMCPClient
 from orchid_ai.core.repository import OrchidVectorReader
 from orchid_ai.runtime import OrchidRuntime
-
 
 # ── Defaults ────────────────────────────────────────────────────
 

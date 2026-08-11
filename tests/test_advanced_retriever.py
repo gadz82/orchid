@@ -20,7 +20,6 @@ from orchid_ai.config.schema import (
 from orchid_ai.core.repository import OrchidSearchResult
 from orchid_ai.rag.scopes import OrchidRAGScope
 
-
 # ── Fixtures ────────────────────────────────────────────────
 
 

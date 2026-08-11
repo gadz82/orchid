@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 
 from orchid_ai.config import tool_registry as treg
-from orchid_ai.config.schema import OrchidAgentsConfig, OrchidBuiltinToolConfig, BuiltinToolParameter
+from orchid_ai.config.schema import BuiltinToolParameter, OrchidAgentsConfig, OrchidBuiltinToolConfig
 from orchid_ai.config.tool_registry import ToolParameter, _extract_parameters_from_handler, find_param_doc
 
 

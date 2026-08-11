@@ -9,12 +9,11 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.errors import GraphInterrupt
 
-from orchid_ai import OrchidInvokeResult, Orchid, OrchidPendingApproval
+from orchid_ai import Orchid, OrchidInvokeResult, OrchidPendingApproval
 from orchid_ai.config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidRAGConfig
 from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.persistence.sqlite import OrchidSQLiteChatStorage
 from orchid_ai.runtime import OrchidRuntime
-
 
 # ── Test doubles ────────────────────────────────────────────────
 

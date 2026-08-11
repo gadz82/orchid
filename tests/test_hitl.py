@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-
 from orchid_ai.config.schema import (
     OrchidAgentConfig,
     OrchidAgentsConfig,
@@ -13,7 +12,6 @@ from orchid_ai.config.schema import (
     OrchidRAGConfig,
     OrchidToolConfig,
 )
-
 
 # ── Schema tests: requires_approval field ───────────────────
 

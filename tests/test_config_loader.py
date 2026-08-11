@@ -6,7 +6,6 @@ import pytest
 
 from orchid_ai.config.loader import _find_comment_start, _interpolate_env, load_config
 
-
 # ── _find_comment_start ─────────────────────────────────────
 
 
@@ -45,6 +44,21 @@ class TestInterpolateEnv:
         result = _interpolate_env("key: value  # ${COMMENTED_VAR}")
         assert "should_not_appear" not in result
         assert "${COMMENTED_VAR}" in result
+
+    def test_default_value_when_unset(self, monkeypatch):
+        monkeypatch.delenv("VAR_WITH_DEFAULT", raising=False)
+        result = _interpolate_env("dsn: postgresql://u:${VAR_WITH_DEFAULT:-secret}@db")
+        assert result == "dsn: postgresql://u:secret@db"
+
+    def test_default_value_ignored_when_set(self, monkeypatch):
+        monkeypatch.setenv("VAR_WITH_DEFAULT", "override")
+        result = _interpolate_env("dsn: postgresql://u:${VAR_WITH_DEFAULT:-secret}@db")
+        assert result == "dsn: postgresql://u:override@db"
+
+    def test_empty_default_value(self, monkeypatch):
+        monkeypatch.delenv("VAR_EMPTY_DEFAULT", raising=False)
+        result = _interpolate_env("value: ${VAR_EMPTY_DEFAULT:-}")
+        assert result == "value: "
 
 
 # ── load_config ─────────────────────────────────────────────

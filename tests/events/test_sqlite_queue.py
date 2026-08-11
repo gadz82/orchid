@@ -23,7 +23,6 @@ from orchid_ai.events.backends.sqlite import (
 )
 from orchid_ai.events.queues.sqlite import SQLiteSignalQueue
 
-
 # ── Fixtures ────────────────────────────────────────────────
 
 

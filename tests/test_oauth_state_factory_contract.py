@@ -10,7 +10,7 @@ from orchid_ai.mcp.oauth_state import OrchidOAuthStateStore, build_oauth_state_s
 class _BadSignatureStore(OrchidOAuthStateStore):
     """Declares a constructor that rejects the factory's kwargs."""
 
-    def __init__(self, *, wrong_name: str = "") -> None:  # noqa: D401
+    def __init__(self, *, wrong_name: str = "") -> None:
         self.wrong_name = wrong_name
 
     async def put(self, state, payload):  # pragma: no cover — never called

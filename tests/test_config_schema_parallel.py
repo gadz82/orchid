@@ -11,7 +11,6 @@ from orchid_ai.config.schema import (
     OrchidToolConfig,
 )
 
-
 # ── OrchidToolConfig.parallel_safe ─────────────────────────────
 
 
@@ -29,7 +28,7 @@ class TestOrchidToolConfigParallelSafe:
         assert cfg.parallel_safe is False
 
     def test_round_trip_via_dict(self):
-        cfg = OrchidToolConfig(**{"name": "x", "parallel_safe": True})
+        cfg = OrchidToolConfig(name="x", parallel_safe=True)
         assert cfg.parallel_safe is True
 
 

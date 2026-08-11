@@ -19,6 +19,7 @@ from ...core.ingestion import OrchidChunkPostProcessor, OrchidIngestionStrategy
 from ..chunker import ChunkConfig
 from ..post_processors.contextual_headers import ContextualHeaderPostProcessor
 from ..post_processors.entity_extraction import EntityExtractionPostProcessor
+from .front_matter import FrontMatterIngestion
 from .headered import HeaderedIngestion
 from .hierarchical import HierarchicalIngestion
 from .recursive import RecursiveIngestion
@@ -35,6 +36,7 @@ _INGESTION_BUILTINS: dict[str, type[OrchidIngestionStrategy]] = {
     "semantic": SemanticIngestion,
     "hierarchical": HierarchicalIngestion,
     "headered": HeaderedIngestion,
+    "front_matter": FrontMatterIngestion,
 }
 
 _POST_PROCESSOR_BUILTINS: dict[str, type[OrchidChunkPostProcessor]] = {
@@ -165,6 +167,7 @@ __all__ = [
     "POST_PROCESSOR_REGISTRY",
     "ContextualHeaderPostProcessor",
     "EntityExtractionPostProcessor",
+    "FrontMatterIngestion",
     "HeaderedIngestion",
     "HierarchicalIngestion",
     "OrchidChunkPostProcessor",

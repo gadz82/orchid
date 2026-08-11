@@ -15,7 +15,6 @@ from orchid_ai.config.schema import OrchidToolConfig
 from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
 from orchid_ai.core.state import OrchidAuthContext
 
-
 # ── Inline mock MCP client ──────────────────────────────────────
 
 

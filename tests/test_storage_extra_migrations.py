@@ -42,7 +42,7 @@ def _install_fake_integrator_package() -> None:
     mod.up = _up
     mod.down = _down
     sys.modules[mod_name] = mod
-    setattr(pkg, "v001_integrator_table", mod)
+    pkg.v001_integrator_table = mod  # type: ignore[attr-defined]
     pkg._fake_submodules = [mod_name]  # type: ignore[attr-defined]
     sys.modules[_EXT_PACKAGE] = pkg
 
@@ -98,7 +98,7 @@ async def test_integrator_migration_runs_after_framework() -> None:
         # migration runs last with the ``ext:`` prefix.
         cursor = await storage._conn.execute("SELECT version FROM _migrations ORDER BY version")
         versions = [row[0] async for row in cursor]
-        assert versions == ["001", "ext:001"]
+        assert versions == ["001", "002", "ext:001"]
     finally:
         await storage.close()
 
@@ -122,6 +122,6 @@ async def test_without_extras_only_framework_tables() -> None:
         cursor = await storage._conn.execute("SELECT version FROM _migrations ORDER BY version")
         versions = [row[0] async for row in cursor]
         # Framework migrations only - no integrator extras.
-        assert versions == ["001"]
+        assert versions == ["001", "002"]
     finally:
         await storage.close()

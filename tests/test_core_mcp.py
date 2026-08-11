@@ -6,7 +6,6 @@ import pytest
 
 from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
 
-
 # ── OrchidMCPToolResult defaults ──
 
 

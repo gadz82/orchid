@@ -31,7 +31,6 @@ from orchid_ai.events.queues.inmemory import (
 )
 from orchid_ai.graph.graph import _create_agent_node, _latest_human_message_id
 
-
 # ── Fixture agent ───────────────────────────────────────────
 
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from orchid_ai.documents.chunker import ChunkConfig, chunk_text
 
-
 # ── ChunkConfig defaults ───────────────────────────────────
 
 

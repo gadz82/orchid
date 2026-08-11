@@ -1,8 +1,11 @@
 """
 YAML config loader with environment variable interpolation.
 
-Syntax: ``${VAR_NAME}`` in any YAML string value is replaced with
-``os.environ["VAR_NAME"]``.  Missing variables raise ``ValueError``.
+Syntax:
+  * ``${VAR_NAME}`` is replaced with ``os.environ["VAR_NAME"]``.
+  * ``${VAR_NAME:-default}`` uses ``default`` when the variable is unset.
+
+Missing variables without a default raise :class:`OrchidConfigError`.
 """
 
 from __future__ import annotations
@@ -19,11 +22,16 @@ from .schema import OrchidAgentsConfig
 
 logger = logging.getLogger(__name__)
 
-_ENV_VAR_RE = re.compile(r"\$\{(\w+)}")
+_ENV_VAR_RE = re.compile(r"\$\{(\w+)(?::-([^}]*))?}")
 
 
 def _interpolate_env(raw: str) -> str:
-    """Replace ``${VAR}`` placeholders with environment variable values.
+    """Replace ``${VAR_NAME}`` placeholders with environment variable values.
+
+    Supports an optional default: ``${VAR_NAME:-default}`` is replaced
+    with the environment variable value when set, otherwise ``default``.
+    When no default is provided and the variable is unset, an
+    :class:`OrchidConfigError` is raised.
 
     Only processes non-comment portions of each line.  YAML comments
     (everything after ``#``) are left untouched.
@@ -31,8 +39,11 @@ def _interpolate_env(raw: str) -> str:
 
     def _replace(match: re.Match) -> str:
         var_name = match.group(1)
+        default = match.group(2)
         value = os.environ.get(var_name)
         if value is None:
+            if default is not None:
+                return default
             raise OrchidConfigError(
                 f"Environment variable '{var_name}' is referenced in agents.yaml "
                 f"but not set. Add it to your .env or environment."

@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime
 
 from orchid_ai.agents.skill_executor import _skill_depth_var
 from orchid_ai.core.agent import _EMPTY_RUN_CONTEXT, _run_ctx_var
-from orchid_ai.core.state import OrchidAuthContext
-from orchid_ai.core.repository import OrchidVectorReader, OrchidVectorWriter, OrchidVectorStoreAdmin
 from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
-from orchid_ai.rag.scopes import OrchidRAGScope
+from orchid_ai.core.repository import OrchidVectorReader, OrchidVectorStoreAdmin, OrchidVectorWriter
+from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.persistence.models import OrchidChatMessage, OrchidChatSession
 from orchid_ai.rag.backends.null import NullVectorReader
-from orchid_ai.persistence.models import OrchidChatSession, OrchidChatMessage
+from orchid_ai.rag.scopes import OrchidRAGScope
 
 
 @pytest.fixture(autouse=True)
@@ -209,8 +210,8 @@ def chat_session():
         tenant_id="t-123",
         user_id="u-456",
         title="Test Chat",
-        created_at=datetime(2025, 1, 1),
-        updated_at=datetime(2025, 1, 1),
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
 
 

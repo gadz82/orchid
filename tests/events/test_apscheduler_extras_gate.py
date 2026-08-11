@@ -57,9 +57,8 @@ def test_apscheduler_imports_raises_friendly_import_error():
     """``_apscheduler_imports`` raises :class:`ImportError` (not
     ``RuntimeError``) so callers can ``except ImportError`` uniformly
     across the parsers + scheduler extras gates."""
-    with _block_apscheduler_import():
-        with pytest.raises(ImportError) as excinfo:
-            _apscheduler_imports()
+    with _block_apscheduler_import(), pytest.raises(ImportError) as excinfo:
+        _apscheduler_imports()
     msg = str(excinfo.value)
     assert "APSchedulerBackend requires" in msg
     assert "apscheduler" in msg
@@ -70,9 +69,8 @@ def test_apscheduler_backend_constructor_raises_friendly_import_error():
     """Constructing :class:`APSchedulerBackend` triggers the gate via
     its call to ``_apscheduler_imports()`` — so a lean install user
     sees the same ImportError directly from the public constructor."""
-    with _block_apscheduler_import():
-        with pytest.raises(ImportError) as excinfo:
-            APSchedulerBackend()
+    with _block_apscheduler_import(), pytest.raises(ImportError) as excinfo:
+        APSchedulerBackend()
     msg = str(excinfo.value)
     assert "pip install orchid-ai[events]" in msg
 
@@ -93,9 +91,8 @@ def test_apscheduler_module_does_not_import_apscheduler_eagerly():
         if isinstance(node, ast.Import):
             for alias in node.names:
                 top_level_imports.add(alias.name.split(".", 1)[0])
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                top_level_imports.add(node.module.split(".", 1)[0])
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            top_level_imports.add(node.module.split(".", 1)[0])
 
     assert "apscheduler" not in top_level_imports, (
         "apscheduler must not be imported at module level — gate every "

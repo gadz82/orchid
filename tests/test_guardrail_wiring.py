@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -12,8 +11,8 @@ from orchid_ai.core.guardrails import (
     OrchidGuardrailContext,
     OrchidGuardrailResult,
 )
-from orchid_ai.graph.guardrail_wiring import _GuardrailWiring
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.graph.guardrail_wiring import _GuardrailWiring
 
 
 class PassGuardrail(OrchidGuardrail):

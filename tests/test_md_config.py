@@ -21,7 +21,6 @@ from orchid_ai.config.md_loader import (
 )
 from orchid_ai.config.schema import OrchidAgentsConfig
 
-
 # ──────────────────────────────────────────────────────────────────
 # Frontmatter parser
 # ──────────────────────────────────────────────────────────────────
@@ -87,7 +86,7 @@ class TestParseFrontmatterBasic:
 
     def test_trailing_whitespace_in_body_stripped(self):
         text = "---\nkey: v\n---\n\n  body with spaces  \n\n"
-        fm, body = parse_frontmatter(text)
+        _fm, body = parse_frontmatter(text)
         assert body == "body with spaces"
 
 

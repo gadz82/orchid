@@ -11,6 +11,7 @@ no effect.  These tests lock in the minimal surface.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from orchid_ai.config.schema import OrchidMCPAuthConfig, OrchidMCPServerConfig
 
@@ -32,7 +33,7 @@ class TestMCPAuthConfig:
         assert cfg.mode == "oauth"
 
     def test_invalid_mode_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             OrchidMCPAuthConfig(mode="invalid")
 
     def test_legacy_static_fields_no_longer_exist(self):

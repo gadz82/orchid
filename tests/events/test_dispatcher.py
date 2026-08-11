@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import pytest
 
 from orchid_ai.core.events import (
@@ -10,7 +9,6 @@ from orchid_ai.core.events import (
     SignalEnvelope,
 )
 from orchid_ai.core.events.middleware import SignalIngestMiddleware
-
 
 # ── Order: insert before enqueue ────────────────────────────
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -15,7 +16,7 @@ from orchid_ai.tools.registry import OrchidToolRegistry
 class DummyTool(OrchidTool):
     name = "dummy"
     description = "Dummy"
-    parameters_schema = {"type": "object", "properties": {}}
+    parameters_schema: ClassVar[dict] = {"type": "object", "properties": {}}
 
     async def invoke(self, tool_input: OrchidToolInput) -> OrchidToolOutput:
         return OrchidToolOutput(result=tool_input.parameters)
@@ -154,6 +155,6 @@ def test_load_tools_from_config_registers_all_tools_from_migrated_examples(confi
     try:
         config = load_config(workspace_root / config_path)
         load_tools_from_config(config.tools)
-        assert set(config.tools).issubset(set(get_tool(name).name for name in config.tools))
+        assert set(config.tools).issubset({get_tool(name).name for name in config.tools})
     finally:
         clear()

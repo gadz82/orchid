@@ -12,7 +12,6 @@ from orchid_ai.config.schema import (
     OrchidRAGConfig,
 )
 
-
 # ── Schema tests ────────────────────────────────────────────
 
 

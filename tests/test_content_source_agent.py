@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from orchid_ai.agents.generic_agent import GenericAgent
 from orchid_ai.config.schema import OrchidAgentConfig
 from orchid_ai.content.local import LocalFileContentSource
