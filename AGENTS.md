@@ -285,6 +285,58 @@ implementations live in consumer projects.
 - Three `OrchidMCPGatewayClient/AuthCode/Token Store` ABCs back the inbound MCP gateway's OAuth state. One concrete class implements all three against the shared chat DB (SQLite / Postgres). `OrchidMCPGatewayToken` carries `idp_access_token` + `idp_refresh_token` + `idp_expires_at` so the refresh path has the upstream pair to swap.
 - `OrchidIdentityResolver` (already pre-existing) does double-duty: per-request bearer validation AND the upstream-token → identity bridge exposed at `/auth/resolve-identity`.
 
+## Split Agent Configuration Across Files
+
+`load_config(path)` accepts either a single YAML file or a directory of
+`*.yaml` / `*.yml` files.  When given a directory, every file is loaded and
+deep-merged into a single `OrchidAgentsConfig`.  Use this to keep agent
+definitions in dedicated files:
+
+```
+config/
+  orchid.yml
+  agents/
+    _shared.yaml          # defaults, supervisor, guardrails, skills, events, ...
+    notification.yaml
+    mailer.yaml
+    ...
+```
+
+`orchid.yml`:
+```yaml
+agents:
+  config_path: config/agents
+```
+
+Rules:
+- Top-level keys (`defaults`, `supervisor`, `skills`, `events`, …) merge across files.
+- The `agents` map merges across files.
+- Defining the same agent name in two files raises `OrchidConfigError`.
+- Environment variable interpolation runs per file.
+
+## Default MCP Servers for All Agents
+
+`defaults.mcp_servers` declares MCP servers that are available to every agent.
+Agent-specific `mcp_servers` are merged with the defaults; when both declare a
+server with the same name, the agent-specific config wins.
+
+```yaml
+defaults:
+  mcp_servers:
+    - name: atlassian-rovo
+      type: remote
+      url: https://mcp.atlassian.com/v1/mcp
+      auth:
+        mode: oauth
+      tools:
+        - name: getConfluencePage
+          inject_to_rag: true
+```
+
+Use this for fleet-wide integrations (e.g., a corporate knowledge base) while
+keeping per-agent servers (e.g., Datadog for the SRE agent) in the individual
+agent files.
+
 ## Database-Backed Agent Configuration
 
 `OrchidConfigStorage` ABC + `OrchidPostgresConfigStorage` implementation let
