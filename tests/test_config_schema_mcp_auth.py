@@ -49,6 +49,32 @@ class TestMCPAuthConfig:
         ):
             assert not hasattr(cfg, legacy), f"legacy field '{legacy}' still present — discovery is authoritative"
 
+    def test_manual_registration_opt_in(self):
+        """Non-compliant servers can seed endpoints via ``manual_registration``.
+
+        The canonical auth config stays minimal (``mode`` only); the
+        registration lives in a separate, explicitly-named model.
+        """
+        cfg = OrchidMCPAuthConfig(
+            mode="oauth",
+            manual_registration={
+                "authorization_endpoint": "https://auth.example.com/authorize",
+                "token_endpoint": "https://auth.example.com/oauth/token",
+                "client_id": "abc",
+                "client_secret": "secret",
+                "scopes": "read:thing",
+            },
+        )
+        assert cfg.manual_registration is not None
+        assert cfg.manual_registration.authorization_endpoint == "https://auth.example.com/authorize"
+        assert cfg.manual_registration.token_endpoint == "https://auth.example.com/oauth/token"
+        assert cfg.manual_registration.client_id == "abc"
+
+    def test_manual_registration_defaults_to_none(self):
+        """Without manual seeding, discovery remains authoritative (None)."""
+        cfg = OrchidMCPAuthConfig(mode="oauth")
+        assert cfg.manual_registration is None
+
 
 class TestMCPServerConfigAuth:
     """OrchidMCPServerConfig backward compatibility and auth integration."""

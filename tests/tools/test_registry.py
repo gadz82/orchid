@@ -107,7 +107,7 @@ def test_load_tools_from_config_supports_class_path():
     [
         (
             "lookup_artist",
-            "examples.festival-producer.tools.booking.LookupArtistTool",
+            "examples.festival_producer.tools.booking.LookupArtistTool",
             "artist_name",
         ),
         (
@@ -143,7 +143,7 @@ def test_load_tools_from_config_resolves_example_tool_classes(tool_name: str, cl
     "config_path",
     [
         "examples/education/agents.yaml",
-        "examples/festival-producer/agents.yaml",
+        "examples/festival_producer/agents.yaml",
         "examples/architecture_review/agents.yaml",
         "examples/wiki/agents.yaml",
     ],

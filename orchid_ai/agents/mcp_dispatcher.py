@@ -14,6 +14,7 @@ from ..config.schema import OrchidMCPServerConfig, OrchidToolConfig
 from ..core.mcp import OrchidMCPAuthRequiredError, OrchidMCPClient
 from ..core.state import OrchidAuthContext
 from ..mcp.inventory import MCPToolAnnotations
+from ..utils import unwrap_exception_group
 
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
@@ -201,7 +202,10 @@ class MCPDispatcher:
             except Exception as exc:
                 # Broad catch: MCP servers can fail with HTTP errors (401, 500),
                 # transport errors, or protocol errors.  Degrade gracefully.
-                logger.warning("[%s] Could not discover tools from '%s': %s", agent_name, server_name, exc)
+                actual = unwrap_exception_group(exc)
+                logger.warning(
+                    "[%s] Could not discover tools from '%s': %s", agent_name, server_name, actual, exc_info=True
+                )
                 return []
 
         prompts_result = await _discover_server_prompts(client, server_config, auth, agent_name)
@@ -440,7 +444,10 @@ async def _discover_server_tools(
         )
         return raw_tools
     except Exception as exc:
-        logger.warning("[%s] Could not discover tools from '%s': %s", agent_name, server_config.name, exc)
+        actual = unwrap_exception_group(exc)
+        logger.warning(
+            "[%s] Could not discover tools from '%s': %s", agent_name, server_config.name, actual, exc_info=True
+        )
         return []
 
 

@@ -1,9 +1,10 @@
 """Migration v002 — Ingestion manifest for idempotent indexing.
 
 Adds a single table that tracks which source files have been indexed into
-which vector namespace, together with their content hash and the vector
-document IDs produced during ingestion.  This lets CLI and API indexers
-skip unchanged files and delete stale vectors for removed sources.
+which vector namespace, together with their content hash, the RAG scope
+key, and the vector document IDs produced during ingestion.  This lets CLI
+and API indexers skip unchanged files, re-index when the scope changes, and
+delete stale vectors for removed sources.
 """
 
 from __future__ import annotations
@@ -16,20 +17,21 @@ _SQLITE_UP = [
     CREATE TABLE IF NOT EXISTS ingestion_manifest (
         source_id    TEXT NOT NULL,
         namespace    TEXT NOT NULL,
+        scope        TEXT NOT NULL DEFAULT '',
         content_hash TEXT NOT NULL,
         document_ids TEXT NOT NULL DEFAULT '[]',
         indexed_at   REAL NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
-        PRIMARY KEY (source_id, namespace)
+        PRIMARY KEY (source_id, namespace, scope)
     )
     """,
     """
-    CREATE INDEX IF NOT EXISTS idx_ingestion_manifest_namespace
-        ON ingestion_manifest (namespace)
+    CREATE INDEX IF NOT EXISTS idx_ingestion_manifest_namespace_scope
+        ON ingestion_manifest (namespace, scope)
     """,
 ]
 
 _SQLITE_DOWN = [
-    "DROP INDEX IF EXISTS idx_ingestion_manifest_namespace",
+    "DROP INDEX IF EXISTS idx_ingestion_manifest_namespace_scope",
     "DROP TABLE IF EXISTS ingestion_manifest",
 ]
 

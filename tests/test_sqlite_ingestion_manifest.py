@@ -64,6 +64,38 @@ class TestSQLiteIngestionManifest:
         assert await manifest.should_skip("src-1", "hash-2", "ns-2") is True
         assert await manifest.should_skip("src-1", "hash-1", "ns-2") is False
 
+    async def test_scopes_are_isolated(self, manifest: OrchidSQLiteIngestionManifest):
+        await manifest.record("src-1", "hash-1", "ns-1", ["doc-1"], scope="t1")
+        await manifest.record("src-1", "hash-1", "ns-1", ["doc-2"], scope="__shared__")
+
+        assert await manifest.should_skip("src-1", "hash-1", "ns-1", scope="t1") is True
+        assert await manifest.should_skip("src-1", "hash-1", "ns-1", scope="__shared__") is True
+        assert await manifest.should_skip("src-1", "hash-1", "ns-1", scope="t2") is False
+
+    async def test_record_same_source_different_scope_is_not_upserted(self, manifest: OrchidSQLiteIngestionManifest):
+        await manifest.record("src-1", "hash-1", "ns-1", ["doc-1"], scope="t1")
+        await manifest.record("src-1", "hash-2", "ns-1", ["doc-2"], scope="t2")
+
+        # Each scope keeps its own hash/document_ids.
+        assert await manifest.get_document_ids("src-1", "ns-1", scope="t1") == ["doc-1"]
+        assert await manifest.get_document_ids("src-1", "ns-1", scope="t2") == ["doc-2"]
+
+    async def test_list_known_filters_by_scope(self, manifest: OrchidSQLiteIngestionManifest):
+        await manifest.record("src-1", "hash-1", "ns-1", ["doc-1"], scope="t1")
+        await manifest.record("src-2", "hash-2", "ns-1", ["doc-2"], scope="t2")
+
+        assert await manifest.list_known("ns-1", scope="t1") == {"src-1"}
+        assert await manifest.list_known("ns-1", scope="t2") == {"src-2"}
+
+    async def test_remove_filters_by_scope(self, manifest: OrchidSQLiteIngestionManifest):
+        await manifest.record("src-1", "hash-1", "ns-1", ["doc-1"], scope="t1")
+        await manifest.record("src-1", "hash-1", "ns-1", ["doc-2"], scope="t2")
+
+        await manifest.remove("src-1", "ns-1", scope="t1")
+
+        assert await manifest.should_skip("src-1", "hash-1", "ns-1", scope="t1") is False
+        assert await manifest.should_skip("src-1", "hash-1", "ns-1", scope="t2") is True
+
     async def test_close_then_operation_raises(self, manifest: OrchidSQLiteIngestionManifest):
         await manifest.close()
         with pytest.raises(RuntimeError, match="not initialised"):

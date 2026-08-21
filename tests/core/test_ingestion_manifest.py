@@ -6,7 +6,7 @@ from orchid_ai.core.ingestion_manifest import OrchidIngestionManifest
 
 
 class MinimalManifest(OrchidIngestionManifest):
-    async def should_skip(self, source_id: str, content_hash: str, namespace: str) -> bool:
+    async def should_skip(self, source_id: str, content_hash: str, namespace: str, scope: str = "") -> bool:
         return False
 
     async def record(
@@ -15,16 +15,17 @@ class MinimalManifest(OrchidIngestionManifest):
         content_hash: str,
         namespace: str,
         document_ids: list[str],
+        scope: str = "",
     ) -> None:
         return None
 
-    async def remove(self, source_id: str, namespace: str) -> None:
+    async def remove(self, source_id: str, namespace: str, scope: str = "") -> None:
         return None
 
-    async def list_known(self, namespace: str) -> set[str]:
+    async def list_known(self, namespace: str, scope: str = "") -> set[str]:
         return set()
 
-    async def get_document_ids(self, source_id: str, namespace: str) -> list[str]:
+    async def get_document_ids(self, source_id: str, namespace: str, scope: str = "") -> list[str]:
         return []
 
     async def close(self) -> None:

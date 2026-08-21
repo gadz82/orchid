@@ -30,6 +30,29 @@ class OrchidToolConfig(BaseModel):
     rag: OrchidRAGConfig | None = None
 
 
+class OrchidMCPManualRegistrationConfig(BaseModel):
+    """Manual OAuth seeding for a non-MCP-2025-03-26-compliant MCP server.
+
+    Carries the authorization-server endpoints + client credentials that the
+    framework would normally discover at runtime via the three-RFC chain
+    (RFC 9728 → RFC 8414 → RFC 7591).  Only used when the target server does
+    not advertise ``resource_metadata`` in its 401 response (e.g. Atlassian
+    Rovo).  Kept as a separate, explicitly-named model so the canonical
+    ``OrchidMCPAuthConfig`` surface stays minimal (``mode`` only) and YAML
+    never silently carries static client credentials on the happy path.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    authorization_endpoint: str = ""
+    token_endpoint: str = ""
+    registration_endpoint: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+    scopes: str = ""
+    issuer: str = ""
+
+
 class OrchidMCPAuthConfig(BaseModel):
     """Per-server authentication configuration.
 
@@ -52,23 +75,42 @@ class OrchidMCPAuthConfig(BaseModel):
         * Dynamic client registration (RFC 7591) — POST'd to the
           advertised ``registration_endpoint``.
 
-      No ``client_id``, ``client_secret``, ``authorization_endpoint`` or
-      ``token_endpoint`` values live in YAML.  The authorization server
-      MUST expose RFC 7591 dynamic client registration; if it does not,
-      integrators supply a pre-seeded
-      :class:`~orchid_ai.core.mcp.OrchidMCPClientRegistrationStore` row
-      with the relevant endpoints + credentials before first use.
+      For servers that do not implement MCP 2025-03-26 discovery (e.g.
+      Atlassian Rovo), set ``manual_registration`` with the OAuth endpoints and
+      credentials.  When present, the framework skips auto-discovery and uses
+      those values directly.
 
-    Example YAML::
+    Example YAML (auto-discovery)::
 
         mcp_servers:
           - name: crm-backend
             url: https://crm.example.com/mcp
             auth:
               mode: oauth    # everything else is discovered at runtime
+
+    Example YAML (manual seeding for non-compliant servers)::
+
+        mcp_servers:
+          - name: atlassian-rovo
+            url: https://mcp.atlassian.com/v1/mcp
+            auth:
+              mode: oauth
+              manual_registration:
+                authorization_endpoint: https://auth.atlassian.com/authorize
+                token_endpoint: https://auth.atlassian.com/oauth/token
+                client_id: ${ATLASSIAN_CLIENT_ID}
+                client_secret: ${ATLASSIAN_CLIENT_SECRET}
+                scopes: "read:jira-work read:confluence-space.global"
     """
 
     mode: Literal["none", "passthrough", "oauth"] = "none"
+    #: Opt-in manual OAuth seeding for servers that are NOT MCP 2025-03-26
+    #: compliant (e.g. Atlassian Rovo, which returns a bare 401 without the
+    #: required ``resource_metadata`` WWW-Authenticate parameter).  When set,
+    #: the framework skips auto-discovery and uses these endpoints + creds
+    #: directly.  ``None`` (default) means discovery is authoritative and
+    #: YAML carries no static client credentials (per framework policy).
+    manual_registration: OrchidMCPManualRegistrationConfig | None = None
 
 
 class OrchidMCPServerConfig(BaseModel):

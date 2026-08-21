@@ -50,6 +50,36 @@ class TestFlatChunking:
         assert meta["chunk_id"]
 
 
+class TestScopeLevelMetadata:
+    @pytest.mark.asyncio
+    async def test_tenant_scope_level(self):
+        chunks = await RecursiveIngestion().ingest(text="hello", filename="x.txt", scope=OrchidRAGScope(tenant_id="t1"))
+        assert chunks[0].metadata["scope"] == "tenant"
+
+    @pytest.mark.asyncio
+    async def test_user_scope_level(self):
+        chunks = await RecursiveIngestion().ingest(
+            text="hello", filename="x.txt", scope=OrchidRAGScope(tenant_id="t1", user_id="u1")
+        )
+        assert chunks[0].metadata["scope"] == "user"
+
+    @pytest.mark.asyncio
+    async def test_chat_shared_scope_level(self):
+        chunks = await RecursiveIngestion().ingest(
+            text="hello", filename="x.txt", scope=OrchidRAGScope(tenant_id="t1", user_id="u1", chat_id="c1")
+        )
+        assert chunks[0].metadata["scope"] == "chat_shared"
+
+    @pytest.mark.asyncio
+    async def test_chat_agent_scope_level(self):
+        chunks = await RecursiveIngestion().ingest(
+            text="hello",
+            filename="x.txt",
+            scope=OrchidRAGScope(tenant_id="t1", user_id="u1", chat_id="c1", agent_id="a1"),
+        )
+        assert chunks[0].metadata["scope"] == "chat_agent"
+
+
 class TestParentChildChunking:
     @pytest.mark.asyncio
     async def test_parent_in_metadata_when_parent_size_set(self):

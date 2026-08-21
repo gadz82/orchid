@@ -82,6 +82,7 @@ class OrchidMCPAuthDiscovery:
         *,
         server_name: str,
         resource_metadata_url: str,
+        manual_config: dict[str, Any] | None = None,
     ) -> OrchidMCPClientRegistration:
         """Return a cached or freshly-minted registration for a server.
 
@@ -89,6 +90,11 @@ class OrchidMCPAuthDiscovery:
         discovery chain and stores the result; subsequent calls return
         the stored record verbatim.  Upstream callers trigger a refresh
         by deleting the store row.
+
+        When ``manual_config`` is provided (from YAML auth config), it
+        skips auto-discovery and uses the supplied endpoints + credentials
+        directly.  This is for servers that do not implement MCP 2025-03-26
+        discovery (e.g. Atlassian Rovo).
         """
         existing = await self.store.get(server_name)
         if existing is not None:
@@ -98,6 +104,13 @@ class OrchidMCPAuthDiscovery:
                 existing.client_id[:8] if existing.client_id else "",
             )
             return existing
+
+        if manual_config and manual_config.get("authorization_endpoint") and manual_config.get("token_endpoint"):
+            logger.info(
+                "[MCPAuthDiscovery] Using manual OAuth config for '%s' (skipping auto-discovery)",
+                server_name,
+            )
+            return await self._seed_from_manual_config(server_name, manual_config)
 
         logger.info(
             "[MCPAuthDiscovery] Starting discovery for '%s' via %s",
@@ -145,6 +158,39 @@ class OrchidMCPAuthDiscovery:
             server_name,
             record.client_id[:8],
             record.is_public_client,
+        )
+        return record
+
+    async def _seed_from_manual_config(
+        self,
+        server_name: str,
+        config: dict[str, Any],
+    ) -> OrchidMCPClientRegistration:
+        """Create a registration record from manually-supplied OAuth config.
+
+        Used for servers that do not implement MCP 2025-03-26 discovery
+        (e.g. Atlassian Rovo).  The config dict comes from the YAML
+        ``auth`` block and contains ``authorization_endpoint``,
+        ``token_endpoint``, ``client_id``, ``client_secret``, etc.
+        """
+        record = OrchidMCPClientRegistration(
+            server_name=server_name,
+            authorization_endpoint=config.get("authorization_endpoint", ""),
+            token_endpoint=config.get("token_endpoint", ""),
+            registration_endpoint=config.get("registration_endpoint", ""),
+            issuer=config.get("issuer", ""),
+            scopes_supported=config.get("scopes", ""),
+            token_endpoint_auth_methods_supported="client_secret_post" if config.get("client_secret") else "none",
+            client_id=config.get("client_id", ""),
+            client_secret=config.get("client_secret", ""),
+            client_id_issued_at=0.0,
+            client_secret_expires_at=0.0,
+        )
+        await self.store.save(record)
+        logger.info(
+            "[MCPAuthDiscovery] Seeded manual registration for '%s' → client_id=%s…",
+            server_name,
+            record.client_id[:8] if record.client_id else "(none)",
         )
         return record
 

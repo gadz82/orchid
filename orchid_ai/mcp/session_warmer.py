@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 
 from ..core.mcp import OrchidMCPAuthRequiredError, OrchidMCPClient
 from ..core.state import OrchidAuthContext
+from ..utils import unwrap_exception_group
 from .inventory import OrchidMCPAuthMode, OrchidMCPServerEntry, OrchidMCPServerInventory
 
 logger = logging.getLogger(__name__)
@@ -218,15 +219,17 @@ class OrchidSessionWarmer:
             # Some implementations may raise the auth error from inside
             # warm_cache — the outer except above catches the canonical
             # case; keep this branch resilient to defensive subclassing.
-            if isinstance(exc, OrchidMCPAuthRequiredError):
+            actual = unwrap_exception_group(exc)
+            if isinstance(actual, OrchidMCPAuthRequiredError):
                 return ("skipped", None)
             logger.warning(
                 "[OrchidSessionWarmer] warm '%s' (%s) failed: %s",
                 entry.server_name,
                 entry.mode,
-                exc,
+                actual,
+                exc_info=True,
             )
-            return ("failed", str(exc))
+            return ("failed", str(actual))
 
         return ("warmed", None)
 

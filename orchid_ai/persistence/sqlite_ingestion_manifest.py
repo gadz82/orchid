@@ -55,8 +55,8 @@ class OrchidSQLiteIngestionManifest(OrchidIngestionManifest):
             await self._conn.close()
             self._conn = None
 
-    async def should_skip(self, source_id: str, content_hash: str, namespace: str) -> bool:
-        row = await self._get_row(source_id, namespace)
+    async def should_skip(self, source_id: str, content_hash: str, namespace: str, scope: str = "") -> bool:
+        row = await self._get_row(source_id, namespace, scope)
         if row is None:
             return False
         return row["content_hash"] == content_hash
@@ -67,35 +67,36 @@ class OrchidSQLiteIngestionManifest(OrchidIngestionManifest):
         content_hash: str,
         namespace: str,
         document_ids: list[str],
+        scope: str = "",
     ) -> None:
         self._ensure_conn()
         await self._conn.execute(
             "INSERT OR REPLACE INTO ingestion_manifest "
-            "(source_id, namespace, content_hash, document_ids, indexed_at) "
-            "VALUES (?, ?, ?, ?, strftime('%s', 'now') * 1000)",
-            (source_id, namespace, content_hash, json.dumps(document_ids)),
+            "(source_id, namespace, scope, content_hash, document_ids, indexed_at) "
+            "VALUES (?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)",
+            (source_id, namespace, scope, content_hash, json.dumps(document_ids)),
         )
         await self._conn.commit()
 
-    async def remove(self, source_id: str, namespace: str) -> None:
+    async def remove(self, source_id: str, namespace: str, scope: str = "") -> None:
         self._ensure_conn()
         await self._conn.execute(
-            "DELETE FROM ingestion_manifest WHERE source_id = ? AND namespace = ?",
-            (source_id, namespace),
+            "DELETE FROM ingestion_manifest WHERE source_id = ? AND namespace = ? AND scope = ?",
+            (source_id, namespace, scope),
         )
         await self._conn.commit()
 
-    async def list_known(self, namespace: str) -> set[str]:
+    async def list_known(self, namespace: str, scope: str = "") -> set[str]:
         self._ensure_conn()
         cursor = await self._conn.execute(
-            "SELECT source_id FROM ingestion_manifest WHERE namespace = ?",
-            (namespace,),
+            "SELECT source_id FROM ingestion_manifest WHERE namespace = ? AND scope = ?",
+            (namespace, scope),
         )
         rows = await cursor.fetchall()
         return {row["source_id"] for row in rows}
 
-    async def get_document_ids(self, source_id: str, namespace: str) -> list[str]:
-        row = await self._get_row(source_id, namespace)
+    async def get_document_ids(self, source_id: str, namespace: str, scope: str = "") -> list[str]:
+        row = await self._get_row(source_id, namespace, scope)
         if row is None:
             return []
         try:
@@ -103,11 +104,11 @@ class OrchidSQLiteIngestionManifest(OrchidIngestionManifest):
         except json.JSONDecodeError:
             return []
 
-    async def _get_row(self, source_id: str, namespace: str) -> aiosqlite.Row | None:
+    async def _get_row(self, source_id: str, namespace: str, scope: str = "") -> aiosqlite.Row | None:
         self._ensure_conn()
         cursor = await self._conn.execute(
-            "SELECT * FROM ingestion_manifest WHERE source_id = ? AND namespace = ?",
-            (source_id, namespace),
+            "SELECT * FROM ingestion_manifest WHERE source_id = ? AND namespace = ? AND scope = ?",
+            (source_id, namespace, scope),
         )
         return await cursor.fetchone()
 
