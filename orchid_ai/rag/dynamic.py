@@ -89,7 +89,11 @@ async def inject_to_rag(
         )
         return 0
 
+    # Skip error payloads: dicts with an explicit "error" key, or any
+    # result object (e.g. OrchidMCPToolResult) that reports is_error=True.
     if isinstance(tool_result, dict) and "error" in tool_result:
+        return 0
+    if getattr(tool_result, "is_error", False):
         return 0
 
     text = _serialise(tool_result)
