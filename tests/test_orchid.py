@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -215,6 +215,40 @@ class TestInterrupts:
 
         assert result.interrupted
         assert result.approvals_needed[0].tool == "raw-text"
+
+    @pytest.mark.asyncio
+    async def test_interrupt_read_from_checkpoint_when_no_exception(self, minimal_config):
+        """With a checkpointer, LangGraph stores interrupts in the checkpoint state."""
+        from langgraph.checkpoint.memory import MemorySaver
+
+        pending = _FakeInterrupt({"tool": "book", "args": {"time": "8pm"}, "agent": "bookings"}, id_="int-cp")
+
+        class _FakeTask:
+            interrupts = (pending,)
+
+        class _FakeSnapshot:
+            tasks = (_FakeTask(),)
+
+        graph = MagicMock()
+        graph.ainvoke = AsyncMock(return_value={"final_response": None, "active_agents": [], "messages": []})
+        graph.aget_state = AsyncMock(return_value=_FakeSnapshot())
+
+        runtime = OrchidRuntime(default_model="ollama/llama3.2", checkpointer=MemorySaver())
+
+        with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
+            build.return_value = graph
+            client = Orchid(config=minimal_config, runtime=runtime)
+
+            result = await client.invoke("book a table", chat_id="c-1", persist=False)
+
+        assert result.interrupted is True
+        assert result.response == ""
+        assert len(result.approvals_needed) == 1
+        approval = result.approvals_needed[0]
+        assert approval.tool == "book"
+        assert approval.args == {"time": "8pm"}
+        assert approval.agent == "bookings"
+        assert approval.interrupt_id == "int-cp"
 
 
 # ── Resume ─────────────────────────────────────────────────────

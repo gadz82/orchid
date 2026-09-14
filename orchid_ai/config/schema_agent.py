@@ -247,7 +247,7 @@ class OrchidAgentsConfig(BaseModel):
     def _apply_defaults_and_names(self) -> OrchidAgentsConfig:
         """Merge defaults into each agent and set names recursively."""
         for agent_name, agent in self.agents.items():
-            _apply_defaults(agent, agent_name, self.defaults, self.tools)
+            _apply_defaults(agent, agent_name, self.defaults, self.tools, self.external_agents)
         return self
 
     def merge_from_db(self, db_configs: list[dict], *, strict: bool = True) -> None:
@@ -386,6 +386,7 @@ def _collect_injectable_tools(
 def _collect_approval_tools(
     agent: OrchidAgentConfig,
     global_tools: dict[str, OrchidBuiltinToolConfig] | None,
+    external_agents: dict[str, OrchidExternalAgentConfig] | None = None,
 ) -> None:
     for server in agent.mcp_servers:
         for tool in server.tools:
@@ -396,6 +397,10 @@ def _collect_approval_tools(
             tool_cfg = global_tools.get(tool_name)
             if tool_cfg and tool_cfg.requires_approval:
                 agent.approval_tools.add(tool_name)
+    # External-agent CLI tools declare their own approval default; honour it.
+    for ext_name, ext_cfg in (external_agents or {}).items():
+        if ext_cfg.requires_approval and ext_name in agent.tools:
+            agent.approval_tools.add(ext_name)
 
 
 def _collect_parallel_safe_tools(
@@ -444,8 +449,9 @@ def _apply_defaults(
     name: str,
     defaults: OrchidDefaultsConfig,
     global_tools: dict[str, OrchidBuiltinToolConfig] | None = None,
+    external_agents: dict[str, OrchidExternalAgentConfig] | None = None,
 ) -> None:
-    """Recursively apply default values and set agent names."""
+    """Recursively apply default values and set names recursively."""
     agent.name = name
 
     _merge_llm_defaults(agent, defaults)
@@ -455,7 +461,7 @@ def _apply_defaults(
     _merge_mcp_defaults(agent, defaults)
 
     _collect_injectable_tools(agent, global_tools)
-    _collect_approval_tools(agent, global_tools)
+    _collect_approval_tools(agent, global_tools, external_agents)
     _collect_parallel_safe_tools(agent, global_tools)
     _cache_builtin_tool_configs(agent, global_tools)
 
@@ -468,7 +474,7 @@ def _apply_defaults(
                     f"agent '{name}.{child_name}' has mini_agent.enabled=true — "
                     f"mini-agents may only be enabled on top-level agents (no nesting)."
                 )
-            _apply_defaults(child, child_name, defaults, global_tools)
+            _apply_defaults(child, child_name, defaults, global_tools, external_agents)
 
 
 def _merge_transformer_prompts(agent_retrieval: object, defaults_retrieval: object) -> None:

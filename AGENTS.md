@@ -360,6 +360,10 @@ The `Orchid.config_storage` property exposes the store for runtime CRUD
 (e.g. from an API router). Seven abstract methods: `init_db`, `close`,
 `list_configs`, `get_config`, `upsert_config`, `patch_config`, `delete_config`.
 
+## Testing & Bug Discovery
+
+- **E2E tests may expose real framework or example bugs.** When writing e2e tests, do not assume every path works. Reproduce failures with the smallest possible test, document the bug in `.knowledge/e2e-testing/execution-matrix.md`, and fix small, safe bugs that unblock a scenario. Larger issues become backlog items.
+
 ## Common Pitfalls
 
 - **Importing qdrant_client in agent code.** Use `self.reader.retrieve(...)` instead.

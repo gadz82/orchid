@@ -158,6 +158,49 @@ class TestApprovalToolsComputed:
         config = OrchidAgentsConfig(**raw)
         assert config.agents["ops"].approval_tools == {"send_alert", "restart_service"}
 
+    def test_external_agent_tools_collected(self):
+        from orchid_ai.config.schema_external_agent import OrchidExternalAgentConfig
+
+        config = OrchidAgentsConfig(
+            external_agents={
+                "ask_assistant": OrchidExternalAgentConfig(
+                    command=["python", "-c"],
+                    args=["print('ok')"],
+                ),
+            },
+            agents={
+                "test": OrchidAgentConfig(
+                    description="test",
+                    prompt="test",
+                    rag=OrchidRAGConfig(enabled=False),
+                    tools=["ask_assistant"],
+                ),
+            },
+        )
+        assert config.agents["test"].approval_tools == {"ask_assistant"}
+
+    def test_external_agent_tools_opt_out(self):
+        from orchid_ai.config.schema_external_agent import OrchidExternalAgentConfig
+
+        config = OrchidAgentsConfig(
+            external_agents={
+                "safe_assistant": OrchidExternalAgentConfig(
+                    command=["python", "-c"],
+                    args=["print('ok')"],
+                    requires_approval=False,
+                ),
+            },
+            agents={
+                "test": OrchidAgentConfig(
+                    description="test",
+                    prompt="test",
+                    rag=OrchidRAGConfig(enabled=False),
+                    tools=["safe_assistant"],
+                ),
+            },
+        )
+        assert config.agents["test"].approval_tools == set()
+
 
 # ── Tool wrapper tests: requires_approval propagation ───────
 
