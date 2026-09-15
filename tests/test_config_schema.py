@@ -6,20 +6,19 @@ import pytest
 from pydantic import ValidationError
 
 from orchid_ai.config.schema import (
+    ExecutionHints,
     OrchidAgentConfig,
-    OrchidAgentSkillStepConfig,
     OrchidAgentsConfig,
+    OrchidAgentSkillStepConfig,
     OrchidBuiltinToolConfig,
     OrchidConfigStorageConfig,
     OrchidDefaultsConfig,
-    ExecutionHints,
     OrchidLLMConfig,
     OrchidMCPServerConfig,
     OrchidRAGConfig,
     OrchidSupervisorConfig,
     OrchidToolConfig,
 )
-
 
 # ── OrchidLLMConfig ───────────────────────────────────────────────
 
@@ -509,6 +508,78 @@ class TestAgentsConfig:
         )
         assert cfg.agents["agent1"].rag.rag_ttl == 7200
 
+    def test_defaults_mcp_servers_merged_into_agents(self):
+        """defaults.mcp_servers are available to every agent."""
+        cfg = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                mcp_servers=[
+                    OrchidMCPServerConfig(
+                        name="shared",
+                        url="http://shared/mcp",
+                        tools=[OrchidToolConfig(name="shared_tool", inject_to_rag=True)],
+                    ),
+                ],
+            ),
+            agents={
+                "agent1": OrchidAgentConfig(description="d", prompt="p"),
+            },
+        )
+        assert len(cfg.agents["agent1"].mcp_servers) == 1
+        assert cfg.agents["agent1"].mcp_servers[0].name == "shared"
+        assert cfg.agents["agent1"].injectable_tools == {"shared_tool"}
+
+    def test_agent_mcp_server_overrides_default_by_name(self):
+        """Agent-specific MCP server with same name as default replaces it."""
+        cfg = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                mcp_servers=[
+                    OrchidMCPServerConfig(
+                        name="shared",
+                        url="http://shared/mcp",
+                        tools=[OrchidToolConfig(name="default_tool")],
+                    ),
+                ],
+            ),
+            agents={
+                "agent1": OrchidAgentConfig(
+                    description="d",
+                    prompt="p",
+                    mcp_servers=[
+                        OrchidMCPServerConfig(
+                            name="shared",
+                            url="http://agent/mcp",
+                            tools=[OrchidToolConfig(name="agent_tool")],
+                        ),
+                    ],
+                ),
+            },
+        )
+        servers = cfg.agents["agent1"].mcp_servers
+        assert len(servers) == 1
+        assert servers[0].url == "http://agent/mcp"
+        assert {t.name for t in servers[0].tools} == {"agent_tool"}
+
+    def test_defaults_mcp_servers_prepended_to_agent_servers(self):
+        """Defaults come first, agent-specific servers are appended."""
+        cfg = OrchidAgentsConfig(
+            defaults=OrchidDefaultsConfig(
+                mcp_servers=[
+                    OrchidMCPServerConfig(name="shared", url="http://shared/mcp"),
+                ],
+            ),
+            agents={
+                "agent1": OrchidAgentConfig(
+                    description="d",
+                    prompt="p",
+                    mcp_servers=[
+                        OrchidMCPServerConfig(name="local", url="http://local/mcp"),
+                    ],
+                ),
+            },
+        )
+        names = [s.name for s in cfg.agents["agent1"].mcp_servers]
+        assert names == ["shared", "local"]
+
 
 class TestMergeFromDb:
     def test_adds_agent_from_db_config(self):
@@ -534,7 +605,7 @@ class TestMergeFromDb:
 
     def test_invalid_config_raises_validation_error(self):
         cfg = OrchidAgentsConfig(agents={})
-        with pytest.raises(Exception):  # ValidationError from pydantic
+        with pytest.raises(ValidationError):  # ValidationError from pydantic
             cfg.merge_from_db([{"name": "bad", "config": {"description": 123}}])  # type: ignore[arg-type]
 
     def test_empty_db_list_leaves_agents_unchanged(self):

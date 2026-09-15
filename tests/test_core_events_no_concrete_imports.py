@@ -46,10 +46,8 @@ def _imports(path: Path) -> list[str]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 out.append(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if not node.level:  # absolute only
-                if node.module:
-                    out.append(node.module)
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            out.append(node.module)
     return out
 
 

@@ -7,6 +7,22 @@ from __future__ import annotations
 import importlib
 
 
+def unwrap_exception_group(exc: BaseException) -> BaseException:
+    """Return the first concrete exception inside an ``ExceptionGroup``.
+
+    ``asyncio.TaskGroup`` and ``ExceptionGroup`` produce summary strings
+    like "unhandled errors in a TaskGroup (1 sub-exception)" which hide
+    the real failure.  This helper walks down the first exception in each
+    group until it reaches the actual leaf exception, suitable for logging
+    and error reporting.
+    """
+    while isinstance(exc, BaseExceptionGroup):
+        if not exc.exceptions:
+            break
+        exc = exc.exceptions[0]
+    return exc
+
+
 def import_class(class_path: str) -> type:
     """
     Dynamically import a class by its dotted path.

@@ -51,6 +51,7 @@ async def ingest_document(
     schema: dict[str, Any] | None = None,
     vision_model: str = "",
     pre_extracted_text: str | None = None,
+    documents_out: list[OrchidDocument] | None = None,
 ) -> int:
     """
     Parse, chunk, and upsert a document.
@@ -73,6 +74,11 @@ async def ingest_document(
     If ``pre_extracted_text`` is provided it is used directly (avoids
     re-parsing the file — important for vision models).  Otherwise the
     file is parsed on the fly.
+
+    If ``documents_out`` is provided, the list of :class:`OrchidDocument`
+    objects produced by the pipeline is appended to it.  This lets
+    callers (e.g. idempotent indexers) record the exact document IDs
+    that were upserted without changing the return type.
 
     Returns the number of chunks indexed.
     """
@@ -139,5 +145,8 @@ async def ingest_document(
         namespace,
         scope.chat_id,
     )
+
+    if documents_out is not None:
+        documents_out.extend(documents)
 
     return len(documents)

@@ -89,9 +89,8 @@ def _imported_names(path: Path) -> set[str]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 names.add(alias.name.split(".", 1)[0])
-        elif isinstance(node, ast.ImportFrom):
-            if node.module and not node.level:  # absolute import only
-                names.add(node.module.split(".", 1)[0])
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:  # absolute import only
+            names.add(node.module.split(".", 1)[0])
     return names
 
 

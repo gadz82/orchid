@@ -45,7 +45,9 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.errors import GraphBubbleUp
 from langgraph.graph import END, StateGraph
+from langgraph.types import Send
 
 from ..config.registry import get_class
 from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig
@@ -65,7 +67,7 @@ from ..tools.external_cli_config import load_external_agents_from_config
 from .guardrail_wiring import _GuardrailWiring
 from .mini_agent_wiring import _MiniAgentWiring
 from .state import GraphState
-from .supervisor import create_supervisor_node, route_to_agents
+from .supervisor import create_supervisor_node
 
 # Backward-compat re-exports (moved to dedicated modules in M2 refactoring)
 _make_fork_router = _MiniAgentWiring.make_fork_router
@@ -208,6 +210,10 @@ class _AgentNodeWrapper:
         perf_logger.info("[PERF][agent=%s] >>> START", self._agent.name)
         try:
             result = await self._agent.run(state)
+        except GraphBubbleUp:
+            # HITL ``interrupt()`` and LangGraph control-flow signals must
+            # bubble up to the graph runtime, not be swallowed as agent errors.
+            raise
         except Exception as exc:
             logger.exception(
                 "[Graph] Agent '%s' raised an unhandled exception",
@@ -408,7 +414,7 @@ def _build_subgraph(
         sg.add_edge(node_name, "supervisor")
 
     sg.set_entry_point("supervisor")
-    sg.add_conditional_edges("supervisor", route_to_agents)
+    sg.add_conditional_edges("supervisor", _make_route_to_agents(has_output_guardrails=False))
 
     compiled = sg.compile()
     logger.info(
@@ -426,11 +432,37 @@ def _route_after_input_guardrails(state: GraphState) -> str:
     return "supervisor"
 
 
-def _route_after_supervisor(state: GraphState) -> str:
-    """Conditional edge: route to output guardrails or agents."""
-    if state.get("final_response"):
-        return "output_guardrails"
-    return "route_agents"
+def _make_route_to_agents(has_output_guardrails: bool = False):
+    """Build a conditional edge function for the supervisor node.
+
+    Captures whether the graph has a global output-guardrails node so the
+    sentinel key ``_has_output_guardrails`` does not need to be threaded
+    through state manually.
+    """
+
+    def route_to_agents(state: GraphState) -> list[Send] | str:
+        active = state.get("active_agents", [])
+        if active:
+            mode = state.get("execution_mode", "parallel")
+            if mode == "parallel":
+                logger.info("[Route] parallel dispatch -> %s", active)
+                return [Send(f"{agent}_agent", state) for agent in active]
+            logger.info("[Route] sequential dispatch -> %s", active[0])
+            return f"{active[0]}_agent"
+
+        if state.get("final_response"):
+            if has_output_guardrails:
+                return "output_guardrails"
+            return END
+
+        if state.get("pending_agents"):
+            return "supervisor"
+
+        if has_output_guardrails:
+            return "output_guardrails"
+        return END
+
+    return route_to_agents
 
 
 def build_graph(
@@ -765,7 +797,7 @@ def build_graph(
         g.set_entry_point("supervisor")
 
     # Supervisor routes to agents (or sets final_response for direct answers)
-    g.add_conditional_edges("supervisor", route_to_agents)
+    g.add_conditional_edges("supervisor", _make_route_to_agents(has_output_guardrails=has_global_output_rails))
 
     # Output guardrails: intercept final_response before END
     if has_global_output_rails:

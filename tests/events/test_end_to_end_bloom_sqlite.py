@@ -45,7 +45,6 @@ from orchid_ai.events.registry import build_registry_from_config
 from orchid_ai.events.runners.graph_runner import GraphJobRunner
 from orchid_ai.persistence.models import OrchidChatSession
 
-
 # ── Fixture resolver — supports both flavours ───────────────
 
 

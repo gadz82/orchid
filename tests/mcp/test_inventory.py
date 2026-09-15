@@ -9,6 +9,7 @@ qualifying child agent references, mode filtering, and the
 from __future__ import annotations
 
 import logging
+from dataclasses import FrozenInstanceError
 from typing import Any
 
 import pytest
@@ -22,7 +23,6 @@ from orchid_ai.config.schema import (
 from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
 from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.mcp.inventory import OrchidMCPServerEntry, OrchidMCPServerInventory
-
 
 # ── Helpers ────────────────────────────────────────────────────
 
@@ -303,5 +303,5 @@ class TestEntryFrozen:
             mode="none",
             agent_names=("a",),
         )
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             entry.server_name = "y"  # type: ignore[misc]

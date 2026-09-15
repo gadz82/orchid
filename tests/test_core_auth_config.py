@@ -17,7 +17,6 @@ from orchid_ai.core.auth_config import (
     OrchidUpstreamTokenResponse,
 )
 
-
 # ── OrchidAuthConfigProvider is abstract ─────────────────────
 
 

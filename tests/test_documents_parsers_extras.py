@@ -26,15 +26,14 @@ from contextlib import contextmanager
 import pytest
 
 from orchid_ai.documents.parsers import (
+    _DOCUMENTS_EXTRA_HINT,
     CSVParser,
     DOCXParser,
     PDFParser,
     TextParser,
     XLSXParser,
-    _DOCUMENTS_EXTRA_HINT,
     _missing_extra,
 )
-
 
 # ── _missing_extra builder ─────────────────────────────────────────
 
@@ -92,9 +91,8 @@ def _block_imports(*module_prefixes: str):
 @pytest.mark.asyncio
 async def test_pdf_parser_raises_friendly_import_error():
     parser = PDFParser()
-    with _block_imports("fitz"):
-        with pytest.raises(ImportError) as excinfo:
-            await parser.parse(b"%PDF-1.4 minimal stub", "doc.pdf")
+    with _block_imports("fitz"), pytest.raises(ImportError) as excinfo:
+        await parser.parse(b"%PDF-1.4 minimal stub", "doc.pdf")
     msg = str(excinfo.value)
     assert "PDF parsing requires" in msg
     assert "pymupdf" in msg
@@ -104,9 +102,8 @@ async def test_pdf_parser_raises_friendly_import_error():
 @pytest.mark.asyncio
 async def test_docx_parser_raises_friendly_import_error():
     parser = DOCXParser()
-    with _block_imports("docx"):
-        with pytest.raises(ImportError) as excinfo:
-            await parser.parse(b"PK fake docx", "doc.docx")
+    with _block_imports("docx"), pytest.raises(ImportError) as excinfo:
+        await parser.parse(b"PK fake docx", "doc.docx")
     msg = str(excinfo.value)
     assert "DOCX parsing requires" in msg
     assert "python-docx" in msg
@@ -116,9 +113,8 @@ async def test_docx_parser_raises_friendly_import_error():
 @pytest.mark.asyncio
 async def test_xlsx_parser_raises_friendly_import_error():
     parser = XLSXParser()
-    with _block_imports("openpyxl"):
-        with pytest.raises(ImportError) as excinfo:
-            await parser.parse(b"PK fake xlsx", "sheet.xlsx")
+    with _block_imports("openpyxl"), pytest.raises(ImportError) as excinfo:
+        await parser.parse(b"PK fake xlsx", "sheet.xlsx")
     msg = str(excinfo.value)
     assert "XLSX parsing requires" in msg
     assert "openpyxl" in msg
@@ -141,7 +137,7 @@ async def test_csv_parser_works_without_extras():
 async def test_text_parser_works_without_extras():
     """:class:`TextParser` only uses stdlib — no extras gate."""
     parser = TextParser()
-    out = await parser.parse("hello world".encode("utf-8"), "note.md")
+    out = await parser.parse(b"hello world", "note.md")
     assert out == "hello world"
 
 
@@ -162,7 +158,7 @@ def test_parsers_module_does_not_import_heavy_packages_eagerly():
     import ast
     import inspect
 
-    import orchid_ai.documents.parsers as parsers
+    from orchid_ai.documents import parsers
 
     source = inspect.getsource(parsers)
     tree = ast.parse(source)
@@ -173,9 +169,8 @@ def test_parsers_module_does_not_import_heavy_packages_eagerly():
         if isinstance(node, ast.Import):
             for alias in node.names:
                 top_level_imports.add(alias.name.split(".", 1)[0])
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                top_level_imports.add(node.module.split(".", 1)[0])
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            top_level_imports.add(node.module.split(".", 1)[0])
 
     assert not (heavy & top_level_imports), (
         f"Heavy packages must not be imported at module level — found: {sorted(heavy & top_level_imports)}"

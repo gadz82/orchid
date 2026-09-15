@@ -47,9 +47,11 @@ class TestIterEntryPointPlugins:
         good = _fake_ep("good", load_result="ok")
         bad = _fake_ep("bad", load_exc=RuntimeError("boom"))
 
-        with patch("importlib.metadata.entry_points", return_value=_mock_entry_points("x", [good, bad])):
-            with caplog.at_level(logging.WARNING):
-                result = list(iter_entry_point_plugins("x"))
+        with (
+            patch("importlib.metadata.entry_points", return_value=_mock_entry_points("x", [good, bad])),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = list(iter_entry_point_plugins("x"))
 
         assert result == [("good", "ok")]
         assert any("Failed to load 'bad'" in r.message for r in caplog.records)
@@ -62,9 +64,11 @@ class TestIterEntryPointPlugins:
         custom = logging.getLogger("orchid_ai.plugins.test-custom")
         bad = _fake_ep("bad", load_exc=ValueError("nope"))
 
-        with patch("importlib.metadata.entry_points", return_value=_mock_entry_points("g", [bad])):
-            with caplog.at_level(logging.WARNING, logger="orchid_ai.plugins.test-custom"):
-                list(iter_entry_point_plugins("g", logger=custom))
+        with (
+            patch("importlib.metadata.entry_points", return_value=_mock_entry_points("g", [bad])),
+            caplog.at_level(logging.WARNING, logger="orchid_ai.plugins.test-custom"),
+        ):
+            list(iter_entry_point_plugins("g", logger=custom))
 
         assert any(r.name == "orchid_ai.plugins.test-custom" for r in caplog.records)
 

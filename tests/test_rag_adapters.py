@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from orchid_ai.core.repository import Document, OrchidDocument
@@ -11,7 +13,6 @@ from orchid_ai.rag.adapters import (
     to_langchain_document,
     to_langchain_documents,
 )
-
 
 # ── OrchidDocument basics ─────────────────────────────────────────────
 
@@ -109,7 +110,7 @@ def test_from_langchain_document_accepts_duck_type():
 
     class FakeDoc:
         page_content = "duck"
-        metadata = {"src": "fake"}
+        metadata: ClassVar[dict] = {"src": "fake"}
         id = "duck-1"
 
     out = from_langchain_document(FakeDoc())
@@ -122,7 +123,7 @@ def test_from_langchain_document_accepts_duck_type():
 def test_from_langchain_document_handles_missing_id():
     class NoId:
         page_content = "no id here"
-        metadata: dict = {}
+        metadata: ClassVar[dict] = {}
 
     out = from_langchain_document(NoId())
     assert out.id is None

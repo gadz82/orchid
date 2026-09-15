@@ -16,7 +16,6 @@ from orchid_ai.config.schema_events import (
     ServiceAccountIdentity,
 )
 
-
 # ── extra=forbid ─────────────────────────────────────────────
 
 

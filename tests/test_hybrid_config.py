@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-
 from orchid_ai.config.md_loader import _load_agents, build_config_data_from_yaml
 from orchid_ai.config.schema import OrchidAgentsConfig
-
 
 AGENT_BALL_MD = """---
 description: "Basketball expert"

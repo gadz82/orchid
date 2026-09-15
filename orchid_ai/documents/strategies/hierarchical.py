@@ -26,7 +26,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from ...core.doc_store import OrchidDocStore
 from ...core.ingestion import OrchidChunk, OrchidIngestionStrategy
-from ...core.scopes import OrchidRAGScope
+from ...core.scopes import OrchidRAGScope, resolve_scope_level
 from ..chunker import ChunkConfig
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ class HierarchicalIngestion(OrchidIngestionStrategy):
                         "tenant_id": scope.tenant_id,
                         "user_id": scope.user_id,
                         "chat_id": scope.chat_id,
-                        "scope": "chat_shared",
+                        "scope": resolve_scope_level(scope),
                         "source_file": filename,
                         "parent_index": pi,
                     },
@@ -118,7 +118,7 @@ class HierarchicalIngestion(OrchidIngestionStrategy):
                     "tenant_id": scope.tenant_id,
                     "user_id": scope.user_id,
                     "chat_id": scope.chat_id,
-                    "scope": "chat_shared",
+                    "scope": resolve_scope_level(scope),
                     "source_file": filename,
                     "parent_id": parent_id,
                     "parent_index": pi,

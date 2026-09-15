@@ -166,16 +166,25 @@ class OrchidDefaultsConfig(BaseModel):
     prompts return cached results, reducing latency and cost.  Cache
     lives for the process lifetime (reset on restart).
 
+    ``mcp_servers`` declares MCP servers that are available to every
+    agent.  Agent-specific ``mcp_servers`` are merged with the defaults;
+    when both define a server with the same name, the agent-specific
+    config wins.
+
     Example YAML::
 
         defaults:
           cache_enabled: true
           llm:
             model: gemini/gemini-2.5-flash
+          mcp_servers:
+            - name: shared-search
+              url: https://search.example.com/mcp
     """
 
     llm: OrchidLLMConfig = Field(default_factory=OrchidLLMConfig)
     rag: OrchidRAGDefaultsConfig = Field(default_factory=OrchidRAGDefaultsConfig)
+    mcp_servers: list[OrchidMCPServerConfig] = Field(default_factory=list)
     cache_enabled: bool = False
 
 
@@ -238,7 +247,7 @@ class OrchidAgentsConfig(BaseModel):
     def _apply_defaults_and_names(self) -> OrchidAgentsConfig:
         """Merge defaults into each agent and set names recursively."""
         for agent_name, agent in self.agents.items():
-            _apply_defaults(agent, agent_name, self.defaults, self.tools)
+            _apply_defaults(agent, agent_name, self.defaults, self.tools, self.external_agents)
         return self
 
     def merge_from_db(self, db_configs: list[dict], *, strict: bool = True) -> None:
@@ -377,6 +386,7 @@ def _collect_injectable_tools(
 def _collect_approval_tools(
     agent: OrchidAgentConfig,
     global_tools: dict[str, OrchidBuiltinToolConfig] | None,
+    external_agents: dict[str, OrchidExternalAgentConfig] | None = None,
 ) -> None:
     for server in agent.mcp_servers:
         for tool in server.tools:
@@ -387,6 +397,10 @@ def _collect_approval_tools(
             tool_cfg = global_tools.get(tool_name)
             if tool_cfg and tool_cfg.requires_approval:
                 agent.approval_tools.add(tool_name)
+    # External-agent CLI tools declare their own approval default; honour it.
+    for ext_name, ext_cfg in (external_agents or {}).items():
+        if ext_cfg.requires_approval and ext_name in agent.tools:
+            agent.approval_tools.add(ext_name)
 
 
 def _collect_parallel_safe_tools(
@@ -411,22 +425,43 @@ def _cache_builtin_tool_configs(
                 agent.builtin_tool_configs[tool_name] = tool_cfg
 
 
+def _merge_mcp_defaults(agent: OrchidAgentConfig, defaults: OrchidDefaultsConfig) -> None:
+    """Merge ``defaults.mcp_servers`` into the agent's own list.
+
+    Default servers are prepended.  When an agent declares a server
+    with the same name as a default, the agent-specific config takes
+    precedence and replaces the default entry.
+    """
+    if not defaults.mcp_servers:
+        return
+
+    agent_names = {s.name for s in agent.mcp_servers}
+    merged: list[OrchidMCPServerConfig] = []
+    for server in defaults.mcp_servers:
+        if server.name not in agent_names:
+            merged.append(server)
+    merged.extend(agent.mcp_servers)
+    agent.mcp_servers = merged
+
+
 def _apply_defaults(
     agent: OrchidAgentConfig,
     name: str,
     defaults: OrchidDefaultsConfig,
     global_tools: dict[str, OrchidBuiltinToolConfig] | None = None,
+    external_agents: dict[str, OrchidExternalAgentConfig] | None = None,
 ) -> None:
-    """Recursively apply default values and set agent names."""
+    """Recursively apply default values and set names recursively."""
     agent.name = name
 
     _merge_llm_defaults(agent, defaults)
     _merge_rag_defaults(agent, defaults)
     _merge_retrieval_defaults(agent, defaults)
     _merge_ingestion_defaults(agent, defaults)
+    _merge_mcp_defaults(agent, defaults)
 
     _collect_injectable_tools(agent, global_tools)
-    _collect_approval_tools(agent, global_tools)
+    _collect_approval_tools(agent, global_tools, external_agents)
     _collect_parallel_safe_tools(agent, global_tools)
     _cache_builtin_tool_configs(agent, global_tools)
 
@@ -439,7 +474,7 @@ def _apply_defaults(
                     f"agent '{name}.{child_name}' has mini_agent.enabled=true — "
                     f"mini-agents may only be enabled on top-level agents (no nesting)."
                 )
-            _apply_defaults(child, child_name, defaults, global_tools)
+            _apply_defaults(child, child_name, defaults, global_tools, external_agents)
 
 
 def _merge_transformer_prompts(agent_retrieval: object, defaults_retrieval: object) -> None:

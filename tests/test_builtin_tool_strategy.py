@@ -168,7 +168,7 @@ class TestAgenticToolLoop:
                 agent._mcp_dispatcher, "render_capabilities", new_callable=AsyncMock, return_value=_EMPTY_CAPS
             ),
         ):
-            final_text, results, _ = await agent._agentic_tool_loop(
+            final_text, _results, _ = await agent._agentic_tool_loop(
                 "test query",
                 _make_auth(),
                 None,

@@ -20,7 +20,7 @@ import hashlib
 from typing import Any
 
 from ...core.ingestion import OrchidChunk, OrchidIngestionStrategy
-from ...core.scopes import OrchidRAGScope
+from ...core.scopes import OrchidRAGScope, resolve_scope_level
 from ..chunker import ChunkConfig, chunk_text, parent_child_chunk_text
 
 
@@ -57,7 +57,7 @@ class RecursiveIngestion(OrchidIngestionStrategy):
                             "tenant_id": scope.tenant_id,
                             "user_id": scope.user_id,
                             "chat_id": scope.chat_id,
-                            "scope": "chat_shared",
+                            "scope": resolve_scope_level(scope),
                             "source_file": filename,
                             "chunk_id": chunk_id,
                             "chunk_index": i,
@@ -78,7 +78,7 @@ class RecursiveIngestion(OrchidIngestionStrategy):
                             "tenant_id": scope.tenant_id,
                             "user_id": scope.user_id,
                             "chat_id": scope.chat_id,
-                            "scope": "chat_shared",
+                            "scope": resolve_scope_level(scope),
                             "source_file": filename,
                             "chunk_id": chunk_id,
                             "chunk_index": i,

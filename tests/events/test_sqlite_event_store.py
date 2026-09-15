@@ -22,7 +22,6 @@ from orchid_ai.core.events.store import (
 )
 from orchid_ai.events.backends.sqlite import SQLiteEventStorage
 
-
 # ── Fixtures ────────────────────────────────────────────────
 
 

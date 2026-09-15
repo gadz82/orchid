@@ -9,6 +9,7 @@ nail down the new contract.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import ClassVar
 from unittest.mock import AsyncMock
 
 import pytest
@@ -162,7 +163,7 @@ class TestFailedResourceNegativeCache:
                         text = "ok-content"
 
                     class _Result:
-                        contents = [_Content()]
+                        contents: ClassVar[list] = [_Content()]
 
                     return _Result()
 

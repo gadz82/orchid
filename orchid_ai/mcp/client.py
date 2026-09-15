@@ -146,7 +146,10 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
                     {
                         "name": t.name,
                         "description": t.description,
-                        "schema": t.inputSchema,
+                        # ``mcp`` versions disagree on casing: some expose
+                        # ``input_schema``, others ``inputSchema``.  Prefer
+                        # snake_case (installed version) with camelCase fallback.
+                        "schema": getattr(t, "input_schema", getattr(t, "inputSchema", {})),
                         # MCP 2025-03-26 ``Tool.annotations`` — advisory hints
                         # (readOnlyHint / idempotentHint / destructiveHint /
                         # openWorldHint).  Stored as raw because downstream
@@ -400,6 +403,30 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
     # ── Transport ────────────────────────────────────────────
 
     @asynccontextmanager
+    async def _normalized_streamablehttp_client(
+        self,
+        url: str,
+        *,
+        http_client: Any,
+    ) -> AsyncGenerator[tuple[Any, Any], None]:
+        """Enter ``streamablehttp_client`` and normalize its yield arity.
+
+        Different ``mcp`` versions yield either ``(read_stream, write_stream)``
+        or ``(read_stream, write_stream, context)``.  We only need the first
+        two; this wrapper adapts both shapes without leaking the context.
+        """
+        cm = streamablehttp_client(url, http_client=http_client)
+        streams = await cm.__aenter__()
+        try:
+            if len(streams) == 3:
+                read_stream, write_stream, _ = streams
+            else:
+                read_stream, write_stream = streams
+            yield read_stream, write_stream
+        finally:
+            await cm.__aexit__(None, None, None)
+
+    @asynccontextmanager
     async def _connect(self, auth: OrchidAuthContext, *, timeout: float = 30.0) -> AsyncGenerator[ClientSession, None]:
         """Open a transport connection and yield an initialized ClientSession."""
         import asyncio
@@ -415,8 +442,18 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
                     await session.initialize()
                     yield session
             else:
+                # Newer mcp versions accept ``headers=`` directly; older ones
+                # only accept an ``httpx.AsyncClient`` via ``http_client=``.
+                # Inject headers through a caller-owned client for version
+                # portability.  The framework owns the client lifecycle here.
+                import httpx
+
                 async with (
-                    streamablehttp_client(self._url, headers=headers) as (read_stream, write_stream, _),
+                    httpx.AsyncClient(headers=headers, timeout=timeout) as http_client,
+                    self._normalized_streamablehttp_client(self._url, http_client=http_client) as (
+                        read_stream,
+                        write_stream,
+                    ),
                     ClientSession(read_stream, write_stream) as session,
                 ):
                     await session.initialize()
@@ -443,11 +480,13 @@ class StreamableHttpMCPClient(OrchidCacheableMCPClient):
 
         async with self._connect(auth, timeout=timeout) as session:
             result = await session.call_tool(tool_name, arguments)
+            # ``mcp`` versions disagree on ``is_error`` vs ``isError`` casing.
+            is_error = getattr(result, "is_error", getattr(result, "isError", False))
             content = [{"type": c.type, "text": getattr(c, "text", "")} for c in result.content]
 
             result_obj = OrchidMCPToolResult(
                 content=content,
-                is_error=result.isError or False,
+                is_error=is_error or False,
             )
 
             logger.info(

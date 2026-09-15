@@ -31,7 +31,6 @@ from orchid_ai.config.schema import (
     OrchidRAGConfig,
 )
 
-
 # ── Helpers ────────────────────────────────────────────────────
 
 
@@ -415,9 +414,10 @@ class TestDecomposerModelFallback:
 
     @pytest.mark.asyncio
     async def test_unset_decomposer_model_uses_parent_chat_model(self, monkeypatch):
+        from langchain_core.messages import HumanMessage
+
         from orchid_ai.agents.mini_agent_decomposer import maybe_decompose
         from orchid_ai.core.state import OrchidAuthContext
-        from langchain_core.messages import HumanMessage
 
         decomposition = MiniAgentDecomposition(should_fork=False, reasoning="single")
         parent_chat = _make_chat_model(decomposition)
@@ -446,9 +446,10 @@ class TestDecomposerModelFallback:
 
     @pytest.mark.asyncio
     async def test_set_decomposer_model_triggers_factory(self, monkeypatch):
+        from langchain_core.messages import HumanMessage
+
         from orchid_ai.agents.mini_agent_decomposer import maybe_decompose
         from orchid_ai.core.state import OrchidAuthContext
-        from langchain_core.messages import HumanMessage
 
         decomposition = MiniAgentDecomposition(should_fork=False, reasoning="single")
         custom_chat = _make_chat_model(decomposition)

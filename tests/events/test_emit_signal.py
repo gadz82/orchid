@@ -13,7 +13,6 @@ from orchid_ai.events.queues.inmemory import (
     InMemorySignalStore,
 )
 
-
 # ── Fixture agent ───────────────────────────────────────────
 
 

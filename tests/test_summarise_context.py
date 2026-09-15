@@ -9,7 +9,6 @@ import pytest
 
 from orchid_ai.core.agent import OrchidAgent
 
-
 # ── Concrete stub (OrchidAgent is abstract) ──────────────────
 
 

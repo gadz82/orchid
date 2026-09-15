@@ -24,7 +24,6 @@ from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.mcp.inventory import OrchidMCPServerInventory
 from orchid_ai.mcp.session_warmer import OrchidSessionWarmer, OrchidWarmReport
 
-
 # ── Test doubles ────────────────────────────────────────────────
 
 

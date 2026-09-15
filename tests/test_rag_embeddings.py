@@ -14,7 +14,6 @@ from orchid_ai.rag.embeddings import (
     get_embedding_dimension,
 )
 
-
 # ── get_embedding_batch_size ────────────────────────────────
 
 

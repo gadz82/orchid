@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from orchid_ai.core.ingestion import OrchidChunk, OrchidIngestionStrategy
+from orchid_ai.core.mcp_result import OrchidMCPToolResult
 from orchid_ai.core.repository import OrchidVectorReader, OrchidVectorWriter
 from orchid_ai.rag.backends.null import NullVectorReader
 from orchid_ai.rag.dynamic import inject_to_rag
@@ -90,6 +91,26 @@ class TestInjectToRag:
         assert count == 0
         assert rw.upserted == []
         assert ingestion.calls == []  # strategy is never invoked for error results
+
+    @pytest.mark.asyncio
+    async def test_error_result_object_skipped(self, scope):
+        """OrchidMCPToolResult with is_error=True is not indexed."""
+        rw = _FakeReaderWriter()
+        ingestion = _RecordingIngestion()
+        count = await inject_to_rag(
+            rw,
+            tool_name="getConfluencePage",
+            tool_result=OrchidMCPToolResult(
+                content=[{"type": "text", "text": "upstream failure"}],
+                is_error=True,
+            ),
+            namespace="ns",
+            scope=scope,
+            ingestion=ingestion,
+        )
+        assert count == 0
+        assert rw.upserted == []
+        assert ingestion.calls == []
 
     @pytest.mark.asyncio
     async def test_empty_text_skipped(self, scope):

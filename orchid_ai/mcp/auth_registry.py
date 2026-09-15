@@ -43,6 +43,11 @@ class OrchidMCPOAuthServerInfo:
     server_name: str
     url: str
     agent_names: tuple[str, ...]  # frozen → must be tuple, not list
+    #: Manual OAuth config seeded from YAML (authorization_endpoint,
+    #: token_endpoint, client_id, client_secret, scopes, issuer) for
+    #: servers that are NOT MCP 2025-03-26 compliant.  ``None`` means
+    #: the framework must run the standard auto-discovery chain.
+    manual_oauth_config: dict | None = None
 
 
 @dataclass
@@ -94,7 +99,10 @@ class OrchidMCPAuthRegistry:
             for server in mcp_servers:
                 if server.auth.mode != "oauth":
                     continue
-                entry = server_map.setdefault(server.name, {"url": server.url, "agents": []})
+                entry = server_map.setdefault(
+                    server.name,
+                    {"url": server.url, "agents": [], "manual_oauth_config": None},
+                )
                 if agent_ref not in entry["agents"]:
                     entry["agents"].append(agent_ref)
                 # First URL seen wins; a later duplicate with a different
@@ -107,6 +115,18 @@ class OrchidMCPAuthRegistry:
                         entry["url"],
                         server.url,
                     )
+                # Carry manual OAuth config from YAML (for non-compliant servers)
+                manual = server.auth.manual_registration
+                if manual and manual.authorization_endpoint and manual.token_endpoint:
+                    entry["manual_oauth_config"] = {
+                        "authorization_endpoint": manual.authorization_endpoint,
+                        "token_endpoint": manual.token_endpoint,
+                        "registration_endpoint": manual.registration_endpoint,
+                        "client_id": manual.client_id,
+                        "client_secret": manual.client_secret,
+                        "scopes": manual.scopes,
+                        "issuer": manual.issuer,
+                    }
 
         for agent_name, agent_config in config.agents.items():
             _collect(agent_config.mcp_servers, agent_name)
@@ -119,6 +139,7 @@ class OrchidMCPAuthRegistry:
                 server_name=name,
                 url=entry["url"],
                 agent_names=tuple(entry["agents"]),
+                manual_oauth_config=entry.get("manual_oauth_config"),
             )
             for name, entry in server_map.items()
         }

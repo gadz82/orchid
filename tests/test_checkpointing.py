@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -17,7 +16,6 @@ from orchid_ai.config.schema import (
     OrchidRAGConfig,
 )
 from orchid_ai.runtime import OrchidRuntime
-
 
 # ── Factory tests ───────────────────────────────────────────
 
@@ -72,12 +70,14 @@ class TestBuildCheckpointerPostgres:
     async def test_postgres_missing_plugin(self):
         from orchid_ai.checkpointing import build_checkpointer
 
-        with patch.dict(
-            "sys.modules",
-            {"langgraph.checkpoint.postgres": None, "langgraph.checkpoint.postgres.aio": None},
+        with (
+            patch.dict(
+                "sys.modules",
+                {"langgraph.checkpoint.postgres": None, "langgraph.checkpoint.postgres.aio": None},
+            ),
+            pytest.raises(ImportError),
         ):
-            with pytest.raises(ImportError):
-                await build_checkpointer("postgres", dsn="postgresql://localhost/test")
+            await build_checkpointer("postgres", dsn="postgresql://localhost/test")
 
 
 class TestBuildCheckpointerCustom:

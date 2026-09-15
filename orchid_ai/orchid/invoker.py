@@ -110,6 +110,13 @@ class OrchidInvoker:
         except GraphInterrupt as exc:
             return self._interrupt_to_result(exc, prepared.chat_id)
 
+        # When a checkpointer is configured, LangGraph stores interrupts in the
+        # checkpoint state instead of raising GraphInterrupt out of ainvoke.
+        if self._checkpointer is not None and not result.get("final_response"):
+            interrupted = await self._check_for_interrupt(prepared.graph_config)
+            if interrupted is not None:
+                return interrupted
+
         response_text = result.get("final_response", "")
         agents_used = list(result.get("active_agents") or [])
 
@@ -282,6 +289,55 @@ class OrchidInvoker:
             mcp_context=dict(result.get("mcp_context") or {}),
             rag_context=dict(result.get("rag_context") or {}),
         )
+
+    async def _check_for_interrupt(
+        self,
+        graph_config: dict[str, Any],
+    ) -> OrchidInvokeResult | None:
+        """Inspect the checkpoint for a pending interrupt.
+
+        When a checkpointer is configured, LangGraph stores HITL interrupts in
+        the checkpoint state rather than raising ``GraphInterrupt`` out of
+        ``ainvoke``.  This helper reads the latest state snapshot and converts
+        any pending interrupts into the public ``OrchidInvokeResult`` shape.
+        """
+        try:
+            snapshot = await self._graph.aget_state(graph_config)
+        except Exception:
+            return None
+
+        chat_id = graph_config.get("configurable", {}).get("thread_id", "")
+        approvals: list[OrchidPendingApproval] = []
+        for task in getattr(snapshot, "tasks", ()) or ():
+            for interrupt in getattr(task, "interrupts", ()) or ():
+                val = getattr(interrupt, "value", None)
+                if isinstance(val, dict):
+                    approvals.append(
+                        OrchidPendingApproval(
+                            tool=val.get("tool", ""),
+                            args=val.get("args", {}),
+                            agent=val.get("agent", ""),
+                            interrupt_id=str(getattr(interrupt, "id", "")),
+                        )
+                    )
+                else:
+                    approvals.append(
+                        OrchidPendingApproval(
+                            tool=str(val) if val is not None else "",
+                            args={},
+                            agent="",
+                            interrupt_id=str(getattr(interrupt, "id", "")),
+                        )
+                    )
+
+        if approvals:
+            return OrchidInvokeResult(
+                response="",
+                chat_id=chat_id,
+                interrupted=True,
+                approvals_needed=approvals,
+            )
+        return None
 
     @staticmethod
     def _interrupt_to_result(exc: GraphInterrupt, chat_id: str) -> OrchidInvokeResult:

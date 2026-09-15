@@ -6,10 +6,10 @@ import datetime
 
 import pytest
 
+from orchid_ai.config.schema_agent import _deep_merge
+from orchid_ai.config.schema_storage import OrchidConfigStorageConfig
 from orchid_ai.config.storage import OrchidConfigStorage
 from orchid_ai.config.storage_factory import build_config_storage
-from orchid_ai.config.schema_storage import OrchidConfigStorageConfig
-from orchid_ai.config.schema_agent import _deep_merge
 
 
 class _FakeConfigStorage(OrchidConfigStorage):
@@ -33,7 +33,7 @@ class _FakeConfigStorage(OrchidConfigStorage):
         return self._db.get(name)
 
     async def upsert_config(self, name: str, config: dict) -> dict:
-        now = datetime.datetime.now().isoformat()
+        now = datetime.datetime.now(tz=datetime.UTC).isoformat()
         self._db[name] = {
             "name": name,
             "config": config,
@@ -51,7 +51,7 @@ class _FakeConfigStorage(OrchidConfigStorage):
             "name": name,
             "config": merged,
             "created_at": self._db[name]["created_at"],
-            "updated_at": datetime.datetime.now().isoformat(),
+            "updated_at": datetime.datetime.now(tz=datetime.UTC).isoformat(),
         }
         return self._db[name]
 

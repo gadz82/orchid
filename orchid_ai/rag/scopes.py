@@ -15,6 +15,6 @@ happens inside the backend.
 
 from __future__ import annotations
 
-from ..core.scopes import SHARED_TENANT, OrchidRAGScope
+from ..core.scopes import SHARED_TENANT, OrchidRAGScope, resolve_scope_level, scope_key
 
-__all__ = ["SHARED_TENANT", "OrchidRAGScope"]
+__all__ = ["SHARED_TENANT", "OrchidRAGScope", "resolve_scope_level", "scope_key"]

@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
-from orchid_ai.core.content import OrchidContentItem, OrchidContentSource
 from orchid_ai.content import (
     CONTENT_SOURCE_REGISTRY,
     build_content_source,
     register_content_source,
 )
 from orchid_ai.content.local import LocalFileContentSource
+from orchid_ai.core.content import OrchidContentItem, OrchidContentSource
 
 
 class TestOrchidContentItem:
@@ -35,7 +37,7 @@ class TestOrchidContentItem:
 
     def test_frozen(self):
         item = OrchidContentItem(path="x", name="x", content_type=".txt")
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             item.path = "y"  # type: ignore[misc]
 
 

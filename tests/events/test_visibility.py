@@ -40,7 +40,6 @@ from orchid_ai.events.registry import (
     build_registry_from_config,
 )
 
-
 # ── Pydantic forbidden combos (§26.3) ───────────────────────
 
 

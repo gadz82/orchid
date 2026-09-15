@@ -10,8 +10,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from orchid_ai.agents.generic_agent import GenericAgent
 from orchid_ai.config.schema import OrchidAgentConfig, OrchidLLMConfig, OrchidRAGConfig
-from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.core.agent import OrchidAgentRunContext
+from orchid_ai.core.state import OrchidAuthContext
 
 
 async def _run_with_auth(agent, state):

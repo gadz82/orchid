@@ -26,7 +26,6 @@ from orchid_ai.rag.factory import (
 )
 from orchid_ai.rag.sparse import SPARSE_ENCODER_REGISTRY, BM25Encoder
 
-
 # ── Vector backend ────────────────────────────────────────────
 
 

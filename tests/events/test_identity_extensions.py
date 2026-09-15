@@ -22,7 +22,6 @@ from orchid_ai.core.mcp import OrchidMCPTokenRecord, OrchidMCPTokenStore
 from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.identity import OAuthMintingMixin, OrchidTokenRefresher
 
-
 # ── Defaults on OrchidIdentityResolver ──────────────────────
 
 

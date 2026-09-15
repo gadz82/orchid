@@ -131,7 +131,7 @@ class TestBuiltinStepSignatureFiltering:
         """Previous step results are passed as 'context' when handler accepts it."""
         received = {}
 
-        def tool_with_context(query: str, context: dict = None):
+        def tool_with_context(query: str, context: dict | None = None):
             received["query"] = query
             received["context"] = context
             return "done"

@@ -29,8 +29,8 @@ from orchid_ai.config.schema import (
     OrchidMiniAgentConfig,
     OrchidRAGConfig,
 )
-from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.core.run_config import with_auth
+from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.observability import (
     MINI_AGENT_EVENT_KEY,
     extract_event,

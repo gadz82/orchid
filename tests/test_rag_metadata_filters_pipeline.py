@@ -17,7 +17,6 @@ from orchid_ai.rag.strategies.hyde import HyDERetrieval
 from orchid_ai.rag.strategies.multi_query import MultiQueryRetrieval
 from orchid_ai.rag.strategies.simple import SimpleRetrieval
 
-
 _FILTERS = {"status": "published", "language": ["en"]}
 
 

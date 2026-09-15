@@ -16,7 +16,6 @@ from orchid_ai.core.events.errors import SignalAuthValidationError
 from orchid_ai.events.auth import BearerValidator, HMACValidator
 from orchid_ai.events.auth.base import SignalAuthRequest
 
-
 # ── HMAC ────────────────────────────────────────────────────
 
 

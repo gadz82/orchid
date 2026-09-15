@@ -26,7 +26,7 @@ from typing import Any
 
 from ...core.doc_store import OrchidDocStore
 from ...core.ingestion import OrchidChunk, OrchidIngestionStrategy
-from ...core.scopes import OrchidRAGScope
+from ...core.scopes import OrchidRAGScope, resolve_scope_level
 from .recursive import RecursiveIngestion
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ class SemanticIngestion(OrchidIngestionStrategy):
                         "tenant_id": scope.tenant_id,
                         "user_id": scope.user_id,
                         "chat_id": scope.chat_id,
-                        "scope": "chat_shared",
+                        "scope": resolve_scope_level(scope),
                         "source_file": filename,
                         "chunk_id": f"semantic-{file_hash}-{i}",
                         "chunk_index": i,

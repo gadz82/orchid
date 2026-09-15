@@ -20,6 +20,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from orchid_ai.agents.mini_agent_node import _build_mini_system_prompt
 from orchid_ai.config.schema import (
@@ -60,7 +61,6 @@ from orchid_ai.rag.transformers.hyde import DEFAULT_MULTI_PROMPT, DEFAULT_SINGLE
 from orchid_ai.rag.transformers.multi_query import DEFAULT_MULTI_QUERY_PROMPT
 from orchid_ai.rag.transformers.reformulate import DEFAULT_REFORMULATE_PROMPT
 
-
 # ── 1. OrchidAgentPromptConfig ─────────────────────────────────
 
 
@@ -97,7 +97,7 @@ class TestOrchidAgentPromptConfig:
         assert cfg.resource_max_chars == 512
 
     def test_extra_fields_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             OrchidAgentPromptConfig(unknown_field="x")  # type: ignore[arg-type]
 
 
@@ -230,7 +230,7 @@ class TestMiniSystemPromptTemplate:
         assert cfg.system_prompt_template is None
 
     def test_mini_agent_config_extra_keys_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             OrchidMiniAgentConfig(unknown="value")  # type: ignore[arg-type]
 
 

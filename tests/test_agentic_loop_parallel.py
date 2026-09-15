@@ -60,7 +60,7 @@ def _make_loop(
 ) -> AgenticLoop:
     """Construct an ``AgenticLoop`` with a no-op chat model."""
     chat_model = AsyncMock()
-    chat_model.bind_tools = lambda _defs: chat_model  # noqa: E731 — terse stub
+    chat_model.bind_tools = lambda _defs: chat_model
     return AgenticLoop(
         agent_name="test_agent",
         chat_model=chat_model,

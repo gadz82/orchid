@@ -15,7 +15,6 @@ from orchid_ai.config.schema import (
     OrchidSupervisorConfig,
 )
 
-
 # ── Schema tests ────────────────────────────────────────────
 
 

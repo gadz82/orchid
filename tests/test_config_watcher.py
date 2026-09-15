@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,6 @@ from orchid_ai.config.watcher import (
     OrchidConfigWatcher,
     OrchidYamlConfigWatcher,
 )
-
 
 # ──────────────────────────────────────────────────────────────────
 # Helpers
@@ -59,7 +59,7 @@ class TestOrchidConfigSnapshot:
         _write_orchid_md(root)
         config, hashes = load_md_config(root, agents_dir=agents_dir)
         snap = OrchidConfigSnapshot(config=config, file_hashes=hashes, root_path=root.resolve())
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             snap.file_hashes = {}  # type: ignore[misc]
 
     def test_snapshot_stores_hashes(self, tmp_path):
@@ -134,7 +134,7 @@ class TestOrchidConfigWatcherChangedFiles:
 
 class TestOrchidConfigWatcherReload:
     def test_reload_returns_new_snapshot(self, tmp_path):
-        watcher, root, agents_dir = _make_md_snapshot(tmp_path)
+        watcher, _root, _agents_dir = _make_md_snapshot(tmp_path)
         snap_before = watcher.snapshot
         new_snap = watcher.reload()
         assert new_snap is not snap_before

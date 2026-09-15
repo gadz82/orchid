@@ -23,7 +23,6 @@ from orchid_ai.core.mcp import OrchidMCPClient, OrchidMCPToolResult
 from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.mcp.inventory import MCPToolAnnotations
 
-
 # ── MCPToolAnnotations.from_raw — parsing ───────────────────────
 
 
@@ -61,10 +60,10 @@ class TestMCPToolAnnotationsFromRaw:
     def test_object_with_camel_attributes(self):
         @dataclass
         class _Annotations:
-            readOnlyHint: bool = True  # noqa: N815 — match wire format
-            idempotentHint: bool | None = None  # noqa: N815
-            destructiveHint: bool | None = None  # noqa: N815
-            openWorldHint: bool | None = None  # noqa: N815
+            readOnlyHint: bool = True
+            idempotentHint: bool | None = None
+            destructiveHint: bool | None = None
+            openWorldHint: bool | None = None
 
         annotations = MCPToolAnnotations.from_raw(_Annotations())
         assert annotations.read_only_hint is True
@@ -204,7 +203,7 @@ def test_client_cache_dict_shape_includes_annotations_key():
     class _Tool:
         name: str
         description: str
-        inputSchema: dict  # noqa: N815 — matches MCP wire field
+        inputSchema: dict
         annotations: object | None
 
     raw_tools = [
