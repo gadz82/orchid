@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v1.10.0 (2026-09-15)
+
+### Bug Fixes
+
+- Skip indexing of error results in RAG dynamic ingestion
+  ([`4f804c0`](https://github.com/gadz82/orchid/commit/4f804c03ffba55e625ba259f4420a7d9ae384a37))
+
+### Features
+
+- Add manual OAuth configuration support and MCP discovery enhancements
+  ([`456e008`](https://github.com/gadz82/orchid/commit/456e00870305c78dea995a40fdd663237955c471))
+
+- Clean up imports and add SQLite ingestion manifest migration
+  ([`7a60856`](https://github.com/gadz82/orchid/commit/7a60856b02e5c9adc42284233029e2e17f4af258))
+
+- Implement interrupt handling in LangGraph with checkpoint integration
+  ([`12ed66a`](https://github.com/gadz82/orchid/commit/12ed66a24027ae1a5c6a3c1cfe24699478ddb286))
+
+- Support split agent configuration and default MCP servers
+  ([`2c73eff`](https://github.com/gadz82/orchid/commit/2c73effa588154b4c437a67384bc020827a08da9))
+
+
 ## v1.9.0 (2026-08-03)
 
 ### Features
