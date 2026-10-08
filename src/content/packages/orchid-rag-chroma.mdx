@@ -3,7 +3,7 @@ title: "orchid-rag-chroma"
 description: "ChromaDB vector-backend plugin for on-disk, zero-infrastructure RAG."
 package: "orchid-rag-chroma"
 section: "packages"
-order: 27
+order: 28
 tags: []
 sources:
   - "orchid-rag-chroma/README.md"
@@ -40,13 +40,20 @@ For CLI users, `orchid-cli` already depends on `orchid-rag-chroma` — no extra 
 chroma = "orchid_rag_chroma:_register"
 ```
 
-The plugin reads `CHROMA_PATH` from the environment to switch from HTTP to persistent (local on-disk) mode.
+The plugin reads `CHROMA_PATH` from the environment to switch from HTTP to persistent (local on-disk) mode. `orchid-cli` sets a persistent path by default (`~/.orchid/chroma`).
 
 ## Configuration
 
 ```yaml
 rag:
   vector_backend: chroma
-  chroma_path: ~/.orchid/chroma        # local on-disk (persistent mode)
   embedding_model: text-embedding-3-small
 ```
+
+Set `CHROMA_PATH` in the environment for persistent mode, e.g.:
+
+```bash
+export CHROMA_PATH=~/.orchid/chroma
+```
+
+Without `CHROMA_PATH` the plugin talks HTTP to the Chroma server at `chroma_host` / `chroma_port` (defaults `localhost:8000`).

@@ -18,7 +18,7 @@ external: []
 
 <RepoLink package="orchid-cli" />
 
-`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. The default storage is SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
+`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. It bundles the **`orchid-storage-sqlite`** plugin, so the default storage is durable SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
 
 The CLI bundles the **`orchid-rag-chroma`** plugin as a dependency for zero-infrastructure RAG — vectors live on disk at `~/.orchid/chroma/`, no Qdrant container required. Set `VECTOR_BACKEND=qdrant` and install `orchid-rag-qdrant` to switch when you need sparse/hybrid search or scope promotion.
 
@@ -26,15 +26,17 @@ The CLI bundles the **`orchid-rag-chroma`** plugin as a dependency for zero-infr
 
 ```bash
 pip install orchid-ai orchid-cli
-# orchid-rag-chroma is included — no extra install needed for on-disk RAG
+# orchid-rag-chroma (on-disk RAG) and orchid-storage-sqlite (durable chat
+# persistence) are included — no extra install needed
+```
 
 After installation the `orchid` command is available in your shell.
 
 ## Quick start
 
 ```bash
-# Validate a config before deploying
-orchid config validate examples/basketball/orchid.yml
+# Validate the agent config before deploying
+orchid config validate examples/basketball/agents.yaml
 
 # Start an interactive chat session
 orchid chat interactive --config examples/basketball/orchid.yml
@@ -64,7 +66,7 @@ Authentication is required when MCP servers or tools need a real Bearer token. W
 | `orchid chat list --config <path>` | List all chat sessions |
 | `orchid chat history <id> --config <path>` | Show message history |
 | `orchid chat send <id> "msg" --config <path>` | Send a single message and stream the response |
-| `orchid chat interactive --config <path>` | Interactive REPL with slash commands (`/switch`, `/new`, `/share`) |
+| `orchid chat interactive --config <path>` | Interactive REPL with slash commands (`/list`, `/switch`, `/new`, `/rename`, `/history`) |
 | `orchid chat rename <id> "title" --config <path>` | Rename a chat |
 | `orchid chat share <id> --config <path>` | Promote chat RAG data to user scope |
 | `orchid chat delete <id> --config <path>` | Delete a chat session |
@@ -208,10 +210,10 @@ Goodbye.
 
 1. Load `OrchidAgentsConfig` from the config path.
 2. Call `build_graph()` to wire the LangGraph supervisor and agent nodes.
-3. Initialise `OrchidChatStorage` (SQLite by default).
+3. Initialise `OrchidChatStorage` (SQLite by default via the bundled `orchid-storage-sqlite` plugin).
 4. Warm MCP capability caches for all `auth.mode: none` servers.
 
-Every `chat`, `index`, and `mcp` command goes through `commands/_session.py:resolve_session()`, which bootstraps the framework, resolves auth, and warms `passthrough`/`oauth` MCP caches once per `(tenant_key, user_id)`. The result is an `Orchid` facade and an `OrchidAuthContext` — the same objects the API hands to its routers.
+Every `chat` command goes through `commands/_session.py:resolve_session()`, which bootstraps the framework, resolves auth, and warms `passthrough`/`oauth` MCP caches once per `(tenant_key, user_id)`. The result is an `Orchid` facade and an `OrchidAuthContext` — the same objects the API hands to its routers. The `index` and `mcp` commands bootstrap the framework directly via `bootstrap.py` without the per-user session warm-up.
 
 The CLI is an independent OAuth 2.0 client: it runs a full Authorization Code + PKCE flow against the upstream IdP, stores tokens in `~/.orchid/tokens.json` (permissions `0o600`), and refreshes them automatically when they expire. It never delegates auth to `orchid-api`.
 

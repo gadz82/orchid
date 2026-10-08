@@ -1000,7 +1000,7 @@ agents:
 |---|---|
 | **Short** | Qdrant collection namespace for this agent. |
 | **Detailed** | Documents indexed for this agent are stored in this namespace. Different agents can share a namespace (common knowledge base) or use separate ones (isolated domains). |
-| **Default** | `""` (uses agent name as namespace) |
+| **Default** | `""` (used as-is — no agent-name substitution) |
 
 ##### `agents[].rag.payload_indexes`
 
@@ -1079,7 +1079,8 @@ agents:
 
 - **`none`** — No authentication headers are sent. Use for local servers on private networks.
 - **`passthrough`** — Forwards the graph's `OrchidAuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider.
-- **`oauth`** — Per-user OAuth 2.0 via MCP 2025-03-26 spec. On the first 401, Orchid discovers the server's OAuth metadata (RFC 9728), fetches the authorization server metadata (RFC 8414), and performs dynamic client registration (RFC 7591). No `client_id` or `client_secret` lives in config — everything is discovered at runtime.
+- **`oauth`** — Per-user OAuth 2.0 via MCP 2025-03-26 spec. When no stored token exists, the client raises `OrchidMCPAuthRequiredError`; the authorization route then discovers the server's OAuth metadata (RFC 9728), fetches the authorization server metadata (RFC 8414), and performs dynamic client registration (RFC 7591).
+- **`oauth` + `manual_registration`** — For servers that do not implement MCP 2025-03-26 discovery, set `auth.manual_registration` with explicit `authorization_endpoint`, `token_endpoint`, `client_id`, `client_secret`, `scopes`, and `issuer`; the framework skips auto-discovery and uses those values.
 
 <Callout variant="warning" title="OAuth mode">
 Use `none` for local MCP servers that need no credentials. Use `passthrough` when the MCP server shares the same identity provider. Use `oauth` when each user must independently authorize the MCP server; Orchid discovers everything from the server's 401 response automatically.
@@ -1468,8 +1469,8 @@ Global built-in tool declarations. Each key is a tool name; the value defines it
 | | |
 |---|---|
 | **Short** | Dotted import path to the Python function. |
-| **Detailed** | The function implementing this tool. Auto-extracted signature is used for parameter schema unless `parameters` is explicitly defined. Sync handlers are automatically wrapped with `asyncio.to_thread`. |
-| **Default** | Required |
+| **Detailed** | The function implementing this tool. Auto-extracted signature is used for parameter schema unless `parameters` is explicitly defined. Sync handlers are automatically wrapped with `asyncio.to_thread`. Either `handler` or `class` (a dotted path to an `OrchidTool` subclass) must be provided. |
+| **Default** | Required (unless `class` is set) |
 
 <a id="agents-yaml__tools[].description"></a>
 #### `tools[].description`
@@ -1969,15 +1970,15 @@ When `events.enabled` is `false` (or the `events` key is absent), no background 
 | | |
 |---|---|
 | **Short** | Event storage backend. |
-| **Detailed** | Required when `enabled: true`. Stores event state, trigger history, and schedule metadata. |
-| **Default** | `null` |
+| **Detailed** | Optional. Stores event state, trigger history, and schedule metadata. When omitted, the built-in in-memory event store is used (non-durable). Durable stores ship in `orchid-storage-sqlite` and `orchid-storage-postgres`. |
+| **Default** | `null` → built-in in-memory store |
 
 ##### `events.store.class`
 
 | | |
 |---|---|
 | **Short** | Dotted import path for the event store. |
-| **Default** | Required when `enabled: true` |
+| **Default** | Built-in in-memory store; e.g. `orchid_storage_sqlite.event_storage.SQLiteEventStorage` (plugin) |
 
 ##### `events.store.extra_args`
 
@@ -1992,15 +1993,15 @@ When `events.enabled` is `false` (or the `events` key is absent), no background 
 | | |
 |---|---|
 | **Short** | Signal queue backend configuration. |
-| **Detailed** | Required when `enabled: true`. Buffers signals between producers and processors. |
-| **Default** | `null` |
+| **Detailed** | Optional. Buffers signals between producers and processors. When omitted, the built-in `InMemorySignalQueue` is used (non-durable). Durable queues ship in the storage plugins. |
+| **Default** | `null` → built-in in-memory queue |
 
 ##### `events.queue.class`
 
 | | |
 |---|---|
 | **Short** | Dotted import path for the queue backend. |
-| **Default** | Required when `enabled: true` |
+| **Default** | Built-in in-memory queue; e.g. `orchid_storage_sqlite.event_queue.SQLiteSignalQueue` (plugin) |
 
 ##### `events.queue.notify_enabled`
 
@@ -2048,7 +2049,7 @@ When `events.enabled` is `false` (or the `events` key is absent), no background 
 | | |
 |---|---|
 | **Short** | Scheduler backend for cron-based triggers. |
-| **Detailed** | Optional. Required only if you use cron schedules. Typically an APScheduler wrapper. |
+| **Detailed** | Reserved. Cron schedules are driven by the built-in `SchedulerProducer`, which currently always uses `APSchedulerBackend` — configuring this block has no effect today. |
 | **Default** | `null` |
 
 ##### `events.scheduler.class`
@@ -2056,7 +2057,7 @@ When `events.enabled` is `false` (or the `events` key is absent), no background 
 | | |
 |---|---|
 | **Short** | Dotted import path for the scheduler. |
-| **Default** | Required when schedules are used |
+| **Default** | — (not consumed; the built-in `SchedulerProducer` always uses `APSchedulerBackend`) |
 
 ##### `events.scheduler.extra_args`
 
@@ -2151,7 +2152,7 @@ When `events.enabled` is `false` (or the `events` key is absent), no background 
 | | |
 |---|---|
 | **Short** | Processing middleware. |
-| **Detailed** | Applied to signals before they reach processors. Can transform, filter, or enrich signals. |
+| **Detailed** | Reserved. Entries are parsed by the schema but not instantiated by the bootstrap today; middleware can be wired programmatically on the dispatcher. |
 | **Default** | `[]` |
 
 ##### `events.middleware[].class`
@@ -2211,7 +2212,7 @@ When `events.enabled` is `false` (or the `events` key is absent), no background 
 | | |
 |---|---|
 | **Short** | Secret reference. |
-| **Detailed** | e.g. An HMAC key name or certificate thumbprint. |
+| **Detailed** | `env:VAR` references are resolved from the environment; other schemes raise a startup error (v1 supports `env:` only). |
 | **Default** | `null` |
 
 ####### `events.ingestion.sources[].validator.extra_args`
@@ -2350,7 +2351,7 @@ When `events.enabled` is `false` (or the `events` key is absent), no background 
 | | |
 |---|---|
 | **Short** | Prompt template for the agent. |
-| **Detailed** | Sent to the agent as the user query when the trigger fires. Can use template variables from the signal envelope. |
+| **Detailed** | Sent to the agent as the user query when the trigger fires. Supports `{{tenant_key}}`, `{{user_id}}`, `{{signal.id}}`, `{{signal.type}}`, `{{signal.source}}`, `{{signal.user_id}}`, `{{signal.tenant_key}}`, `{{identity.mode}}`, and `{{payload.<key>}}` (top-level keys only). Unknown placeholders are left verbatim. |
 | **Default** | Required |
 
 ###### `events.triggers[].emits.identity`
@@ -2448,11 +2449,13 @@ When `events.enabled` is `false` (or the `events` key is absent), no background 
 events:
   enabled: true
   store:
-    class: orchid_ai.events.stores.sqlite.SQLiteEventStore
+    class: orchid_storage_sqlite.event_storage.SQLiteEventStorage   # pip install orchid-storage-sqlite
   queue:
-    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
+    class: orchid_storage_sqlite.event_queue.SQLiteSignalQueue
+  producers:
+    - class: orchid_ai.events.producers.scheduler.SchedulerProducer
   processors:
-    - class: orchid_ai.events.processors.default.DefaultProcessor
+    - class: orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor
       concurrency: 4
   schedules:
     - id: daily_digest
@@ -2463,15 +2466,15 @@ events:
         name: scheduler
   triggers:
     - id: morning_briefing
-      on:
+      "on":
         signal: cron
+        cron: "0 7 * * 1-5"
       emits:
         agent: digest
-        prompt_template: "Generate the morning briefing for {{user.name}}"
+        prompt_template: "Generate the morning briefing for tenant {{tenant_key}}"
         identity:
-          mode: addressed_to_user
-          service_account: scheduler
-          user_id_from: signal.user_id
+          mode: service_account
+          name: scheduler
       retry:
         max: 3
         backoff: exponential

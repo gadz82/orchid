@@ -32,8 +32,8 @@ Ask through the `docs` agent:
 
 ```bash
 pip install -e ./orchid -e ./orchid-cli
-orchid chat send "How do I configure hybrid RAG?" \
-  --agent docs \
+orchid chat create --config examples/wiki/orchid.yml
+orchid chat send <chat_id> "How do I configure hybrid RAG?" \
   --config examples/wiki/orchid.yml
 ```
 
@@ -60,7 +60,7 @@ upload:
   chunk_overlap: 150
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/wiki_chats.db
 
 startup:
@@ -82,7 +82,7 @@ upload:
   chunk_overlap: 150
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/wiki_chats.db
 
 startup:
@@ -109,7 +109,7 @@ defaults:
 
 tools:
   lookup_glossary:
-    handler: examples.wiki.hooks.tools.lookup_glossary
+    class: examples.wiki.hooks.tools.LookupGlossaryTool
     description: "Fetch a term's definition from the glossary store."
     inject_to_rag: true          # tool result is cached into RAG
     rag_ttl: 3600
@@ -177,7 +177,7 @@ tools:
 
 ## What to look for
 
-- `ingestion.strategy: headered` on `docs` → wraps recursive splitting with a contextual-header post-processor; each chunk is prepended with `{source_file} > {nearest_heading}`, so retrieval includes section context even for chunks deep in a page.
+- `ingestion.strategy: headered` on `docs` → wraps recursive splitting with a contextual-header post-processor; each chunk is prepended with a two-line header (`# {title}` from the filename, then `## {section}` for the nearest heading), so retrieval includes section context even for chunks deep in a page.
 - `retrieval.strategy: hybrid` → fans out to both dense embeddings and BM25; `fusion: rrf` merges the ranked lists with Reciprocal Rank Fusion; effective for jargon-heavy queries (error codes, exact feature names).
 - `inject_to_rag: true` on `lookup_glossary` → when the tool returns a glossary entry it is automatically chunked and indexed into `glossary_cache`; subsequent hybrid searches can surface definitions alongside doc-page hits.
 - `rag` block on the `lookup_glossary` tool → a per-tool override; the tool's results use a different namespace and ingestion strategy than the agent's main corpus.

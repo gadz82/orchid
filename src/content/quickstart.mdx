@@ -10,11 +10,11 @@ example: "/examples/basketball"
 external: []
 ---
 
-This guide takes you from a fresh clone to your first agent reply in under ten minutes, using the basketball demo — a self-contained pair of agents (NBA stats expert and sports psychologist) that runs entirely on local models via Ollama.
+This guide takes you from a fresh clone to your first agent reply in under ten minutes, using the basketball demo — a self-contained pair of agents (NBA stats expert and sports psychologist) with PostgreSQL persistence and Qdrant RAG, running on local models via Ollama.
 
 ## Prerequisites
 
-You need Docker Desktop (or Docker Engine + Compose v2) and Ollama with three models pulled:
+You need Docker Desktop (or Docker Engine + Compose v2) and Ollama running on the host with three models pulled:
 
 ```bash
 ollama pull llama3.2
@@ -26,51 +26,60 @@ ollama pull minicpm-v
 
 ## Clone
 
+The examples live in a dedicated repository. Clone it and enter the basketball example:
+
 ```bash
-git clone https://github.com/gadz82/orchid
-cd orchid
+git clone https://github.com/gadz82/orchid-examples
+cd orchid-examples/basketball
+cp .env.example .env   # optional — the defaults work with local Ollama
 ```
 
 ## Run the basketball demo
 
-The demo ships with a single Compose file that starts the API server, Qdrant vector store, and all dependencies. For a zero-infrastructure alternative (no Docker, ChromaDB instead of Qdrant), try the [Recipes example](/examples/recipes) which runs entirely locally with Ollama.
+The example ships with its own Compose file that starts the API, PostgreSQL, Qdrant, the web UI, and the MCP gateway. Ollama stays on your host — the API reaches it through `host.docker.internal`.
 
 ```bash
-docker compose -f docker-compose.demo.yml up --build
+docker compose up --build
 ```
 
-The first build takes a few minutes to pull base images and install Python dependencies. Subsequent starts are fast because Docker caches the layers. Once you see `Application startup complete` in the logs, the API is ready on `http://localhost:8000`.
+The first build takes a few minutes to pull base images and install Python dependencies. Subsequent starts are fast because Docker caches the layers. Once you see `Application startup complete` in the logs, you have:
+
+- API: `http://localhost:8080`
+- Web UI: `http://localhost:3000`
+- MCP gateway: `http://localhost:9000/mcp`
+- Qdrant: `http://localhost:6333`
+
+For a zero-infrastructure alternative (no Docker, SQLite + ChromaDB instead of PostgreSQL + Qdrant), try the [Recipes example](/examples/recipes) which runs entirely locally with Ollama.
 
 ## First call
 
-Send your first message through the API or the CLI:
+Create a chat session, then send your first message:
 
 ```bash
-curl -X POST http://localhost:8000/chats/demo/messages \
-  -H "Content-Type: application/json" \
-  -d '{"content": "Tell me about LeBron James"}'
+# 1. Create a chat and capture its id
+curl -s -X POST http://localhost:8080/chats \
+  -H "Content-Type: application/json" -d '{}' \
+  | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])"
+
+# 2. Send a message (the endpoint expects multipart/form-data)
+curl -X POST http://localhost:8080/chats/<chat_id>/messages \
+  -F "message=Tell me about LeBron James"
 ```
 
-Or using the CLI directly:
+Or open `http://localhost:3000` and chat from the UI.
 
-```bash
-orchid chat send "Tell me about LeBron James" \
-  --config examples/basketball/orchid.yml
-```
-
-The basketball agent calls the `get_player_stats` tool, retrieves career stats from the built-in data store, and returns a structured analysis. Ask the psychologist anything about player motivation or team dynamics — it has its own dedicated tools.
+The basketball agent calls the `get_player_stats` tool, retrieves career stats from the example's data store, and returns a structured analysis. Ask the psychologist anything about player motivation or team dynamics — it has its own dedicated tools.
 
 ## What just happened?
 
-Orchid loaded `examples/basketball/agents.yaml`, which declares two `GenericAgent` instances with named tools and prompts. No custom Python classes were needed — the entire agent configuration lives in YAML. The framework built a [LangGraph supervisor](/concepts/supervisor) graph, which routes your message to the right agent based on content and available tools.
+Orchid loaded `basketball/agents.yaml`, which declares the agents, their tools, and the cross-agent skills. The tools are implemented as `OrchidTool` subclasses in the example's Python package, and the entire agent configuration lives in YAML. The framework built a [LangGraph supervisor](/concepts/supervisor) graph, which routes your message to the right agent based on content and available tools.
 
 The supervisor also manages [conversation history](/concepts/agents) across turns, so follow-up questions work naturally. When you ask about a player's mental state, the supervisor automatically forwards relevant context from the basketball agent to the psychologist agent as part of a multi-step skill.
 
-Behind the scenes, the API persists chat history to SQLite (the demo default) and streams responses via Server-Sent Events. The [RAG pipeline](/concepts/rag) is configured but not indexed yet — uploading a PDF via `POST /chats/demo/documents` would make it retrievable in future turns.
+Behind the scenes, chat history is persisted to PostgreSQL via the `orchid-storage-postgres` plugin and responses are streamed via Server-Sent Events. The [RAG pipeline](/concepts/rag) is configured but not indexed yet — uploading a PDF through `POST /chats/{chat_id}/upload` would make it retrievable in future turns.
 
 ## Next steps
 
 Explore the [configuration reference](/configuration) for all `orchid.yml` and `agents.yaml` options. Browse the [examples](/examples) for more complex scenarios including helpdesk, restaurant ordering, MCP auth flows, and RAG strategies. The [best practices](/best-practices) guide covers production-ready patterns for scaling Orchid in a real deployment.
 
 ---
-

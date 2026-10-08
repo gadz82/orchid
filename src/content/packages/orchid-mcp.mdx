@@ -19,7 +19,7 @@ external: []
 
 <RepoLink package="orchid-mcp" />
 
-`orchid-mcp` is a **fork-and-deploy boilerplate**, not a published npm package. It is a TypeScript/Node.js MCP gateway that exposes your Orchid deployment to any MCP-capable host LLM — Claude Desktop, Claude Code, Cursor, or anything that speaks the MCP 2025-03-26 Streamable HTTP transport. Clone the source, configure a handful of environment variables, and any host LLM can call `orchid_ask(...)` as naturally as a built-in tool.
+`orchid-mcp` is a TypeScript/Node.js MCP gateway that exposes your Orchid deployment to any MCP-capable host LLM — Claude Desktop, Claude Code, Cursor, or anything that speaks the MCP 2025-03-26 Streamable HTTP transport. It is published on npm as `@orchid-ai/orchid-mcp` and doubles as forkable boilerplate: configure a handful of environment variables and any host LLM can call `orchid_ask(...)` as naturally as a built-in tool.
 
 The gateway is intentionally thin: it owns MCP transport, identity resolution, session mapping, and HTTP translation. It never duplicates framework logic. All agent routing, RAG retrieval, tool execution, and HITL approvals happen upstream in `orchid-api`.
 
@@ -31,8 +31,8 @@ MCP client         orchid-mcp            orchid-api
                            │
                     ┌──────┴──────────────────────┐
                     │  AuthStrategy (per session)  │
-                    │  SessionMap (LRU / Redis)     │
-                    │  OrchidAPIClient (undici)     │
+                    │  SessionMap (in-memory LRU)   │
+                    │  OrchidAPIClient (fetch)      │
                     │  opossum circuit breaker      │
                     │  Pino + OTEL + rate limiter   │
                     └─────────────────────────────-┘
@@ -40,9 +40,9 @@ MCP client         orchid-mcp            orchid-api
 
 ### Key internal modules
 
-**`OrchidAPIClient`** — zod-validated HTTP client backed by undici. Every response shape is parsed at the boundary; a schema mismatch raises a clear error rather than silently passing garbage to tool handlers.
+**`OrchidAPIClient`** — zod-validated HTTP client built on Node's `fetch`. Every response shape is parsed at the boundary; a schema mismatch raises a clear error rather than silently passing garbage to tool handlers.
 
-**`SessionMap`** — maps an MCP session ID to its bound Orchid chat ID and resolved identity. The default implementation is an in-process LRU cache. For multi-replica deployments swap in the Redis-backed implementation via `ORCHID_MCP_SESSION_BACKEND=redis`.
+**`SessionMap`** — maps an MCP session ID to its bound Orchid chat ID and pending-interrupt state. The implementation is an in-process LRU cache; a shared Redis-backed map for multi-replica deployments is not shipped yet. Identity is resolved per request, not stored in the map.
 
 **`AuthStrategy` ABC** — pluggable authentication. Two implementations ship: `service_account` (one static Bearer token shared across all MCP users) and `oauth` / `discover` (MCP 2025-03-26 OAuth 2.0 authorization-server role with Dynamic Client Registration). The gateway holds no upstream secrets; code exchange, identity resolution, and token refresh all delegate to `orchid-api`.
 
@@ -56,12 +56,12 @@ The gateway registers nine MCP tools on every session. All tool handlers go thro
 
 | Tool | Purpose | Key params |
 |------|---------|------------|
-| `orchid_ask` | Ask Orchid's supervisor a question. Auto-creates a chat on first call. | `query: string`, optional `files: [{name, base64}]` |
+| `orchid_ask` | Ask Orchid's supervisor a question. Auto-creates a chat on first call. | `message: string`, optional `files: [{filename, contentB64, mimeType?}]` |
 | `orchid_new_chat` | Start a fresh chat and bind the MCP session to it. | optional `title: string` |
 | `orchid_list_chats` | List the user's existing chats. | — |
-| `orchid_switch_chat` | Bind the current MCP session to a prior chat. | `chat_id: string` |
-| `orchid_upload_file` | Upload a file into the current chat's RAG scope. | `name: string`, `content_b64: string` |
-| `orchid_resume_chat` | Resume a HITL-paused chat with an approve/deny decision. | `chat_id: string`, `decision: "approve" \| "deny"` |
+| `orchid_switch_chat` | Bind the current MCP session to a prior chat. | `chatId: string` |
+| `orchid_upload_file` | Upload a file into the current chat's RAG scope. | `filename: string`, `contentB64: string`, optional `mimeType: string` |
+| `orchid_resume_chat` | Resume a HITL-paused chat with an approve/deny decision. | `approved: boolean` |
 
 ### Event tools (three)
 
@@ -131,11 +131,11 @@ Add to `~/.cursor/mcp.json`:
 
 ## Fork and deploy checklist
 
-1. **Set `ORCHID_MCP_UPSTREAM_URL`** to the base URL of your `orchid-api` instance (e.g. `http://orchid-api:8000`).
+1. **Set `ORCHID_MCP_ORCHID_API_URL`** to the base URL of your `orchid-api` instance (e.g. `http://orchid-api:8000`).
 2. **Choose an auth mode** via `ORCHID_MCP_AUTH_MODE`: `service_account` for single-user personal installs; `discover` for multi-user deployments (pulls auth metadata from `orchid-api`'s `/auth-info`).
 3. **Set `ORCHID_MCP_SERVICE_ACCOUNT_TOKEN`** if using `service_account` mode.
-4. **Configure session backend**: `ORCHID_MCP_SESSION_BACKEND=redis` + `ORCHID_MCP_REDIS_URL` for multi-replica; leave at default (`memory`) for single-instance.
-5. **Wire observability**: set `ORCHID_MCP_TRACING_ENABLED=true` and `ORCHID_MCP_OTLP_ENDPOINT` for your OTEL collector; `ORCHID_MCP_LOG_LEVEL` defaults to `info`.
-6. **Review hardening defaults**: rate limiter (`ORCHID_MCP_RATE_LIMIT_RPM`, `ORCHID_MCP_RATE_LIMIT_BURST`) and circuit breaker (`ORCHID_MCP_CIRCUIT_BREAKER_THRESHOLD`) ship with sensible defaults — tune for your traffic profile.
+4. **Session maps live in process memory** — run a single gateway replica, or wait for the shared session-map backend (Redis support is not shipped yet).
+5. **Wire observability**: set `ORCHID_MCP_TRACING_ENABLED=true` and `ORCHID_MCP_OTEL_EXPORTER_OTLP_ENDPOINT` for your OTEL collector; `ORCHID_MCP_LOG_LEVEL` defaults to `info`.
+6. **Review hardening defaults**: rate limiter (`ORCHID_MCP_RATE_LIMIT_RPM`, `ORCHID_MCP_RATE_LIMIT_BURST`) and circuit breaker (`ORCHID_MCP_CIRCUIT_BREAKER_ERROR_THRESHOLD_PCT`) ship with sensible defaults — tune for your traffic profile.
 7. **Run checks**: `npm run typecheck && npm run lint && npm test` must all be green before deploying.
 

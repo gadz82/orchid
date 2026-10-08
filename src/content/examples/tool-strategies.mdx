@@ -17,7 +17,7 @@ external: []
 
 ## What this demonstrates
 
-Five agents hit the same knowledge-base MCP server but with different `tool_call_strategy` settings. `fanout_lookup` calls all tools concurrently (`all`). `pipeline_lookup` runs them in order, passing each result to the next (`sequential`). `smart_lookup` lets the LLM choose which tools to call (`llm_decides`). `cascade_lookup` uses a custom `priority` strategy — registered by a startup hook — that short-circuits as soon as one tool returns a non-empty result. A fifth agent, `parallel_searcher`, demonstrates the orthogonal `parallel_tools` flag for the agentic loop. This is the reference example for understanding how skill-execution strategies compose with MCP servers.
+Four agents hit the same knowledge-base MCP server but with different `tool_call_strategy` settings. `fanout_lookup` calls all tools concurrently (`all`). `pipeline_lookup` runs them in order, passing each result to the next (`sequential`). `smart_lookup` lets the LLM choose which tools to call (`llm_decides`). `cascade_lookup` uses a custom `priority` strategy — registered by a startup hook — that short-circuits as soon as one tool returns a non-empty result. A fifth agent, `parallel_searcher`, is built-in-tools-only and demonstrates the orthogonal `parallel_tools` flag for the agentic loop. This is the reference example for understanding how skill-execution strategies compose with MCP servers.
 
 ## Run it
 
@@ -54,7 +54,7 @@ auth:
   dev_bypass: true
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/tool_strategies_chats.db
 
 startup:
@@ -69,7 +69,7 @@ auth:
   dev_bypass: true
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/tool_strategies_chats.db
 
 startup:
@@ -93,13 +93,13 @@ defaults:
 
 tools:
   metric_a:
-    handler: "examples.tool-strategies.tools.metrics.metric_a"
+    class: "examples.tool-strategies.tools.metrics.MetricATool"
     parallel_safe: true
   metric_b:
-    handler: "examples.tool-strategies.tools.metrics.metric_b"
+    class: "examples.tool-strategies.tools.metrics.MetricBTool"
     parallel_safe: true
   metric_c:
-    handler: "examples.tool-strategies.tools.metrics.metric_c"
+    class: "examples.tool-strategies.tools.metrics.MetricCTool"
     parallel_safe: true
 
 agents:
@@ -116,9 +116,9 @@ agents:
     skills:
       lookup_everywhere:
         steps:
-          - { tool: cache_lookup, source: mcp, server: knowledge_base }
-          - { tool: primary_lookup, source: mcp, server: knowledge_base }
-          - { tool: slow_lookup, source: mcp, server: knowledge_base }
+          - { tool: cache_lookup, source: knowledge_base }
+          - { tool: primary_lookup, source: knowledge_base }
+          - { tool: slow_lookup, source: knowledge_base }
 
   pipeline_lookup:
     description: "Tools run in order; each receives previous results."
@@ -172,13 +172,13 @@ defaults:
 
 tools:
   metric_a:
-    handler: "examples.tool-strategies.tools.metrics.metric_a"
+    class: "examples.tool-strategies.tools.metrics.MetricATool"
     parallel_safe: true
   metric_b:
-    handler: "examples.tool-strategies.tools.metrics.metric_b"
+    class: "examples.tool-strategies.tools.metrics.MetricBTool"
     parallel_safe: true
   metric_c:
-    handler: "examples.tool-strategies.tools.metrics.metric_c"
+    class: "examples.tool-strategies.tools.metrics.MetricCTool"
     parallel_safe: true
 ---`}
   mdLabel="orchid.md (infra + shared)"

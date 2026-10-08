@@ -24,6 +24,7 @@ The helpdesk example shows how to go beyond `GenericAgent`. A custom `SupportAge
 
 ```bash
 pip install -e ./orchid -e ./orchid-api
+export GEMINI_API_KEY=...   # required by this example's orchid.yml
 ORCHID_CONFIG=examples/helpdesk/config/orchid.yml uvicorn orchid_api.main:app --port 8000
 ```
 
@@ -159,26 +160,23 @@ skills:
       - agent: escalation
         instruction: "Confirm closure or create an escalation plan"
 ---`}
-  mdLabel="orchid.md (infra + shared)"
+  mdLabel="orchid.md"
 />
 
-The `support` agent lives in `agents/support.md` with its own frontmatter and Markdown body:
+The `support` agent is a custom `OrchidAgent` subclass (`agents/support.py`), wired in `config/agents.yaml`:
 
-```markdown
----
-class: examples.helpdesk.agents.support.SupportAgent
-description: "Technical support agent with KB search and ticket status."
-tools: [classify_ticket, search_kb, get_ticket_status]
-mini_agent:
-  enabled: true
-  max_count: 3
-parallel_tools: true
-rag:
-  namespace: knowledge_base
-  k: 5
----
-
-Technical support agent with KB search and ticket status.
+```yaml
+support:
+  class: examples.helpdesk.agents.support.SupportAgent
+  description: "Technical support agent with KB search and ticket status."
+  tools: [classify_ticket, search_kb, get_ticket_status]
+  mini_agent:
+    enabled: true
+    max_count: 3
+  parallel_tools: true
+  rag:
+    namespace: knowledge_base
+    k: 5
 ```
 
 ## What to look for

@@ -6,7 +6,7 @@ section: "concepts"
 order: 20
 tags: ["parallelism", "fan-out", "yaml"]
 sources:
-  - "orchid/.knowledge/adr/ADR-021-mini-agents.md"
+  - ".knowledge/adr/ADR-021-mini-agents.md"
   - "orchid/orchid_ai/agents/generic_agent.py"
   - "orchid/orchid_ai/graph/supervisor.py"
   - "examples/helpdesk/config/agents.yaml"
@@ -19,7 +19,7 @@ Mini-agents are an opt-in per-agent fan-out mechanism. When a user sends a messa
 
 ## How it works
 
-Enabling mini-agents on a parent agent adds three nodes to the LangGraph graph for that agent:
+Enabling mini-agents on a parent agent adds two nodes to that agent's subgraph — a decomposer/fan-out node and an aggregator node — plus a conditional fork edge:
 
 ```
 supervisor ──Send──> {name}_agent (parent + decomposer hook)
@@ -49,7 +49,7 @@ At the start of every turn, a **decomposer** runs as a cheap structured-output c
     prompt: "You are a support specialist..."
     mini_agent:
       enabled: true
-      max_minis: 3          # default 3, hard cap 8
+      max_count: 3          # default 3, hard cap 8
       timeout_seconds: 30   # per-mini timeout
       tool_allowlist_mode: strict   # strict | parent_full | inferred`}
   yamlLabel="agents.yaml"
@@ -57,7 +57,7 @@ At the start of every turn, a **decomposer** runs as a cheap structured-output c
 description: "Handles support tickets and knowledge-base lookups."
 mini_agent:
   enabled: true
-  max_minis: 3          # default 3, hard cap 8
+  max_count: 3          # default 3, hard cap 8
   timeout_seconds: 30   # per-mini timeout
   tool_allowlist_mode: strict   # strict | parent_full | inferred
 ---
@@ -85,9 +85,9 @@ Mini-agents fail gracefully. The aggregator handles partial failures:
 | Condition | Mini outcome | Aggregator action |
 |---|---|---|
 | Loop completes successfully | `status="ok"`, `summary=<text>` | Use as-is |
-| MCP transport error (after retry) | `status="failed"`, `error=<msg>` | LLM mentions failure |
-| Unhandled exception | `status="failed"`, `error=<repr>` | LLM mentions failure |
-| Timeout exceeded | `status="timeout"`, `error="timed out"` | LLM mentions delay |
+| MCP transport error | `status="failed"`, `error=<msg>` | LLM mentions failure |
+| Unhandled exception | `status="failed"`, `error="<ExceptionType>: <message>"` | LLM mentions failure |
+| Timeout exceeded | `status="timeout"`, `error="timed out after {timeout}s"` | LLM mentions delay |
 | All minis failed | n/a | Deterministic error AIMessage — no synthesis LLM call |
 
 Only the parent's synthesised `AIMessage` is persisted in chat history. Mini outcomes are invisible to the conversation record.

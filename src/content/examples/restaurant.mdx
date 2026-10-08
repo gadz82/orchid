@@ -18,7 +18,7 @@ external: []
 
 ## What this demonstrates
 
-The restaurant example is the canonical demonstration of RAG in Orchid. A `menu` agent uses `multi_query` retrieval with `reformulate` query transformations to answer dietary and recommendation questions from a vector knowledge base. A custom `ReviewsAgent` performs sentiment analysis. An `orders` agent handles order placement and billing using built-in tools. A cross-agent `full_dining_experience` skill chains all three agents in sequence. The example also shows how an agent can emit a signal mid-run to trigger a background Bloom (event-driven deep research that replies back into the originating chat).
+The restaurant example is the canonical demonstration of RAG in Orchid. A `menu` agent uses `multi_query` retrieval with `reformulate` query transformations to answer dietary and recommendation questions from a vector knowledge base. A custom `ReviewsAgent` performs sentiment analysis. An `orders` agent handles order placement and billing using built-in tools. A cross-agent `full_dining_experience` skill chains all three agents in sequence. The example also wires a chat-bound event trigger: a `research.requested` signal starts a background Bloom that runs the `reviews` agent and posts its result back into the originating chat.
 
 ## Run it
 
@@ -36,7 +36,7 @@ orchid chat interactive --config examples/restaurant/config/orchid.yml
 
 ## Configuration walkthrough
 
-`orchid.yml` connects the LLM, Qdrant, and the custom SQLite storage backend:
+`orchid.yml` connects the LLM, Qdrant, and the SQLite storage backend (via the `orchid-storage-sqlite` plugin):
 
 <CodePair
   yaml={`# orchid.yml (trimmed)
@@ -55,7 +55,7 @@ rag:
   embedding_model: gemini/gemini-embedding-001   # 3072-d
 
 storage:
-  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/restaurant_chats.db
 
 # ...truncated`}
@@ -73,7 +73,7 @@ rag:
   embedding_model: gemini/gemini-embedding-001
 
 storage:
-  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/restaurant_chats.db
 ---`}
   mdLabel="orchid.md"
@@ -93,6 +93,7 @@ defaults:
     model: "gemini/gemini-flash-latest"
     temperature: 0.3
   rag:
+    enabled: false
     retrieval:
       strategy: multi_query
       query_transformers: [reformulate]
@@ -127,7 +128,7 @@ agents:
 
   orders:
     description: "Order placement and billing."
-    tools: [place_order, get_order_status, calculate_bill]
+    tools: [place_order, get_order_status, calculate_bill, search_menu, get_daily_specials]
     rag:
       enabled: false
     execution_hints:
@@ -165,6 +166,7 @@ defaults:
     model: "gemini/gemini-flash-latest"
     temperature: 0.3
   rag:
+    enabled: false
     retrieval:
       strategy: multi_query
       query_transformers: [reformulate]
@@ -180,7 +182,7 @@ skills:
       - agent: reviews
         instruction: "Analyze the customer's review"
 ---`}
-  mdLabel="orchid.md (infra + shared)"
+  mdLabel="orchid.md"
 />
 
 ## What to look for

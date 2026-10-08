@@ -39,13 +39,14 @@ The base class also provides shared helpers every subclass can use without reimp
 
 ## GenericAgent: no Python required
 
-For most use cases, `GenericAgent` is the right choice. It is a concrete subclass whose behaviour is entirely driven by an `OrchidAgentConfig` parsed from config files. Its `run()` executes a fixed six-step pipeline:
+For most use cases, `GenericAgent` is the right choice. It is a concrete subclass whose behaviour is entirely driven by an `OrchidAgentConfig` parsed from config files. Its `run()` executes a fixed pipeline of six stages:
 
 1. RAG retrieval (tenant-scoped via `OrchidRAGScope`)
-2. Skill check — if the query matches a configured skill, run it and skip to step 6
-3. Agentic tool-calling loop — MCP + built-in tools via native `tool_calls`
-4. Dynamic RAG injection — write tool results back to the vector store for future retrieval
-5. LLM summarisation — synthesise the final response
+2. Injectable-tool cache check — reuse recent results when available
+3. Skill check — if the query matches a configured skill, run it and skip the agentic loop
+4. Agentic tool-calling loop — MCP + built-in tools via native `tool_calls`
+5. Dynamic RAG injection — write tool results back to the vector store for future retrieval
+6. LLM summarisation — synthesise the final response
 
 ## Defining an agent
 

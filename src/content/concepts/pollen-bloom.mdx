@@ -14,8 +14,8 @@ example: ""
 external: []
 ---
 
-<Callout type="info">
-  Pollen + Bloom is the event-driven layer of Orchid — currently proposed and under active design (ADR-029, status: Proposed). The architecture is stable; implementation phases land incrementally.
+<Callout variant="info" title="Opt-in layer">
+  Pollen + Bloom is the event-driven layer of Orchid (ADR-029, status: **Accepted**), enabled per deployment with `events.enabled: true` in `agents.yaml`. When disabled, no store, queue, producers, or processors are constructed — opt-out is zero overhead.
 </Callout>
 
 Every standard Orchid run is synchronous: a user sends a message, the API resolves an `OrchidAuthContext`, the supervisor fans out, and the response streams back. Pollen + Bloom adds a complementary mode — **AI work triggered by events** — without duplicating the supervisor, auth model, or streaming infrastructure.
@@ -24,7 +24,7 @@ Every standard Orchid run is synchronous: a user sends a message, the API resolv
 
 **Pollen** is the event substrate. It ingests, persists, and dispatches immutable `Signal`s. Every signal that enters the system is written to the `signals` table before any trigger runs — signals are replayable by definition.
 
-**Bloom** is the execution layer. Triggers match signals using JMESPath filter expressions, build `JobSpec`s, and the `JobRunner` invokes the existing LangGraph supervisor with a synthesised `OrchidAgentState`. A `JobRun` is the unit of execution, persisted with status, result, and error.
+**Bloom** is the execution layer. Triggers match signals using JMESPath filter expressions, build `JobSpec`s, and the `GraphJobRunner` invokes the existing LangGraph supervisor with a synthesised `OrchidAgentState`. A `JobRun` is the unit of execution, persisted with status, result, and error.
 
 ```
               ┌──────── Pollen — ingest path (non-blocking) ──────────┐
@@ -63,23 +63,41 @@ Scheduling is not a separate concept — `Schedule` rows produce synthetic `cron
   enabled: true
 
   store:
-    class: orchid_ai.events.backends.postgres.PostgresEventStore
+    class: orchid_storage_postgres.event_storage.PostgresEventStorage
+    extra_args:
+      dsn: postgresql://user:pass@host:5432/orchid
 
   queue:
-    class: orchid_ai.events.queues.postgres.PostgresSignalQueue
+    class: orchid_storage_postgres.event_queue.PostgresSignalQueue
 
   producers:
-    - class: orchid_ai.events.producers.http.HTTPIngestionProducer
-      mount: /signals
     - class: orchid_ai.events.producers.scheduler.SchedulerProducer
+    - class: orchid_ai.events.producers.internal.InternalEmissionProducer
 
   processors:
     - class: orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor
       concurrency: 4
 
+  # Webhook ingest — orchid-api mounts HTTPIngestionProducer at /signals
+  # automatically when at least one source is declared.
+  ingestion:
+    sources:
+      - id: crm-webhooks
+        validator:
+          class: orchid_ai.events.auth.HMACValidator
+          secret_ref: env:CRM_WEBHOOK_SECRET
+        allowed_types:
+          - support.ticket.created
+
+  schedules:
+    - id: morning-digest-cron
+      cron: "0 7 * * 1-5"
+      trigger_id: morning-digest
+      identity: { mode: service_account, name: digest-bot }
+
   triggers:
     - id: morning-digest
-      on: { signal: cron, cron: "0 7 * * 1-5" }
+      "on": { signal: cron, cron: "0 7 * * 1-5" }
       emits:
         agent: notifications
         prompt_template: "Build the morning digest for {{tenant_key}}"
@@ -87,7 +105,7 @@ Scheduling is not a separate concept — `Schedule` rows produce synthetic `cron
       retry: { max: 3, backoff: exponential }
 
     - id: high-priority-ticket
-      on:
+      "on":
         signal: support.ticket.created
         when: "payload.priority == 'high'"
       emits:
@@ -100,23 +118,41 @@ events:
   enabled: true
 
   store:
-    class: orchid_ai.events.backends.postgres.PostgresEventStore
+    class: orchid_storage_postgres.event_storage.PostgresEventStorage
+    extra_args:
+      dsn: postgresql://user:pass@host:5432/orchid
 
   queue:
-    class: orchid_ai.events.queues.postgres.PostgresSignalQueue
+    class: orchid_storage_postgres.event_queue.PostgresSignalQueue
 
   producers:
-    - class: orchid_ai.events.producers.http.HTTPIngestionProducer
-      mount: /signals
     - class: orchid_ai.events.producers.scheduler.SchedulerProducer
+    - class: orchid_ai.events.producers.internal.InternalEmissionProducer
 
   processors:
     - class: orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor
       concurrency: 4
 
+  # Webhook ingest — orchid-api mounts HTTPIngestionProducer at /signals
+  # automatically when at least one source is declared.
+  ingestion:
+    sources:
+      - id: crm-webhooks
+        validator:
+          class: orchid_ai.events.auth.HMACValidator
+          secret_ref: env:CRM_WEBHOOK_SECRET
+        allowed_types:
+          - support.ticket.created
+
+  schedules:
+    - id: morning-digest-cron
+      cron: "0 7 * * 1-5"
+      trigger_id: morning-digest
+      identity: { mode: service_account, name: digest-bot }
+
   triggers:
     - id: morning-digest
-      on: { signal: cron, cron: "0 7 * * 1-5" }
+      "on": { signal: cron, cron: "0 7 * * 1-5" }
       emits:
         agent: notifications
         prompt_template: "Build the morning digest for {{tenant_key}}"
@@ -124,7 +160,7 @@ events:
       retry: { max: 3, backoff: exponential }
 
     - id: high-priority-ticket
-      on:
+      "on":
         signal: support.ticket.created
         when: "payload.priority == 'high'"
       emits:
@@ -135,15 +171,17 @@ events:
   mdLabel="orchid.md"
 />
 
+The event backends are plugin-provided: `PostgresEventStorage` and `PostgresSignalQueue` ship in `orchid-storage-postgres` (`pip install orchid-storage-postgres`), while `SQLiteEventStorage` and `SQLiteSignalQueue` ship in `orchid-storage-sqlite`. The in-memory event backend is built into `orchid-ai` for local development.
+
 ## Signal sources
 
 All ingress paths normalise to a `Signal` and flow through the same dispatcher:
 
 | Path | Producer | Notes |
 |---|---|---|
-| `POST /signals` (HTTP) | `HTTPIngestionProducer` | HMAC-SHA256 per source. Returns `202 Accepted` with `signal_id` — never blocks on processing. |
-| Cron schedule | `SchedulerProducer` | APScheduler-driven; synthetic `signal.type = "cron"`. |
-| MCP tool `orchid_signal_emit` | `MCPIngestionProducer` | Gateway forwards to `POST /signals`. |
+| `POST /signals` (HTTP) | `HTTPIngestionProducer` | An `orchid-api` adapter — mounted automatically when `events.ingestion.sources` is non-empty. HMAC/bearer validators per source; returns `202 Accepted` with `signal_id` — never blocks on processing. |
+| Cron schedule | `SchedulerProducer` | APScheduler-driven; `events.schedules[]` rows emit synthetic `signal.type = "cron"` signals. |
+| MCP tool `orchid_signal_emit` | orchid-mcp gateway tool | The gateway posts to the API's `/signals` route as source id `mcp-gateway` — declare a matching `events.ingestion.sources[]` entry so the request validates. |
 | Agent `self.emit_signal(...)` | `InternalEmissionProducer` | Non-blocking; inherits the agent's `OrchidAuthContext`. |
 | Custom bus | `OrchidSignalProducer` subclass | Kafka, SQS, Redis Streams, file watcher — wired via `events.producers:` YAML. |
 
@@ -157,7 +195,7 @@ Every signal carries an identity claim. The **processor** (not the ingest path) 
 | `addressed_to_user` | Platform, scoped to a user's data | Service account + `user_id` in `JobSpec` |
 | `act_as_user` | The user (impersonation) | `OrchidIdentityResolver.mint_for_user(tenant_key, user_id)` |
 
-`mint_for_user` is an optional extension point on `OrchidIdentityResolver`. The default raises `OrchidIdentityNotMintableError`; consumers implement it according to what their identity provider supports.
+`mint_for_user` is an optional extension point on `OrchidIdentityResolver`. The default raises `MintingProbeUnsupportedError`; resolvers that support impersonation override it and may raise `OrchidIdentityNotMintableError` for specific users they cannot mint for. The trigger registry probes this method at boot for every `act_as_user` trigger and refuses to start when the resolver cannot mint at all.
 
 ## Extension points
 
@@ -169,7 +207,7 @@ All three layers between emitter and supervisor are independently pluggable:
 | New event source (Kafka topic, file watcher) | `OrchidSignalProducer` | `events.producers:` list |
 | Different worker model (Celery, Lambda) | `OrchidSignalProcessor` | `events.processors:` list |
 | Custom webhook auth (mTLS, signed JWT) | `SignalAuthValidator` | per-source `validator.class:` |
-| Cross-cutting enrichment (PII redaction) | `SignalIngestMiddleware` | `events.middleware:` ordered list |
+| Cross-cutting enrichment (PII redaction) | `SignalIngestMiddleware` | programmatic dispatcher wiring (`events.middleware:` is parsed but not wired yet) |
 
 ## Idempotency and retry
 
@@ -181,5 +219,5 @@ All three layers between emitter and supervisor are independently pluggable:
 
 ## Streaming
 
-`GET /runs/{run_id}/stream` reuses the existing SSE infrastructure. It emits the same events the chat stream produces (`agent.started`, `tool.called`, `tool.completed`, `agent.finished`), plus four Bloom-specific events: `bloom.signal.ingested`, `bloom.run.queued`, `bloom.run.started`, `bloom.run.finished`.
+`GET /runs/{run_id}/stream` opens a Server-Sent Events stream scoped to a single `JobRun`. It carries the run lifecycle — `bloom.run.queued`, `bloom.run.started`, and the terminal `bloom.run.finished` — and closes after the terminal event or an idle timeout. Chat-bound runs additionally project progress onto the chat channel as `chat.bloom.attached` and `chat.bloom.finished`; the final assistant message itself is persisted to chat storage through the normal chat path.
 

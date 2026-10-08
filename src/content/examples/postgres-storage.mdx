@@ -42,11 +42,11 @@ The `orchid.yml` references the plugin classes directly:
 ```yaml
 storage:
   class: orchid_storage_postgres.OrchidPostgresChatStorage
-  dsn: postgresql://postgres:postgres@postgres:5432/orchid
+  dsn: postgresql://orchid:${POSTGRES_PASSWORD:-orchid}@postgres:5432/orchid
 
 checkpointer:
   type: postgres
-  dsn: postgresql://postgres:postgres@postgres:5432/orchid
+  dsn: postgresql://orchid:${POSTGRES_PASSWORD:-orchid}@postgres:5432/orchid
 
 rag:
   vector_backend: qdrant
@@ -60,10 +60,10 @@ The `orchid-rag-qdrant` and `orchid-storage-postgres` packages are installed alo
 After sending a few messages, connect to the running PostgreSQL instance:
 
 ```bash
-docker exec -it postgres psql -U postgres -d orchid
+docker compose exec postgres psql -U orchid -d orchid
 
 # Chat sessions
-SELECT id, title, tenant_key, user_id, created_at FROM chat_sessions;
+SELECT id, title, tenant_id, user_id, created_at FROM chat_sessions;
 
 # LangGraph checkpoints
 SELECT count(*) FROM checkpoints;

@@ -73,7 +73,7 @@ supervisor:
 The supervisor calls `OrchidAgent.extract_conversation_history()` before every routing, synthesis, and sequential-advance step. This static method:
 
 - Filters out internal supervisor routing messages (any message starting with `[Supervisor`)
-- Strips agent-name prefixes from AI messages (e.g. `[Basketball Agent]\n…` → `…`)
+- Optionally strips agent-name prefixes from AI messages via `strip_prefixes` (`GenericAgent` passes its own agent tag; the supervisor's routing calls leave prefixes in place)
 - Excludes the current user query (added separately as the trigger)
 - Caps the result to `history_max_turns * 2` messages
 

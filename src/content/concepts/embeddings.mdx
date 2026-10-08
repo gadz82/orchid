@@ -29,19 +29,17 @@ Orchid uses pluggable embedding models to convert documents and queries into den
 Set the embedding model:
 
 <CodePair
-  yaml={`defaults:
-  rag:
-    embedding_model: "ollama/nomic-embed-text"`}
+  yaml={`rag:
+  embedding_model: "ollama/nomic-embed-text"`}
   yamlLabel="orchid.yml"
   md={`---
-defaults:
-  rag:
-    embedding_model: "ollama/nomic-embed-text"
+rag:
+  embedding_model: "ollama/nomic-embed-text"
 ---`}
   mdLabel="orchid.md"
 />
 
-Any LiteLLM-compatible embedding model string is accepted. The `LiteLLMEmbedder` in `orchid_ai/rag/embeddings.py` delegates the actual call to LiteLLM.
+Any LiteLLM-compatible embedding model string is accepted. The `build_embeddings()` factory in `orchid_ai/rag/embeddings.py` returns a LiteLLM-backed embedder that delegates the actual call to LiteLLM.
 
 <Callout variant="warning" title="Switching models requires re-indexing">
 Vector store collections are created with a fixed vector dimension. If you change `embedding_model` after ingesting documents, the dimensions of new vectors will not match the existing collections and inserts will fail. Drop and recreate the collections, then re-index all documents from scratch. This applies to both Qdrant and ChromaDB.

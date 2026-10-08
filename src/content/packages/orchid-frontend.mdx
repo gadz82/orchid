@@ -1,6 +1,6 @@
 ---
 title: "orchid-frontend"
-description: "Next.js 15 multi-chat UI with SSE streaming and file upload support."
+description: "Next.js 16 multi-chat UI with SSE streaming and file upload support."
 package: "orchid-frontend"
 section: "packages"
 order: 24
@@ -16,7 +16,7 @@ external: []
 
 <RepoLink package="orchid-frontend" />
 
-`orchid-frontend` is a **fork-and-deploy boilerplate**, not a published npm package. It is a Next.js 15 multi-chat UI that talks to `orchid-api` over HTTP via Server Actions. Clone it, customise the theme tokens and branding, point it at your API, and you have a production-ready chat interface — no framework knowledge required.
+`orchid-frontend` is a **fork-and-deploy boilerplate**, not a published npm package. It is a Next.js 16 multi-chat UI that talks to `orchid-api` over HTTP via Server Actions. Clone it, customise the theme tokens and branding, point it at your API, and you have a production-ready chat interface — no framework knowledge required.
 
 The frontend has no direct dependency on the `orchid` Python library. It is a pure TypeScript/React project whose only runtime dependency is the `orchid-api` HTTP endpoint.
 
@@ -32,12 +32,13 @@ src/
 │   └── api/               SSE proxies for streaming and Bloom events
 ├── components/chat/
 │   ├── chat-container.tsx Main layout: sidebar + chat + drag-drop + MCP auth panel
-│   ├── chat-sidebar.tsx   Session list with create/rename/share/delete
+│   ├── chat-sidebar.tsx   Session list with create/share/delete
 │   ├── chat-input.tsx     Message input with file attachment
 │   ├── message-bubble.tsx User/assistant bubbles with Markdown rendering
-│   ├── message-list.tsx   Scrollable thread with inline Bloom progress cards
-│   ├── hitl-approval-card.tsx  Approve / deny HITL tool-call pauses
-│   └── mini-agent-trace.tsx    Per-mini-agent lifecycle markers
+│   ├── message-list.tsx   Scrollable thread
+│   ├── inline-bloom-progress.tsx  In-chat Bloom progress card
+│   ├── bloom-activity-pill.tsx    Compact Bloom activity indicator
+│   └── mcp-auth-status.tsx        Per-server MCP OAuth status panel
 ├── components/bloom/      Bloom operator panel primitives
 ├── hooks/
 │   ├── use-chat-stream.ts Per-message SSE subscription
@@ -57,10 +58,8 @@ Every visible UI behaviour is driven by a YAML key in `agents.yaml` or an `orchi
 | Streaming token-by-token output | SSE endpoint `POST /chats/{id}/messages/stream` in `orchid-api` |
 | Auth bearer used for all API calls | Obtained via NextAuth server-side; passed downstream into `OrchidAuthContext` |
 | Multi-turn history depth | `supervisor.history_max_turns` in `agents.yaml` (default 20) |
-| Summarisation indicator | `supervisor.history_summary_enabled` in `agents.yaml` |
 | Tool-call animation and sequencing | `OrchidToolCallStrategy` selected per agent (`all`, `sequential`, `llm_decides`) |
-| HITL approval card visibility | `requires_approval: true` on a tool definition in `agents.yaml` |
-| Mini-agent trace pane | `mini_agent.enabled: true` on an agent in `agents.yaml` |
+| Inline Bloom progress cards | `events.enabled: true` in `agents.yaml` |
 | MCP OAuth server panel | Presence of `auth.mode: oauth` servers in `agents.yaml` |
 | Bloom operator panel | `events.enabled: true` in `agents.yaml` |
 
@@ -94,20 +93,20 @@ The supervisor reads the new `agents:` section at startup and includes the agent
 
 ## Authentication and bearer propagation
 
-The OAuth access token is stored **only** in the server-side NextAuth JWT. It never reaches the browser. The data flow is:
+The OAuth access token is held in the NextAuth session (server-side, httpOnly cookie) and consumed by Server Actions — browser code never calls `orchid-api` directly. The data flow is:
 
 1. User logs in via the generic OAuth2/OIDC provider (`lib/auth/oauth-provider.ts`). The `OAUTH_ISSUER` env var enables OIDC auto-discovery; explicit endpoints are also supported.
-2. NextAuth stores the access token in a server-side session (httpOnly cookie — never exposed as JavaScript).
-3. Every API call goes through a Server Action that reads the session server-side and attaches the Bearer to `orchid-api` requests.
+2. NextAuth stores the session in a server-side, httpOnly cookie.
+3. Every API call goes through a Server Action (or route handler) that reads the session server-side and attaches the Bearer to `orchid-api` requests.
 4. `orchid-api` passes the Bearer to `get_auth_context`, which calls the operator's `OrchidIdentityResolver` to produce an `OrchidAuthContext`. From that point the framework owns identity.
 
 This proxy pattern means the frontend never needs to know anything about the upstream IdP structure — it just holds a NextAuth session and lets Server Actions handle the rest.
 
 ## Fork and deploy checklist
 
-1. **Set `NEXT_PUBLIC_API_URL`** to your `orchid-api` base URL (e.g. `http://localhost:8000`).
+1. **Set `AGENTS_API_URL`** to your `orchid-api` base URL (e.g. `http://localhost:8000`); set `NEXT_PUBLIC_AGENTS_API_URL` to the browser-reachable URL for the SSE proxies.
 2. **Configure OAuth**: set `OAUTH_ISSUER` (for OIDC auto-discovery) and `OAUTH_CLIENT_ID` + `OAUTH_CLIENT_SECRET`. Or use explicit `OAUTH_AUTHORIZATION_URL`, `OAUTH_TOKEN_URL`, `OAUTH_USERINFO_URL`.
-3. **Set `NEXTAUTH_SECRET`** to a random string (at least 32 characters).
+3. **Set `AUTH_SECRET`** to a random string (at least 32 characters).
 4. **Override theme tokens**: edit only `src/app/globals.css`. The `@theme inline` block contains all colour tokens (`--orchid-bg`, `--orchid-accent`, etc.) — re-skin without touching a component.
 5. **Swap branding files**: replace `src/app/icon.svg` and any logo assets.
 6. **Build and verify**: `npm run build && npm run lint && npm test` must all pass.

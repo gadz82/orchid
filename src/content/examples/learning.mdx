@@ -16,18 +16,17 @@ external: []
 
 ## What this demonstrates
 
-The learning example demonstrates the Pollen + Bloom fan-out pattern. A custom `WeeklyDigestFanoutProducer` fires every Monday at 06:00 UTC, enumerates active learners, and emits one `weekly-digest.due` signal per `(tenant, user)` pair. Each signal triggers a Bloom that runs under the `addressed_to_user` identity — the service account acts on each learner's RAG scope without impersonating them. Because `parallelism: per_user` is set, all digests run concurrently. Each user only sees their own digest (`visibility: addressed`).
+The learning example demonstrates the Pollen + Bloom fan-out pattern. A custom `WeeklyDigestFanoutProducer` enumerates active learners and emits one `weekly-digest.due` signal per `(tenant, user)` pair — one tick fans out into N parallel Bloom runs. Each signal triggers a Bloom that runs under the `addressed_to_user` identity — the service account acts on each learner's RAG scope without impersonating them. Because `parallelism: per_user` is set, all digests run concurrently. Each user only sees their own digest (`visibility: addressed`).
 
-This example does not include a separate `orchid.yml`; the event and agent configuration are self-contained in `agents.yaml`. Wire it into any `orchid.yml` via `agents.config_path`.
+The producer's `start()` deliberately leaves timing to the caller; the example drives a tick programmatically via `fanout_now()`, and a real deployment hooks that method into its own scheduler.
 
 ## Run it
 
-Wire `agents.yaml` into an `orchid.yml` with your storage and LLM settings:
+The example ships its own `orchid.yml` pointing at `agents.yaml`:
 
 ```bash
 pip install -e ./orchid -e ./orchid-api
-# Point your orchid.yml at examples/learning/agents.yaml
-ORCHID_CONFIG=<your-orchid.yml> uvicorn orchid_api.main:app --port 8000
+ORCHID_CONFIG=examples/learning/orchid.yml uvicorn orchid_api.main:app --port 8000
 ```
 
 Or drive a single fan-out tick in a test without the scheduler:
@@ -68,12 +67,12 @@ events:
   enabled: true
 
   store:
-    class: orchid_ai.events.backends.sqlite.SQLiteEventStorage
+    class: orchid_storage_sqlite.event_storage.SQLiteEventStorage
     extra_args:
       dsn: /data/chats.db
 
   queue:
-    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
+    class: orchid_storage_sqlite.event_queue.SQLiteSignalQueue
     poll_interval_ms: 200
     lease_seconds: 30
     max_attempts: 2
@@ -119,12 +118,12 @@ events:
   enabled: true
 
   store:
-    class: orchid_ai.events.backends.sqlite.SQLiteEventStorage
+    class: orchid_storage_sqlite.event_storage.SQLiteEventStorage
     extra_args:
       dsn: /data/chats.db
 
   queue:
-    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
+    class: orchid_storage_sqlite.event_queue.SQLiteSignalQueue
     poll_interval_ms: 200
     lease_seconds: 30
     max_attempts: 2
@@ -154,28 +153,12 @@ events:
       retry: { max: 2, backoff: exponential }
       parallelism: per_user
 ---`}
-  mdLabel="orchid.md (infra + events)"
+  mdLabel="orchid.md"
 />
-
-The `digest` agent lives in `agents/digest.md`:
-
-```markdown
----
-description: "Personalised weekly learning digest."
-rag:
-  enabled: false
-execution_hints:
-  parallel_safe: true
----
-
-Build a short personalised digest for the named learner.
-Sections: Highlights from last week, Recommended next steps,
-One stretch goal. Keep it under 150 words.
-```
 
 ## What to look for
 
-- `producers[0].class: examples.learning.producers.weekly_digest.WeeklyDigestFanoutProducer` → a custom `OrchidSignalProducer` subclass; the framework calls its `tick()` at each cron interval and it decides how many signals to emit.
+- `producers[0].class: examples.learning.producers.weekly_digest.WeeklyDigestFanoutProducer` → a custom `OrchidSignalProducer` subclass; the example calls its `fanout_now()` to run one fan-out tick (wire that method into your own scheduler for production use).
 - `identity.mode: addressed_to_user` → the Bloom runs with the learner's `user_id` in scope (for RAG scoping) without requiring the user to be logged in.
 - `parallelism: per_user` → one concurrent Bloom per `(tenant, user)` pair; the framework ensures two digests for the same user don't overlap.
 - `visibility: addressed` (implicit default) → each user only sees their own digest via the API; other users in the same tenant cannot access it.

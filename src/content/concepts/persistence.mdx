@@ -1,20 +1,23 @@
 ---
 title: "Chat Persistence"
-description: "OrchidChatStorage ABC, built-in SQLite backend, PostgreSQL via plugin, and pluggable custom backends."
+description: "OrchidChatStorage ABC, the built-in in-memory default, and durable SQLite/PostgreSQL backends via plugins."
 package: "orchid"
 section: "concepts"
 order: 17
 tags: []
 sources:
   - "orchid/orchid_ai/persistence/base.py"
-  - "orchid/orchid_ai/persistence/AGENTS.md"
-  - "orchid/AGENTS.md"
-related: ["/concepts/agents", "/examples/custom-storage"]
+  - "orchid/orchid_ai/persistence/in_memory.py"
+  - "orchid/orchid_ai/persistence/factory.py"
+  - "orchid/orchid_ai/persistence/plugin_hints.py"
+  - "orchid-storage-sqlite/README.md"
+  - "orchid-storage-postgres/README.md"
+related: ["/concepts/agents", "/examples/custom-storage", "/packages/orchid-storage-sqlite"]
 example: "/examples/custom-storage"
 external: []
 ---
 
-Orchid persists chat sessions and messages through the `OrchidChatStorage` ABC. The library ships two built-in backends; consumers can supply their own by pointing `storage.class` at any importable subclass.
+Orchid persists chat sessions and messages through the `OrchidChatStorage` ABC. The `orchid-ai` library ships one dependency-free implementation — an in-memory store used as the zero-configuration default. Durable backends come from plugin packages (`orchid-storage-sqlite`, `orchid-storage-postgres`) or from consumer projects via any importable subclass.
 
 ## OrchidChatStorage interface
 
@@ -36,27 +39,63 @@ class OrchidChatStorage(ABC):
 
 The API layer depends only on this interface — swapping the backend requires no code changes in routers or agents.
 
-## Built-in backends
+## Default: in-memory
 
-| Class | Driver | When to use |
-|---|---|---|
-| `OrchidSQLiteChatStorage` | `aiosqlite` | Local development, single-process demos |
-| `OrchidPostgresChatStorage` | `asyncpg` | Production, multi-worker deployments |
+When no storage backend is configured, the framework resolves `storage.class` to the `"memory"` sentinel and uses `OrchidInMemoryChatStorage` — sessions and messages live in process memory for the lifetime of the process. It has no external dependencies and no migration step, which keeps tests, embedded runs, and quick starts working out of the box.
+
+<Callout variant="warning" title="In-memory means non-durable">
+History stored by the default backend disappears when the process exits. For anything that must survive a restart, install a durable plugin or point `storage.class` at your own backend.
+</Callout>
+
+`orchid-api` and `orchid-cli` **bundle the `orchid-storage-sqlite` plugin** and pass an explicit `storage.class` at startup, so both default to durable SQLite (`~/.orchid/chats.db`) instead of the framework in-memory store.
+
+## Pluggable backends
+
+| Class | Provided by | Driver | When to use |
+|---|---|---|---|
+| `OrchidInMemoryChatStorage` | `orchid-ai` (built-in) | — | Tests, embedded runs, demos — framework default |
+| `OrchidSQLiteChatStorage` | `orchid-storage-sqlite` | `aiosqlite` | Local development, single-process deployments, CLI — default for `orchid-api` / `orchid-cli` |
+| `OrchidPostgresChatStorage` | `orchid-storage-postgres` | `asyncpg` | Production, multi-worker deployments |
 
 Configure via config:
 
 <CodePair
   yaml={`storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
-  dsn: postgresql://user:pass@host:5432/db`}
-  yamlLabel="orchid.yml"
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
+  dsn: ~/.orchid/chats.db`}
+  yamlLabel="orchid.yml — SQLite (pip install orchid-storage-sqlite)"
   md={`---
 storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
+  dsn: ~/.orchid/chats.db
+---`}
+  mdLabel="orchid.md"
+/>
+
+<CodePair
+  yaml={`storage:
+  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
+  dsn: postgresql://user:pass@host:5432/db`}
+  yamlLabel="orchid.yml — PostgreSQL (pip install orchid-storage-postgres)"
+  md={`---
+storage:
+  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
   dsn: postgresql://user:pass@host:5432/db
 ---`}
   mdLabel="orchid.md"
 />
+
+## Strict resolution — no silent fallback
+
+A configured dotted class path is always resolved strictly. If the import fails — a typo, a missing extra, or a plugin that was never installed — startup raises immediately with the package to install:
+
+```text
+ImportError: Cannot resolve chat storage class
+'orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage'.
+Install the missing plugin: pip install orchid-storage-sqlite
+```
+
+Only the `"memory"` sentinel (or an empty value) selects the in-memory backend. The framework never falls back silently from a configured backend to in-memory, so a misconfigured deployment fails fast instead of quietly dropping persistence.
 
 ## Custom backends
 
@@ -75,21 +114,23 @@ storage:
   mdLabel="orchid.md"
 />
 
-The factory resolves the class at startup via `importlib`. The constructor must accept `*, dsn: str`.
+The factory resolves the class at startup via `importlib`. The constructor must accept keyword-only `dsn: str` and `extra_migrations_package: str | None = None`.
 
 ## Migrations
 
-The migration system uses versioned modules named `v{NNN}_{description}.py` (e.g. `v001_initial_schema.py`). Each module exposes `VERSION`, `up(conn, *, dialect)`, and `down(conn, *, dialect)`. `OrchidMigrationRunner` runs framework migrations first, then integrator migrations from `extra_migrations_package` — recorded with an `"ext:"` prefix to avoid collisions.
+Durable backends own their migration modules: `orchid-storage-sqlite` ships `v001_initial_schema` (every framework table) and `v002_ingestion_manifest`, while `orchid-storage-postgres` ships its own Postgres DDL. Migrations are versioned modules named `v{NNN}_{description}.py`; each exposes `VERSION`, `up(conn, *, dialect)`, and `down(conn, *, dialect)`.
+
+Integrators can append their own migrations on top of a backend's by setting `extra_migrations_package`. Those run after the backend's migrations and are recorded with an `"ext:"` prefix in the shared `_migrations` table to avoid collisions.
 
 <CodePair
   yaml={`storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
   dsn: postgresql://...
   extra_migrations_package: myapp.migrations`}
   yamlLabel="orchid.yml"
   md={`---
 storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
   dsn: postgresql://...
   extra_migrations_package: myapp.migrations
 ---`}
@@ -99,4 +140,3 @@ storage:
 <Callout variant="info" title="Persist original messages only">
 Always save the original user message to chat history — not the version with file content prepended. Prepending extracted text to the user message is a prompt augmentation pattern for the current LLM call. Persisting that augmented string would cause the stored message to be significantly longer, wasteful to re-load, and misleading if the underlying document changes.
 </Callout>
-

@@ -26,20 +26,21 @@ Two agents — `cookbook` and `mealplanner` — draw on a shared recipe corpus s
 ## Run it
 
 ```bash
-# From the repo root
-pip install -e orchid -e orchid-cli
+# From a workspace where this repo is checked out as ./examples
+pip install orchid-ai orchid-cli
 
-# Send a recipe question
-orchid chat send "What can I make with chicken and rice?" \
+# Create a chat and note the returned id
+orchid chat create --config examples/recipes/orchid.yml
+
+# Send a recipe question, then a meal-plan follow-up
+orchid chat send <chat_id> "What can I make with chicken and rice?" \
   --config examples/recipes/orchid.yml
-
-# Ask for a meal plan
-orchid chat send "Plan a vegan dinner for Monday" \
-  --agent mealplanner \
+orchid chat send <chat_id> "Plan a vegan dinner for Monday" \
   --config examples/recipes/orchid.yml
 
 # Interactive session
 orchid chat interactive --config examples/recipes/orchid.yml
+```
 ```
 
 Ollama must be running locally with `llama3.2` and `nomic-embed-text` pulled.
@@ -60,7 +61,7 @@ rag:
   embedding_model: ollama/nomic-embed-text   # 768-d, runs locally
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: ~/.orchid/recipes.db
 
 startup:
@@ -78,7 +79,7 @@ rag:
   embedding_model: ollama/nomic-embed-text
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: ~/.orchid/recipes.db
 
 startup:
@@ -136,10 +137,10 @@ defaults:
     model: ollama/llama3.2
     temperature: 0.2
 ---`}
-  mdLabel="orchid.md (infra + defaults)"
+  mdLabel="orchid.md"
 />
 
-The `cookbook` agent lives in `agents/cookbook.md`:
+In the MD-config format, the same agent would live in `agents/cookbook.md`:
 
 ```markdown
 ---

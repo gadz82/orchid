@@ -314,7 +314,7 @@ auth:
 | | |
 |---|---|
 | **Short** | Dotted import path to a startup hook function. |
-| **Detailed** | Called once after the LangGraph is initialised and before the API starts serving requests. Use this for one-time setup: warming caches, registering custom tools, or running database migrations. The function signature must be `async def hook(app_context) -> None`. |
+| **Detailed** | Called once during bootstrap — before the graph is built — with the signature `async def hook(reader, settings, runtime, **_)`. Use it for one-time setup: seeding the vector store, registering custom tools, or wiring collaborators such as `runtime.graph_store`. `settings` is the API's `Settings` instance (or `None` for CLI / embedded runs). |
 | **Default** | `null` |
 | **Available values** | Any dotted Python path to an async callable |
 | **Env var** | `STARTUP_HOOK` |
@@ -332,9 +332,9 @@ startup:
 | | |
 |---|---|
 | **Short** | Vector database backend type. |
-| **Detailed** | The persistence layer for embeddings and vector search. Currently only Qdrant is supported. Setting this to `null` disables vector storage entirely. |
+| **Detailed** | The persistence layer for embeddings and vector search. `qdrant`, `chroma`, and `neo4j` are provided by the corresponding `orchid-rag-*` plugin packages; the built-in `null` backend disables vector storage. To disable storage, use the quoted string `vector_backend: "null"` (a bare YAML `null` is coerced to the string `"None"` and rejected). |
 | **Default** | `qdrant` |
-| **Available values** | `qdrant`, `null` |
+| **Available values** | `qdrant`, `chroma`, `neo4j`, `"null"` (quoted), or any registered backend name |
 | **Env var** | `VECTOR_BACKEND` |
 
 ```yaml
@@ -397,7 +397,7 @@ rag:
 <a id="orchid-yml__cli_rag"></a>
 ## `cli_rag` (optional)
 
-CLI-specific RAG override. When present, `orchid-cli` uses these values instead of `rag:`. The API ignores this section entirely. This allows Docker-based examples (with `rag.vector_backend: qdrant`) to run locally via the CLI without requiring Qdrant infrastructure.
+CLI-specific RAG override. When present, `orchid-cli` uses these values instead of `rag:`. This allows Docker-based examples (with `rag.vector_backend: qdrant`) to run locally via the CLI without requiring Qdrant infrastructure. The API does not interpret `cli_rag:` — but both sections map to the same environment variables (first value wins), so keep `rag:` before `cli_rag:` in the file when the same config is also used by the API.
 
 Same keys as `rag:`:
 
@@ -494,9 +494,9 @@ Larger `chunk_size` (2000–4000) improves retrieval coherence for long-form doc
 | | |
 |---|---|
 | **Short** | Dotted import path to an `OrchidChatStorage` subclass. |
-| **Detailed** | The persistence backend for chat sessions and messages. The built-in SQLite backend is sufficient for single-process deployments. For multi-replica API deployments, switch to PostgreSQL or a custom backend so all instances share state. |
-| **Default** | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` |
-| **Available values** | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage`, `orchid_ai.persistence.postgres.OrchidPostgresChatStorage`, or any dotted path to a custom subclass |
+| **Detailed** | The persistence backend for chat sessions and messages. The `orchid-ai` framework defaults to the built-in **in-memory** store (`memory`), which is non-durable. `orchid-api` and `orchid-cli` bundle the `orchid-storage-sqlite` plugin and default to a durable SQLite file. For multi-replica API deployments, switch to PostgreSQL or a custom backend so all instances share state. |
+| **Default** | `memory` (framework) · `orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage` (orchid-api / orchid-cli) |
+| **Available values** | `memory`, `orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage`, `orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage`, or any dotted path to a custom subclass |
 | **Env var** | `CHAT_STORAGE_CLASS` |
 
 <Callout variant="warning" title="Single-process vs multi-replica">
@@ -505,14 +505,14 @@ SQLite works for demos and CLI tools where only one process accesses the databas
 
 ```yaml
 storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
   dsn: postgresql://orchid:orchid@postgres:5432/orchid
 ```
 
 ```md
 ---
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: ~/.orchid/chats.db
 ---
 ```
@@ -523,7 +523,7 @@ storage:
 | | |
 |---|---|
 | **Short** | Database connection string or file path. |
-| **Detailed** | For SQLite this is a file path (supports `~` expansion). For PostgreSQL this is a `postgresql://` URI. |
+| **Detailed** | For SQLite this is a file path (supports `~` expansion); for PostgreSQL this is a `postgresql://` URI. Ignored by the in-memory backend. |
 | **Default** | `~/.orchid/chats.db` |
 | **Env var** | `CHAT_DB_DSN` |
 
@@ -542,10 +542,14 @@ storage:
 <a id="orchid-yml__config_storage.enabled"></a>
 ### `config_storage.enabled`
 
+<Callout variant="info" title="This is an agents.yaml key">
+`config_storage:` is a top-level key in **`agents.yaml`**, not `orchid.yml` — it is not mapped to an environment variable. It is documented on this page as part of the full configuration reference.
+</Callout>
+
 | | |
 |---|---|
 | **Short** | Enable database-backed agent configuration store. |
-| **Detailed** | When enabled, Orchid loads agent configurations from a PostgreSQL database at startup and merges them into the YAML-loaded config. This allows runtime CRUD management of agent definitions without editing YAML files. The store is controlled declaratively — no constructor parameters needed. |
+| **Detailed** | When enabled, Orchid loads agent configurations from a database (SQLite via `orchid-storage-sqlite`, or PostgreSQL via `orchid-storage-postgres`) at startup and merges them into the YAML-loaded config. This allows runtime CRUD management of agent definitions without editing YAML files. The store is controlled declaratively — no constructor parameters needed. |
 | **Default** | `false` |
 | **Available values** | `true`, `false` |
 
@@ -556,7 +560,7 @@ When `enabled: false` (the default), Orchid skips config storage entirely. No da
 ```yaml
 config_storage:
   enabled: true
-  class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+  class: orchid_storage_postgres.config_storage.OrchidPostgresConfigStorage
   dsn: postgresql://orchid:orchid@postgres:5432/orchid
 ```
 
@@ -566,9 +570,9 @@ config_storage:
 | | |
 |---|---|
 | **Short** | Dotted import path to an `OrchidConfigStorage` subclass. |
-| **Detailed** | The persistence backend for agent configurations. The built-in PostgreSQL implementation (`OrchidPostgresConfigStorage`) provides full CRUD: `list_configs`, `get_config`, `upsert_config`, `patch_config`, `delete_config`. Custom implementations can target any database by subclassing `OrchidConfigStorage`. |
+| **Detailed** | The persistence backend for agent configurations. PostgreSQL (`OrchidPostgresConfigStorage`, from `orchid-storage-postgres`) and SQLite (`OrchidSQLiteConfigStorage`, from `orchid-storage-sqlite`) implementations provide full CRUD: `list_configs`, `get_config`, `upsert_config`, `patch_config`, `delete_config`. Custom implementations can target any database by subclassing `OrchidConfigStorage`. |
 | **Default** | `""` (empty — ignored when `enabled: false`) |
-| **Available values** | `orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage`, or any dotted path to a custom subclass |
+| **Available values** | `orchid_storage_postgres.config_storage.OrchidPostgresConfigStorage`, `orchid_storage_sqlite.config_storage.OrchidSQLiteConfigStorage`, or any dotted path to a custom subclass |
 
 <a id="orchid-yml__config_storage.dsn"></a>
 ### `config_storage.dsn`
@@ -591,8 +595,8 @@ By default (`strict=True`), an agent name that exists in both YAML and the datab
 | | |
 |---|---|
 | **Short** | Dotted import path to an `OrchidMCPTokenStore` subclass. |
-| **Detailed** | Stores per-user OAuth tokens for MCP servers configured with `auth.mode: oauth`. The SQLite backend shares the same database file as chat storage by default. |
-| **Default** | `orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore` |
+| **Detailed** | Stores per-user OAuth tokens for MCP servers configured with `auth.mode: oauth`. The SQLite backend (`orchid-storage-sqlite`) shares the same database file as chat storage by default; the PostgreSQL backend ships in `orchid-storage-postgres`. |
+| **Default** | `orchid_storage_sqlite.mcp_token_store.OrchidSQLiteMCPTokenStore` (orchid-api / orchid-cli) · `memory` (framework) |
 | **Env var** | `MCP_TOKEN_STORE_CLASS` |
 
 <a id="orchid-yml__mcp_auth.token_store_dsn"></a>
@@ -611,8 +615,8 @@ By default (`strict=True`), an agent name that exists in both YAML and the datab
 | | |
 |---|---|
 | **Short** | Dotted import path to an `OrchidMCPClientRegistrationStore` subclass. |
-| **Detailed** | Stores per-server OAuth endpoint metadata and dynamic client registration (DCR) credentials. Required when using MCP servers with `auth.mode: oauth`. |
-| **Default** | `orchid_ai.persistence.mcp_client_registration_sqlite.OrchidSQLiteMCPClientRegistrationStore` |
+| **Detailed** | Stores per-server OAuth endpoint metadata and dynamic client registration (DCR) credentials. Required when using MCP servers with `auth.mode: oauth`. SQLite ships in `orchid-storage-sqlite`; PostgreSQL ships in `orchid-storage-postgres`. |
+| **Default** | `orchid_storage_sqlite.mcp_client_registration_store.OrchidSQLiteMCPClientRegistrationStore` (orchid-api / orchid-cli) · `memory` (framework) |
 | **Env var** | `MCP_CLIENT_REGISTRATION_STORE_CLASS` |
 
 <a id="orchid-yml__mcp_auth.client_registration_store_dsn"></a>
@@ -632,14 +636,14 @@ By default (`strict=True`), an agent name that exists in both YAML and the datab
 | | |
 |---|---|
 | **Short** | LangGraph state persistence backend. |
-| **Detailed** | Persists the LangGraph state machine across restarts. Without a checkpointer, in-flight conversations lose their graph state on process restart. `memory` stores state in RAM (lost on restart). `sqlite` and `postgres` provide durable persistence. A dotted class path enables custom backends. |
+| **Detailed** | Persists the LangGraph state machine across restarts. Without a checkpointer, in-flight conversations lose their graph state on process restart. `memory` stores state in RAM (built into `orchid-ai`, lost on restart). `sqlite` (requires `orchid-storage-sqlite`) and `postgres` (requires `orchid-storage-postgres`) provide durable persistence. A dotted class path enables custom backends. |
 | **Default** | `null` (disabled) |
 | **Available values** | `memory`, `sqlite`, `postgres`, or any dotted Python path to a `BaseCheckpointSaver` subclass |
 | **Env var** | `CHECKPOINTER_TYPE` |
 
 ```yaml
 checkpointer:
-  type: sqlite
+  type: sqlite                      # requires: pip install orchid-storage-sqlite
   dsn: ~/.orchid/checkpoints.db
 ```
 
@@ -654,7 +658,7 @@ checkpointer:
 | **Env var** | `CHECKPOINTER_DSN` |
 
 <Callout variant="warning" title="State loss without checkpointer">
-If `checkpointer.type` is null and the API process restarts, all in-progress conversations lose their graph state. Users will see errors or stale responses. Always configure a durable checkpointer (`sqlite` minimum) for production deployments.
+If `checkpointer.type` is null and the API process restarts, all in-progress conversations lose their graph state. Users will see errors or stale responses. Always configure a durable checkpointer (`sqlite` minimum — install `orchid-storage-sqlite`) for production deployments.
 </Callout>
 
 ---

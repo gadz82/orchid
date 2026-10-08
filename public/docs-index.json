@@ -92,7 +92,7 @@
   {
     "route": "/concepts/persistence",
     "title": "Chat Persistence",
-    "description": "OrchidChatStorage ABC, built-in SQLite backend, PostgreSQL via plugin, and pluggable custom backends.",
+    "description": "OrchidChatStorage ABC, the built-in in-memory default, and durable SQLite/PostgreSQL backends via plugins.",
     "package": "orchid",
     "section": "concepts",
     "tags": [],
@@ -197,16 +197,30 @@
   {
     "route": "/packages/orchid-frontend",
     "title": "orchid-frontend",
-    "description": "Next.js 15 multi-chat UI with SSE streaming and file upload support.",
+    "description": "Next.js 16 multi-chat UI with SSE streaming and file upload support.",
     "package": "orchid-frontend",
     "section": "packages",
     "tags": [],
     "sources": ""
   },
   {
+    "route": "/packages/orchid-storage-sqlite",
+    "title": "orchid-storage-sqlite",
+    "description": "SQLite storage plugin: chat persistence, MCP stores, event storage, migrations, and the sqlite checkpointer.",
+    "package": "orchid-storage-sqlite",
+    "section": "packages",
+    "tags": [
+      "persistence",
+      "sqlite",
+      "plugin",
+      "checkpointer"
+    ],
+    "sources": ""
+  },
+  {
     "route": "/packages/orchid-storage-postgres",
     "title": "orchid-storage-postgres",
-    "description": "PostgreSQL storage plugin: chat persistence, checkpointer, and visibility fragment.",
+    "description": "PostgreSQL storage plugin: chat and config persistence, MCP stores, events, checkpointer, and visibility fragment.",
     "package": "orchid-storage-postgres",
     "section": "packages",
     "tags": [],
@@ -311,7 +325,7 @@
   {
     "route": "/examples/basketball",
     "title": "Basketball Demo",
-    "description": "Minimal end-to-end Orchid example: two GenericAgents, built-in tools, SQLite storage, and cross-agent skills.",
+    "description": "Minimal end-to-end Orchid example: GenericAgents with built-in tool classes, PostgreSQL storage, cross-agent skills, and an event-driven trivia agent.",
     "package": "cross-cutting",
     "section": "examples",
     "tags": [

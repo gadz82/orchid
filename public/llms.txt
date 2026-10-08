@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-08-04
+Last generated: 2026-10-08
 
 ## Overview
 
@@ -35,7 +35,7 @@ https://orchestratorindex.com/concepts/embeddings
 Multi-LLM Support — Provider agnosticism via LiteLLM: configure any model per agent, swap at runtime.
 https://orchestratorindex.com/concepts/multi-llm
 
-Chat Persistence — OrchidChatStorage ABC, built-in SQLite backend, PostgreSQL via plugin, and pluggable custom backends.
+Chat Persistence — OrchidChatStorage ABC, the built-in in-memory default, and durable SQLite/PostgreSQL backends via plugins.
 https://orchestratorindex.com/concepts/persistence
 
 Tool Call Strategies — The all, sequential, and llm_decides strategies and how to register custom ones.
@@ -67,10 +67,13 @@ https://orchestratorindex.com/packages/orchid-cli
 orchid-mcp — Node.js MCP gateway that exposes Orchid to any MCP-capable host LLM.
 https://orchestratorindex.com/packages/orchid-mcp
 
-orchid-frontend — Next.js 15 multi-chat UI with SSE streaming and file upload support.
+orchid-frontend — Next.js 16 multi-chat UI with SSE streaming and file upload support.
 https://orchestratorindex.com/packages/orchid-frontend
 
-orchid-storage-postgres — PostgreSQL storage plugin: chat persistence, checkpointer, and visibility fragment.
+orchid-storage-sqlite — SQLite storage plugin: chat persistence, MCP stores, event storage, migrations, and the sqlite checkpointer.
+https://orchestratorindex.com/packages/orchid-storage-sqlite
+
+orchid-storage-postgres — PostgreSQL storage plugin: chat and config persistence, MCP stores, events, checkpointer, and visibility fragment.
 https://orchestratorindex.com/packages/orchid-storage-postgres
 
 orchid-rag-qdrant — Qdrant vector and doc-store plugin for the Orchid AI framework.
@@ -98,7 +101,7 @@ https://orchestratorindex.com/configuration-reference/agents
 
 ## Examples
 
-Basketball Demo — Minimal end-to-end Orchid example: two GenericAgents, built-in tools, SQLite storage, and cross-agent skills.
+Basketball Demo — Minimal end-to-end Orchid example: GenericAgents with built-in tool classes, PostgreSQL storage, cross-agent skills, and an event-driven trivia agent.
 https://orchestratorindex.com/examples/basketball
 
 Helpdesk Demo — Custom agent class, cross-agent skills, sequential routing, and event-driven ticket triage.

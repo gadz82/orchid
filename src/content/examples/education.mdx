@@ -33,6 +33,7 @@ The Education Studio example turns uploaded course material into quizzes, lesson
 
 ```bash
 pip install -e ./orchid -e ./orchid-api
+export GEMINI_API_KEY=...   # required by this example's orchid.yml
 ORCHID_CONFIG=examples/education/orchid.yml uvicorn orchid_api.main:app --port 8000
 ```
 
@@ -83,7 +84,7 @@ upload:
   chunk_overlap: 200
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: ~/.orchid/education_chats.db
 
 # ...truncated`}
@@ -107,7 +108,7 @@ upload:
   chunk_size: 1000
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: ~/.orchid/education_chats.db
 ---`}
   mdLabel="orchid.md (infra)"
@@ -192,6 +193,7 @@ skills:
 
 agents:
   content-analyzer:
+    class: examples.education.agents.bloom_agent.EducationAgent
     description: "Extracts headings and core concepts from uploaded material."
     tools: [extract_concepts]
     rag:
@@ -229,7 +231,7 @@ agents:
 events:
   enabled: true
   store:
-    class: orchid_ai.events.backends.sqlite.SQLiteEventStorage
+    class: orchid_storage_sqlite.event_storage.SQLiteEventStorage
   scheduler:
     class: orchid_ai.events.schedulers.apscheduler.APSchedulerBackend
 
@@ -298,6 +300,7 @@ skills:
 
 agents:
   content-analyzer:
+    class: examples.education.agents.bloom_agent.EducationAgent
     tools: [extract_concepts]
     rag:
       namespace: education-source
@@ -336,12 +339,12 @@ agents:
 - `tools.*.parallel_safe` → content-analysis tools are `parallel_safe: true` (stateless reads), while export tools that write files are `parallel_safe: false` (sequential I/O).
 - `mini_agent.enabled: true` on `quiz-generator` → multi-section source material fans out into parallel mini-agents, each drafting questions from one section. Custom `decomposer_prompt` and `aggregator_prompt` control the split/merge logic.
 - Three cross-agent skills (`generate_quiz`, `generate_lesson`, `generate_full_package`) → chain agents sequentially; each step passes context forward. The `generate_full_package` skill demonstrates a four-agent pipeline.
-- `rag.namespace: education-source` / `education` / `education-exports` → three distinct RAG namespaces isolate source content from generated quizzes from export artifacts.
+- `rag.namespace: education-source` / `education` → source content and generated quizzes use separate RAG namespaces; `format-exporter` declares `education-exports` with `rag.enabled: false`, so export formatting does no retrieval.
 - `events.schedules[].cron: "0 8 * * 1"` → the APScheduler backend fires a weekly cron that triggers `quiz-generator` to produce a tenant-wide review quiz every Monday at 08:00.
 - `identity.mode: service_account` on the weekly quiz → the Bloom runs as `quiz-bot`, visible to all users in the tenant via `visibility: tenant`.
 - `respect_chat_binding: true` on `chat-bound-generation` → when a Bloom is triggered from within a chat context, its output is attached to that conversation rather than creating a standalone artifact.
 - `format-exporter` agent has `rag.enabled: false` → export formatting doesn't need retrieval; saves embedding and context overhead.
-- `eywords` → `EducationIdentityResolver` implements `resolve_service_account()` and `mint_for_user()`, enabling both cron-driven service-account flows and per-user event scoping.
+- `content-analyzer.class: examples.education.agents.bloom_agent.EducationAgent` → a custom `OrchidAgent` subclass; `EducationIdentityResolver` implements `resolve_service_account()` and `mint_for_user()`, enabling both cron-driven service-account flows and per-user event scoping.
 - `upload:` section in `orchid.yml` → file uploads target the `education-uploads` Qdrant namespace; the framework auto-chunks and indexes uploaded material at 1000-char chunks with 200-char overlap.
 
 ## Related concepts

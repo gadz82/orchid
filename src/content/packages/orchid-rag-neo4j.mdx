@@ -3,7 +3,7 @@ title: "orchid-rag-neo4j"
 description: "Neo4j graph-store plugin for knowledge-graph RAG."
 package: "orchid-rag-neo4j"
 section: "packages"
-order: 28
+order: 29
 tags: []
 sources:
   - "orchid-rag-neo4j/README.md"
@@ -39,10 +39,26 @@ neo4j = "orchid_rag_neo4j:_register"
 
 ## Configuration
 
-```yaml
-rag:
-  graph_backend: neo4j
-  neo4j_uri: bolt://localhost:7687
-  neo4j_user: neo4j
-  neo4j_password: ${NEO4J_PASSWORD}
+There is no `orchid.yml` key for the graph store — the framework does not construct one during bootstrap. Wire it from a startup hook (or embedded integration) before the graph is built:
+
+```python
+# myproject/hooks/startup.py
+from orchid_ai.rag.factory import build_graph_store
+
+
+async def wire_graph_store(*, runtime, **_):
+    runtime.graph_store = build_graph_store(
+        graph_store_backend="neo4j",
+        url="bolt://localhost:7687",
+        username="neo4j",
+        password="…",
+    )
 ```
+
+```yaml
+# orchid.yml
+startup:
+  hook: myproject.hooks.startup.wire_graph_store
+```
+
+The builder forwards its keyword arguments to `Neo4jGraphStore(url, username, password)`.

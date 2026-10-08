@@ -1,0 +1,118 @@
+---
+title: "orchid-storage-sqlite"
+description: "SQLite storage plugin: chat persistence, MCP stores, event storage, migrations, and the sqlite checkpointer."
+package: "orchid-storage-sqlite"
+section: "packages"
+order: 25
+tags: ["persistence", "sqlite", "plugin", "checkpointer"]
+sources:
+  - "orchid-storage-sqlite/README.md"
+  - "orchid-storage-sqlite/AGENTS.md"
+  - "orchid-storage-sqlite/orchid_storage_sqlite/"
+related: ["/packages/orchid", "/concepts/persistence", "/packages/orchid-api", "/packages/orchid-cli"]
+example: "/examples/recipes"
+external: []
+---
+
+<RepoLink package="orchid-storage-sqlite" />
+
+`orchid-storage-sqlite` is the zero-infrastructure storage plugin for the Orchid AI framework. It provides SQLite-backed implementations of every framework storage ABC — chat persistence, agent-config CRUD, MCP OAuth stores, event storage, and the LangGraph checkpointer — in a single installable package. The checkpointer and visibility fragment auto-register through Python entry points; storage classes are referenced by dotted import path in YAML.
+
+`orchid-api` and `orchid-cli` **depend on this plugin and ship with it installed** — SQLite is their out-of-the-box persistence backend. A bare `orchid-ai` install without a storage plugin defaults to the framework's built-in in-memory backend instead.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-storage-sqlite
+```
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Chat storage | `OrchidSQLiteChatStorage` | Full `OrchidChatStorage` implementation — sessions, messages, conversation summaries |
+| Config storage | `OrchidSQLiteConfigStorage` | `OrchidConfigStorage` CRUD for database-backed agent definitions |
+| MCP token store | `OrchidSQLiteMCPTokenStore` | Per-user OAuth tokens for outbound MCP servers |
+| MCP registration store | `OrchidSQLiteMCPClientRegistrationStore` | RFC 7591 dynamic-client registrations |
+| MCP gateway state | `OrchidSQLiteMCPGatewayStateStore` | Inbound gateway clients, auth codes, and tokens |
+| Ingestion manifest | `OrchidSQLiteIngestionManifest` | Content-hash tracking for idempotent indexing |
+| Event storage | `SQLiteEventStorage` | Pollen + Bloom signal / job / schedule / trigger persistence |
+| Signal queue | `SQLiteSignalQueue` | Durable lease-based queue with dead-lettering |
+| Checkpointer | `_build_sqlite_checkpointer` | LangGraph `AsyncSqliteSaver` for the `sqlite` checkpointer type |
+| Visibility | `_build_sqlite_filter` | SQLite visibility fragment with named bind parameters (`:tenant_key`, `:user_id`) for run filtering |
+| Migrations | `SQLiteMigrationRunner` | v001 (all framework tables) + v002 (ingestion manifest) |
+
+## Auto-Registration
+
+The package registers its extension points through `importlib.metadata` — no manual `register_*()` calls are needed:
+
+```toml
+[project.entry-points."orchid.visibility_fragments"]
+sqlite = "orchid_storage_sqlite:_register"
+
+[project.entry-points."orchid.checkpointers"]
+sqlite = "orchid_storage_sqlite:_register"
+```
+
+Once installed, `build_run_filter_clause(auth, dialect="sqlite")` and `build_checkpointer("sqlite", dsn=…)` resolve to this package's implementations.
+
+## Configuration
+
+Reference the classes you need in `orchid.yml`:
+
+```yaml
+storage:
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
+  dsn: ~/.orchid/chats.db
+
+checkpointer:
+  type: sqlite
+  dsn: ~/.orchid/checkpoints.db
+
+mcp_auth:
+  token_store_class: orchid_storage_sqlite.mcp_token_store.OrchidSQLiteMCPTokenStore
+  token_store_dsn: ~/.orchid/chats.db
+  client_registration_store_class: orchid_storage_sqlite.mcp_client_registration_store.OrchidSQLiteMCPClientRegistrationStore
+  client_registration_store_dsn: ~/.orchid/chats.db
+```
+
+For database-backed agent configs and the event layer, add:
+
+```yaml
+# agents.yaml
+config_storage:
+  enabled: true
+  class: orchid_storage_sqlite.config_storage.OrchidSQLiteConfigStorage
+  dsn: ~/.orchid/chats.db
+
+events:
+  enabled: true
+  store:
+    class: orchid_storage_sqlite.event_storage.SQLiteEventStorage
+    extra_args:
+      dsn: ~/.orchid/chats.db
+  queue:
+    class: orchid_storage_sqlite.event_queue.SQLiteSignalQueue
+```
+
+The MCP gateway-state store has no `orchid.yml` mapping — configure it with the `MCP_GATEWAY_STATE_STORE_CLASS` and `MCP_GATEWAY_STATE_STORE_DSN` environment variables.
+
+Use `:memory:` as the DSN for tests and ephemeral runs: each store supports it, and nothing touches disk.
+
+## Schema ownership
+
+A single `v001_initial_schema` migration creates **all** framework-owned tables — chat, MCP, events, agent configs, conversation summaries — in one pass; `v002_ingestion_manifest` adds the indexing manifest. Every store class in this package shares the same migration runner, so it does not matter which class triggers `init_db()` first: subsequent calls are no-ops thanks to `CREATE TABLE IF NOT EXISTS`.
+
+Integrators can append their own migrations on top by setting `extra_migrations_package` to a dotted import path. Their migrations run after the framework's and are recorded with an `ext:` prefix in the shared `_migrations` table.
+
+## Usage notes
+
+`orchid-api` and `orchid-cli` default to this backend at `~/.orchid/chats.db`; installing the plugin is only an explicit step when you write your own integration on top of the bare `orchid-ai` library. A configured class path is resolved strictly — if the import fails, startup raises an actionable error such as:
+
+```text
+ImportError: Cannot resolve chat storage class
+'orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage'.
+Install the missing plugin: pip install orchid-storage-sqlite
+```
+
+There is no silent fallback to the in-memory default, so a typo or a missing dependency fails fast instead of quietly dropping persistence.

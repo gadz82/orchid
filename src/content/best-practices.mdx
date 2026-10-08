@@ -29,7 +29,7 @@ Orchid's RAG system uses a five-level hierarchy: **root → tenant → user → 
 
 Use **tenant scope** for shared knowledge that every user in an organisation should access — product documentation, company policies, public FAQs. Indexing once at tenant level avoids duplicating vectors per user.
 
-Use **user scope** for personal context that must not leak across accounts — uploaded CVs, private notes, user-specific preferences. The `OrchidRAGScope.user(tenant_key, user_id)` factory enforces this boundary automatically.
+Use **user scope** for personal context that must not leak across accounts — uploaded CVs, private notes, user-specific preferences. Construct it as `OrchidRAGScope(tenant_id=..., user_id=...)` — the scope filter enforces this boundary automatically.
 
 Use **chat scope** sparingly — only when a document is relevant only to a single conversation thread. Chat-scoped collections accumulate quickly and should be pruned on chat deletion.
 
@@ -41,14 +41,14 @@ See [Hierarchical RAG](/concepts/rag) for the full scope API.
 
 ## Sliding-Window Summarization
 
-The supervisor keeps a rolling conversation window in graph state. By default it retains the last 20 turns verbatim (`supervisor.history_max_turns`). For long-running sessions this inflates token usage on every LLM call.
+The supervisor keeps a rolling conversation window in graph state. By default it retains the last 20 turns verbatim (`supervisor.history_max_turns`) and **sliding-window summarization is enabled** (`supervisor.history_summary_enabled` defaults to `true`): older turns are compressed into a running summary via a cheap LLM call, while the most recent `history_summary_recent_turns` (default 10) exchanges stay verbatim.
 
-**Enable** sliding-window summarization (`supervisor.history_summary_enabled: true`) when:
+**Keep it enabled** when:
 - Sessions routinely exceed 15 turns.
 - You are using a paid API provider and cost is a concern.
 - The conversation topic shifts over time (summaries compress stale context well).
 
-**Disable** it when:
+**Disable** it (`supervisor.history_summary_enabled: false`) when:
 - Sessions are short-form (customer support, single-question Q&A).
 - Exact verbatim recall of earlier turns is required (legal, compliance).
 - You are running a local Ollama model where token cost is irrelevant.
@@ -67,7 +67,7 @@ Orchid supports any embedding model exposed via LiteLLM. The three most common c
 | `text-embedding-3-small` (OpenAI) | 1536 | Low cost, strong multilingual |
 | `gemini-embedding-001` (Google) | 3072 | Highest quality, highest cost |
 
-**Switching embedding models requires a full re-index.** Vector store collections are created with a fixed vector dimension. If you change `embeddings.model` in `orchid.yml` after data has been indexed, you must drop and recreate every collection. There is no automatic migration — this applies equally to Qdrant and ChromaDB.
+**Switching embedding models requires a full re-index.** Vector store collections are created with a fixed vector dimension. If you change `rag.embedding_model` in `orchid.yml` after data has been indexed, you must drop and recreate every collection. There is no automatic migration — this applies equally to Qdrant and ChromaDB.
 
 Establish your embedding model choice before ingesting production data. If you anticipate switching, keep a record of which model was used for each collection in your operational runbook.
 
@@ -106,22 +106,24 @@ See [Tool Strategies](/concepts/tool-strategies) for implementation details.
 
 ## Persistence
 
-Orchid ships a built-in SQLite backend (`orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage`) as the default. PostgreSQL is available via the `orchid-storage-postgres` plugin (`pip install orchid-storage-postgres`).
+The `orchid-ai` library ships a dependency-free **in-memory** store as its zero-configuration default — ideal for tests and embedded runs, but non-durable. For durable persistence install **`orchid-storage-sqlite`** (`pip install orchid-storage-sqlite`) for single-process deployments, or **`orchid-storage-postgres`** for multi-replica deployments. `orchid-api` and `orchid-cli` bundle the SQLite plugin, so both persist to `~/.orchid/chats.db` out of the box.
 
 **Write a custom `OrchidChatStorage`** when:
 - You need a different database engine (DynamoDB for serverless, Redis for ephemeral sessions).
 - Your platform has an existing chat/session store you must integrate with.
-- You need custom retention policies or encryption at rest beyond what the built-in backends provide.
+- You need custom retention policies or encryption at rest beyond what the plugin backends provide.
 
 **Use the `orchid-storage-postgres` plugin** when:
 - You already run PostgreSQL (or can add it).
-- You want zero-maintenance schema migrations (the plugin ships `v001_initial_schema.py` and future migrations).
+- You want zero-maintenance schema migrations (the plugin ships its own versioned migrations).
 - Multi-tenant isolation via `tenant_key` is sufficient.
 - You need multi-replica API deployments sharing state.
 
-**Use the built-in SQLite backend** when:
+**Use the `orchid-storage-sqlite` plugin** when:
 - Single-process deployments (development, demos, CLI).
 - No external database dependency desired.
+
+A configured `storage.class` is resolved strictly: if the dotted path cannot be imported, startup fails with the `pip install` command that provides it — there is no silent fallback to in-memory.
 
 The `OrchidChatStorage` ABC defines the full contract. Implement all methods — partial implementations will fail at runtime when the supervisor calls an unimplemented method.
 
@@ -129,9 +131,9 @@ See [Persistence](/concepts/persistence) for the ABC reference and migration gui
 
 ## Observability
 
-**LangSmith tracing** is enabled by setting `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` in your environment. The `orchid-api` lifespan calls `setup_tracing()` automatically when these variables are present. Every graph run is traced end-to-end with agent names, tool calls, and token counts.
+**LangSmith tracing** is enabled by setting `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` in your environment. The `orchid-api` lifespan calls `configure_tracing()` automatically when these variables are present. Every graph run is traced end-to-end with agent names, tool calls, and token counts.
 
-**Structured logging** in `orchid-api` uses Python's standard `logging` module with JSON formatting in production. Set `LOG_LEVEL=DEBUG` to see per-request detail including auth context resolution and MCP capability cache hits/misses.
+**Logging** in `orchid-api` uses Python's standard `logging` module at INFO level with a timestamped plain-text format, and a redaction filter that scrubs Bearer tokens from every handler. `LANGCHAIN_DEBUG=true` adds verbose LLM/tool traces, and `ORCHID_ENABLE_PERF_LOGS=true` turns on `[PERF]` profiling lines for latency investigations.
 
 **Correlation IDs** in `orchid-mcp` flow via `AsyncLocalStorage` — every log line emitted during an MCP tool call carries the same `correlationId` as the originating HTTP request. This makes cross-service tracing possible without a full distributed tracing stack.
 
@@ -147,7 +149,7 @@ These patterns appear frequently in early Orchid integrations and cause subtle b
 
 **Bypassing `register_parser` / `register_strategy`.** Do not modify `PARSER_REGISTRY` or `STRATEGY_REGISTRY` directly from consumer code. Use the public registration functions. Direct mutation breaks the Open/Closed principle and will conflict with future framework versions that may replace the registry implementation.
 
-**Importing `litellm` at module level in consumer agents.** Use `self.summarise()` or `self._llm_service` for simple completions. Reserve direct `litellm` imports (inside methods, with a comment) for agentic tool-calling loops where you need the raw `tool_calls` response object.
+**Importing `litellm` at module level in consumer agents.** Use `self.summarise()` (backed by the injected `self._chat_model`) for simple completions. Reserve direct `litellm` imports (inside methods, with a comment) for agentic tool-calling loops where you need the raw `tool_calls` response object.
 
 **Calling `extract_text()` more than once per document.** PDF and image parsing is expensive. Call `extract_text()` once, pass the result to both the prompt builder and `ingest_document(pre_extracted_text=...)`. Parsing twice doubles latency and cost for no benefit.
 

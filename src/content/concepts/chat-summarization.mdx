@@ -8,7 +8,6 @@ tags: ["memory", "summarization", "rag", "truncation", "conversation"]
 sources:
   - "orchid/orchid_ai/core/memory.py"
   - "orchid/orchid_ai/core/memory_types.py"
-  - "orchid/orchid_ai/core/message_filter.py"
   - "orchid/orchid_ai/core/truncation.py"
   - "orchid/orchid_ai/core/helpers.py"
   - "orchid/orchid_ai/agents/memory.py"
@@ -21,7 +20,7 @@ sources:
 related: ["/concepts/supervisor", "/concepts/rag", "/concepts/persistence", "/concepts/embeddings"]
 ---
 
-Orchid replaces the naive O(n²) stateless re-summarization anti-pattern with a layered conversation memory system: **incremental running summaries**, **structured JSON entity extraction**, and **Qdrant-backed semantic retrieval** of past turns. All message filtering is consolidated into a single configurable pipeline.
+Orchid replaces the naive O(n²) stateless re-summarization anti-pattern with a layered conversation memory system: **incremental running summaries**, **structured JSON entity extraction**, and **Qdrant-backed semantic retrieval** of past turns. All message filtering is consolidated behind `extract_conversation_history()` in `core/helpers.py`.
 
 ## Configuration
 
@@ -130,24 +129,24 @@ All compression prompts are overridable per-agent. Message truncation strategies
 
 Implementation: `OrchidTruncationStrategy` enum, `truncate_content()` / `truncate_content_async()` in `core/truncation.py`.
 
-## Message Filtering Pipeline (Phase 5)
+## Message Filtering
 
-Before Phase 5, message filtering was duplicated across 6+ call sites with slightly different logic. The `MessageFilterPipeline` consolidates all filtering:
+All history filtering lives behind `orchid_ai/core/helpers.py:extract_conversation_history()`. It skips supervisor routing noise (`skip_prefixes`), strips agent name tags (`strip_prefixes`), excludes the current query (the last user message), truncates long messages with the configured strategy, and caps the result to `max_turns` exchange pairs:
 
 ```python
-from orchid_ai.core.message_filter import MessageFilter, MessageFilterPipeline
+from orchid_ai.core.helpers import extract_conversation_history
 
-# Built-in presets
-from orchid_ai.core.message_filter import SUPERVISOR_PIPELINE
-# Skips: [Supervisor], [Conversation summary], tool types
-# Excludes last user message
-
-# Per-agent pipeline
-from orchid_ai.core.message_filter import agent_pipeline
-pipeline = agent_pipeline(("[MyAgent]\n",), max_chars=1000, max_turns=10)
+history = extract_conversation_history(
+    state,
+    max_turns=10,
+    max_chars=1000,
+    skip_prefixes=("[Supervisor",),
+    strip_prefixes=("[MyAgent]\n",),
+    truncation_strategy="middle",
+)
 ```
 
-`extract_conversation_history()` accepts an optional `pipeline=` parameter. When provided, it delegates to the pipeline. When `None`, it builds one from the legacy `skip_prefixes`/`strip_prefixes` parameters for backward compatibility.
+`OrchidAgent.extract_conversation_history()` is a thin delegate to the same function — custom agents should call it rather than reimplementing the filtering rules.
 
 ## Architecture
 
@@ -155,7 +154,7 @@ pipeline = agent_pipeline(("[MyAgent]\n",), max_chars=1000, max_turns=10)
 User message
   │
   ▼
-extract_conversation_history()          ── MessageFilterPipeline
+extract_conversation_history()          ── core/helpers.py
   │  ┌─ Skip [Supervisor] routing noise
   │  ├─ Strip [Agent] prefixes
   │  ├─ Truncate long messages (hard | middle | llm)

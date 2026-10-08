@@ -30,24 +30,28 @@ Both modes attach auth credentials to MCP calls, but they draw those credentials
 
 | Mode | Where the token comes from |
 |------|---------------------------|
-| `passthrough` | The graph's `OrchidAuthContext` bearer token — obtained **once** at the API entry point via `OrchidIdentityResolver` and threaded through the graph state |
+| `passthrough` | The graph's `OrchidAuthContext` bearer token — obtained **once** at the API entry point via `OrchidIdentityResolver` and passed through the LangGraph run configuration (never stored in graph state) |
 | `oauth` | A per-user, per-MCP-server token stored in `OrchidMCPTokenStore` — resolved independently of the graph auth |
 
 Use `passthrough` when the MCP server shares your identity provider. Use `oauth` when the MCP server has its own independent OAuth server.
 
-## Discovery on first 401
+## Discovery on demand
 
-When `auth.mode: oauth` is configured and a tool call hits the server for the first time, the sequence is:
+When `auth.mode: oauth` is configured and no stored token exists for the user yet, the sequence is:
 
 ```
 agent calls tool
-  → MCP server returns 401 + WWW-Authenticate: Bearer resource_metadata="…"
+  → MCP client finds no stored token → raises OrchidMCPAuthRequiredError
+  → orchid-api surfaces the auth requirement (per-server status via GET /mcp/auth/servers)
+
+GET /mcp/auth/servers/{name}/authorize:
+  → probe the MCP server → 401 + WWW-Authenticate: Bearer resource_metadata="…"
   → RFC 9728: fetch Protected Resource Metadata → names the auth server
   → RFC 8414: fetch Authorization Server Metadata → endpoints + grant types
   → RFC 7591: POST Dynamic Client Registration → receive client_id (+ optional client_secret)
   → persist OrchidMCPClientRegistration (endpoints + DCR credentials, one row per MCP server)
-  → raise OrchidMCPAuthRequiredError to the agent boundary
-  → orchid-api /mcp/auth/* routes drive the browser OAuth dance
+  → return the browser authorization URL
+  → user completes the OAuth dance → GET /mcp/auth/callback
   → per-user access + refresh tokens stored in OrchidMCPTokenStore
 ```
 
@@ -57,10 +61,10 @@ Subsequent calls resolve the token from `OrchidMCPTokenStore` and auto-refresh u
 
 | Store | Contents | Scope |
 |---|---|---|
-| `OrchidMCPTokenStore` | Per-user access + refresh tokens | One row per `(user_id, server_name)` |
+| `OrchidMCPTokenStore` | Per-user access + refresh tokens | One row per `(tenant_id, user_id, server_name)` |
 | `OrchidMCPClientRegistrationStore` | Discovered endpoints + DCR credentials | One row per MCP server (shared across all users) |
 
-Both ABCs live in `orchid_ai/core/mcp.py`. SQLite and PostgreSQL implementations ship in `orchid_ai/persistence/`.
+Both ABCs are defined in `orchid_ai/core/mcp_tokens.py` and `orchid_ai/core/mcp_registration.py` and re-exported from the `orchid_ai/core/mcp.py` umbrella. The framework ships dependency-free in-memory stores; durable implementations ship in plugin packages — `orchid-storage-sqlite` (`OrchidSQLiteMCPTokenStore`, `OrchidSQLiteMCPClientRegistrationStore`) and `orchid-storage-postgres` (`OrchidPostgresMCPTokenStore`, `OrchidPostgresMCPClientRegistrationStore`). `orchid-api` and `orchid-cli` default to the SQLite stores.
 
 ## No credentials in YAML
 
@@ -83,11 +87,42 @@ mcp_servers:
   mdLabel="orchid.md"
 />
 
-No `client_id`, `client_secret`, `authorization_endpoint`, or `token_endpoint`. The authorization server **must** advertise RFC 7591 dynamic client registration. If it doesn't, seed `OrchidMCPClientRegistrationStore` with the pre-known endpoints and credentials before first use.
+For MCP-2025-03-26-compliant servers, no `client_id`, `client_secret`, `authorization_endpoint`, or `token_endpoint` is needed — the framework discovers them. The authorization server **must** advertise RFC 7591 dynamic client registration.
+
+For non-compliant servers (a bare 401 without `resource_metadata`), seed the endpoints and credentials explicitly with `auth.manual_registration`; the framework then skips auto-discovery:
+
+<CodePair
+  yaml={`mcp_servers:
+  - name: legacy-crm
+    url: https://crm.example.com/mcp
+    auth:
+      mode: oauth
+      manual_registration:
+        authorization_endpoint: https://auth.example.com/authorize
+        token_endpoint: https://auth.example.com/oauth/token
+        client_id: \${CRM_CLIENT_ID}
+        client_secret: \${CRM_CLIENT_SECRET}
+        scopes: "read:records"`}
+  yamlLabel="agents.yaml"
+  md={`---
+mcp_servers:
+  - name: legacy-crm
+    url: https://crm.example.com/mcp
+    auth:
+      mode: oauth
+      manual_registration:
+        authorization_endpoint: https://auth.example.com/authorize
+        token_endpoint: https://auth.example.com/oauth/token
+        client_id: \${CRM_CLIENT_ID}
+        client_secret: \${CRM_CLIENT_SECRET}
+        scopes: "read:records"
+---`}
+  mdLabel="orchid.md"
+/>
 
 ## OrchidAuthContext entry point
 
-`OrchidAuthContext` — the graph's identity token — is resolved **once** per HTTP request by `OrchidIdentityResolver` at the API entry point. It flows through the entire LangGraph state unchanged. MCP servers with `auth.mode: passthrough` receive its `bearer_header`; MCP servers with `auth.mode: oauth` bypass it entirely and use their own per-user token.
+`OrchidAuthContext` — the graph's identity token — is resolved **once** per HTTP request by `OrchidIdentityResolver` at the API entry point. It travels in the LangGraph run configuration (`config["configurable"]["auth_context"]`) and is re-injected for every entry point — it is never written to graph state or a checkpoint. MCP servers with `auth.mode: passthrough` receive its `bearer_header`; MCP servers with `auth.mode: oauth` bypass it entirely and use their own per-user token.
 
 ## External reading
 

@@ -16,7 +16,7 @@ external: []
 
 ## What this demonstrates
 
-The `custom-storage` example shows how to replace Orchid's built-in PostgreSQL or SQLite backends with any `OrchidChatStorage` subclass — in this case a JSON-file backend. The framework resolves the class at startup via dotted import path, calls its constructor with `dsn=` and `extra_migrations_package=`, and uses it for all chat session and message persistence. The agent itself is a trivial echo so the demo keeps focus on the storage layer.
+The `custom-storage` example shows how to replace the framework's default in-memory store — or a plugin backend such as SQLite or PostgreSQL — with any `OrchidChatStorage` subclass, in this case a JSON-file backend. The framework resolves the class at startup via dotted import path, calls its constructor with `dsn=` and `extra_migrations_package=`, and uses it for all chat session and message persistence. The agent itself is a trivial echo so the demo keeps focus on the storage layer.
 
 ## Run it
 
@@ -109,10 +109,10 @@ defaults:
   rag:
     enabled: false
 ---`}
-  mdLabel="orchid.md (infra + defaults)"
+  mdLabel="orchid.md"
 />
 
-The `echo` agent lives in `agents/echo.md`:
+In the MD-config format, the same agent would live in `agents/echo.md`:
 
 ```markdown
 ---

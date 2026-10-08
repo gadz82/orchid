@@ -12,6 +12,8 @@ external: []
 
 Orchid is delivered as five separable packages with a clear, one-direction dependency graph. Each package can be replaced or forked independently — the only coupling is the HTTP API contract between the server-side packages and their consumers.
 
+Storage and RAG backends live in additional plugin packages — [`orchid-storage-sqlite`](/packages/orchid-storage-sqlite), [`orchid-storage-postgres`](/packages/orchid-storage-postgres), [`orchid-rag-qdrant`](/packages/orchid-rag-qdrant), [`orchid-rag-chroma`](/packages/orchid-rag-chroma), and [`orchid-rag-neo4j`](/packages/orchid-rag-neo4j) — which extend the core without changing the dependency graph.
+
 <EcosystemSplice variant="full" />
 
 ## Package summary
@@ -30,23 +32,29 @@ The library (`orchid`) contains only ABCs, the `GenericAgent` implementation, an
 
 ## Plugin dependencies by configuration
 
-The core `orchid-ai` library ships with `null` and `in_memory` backends only — no Qdrant, no PostgreSQL, no ChromaDB. Concrete backends live in **separate plugin packages** that auto-register via Python entry points. The table below shows which plugin to install for each configuration choice:
+The core `orchid-ai` library ships with `null` and `in_memory` backends only — no Qdrant, no SQLite, no PostgreSQL, no ChromaDB. Concrete backends live in **separate plugin packages** that auto-register via Python entry points. The table below shows which plugin to install for each configuration choice:
 
 | If your config uses this… | Install this | Backend provided |
 |---|---|---|
+| `storage.class: orchid_storage_sqlite.*` | `pip install orchid-storage-sqlite` | SQLite chat + config storage, MCP stores, event storage |
+| `checkpointer.type: sqlite` | `pip install orchid-storage-sqlite` | LangGraph SQLite checkpointer |
+| Events with SQLite backends | `pip install orchid-storage-sqlite` | SQLite signal queue + event storage |
+| `storage.class: orchid_storage_postgres.*` | `pip install orchid-storage-postgres` | PostgreSQL chat + config storage, MCP stores, event storage |
+| `checkpointer.type: postgres` | `pip install orchid-storage-postgres` | LangGraph Postgres checkpointer |
+| Events with PostgreSQL backends | `pip install orchid-storage-postgres` | Postgres signal queue + event storage |
 | `rag.vector_backend: qdrant` | `pip install orchid-rag-qdrant` | Qdrant vector store + doc store |
 | `rag.vector_backend: chroma` | `pip install orchid-rag-chroma` | ChromaDB on-disk vector store |
 | `rag.vector_backend: neo4j` | `pip install orchid-rag-neo4j` | Neo4j graph store |
-| `storage.class: orchid_storage_postgres.*` | `pip install orchid-storage-postgres` | PostgreSQL chat persistence |
-| `checkpointer_type: postgres` | `pip install orchid-storage-postgres` | LangGraph Postgres checkpointer |
-| Events with PostgreSQL backends | `pip install orchid-storage-postgres` | Postgres signal queue + event storage |
 
 Missing a plugin raises a clear startup error. For example, setting
-`vector_backend: qdrant` without installing `orchid-rag-qdrant` produces:
+`storage.class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage` without installing `orchid-storage-sqlite` produces:
 ```
-ValueError: Unknown vector backend 'qdrant'. Install the missing
-plugin: pip install orchid-rag-qdrant. Registered built-ins: ['null'].
+ImportError: Cannot resolve chat storage class
+'orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage'.
+Install the missing plugin: pip install orchid-storage-sqlite
 ```
+
+`orchid-api` and `orchid-cli` pre-install `orchid-storage-sqlite`, and `orchid-cli` also pre-installs `orchid-rag-chroma` — their defaults (durable SQLite persistence, on-disk vectors) work with no additional installs. The bare `orchid-ai` library defaults to the in-memory backends.
 
 `orchid-api` and `orchid-cli` are thin consumers. They import `orchid` as a Python dependency, add the runtime surface (HTTP routes, CLI commands, Docker entrypoints), and delegate all agent execution back to the framework library. Because the split is at the Python package boundary, the framework can be upgraded independently of the serving layer.
 

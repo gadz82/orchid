@@ -31,14 +31,8 @@ The weather fleet example shows how to integrate a **remote MCP server** into an
 ## Run it
 
 ```bash
-cp examples/weather/.env.example .env   # fill in GEMINI_API_KEY (or use ollama)
-docker compose -f docker-compose.demo.yml up --build
-```
-
-Or use the dedicated compose file:
-
-```bash
 cd examples/weather
+cp .env.example .env        # optional — the defaults use local Ollama
 docker compose up --build
 ```
 
@@ -269,23 +263,32 @@ class OutfitAdvisorAgent(OrchidAgent):
         return {"messages": [AIMessage(content=summary)]}
 ```
 
-The weather MCP server is a standalone Node.js service using the `@modelcontextprotocol/sdk`. It wraps the free Open-Meteo API and exposes two tools — `get_forecast` and `get_current_weather` — each accepting a city name that is resolved via the Open-Meteo geocoding API:
+The weather MCP server is a standalone Node.js service built on Express that hand-rolls the JSON-RPC MCP surface (`initialize`, `tools/list`, `tools/call`) instead of using the MCP SDK. It wraps the free Open-Meteo API and exposes `get_forecast` and `get_current_weather`, each accepting a city name that is resolved via the Open-Meteo geocoding API:
 
 ```javascript
-server.tool(
-  "get_forecast",
-  "7-day weather forecast for any city.",
-  { city: z.string().describe("City name") },
-  async ({ city }) => {
-    const loc = await geocode(city);
-    const url = new URL("https://api.open-meteo.com/v1/forecast");
+TOOLS["get_forecast"] = {
+  schema: {
+    name: "get_forecast",
+    description: "7-day weather forecast for a given city.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        city: { type: "string", description: "City name" },
+        days: { type: "integer", minimum: 1, maximum: 7, default: 7 },
+      },
+      required: ["city"],
+    },
+  },
+  async handler(args) {
+    const loc = await geocode(args.city);
+    const url = new URL(OPEN_METEO_FORECAST);
     url.searchParams.set("latitude", loc.lat.toString());
     url.searchParams.set("longitude", loc.lon.toString());
-    // ... daily parameters ...
-    const res = await fetch(url);
-    return { content: [{ type: "text", text: JSON.stringify(result) }] };
-  }
-);
+    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    const data = await res.json();
+    // ... map the daily arrays into forecast entries ...
+  },
+};
 ```
 
 Startup hook `bootstrap_weather()` seeds two RAG namespaces — `clothing-guides` (articles on dressing for hot, cold, rainy, windy, snowy weather) and `safety-guides` (emergency kit lists, heat safety, flood safety, winter storm safety) — into Qdrant:
@@ -307,7 +310,7 @@ async def bootstrap_weather(reader, settings, **_):
 - `outfit-advisor.class: examples.weather.agents.outfit.OutfitAdvisorAgent` → custom `OrchidAgent` subclass reads sibling agent results from `state["mcp_context"]`.
 - `skills.prepare_for_day.steps` → three-agent sequential chain; each step receives the previous agent's output as context.
 - `startup.hook: examples.weather.hooks.startup.bootstrap_weather` → RAG data is seeded at process startup; no manual indexing required.
-- `storage.class: orchid_storage_postgres.OrchidPostgresChatStorage` → PostgreSQL plugin replaces the default SQLite backend.
+- `storage.class: orchid_storage_postgres.OrchidPostgresChatStorage` → the `orchid-storage-postgres` plugin switches chat persistence to PostgreSQL instead of the API's bundled SQLite backend.
 
 ## Related concepts
 

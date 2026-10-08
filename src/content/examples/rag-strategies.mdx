@@ -25,18 +25,14 @@ Four agents share the same `release_notes` knowledge base but each uses a differ
 pip install -e ./orchid -e ./orchid-api
 ORCHID_CONFIG=examples/rag-strategies/orchid.yml \
   uvicorn orchid_api.main:app --port 8000
+
+# Create a chat, then ask your question
+curl -s -X POST http://localhost:8000/chats -H "Content-Type: application/json" -d '{}'
+curl -X POST http://localhost:8000/chats/<chat_id>/messages \
+  -F "message=what changed in release 5.4?"
 ```
 
-Ask the same question through each agent:
-
-```bash
-pip install -e ./orchid -e ./orchid-cli
-orchid chat send "what changed in release 5.4?" \
-  --agent simple_searcher \
-  --config examples/rag-strategies/orchid.yml
-```
-
-Replace `simple_searcher` with `multi_query_searcher`, `hyde_searcher`, or `recency_searcher` to compare.
+The four search agents (`simple_searcher`, `multi_query_searcher`, `hyde_searcher`, `recency_searcher`) share the same corpus; the supervisor routes each query to the best match. The example's tests invoke each strategy deterministically for side-by-side comparison.
 
 ## Configuration walkthrough
 
@@ -56,7 +52,7 @@ rag:
   embedding_model: gemini/gemini-embedding-001   # 3072-d
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/rag_strategies_chats.db
 
 startup:
@@ -73,7 +69,7 @@ rag:
   embedding_model: gemini/gemini-embedding-001
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/rag_strategies_chats.db
 
 startup:
@@ -141,6 +137,7 @@ agents:
       k: 5
       retrieval:
         strategy: recency_simple   # registered by startup hook
+        query_transformers: [reformulate]
 
 # ...truncated`}
   yamlLabel="agents.yaml"
@@ -165,7 +162,7 @@ defaults:
 - `strategy: simple` → single dense nearest-neighbour lookup; fastest, best for well-formed queries where the corpus contains a near-verbatim match.
 - `strategy: multi_query` → the LLM generates N paraphrases, retrieves against each independently, then merges by score; improves recall for ambiguous or informal questions.
 - `strategy: hyde` + `n_hypothetical: 2` → generates N hypothetical answer paragraphs and retrieves documents similar to those; effective when user vocabulary differs from corpus vocabulary.
-- `strategy: recency_simple` → registered via `startup.hook`; shows how to add custom strategies with `register_strategy()` without modifying the framework.
+- `strategy: recency_simple` → registered via `startup.hook`; shows how to add custom retrieval strategies with `register_retrieval_strategy()` without modifying the framework.
 - `prompt: &shared_prompt` / `prompt: *shared_prompt` → YAML anchors keep the prompt identical across agents so the only variable is the retrieval strategy.
 
 ## Related concepts

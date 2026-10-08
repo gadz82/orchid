@@ -25,8 +25,8 @@ Note: the source directory uses an underscore (`graph_kb`) but the route is `/ex
 
 ```bash
 pip install -e ./orchid -e ./orchid-api
-orchid chat send "Who does Bob report to?" \
-  --agent org_chart \
+orchid chat create --config examples/graph_kb/orchid.yml
+orchid chat send <chat_id> "Who does Bob report to?" \
   --config examples/graph_kb/orchid.yml
 ```
 
@@ -58,7 +58,7 @@ rag:
   embedding_model: gemini/gemini-embedding-001   # 3072-d
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/graph_kb_chats.db
 
 startup:
@@ -79,7 +79,7 @@ rag:
   embedding_model: gemini/gemini-embedding-001
 
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/graph_kb_chats.db
 
 startup:
@@ -131,10 +131,10 @@ defaults:
     enabled: true
     k: 5
 ---`}
-  mdLabel="orchid.md (infra + defaults)"
+  mdLabel="orchid.md"
 />
 
-The `org_chart` agent lives in `agents/org_chart.md`:
+In the MD-config format, the same agent would live in `agents/org_chart.md`:
 
 ```markdown
 ---

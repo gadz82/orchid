@@ -1,22 +1,20 @@
 ---
 title: "orchid-storage-postgres"
-description: "PostgreSQL storage plugin: chat persistence, checkpointer, and visibility fragment."
+description: "PostgreSQL storage plugin: chat and config persistence, MCP stores, events, checkpointer, and visibility fragment."
 package: "orchid-storage-postgres"
 section: "packages"
-order: 25
+order: 26
 tags: []
 sources:
   - "orchid-storage-postgres/README.md"
   - "orchid-storage-postgres/AGENTS.md"
   - "orchid-storage-postgres/orchid_storage_postgres/"
-related: ["/packages/orchid", "/concepts/persistence"]
+related: ["/packages/orchid", "/packages/orchid-storage-sqlite", "/concepts/persistence"]
 example: "/examples/postgres-storage"
 external: []
 ---
 
-<RepoLink package="orchid-storage-postgres" />
-
-`orchid-storage-postgres` is the PostgreSQL storage plugin for the Orchid AI framework. It provides production-grade PostgreSQL backends for chat persistence, LangGraph checkpointing, and SQL visibility filtering — all in a single installable package that auto-registers via Python entry points.
+`orchid-storage-postgres` is the production-grade PostgreSQL storage plugin for the Orchid AI framework. It implements the same storage surface as [`orchid-storage-sqlite`](/packages/orchid-storage-sqlite) — chat persistence, agent-config CRUD, MCP OAuth stores, event storage, and the LangGraph checkpointer — backed by `asyncpg`, with all extension points auto-registering via Python entry points.
 
 ## Installation
 
@@ -29,9 +27,15 @@ pip install orchid-ai orchid-storage-postgres
 | Component | Class | Purpose |
 |-----------|-------|---------|
 | Chat storage | `OrchidPostgresChatStorage` | Full `OrchidChatStorage` implementation backed by `asyncpg` |
+| Config storage | `OrchidPostgresConfigStorage` | `OrchidConfigStorage` CRUD for database-backed agent definitions |
+| MCP token store | `OrchidPostgresMCPTokenStore` | Per-user OAuth tokens for outbound MCP servers |
+| MCP registration store | `OrchidPostgresMCPClientRegistrationStore` | RFC 7591 dynamic-client registrations |
+| MCP gateway state | `OrchidPostgresMCPGatewayStateStore` | Inbound gateway clients, auth codes, and tokens |
+| Event storage | `PostgresEventStorage` | Pollen + Bloom signal / job / schedule / trigger persistence |
+| Signal queue | `PostgresSignalQueue` | Durable lease-based queue (`FOR UPDATE SKIP LOCKED` + `pg_notify`) |
 | Checkpointer | `_build_postgres_checkpointer` | LangGraph `AsyncPostgresSaver` for agent-state persistence |
 | Visibility | `_build_postgres_filter` | PostgreSQL `$1..$N` positional-parameter visibility fragment |
-| Migrations | `PostgresMigrationRunner` | Unified v001 DDL for all framework-owned tables |
+| Migrations | `v001_initial_schema` + `v002_ingestion_manifest` | Unified DDL for all framework-owned tables + the indexing manifest |
 
 ## Auto-Registration
 
@@ -44,4 +48,18 @@ postgres = "orchid_storage_postgres:_register"
 postgres = "orchid_storage_postgres:_register"
 ```
 
-No manual `register_visibility_fragment()` or `register_checkpointer()` calls are needed by integrators. The chat storage is referenced via dotted class path in YAML config.
+No manual `register_visibility_fragment()` or `register_checkpointer()` calls are needed by integrators. The storage classes are referenced via dotted class path in YAML config.
+
+## Configuration
+
+```yaml
+storage:
+  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
+  dsn: postgresql://user:pass@host:5432/orchid
+
+checkpointer:
+  type: postgres
+  dsn: postgresql://user:pass@host:5432/orchid
+```
+
+`orchid-api` and `orchid-cli` bundle SQLite defaults; point `storage.class` at `OrchidPostgresChatStorage` (and `checkpointer.type` at `postgres`) to move state to PostgreSQL for multi-replica deployments. See [Persistence](/concepts/persistence) for the full backend comparison.

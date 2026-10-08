@@ -66,6 +66,7 @@ class OrchidToolCallStrategy(ABC):
         *,
         agent_name: str = "",
         server_config: OrchidMCPServerConfig | None = None,
+        llm_model: str | None = None,
         chat_model: Any | None = None,
     ) -> dict[str, Any]:
         ...

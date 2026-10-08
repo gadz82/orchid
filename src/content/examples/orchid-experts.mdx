@@ -21,7 +21,7 @@ external: []
 
 The Orchid Experts example deploys a **fleet of ten RAG-powered GenericAgent experts**, each the chief of knowledge for one orchid-* package or cross-cutting concept. This is the canonical "ask our docs" demo — every agent is a `GenericAgent` (zero custom Python code), and all domain knowledge lives in 86 markdown files ingested into Qdrant at startup.
 
-No MCP servers. No auth. Just pure YAML + MD + RAG.
+No MCP servers and no custom agent classes — pure YAML + Markdown + RAG, with a small custom identity resolver for per-user auth.
 
 ## Agents
 
@@ -40,10 +40,11 @@ No MCP servers. No auth. Just pure YAML + MD + RAG.
 
 ## Run it
 
-Start with Docker (includes Qdrant, Ollama, and the API):
+Start with Docker (includes Qdrant and the API; Ollama runs on the host):
 
 ```bash
-bash script/start_orchid_experts.sh
+cd examples/orchid_experts
+docker compose up --build
 ```
 
 Or run the API directly (Ollama must be running on the host with `llama3.2` and `nomic-embed-text`):
@@ -85,12 +86,12 @@ rag:
   embedding_model: ollama/nomic-embed-text
 
 storage:
-  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/experts_chats.db
 
 # config_storage:          # optional — manage agents via PostgreSQL
 #   enabled: true
-#   class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+#   class: orchid_storage_postgres.config_storage.OrchidPostgresConfigStorage
 #   dsn: postgresql://...
 
 startup:
@@ -192,7 +193,7 @@ knowledge/
 - **All 10 agents use `GenericAgent`** — no `class:` field anywhere in `agents.yaml`. Every agent is defined purely in YAML with a system prompt and RAG namespace.
 - **Startup hook seeds knowledge** — `seed_experts_knowledge()` iterates the `knowledge/` directory, reads each `.md` file, and calls `ingest_document(pre_extracted_text=content)` with `RecursiveIngestion`. The parse-once pattern is followed: text is read once, passed to both the prompt builder and the ingestion pipeline.
 - **9 cross-agent skills** — The supervisor chains agents sequentially for multi-domain questions (e.g., "How do I secure my Orchid deployment?" triggers `secure-deployment`: `orchid` → `auth` → `ai-integration`).
-- **Per-agent topic restrictions** — Each agent has `topic_restriction` in `warn` mode with 10–15 allowed keyword terms, keeping answers within the agent's domain without blocking edge-case queries.
+- **Per-agent topic restrictions** — Each agent has `topic_restriction` in `warn` mode with 17–22 allowed keyword terms, keeping answers within the agent's domain without blocking edge-case queries.
 - **Zero MCP dependencies** — This example is pure RAG. No `mcp_servers:` in any agent config. The startup hook alone populates the knowledge base.
 
 ## Related concepts

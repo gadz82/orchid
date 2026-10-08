@@ -39,7 +39,7 @@ Orchid agents can call any MCP server over Streamable HTTP or SSE transport. The
 
 ## Three auth modes
 
-Each MCP server declaration carries exactly one field under `auth:` — the `mode`. No credentials, no endpoints, no client IDs live in config.
+Each MCP server declaration carries a `mode` under `auth:`; for MCP-2025-03-26-compliant servers that is the only field — no credentials, no endpoints, no client IDs live in config. Non-compliant servers can opt into explicit endpoints and credentials with `auth.manual_registration` (see [OAuth & Authentication](/concepts/oauth)).
 
 <CodePair
   yaml={`mcp_servers:
@@ -80,7 +80,7 @@ mcp_servers:
 |------|-----------|
 | `none` (default) | No auth headers. For local or public servers. |
 | `passthrough` | Forwards the graph's `OrchidAuthContext` bearer token on every call. The MCP server and Orchid share the same identity provider. |
-| `oauth` | Full MCP 2025-03-26 flow. On the first `401` the framework discovers everything — protected resource metadata, authorization server metadata, and dynamic client registration — and stores per-user tokens in `OrchidMCPTokenStore`. See [OAuth & Authentication](/concepts/oauth). |
+| `oauth` | Full MCP 2025-03-26 flow. When no stored token exists, the client raises `OrchidMCPAuthRequiredError`; the authorization route then discovers protected resource metadata, authorization server metadata, and dynamic client registration, and stores per-user tokens in `OrchidMCPTokenStore`. Non-compliant servers can seed endpoints via `auth.manual_registration` instead. See [OAuth & Authentication](/concepts/oauth). |
 
 <Callout variant="info" title="cache_ttl is rejected">
 `OrchidMCPServerConfig` is declared with `extra="forbid"`. Adding `cache_ttl:` to a server block raises a Pydantic validation error at startup. Capability caches have no TTL; they live for the process lifetime and are flushed via `invalidate_cache()` or `OrchidSessionWarmer.invalidate_user()`.

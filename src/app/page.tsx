@@ -101,8 +101,8 @@ rag:
   embedding_model: ollama/nomic-embed-text
 
 storage:
-  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
-  dsn: ./chats.db`;
+  class: orchid_storage_postgres.OrchidPostgresChatStorage
+  dsn: postgresql://orchid:orchid@localhost:5432/orchid`;
 
 const RUNTIME_TABS = [
   {

@@ -43,10 +43,14 @@ from pathlib import Path
 from typing import Any, get_args, get_origin
 
 # ── Bootstrap: add orchid package to sys.path ───────────────────────────────
-# orchid-website/ lives at REPO_ROOT/orchid-website, so the orchid lib is at
-# REPO_ROOT/orchid.
+# Two layouts are supported:
+#   • standalone sibling checkouts — REPO_ROOT/orchid, REPO_ROOT/examples
+#   • monorepo                      — REPO_ROOT/workspace-py/orchid, .../examples
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-ORCHID_SRC = REPO_ROOT / "orchid"
+ORCHID_SRC = next(
+    (p for p in (REPO_ROOT / "orchid", REPO_ROOT / "workspace-py" / "orchid") if p.is_dir()),
+    REPO_ROOT / "orchid",
+)
 if str(ORCHID_SRC) not in sys.path:
     sys.path.insert(0, str(ORCHID_SRC))
 
@@ -58,19 +62,30 @@ from orchid_ai.config.schema import OrchidAgentsConfig  # noqa: E402
 from orchid_ai.config.yaml_env import YAML_TO_ENV  # noqa: E402
 
 # ── Example discovery ────────────────────────────────────────────────────────
-EXAMPLES_DIR = REPO_ROOT / "examples"
+EXAMPLES_DIR = next(
+    (p for p in (REPO_ROOT / "examples", REPO_ROOT / "workspace-py" / "examples") if p.is_dir()),
+    REPO_ROOT / "examples",
+)
 
 EXAMPLE_DIR_TO_ROUTE: dict[str, str] = {
+    "architecture_review": "/examples/architecture-review",
     "basketball": "/examples/basketball",
+    "custom-storage": "/examples/custom-storage",
+    "education": "/examples/education",
+    "festival_producer": "/examples/festival-producer",
+    "gallery_curator": "/examples/gallery-curator",
+    "graph_kb": "/examples/graph-kb",
     "helpdesk": "/examples/helpdesk",
-    "restaurant": "/examples/restaurant",
     "learning": "/examples/learning",
     "mcp-auth": "/examples/mcp-auth",
-    "custom-storage": "/examples/custom-storage",
-    "rag-strategies": "/examples/rag-strategies",
-    "tool-strategies": "/examples/tool-strategies",
+    "orchid_experts": "/examples/orchid-experts",
+    "postgres-storage": "/examples/postgres-storage",
     "prompt-customization": "/examples/prompt-customization",
-    "graph_kb": "/examples/graph-kb",
+    "rag-strategies": "/examples/rag-strategies",
+    "recipes": "/examples/recipes",
+    "restaurant": "/examples/restaurant",
+    "tool-strategies": "/examples/tool-strategies",
+    "weather": "/examples/weather",
     "wiki": "/examples/wiki",
 }
 
@@ -90,9 +105,12 @@ def _load_example_yamls() -> dict[str, str]:
 
 
 def _example_route(rel_path: str) -> str | None:
-    parts = Path(rel_path).parts  # ('examples', 'basketball', 'agents.yaml')
-    if len(parts) >= 2 and parts[0] == "examples":
-        return EXAMPLE_DIR_TO_ROUTE.get(parts[1])
+    parts = Path(rel_path).parts  # ('workspace-py', 'examples', 'basketball', 'agents.yaml')
+    if "examples" not in parts:
+        return None
+    idx = parts.index("examples")
+    if len(parts) > idx + 1:
+        return EXAMPLE_DIR_TO_ROUTE.get(parts[idx + 1])
     return None
 
 
@@ -259,17 +277,17 @@ DESCRIPTIONS: dict[str, str] = {
     "upload.max_size_mb": "Maximum upload size in megabytes.",
     "upload.chunk_size": "Text chunk size in characters for document ingestion.",
     "upload.chunk_overlap": "Character overlap between consecutive chunks.",
-    "storage.class": "Dotted import path to an OrchidChatStorage subclass.",
-    "storage.dsn": "Database connection string for chat persistence (SQLite path or Postgres URL).",
+    "storage.class": "Dotted import path to an OrchidChatStorage subclass; 'memory' selects the built-in non-durable backend. Durable backends ship in orchid-storage-sqlite / orchid-storage-postgres.",
+    "storage.dsn": "Database connection string for chat persistence (SQLite file path or PostgreSQL URL); ignored by the in-memory backend.",
     "storage.extra_migrations_package": "Dotted package path for consumer-supplied DB migrations.",
     "config_storage.enabled": "Enable database-backed agent configuration store (PostgreSQL CRUD for agent definitions).",
     "config_storage.class": "Dotted import path to an OrchidConfigStorage subclass for agent config persistence.",
     "config_storage.dsn": "Database connection string for agent config storage (PostgreSQL URL).",
-    "mcp_auth.token_store_class": "Dotted import path to an OrchidMCPTokenStore subclass.",
+    "mcp_auth.token_store_class": "Dotted import path to an OrchidMCPTokenStore subclass (SQLite/PostgreSQL implementations ship in the storage plugins).",
     "mcp_auth.token_store_dsn": "Database DSN for per-user outbound MCP OAuth tokens.",
-    "mcp_auth.client_registration_store_class": "Dotted import path to an OrchidMCPClientRegistrationStore subclass.",
+    "mcp_auth.client_registration_store_class": "Dotted import path to an OrchidMCPClientRegistrationStore subclass (SQLite/PostgreSQL implementations ship in the storage plugins).",
     "mcp_auth.client_registration_store_dsn": "Database DSN for per-server MCP OAuth endpoints and DCR credentials.",
-    "checkpointer.type": "LangGraph state persistence backend ('memory', 'sqlite', 'postgres', or class path).",
+    "checkpointer.type": "LangGraph state persistence backend: 'memory' (built-in), 'sqlite'/'postgres' (storage plugins), or a dotted class path.",
     "checkpointer.dsn": "Connection string or file path for the LangGraph checkpointer.",
     "tracing.langsmith_tracing": "Enable LangSmith tracing for debugging and observability.",
     "tracing.langsmith_api_key": "LangSmith API key.",
@@ -648,16 +666,16 @@ ORCHID_YML_DEFAULTS: dict[str, Any] = {
     "upload.max_size_mb": 20,
     "upload.chunk_size": 1000,
     "upload.chunk_overlap": 200,
-    "storage.class": "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
+    "storage.class": "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage",
     "storage.dsn": "~/.orchid/chats.db",
     "storage.extra_migrations_package": None,
     "config_storage.enabled": False,
     "config_storage.class": "",
     "config_storage.dsn": "",
-    "mcp_auth.token_store_class": "orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore",
+    "mcp_auth.token_store_class": "orchid_storage_sqlite.mcp_token_store.OrchidSQLiteMCPTokenStore",
     "mcp_auth.token_store_dsn": "~/.orchid/chats.db",
     "mcp_auth.client_registration_store_class": (
-        "orchid_ai.persistence.mcp_client_registration_sqlite"
+        "orchid_storage_sqlite.mcp_client_registration_store"
         ".OrchidSQLiteMCPClientRegistrationStore"
     ),
     "mcp_auth.client_registration_store_dsn": "~/.orchid/chats.db",

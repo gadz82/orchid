@@ -6,11 +6,11 @@ section: "examples"
 order: 99
 tags: ["memory", "rag", "multi-agent", "skills", "summarization"]
 sources:
-  - examples/festival-producer/orchid.yml
-  - examples/festival-producer/agents.yaml
-  - examples/festival-producer/tools/booking.py
-  - examples/festival-producer/tools/logistics.py
-  - examples/festival-producer/tools/marketing.py
+  - examples/festival_producer/orchid.yml
+  - examples/festival_producer/agents.yaml
+  - examples/festival_producer/tools/booking.py
+  - examples/festival_producer/tools/logistics.py
+  - examples/festival_producer/tools/marketing.py
 related:
   - /concepts/chat-summarization
   - /concepts/supervisor
@@ -38,11 +38,11 @@ Every feature of the summarization pipeline (Phases 1–5) is active.
 ## Run it
 
 ```bash
-ORCHID_CONFIG=examples/festival-producer/orchid.yml uvicorn orchid_api.main:app
+ORCHID_CONFIG=examples/festival_producer/orchid.yml uvicorn orchid_api.main:app
 # or:
-orchid chat interactive --config examples/festival-producer/orchid.yml
+orchid chat interactive --config examples/festival_producer/orchid.yml
 # or validate:
-orchid config validate examples/festival-producer/agents.yaml
+orchid config validate examples/festival_producer/agents.yaml
 ```
 
 ## Agents and tools
@@ -91,7 +91,7 @@ supervisor:
 ## Files
 
 ```text
-examples/festival-producer/
+examples/festival_producer/
 ├── README.md
 ├── orchid.yml
 ├── agents.yaml

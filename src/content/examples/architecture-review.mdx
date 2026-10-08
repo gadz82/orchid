@@ -6,11 +6,11 @@ section: "examples"
 order: 100
 tags: ["memory", "rag", "multi-agent", "skills", "sustainability", "summarization"]
 sources:
-  - examples/architecture-review/orchid.yml
-  - examples/architecture-review/agents.yaml
-  - examples/architecture-review/tools/structural.py
-  - examples/architecture-review/tools/cost.py
-  - examples/architecture-review/tools/sustainability.py
+  - examples/architecture_review/orchid.yml
+  - examples/architecture_review/agents.yaml
+  - examples/architecture_review/tools/structural.py
+  - examples/architecture_review/tools/cost.py
+  - examples/architecture_review/tools/sustainability.py
 related:
   - /concepts/chat-summarization
   - /concepts/supervisor
@@ -40,9 +40,9 @@ similarity threshold (0.45) to catch terminology variants across disciplines.
 ## Run it
 
 ```bash
-ORCHID_CONFIG=examples/architecture-review/orchid.yml uvicorn orchid_api.main:app
-orchid chat interactive --config examples/architecture-review/orchid.yml
-orchid config validate examples/architecture-review/agents.yaml
+ORCHID_CONFIG=examples/architecture_review/orchid.yml uvicorn orchid_api.main:app
+orchid chat interactive --config examples/architecture_review/orchid.yml
+orchid config validate examples/architecture_review/agents.yaml
 ```
 
 ## Agents and tools
@@ -92,7 +92,7 @@ supervisor:
 ## Files
 
 ```text
-examples/architecture-review/
+examples/architecture_review/
 ├── README.md
 ├── orchid.yml
 ├── agents.yaml

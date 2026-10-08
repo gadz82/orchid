@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-08-04
+Last generated: 2026-10-08
 
 ## Overview
 
@@ -11,6 +11,8 @@ URL: https://orchestratorindex.com/ecosystem
 Description: Five packages, one coherent framework: library, API, CLI, MCP gateway, and frontend.
 
 Orchid is delivered as five separable packages with a clear, one-direction dependency graph. Each package can be replaced or forked independently — the only coupling is the HTTP API contract between the server-side packages and their consumers.
+
+Storage and RAG backends live in additional plugin packages — [`orchid-storage-sqlite`](/packages/orchid-storage-sqlite), [`orchid-storage-postgres`](/packages/orchid-storage-postgres), [`orchid-rag-qdrant`](/packages/orchid-rag-qdrant), [`orchid-rag-chroma`](/packages/orchid-rag-chroma), and [`orchid-rag-neo4j`](/packages/orchid-rag-neo4j) — which extend the core without changing the dependency graph.
 
 ## Package summary
 
@@ -28,23 +30,29 @@ The library (`orchid`) contains only ABCs, the `GenericAgent` implementation, an
 
 ## Plugin dependencies by configuration
 
-The core `orchid-ai` library ships with `null` and `in_memory` backends only — no Qdrant, no PostgreSQL, no ChromaDB. Concrete backends live in **separate plugin packages** that auto-register via Python entry points. The table below shows which plugin to install for each configuration choice:
+The core `orchid-ai` library ships with `null` and `in_memory` backends only — no Qdrant, no SQLite, no PostgreSQL, no ChromaDB. Concrete backends live in **separate plugin packages** that auto-register via Python entry points. The table below shows which plugin to install for each configuration choice:
 
 | If your config uses this… | Install this | Backend provided |
 |---|---|---|
+| `storage.class: orchid_storage_sqlite.*` | `pip install orchid-storage-sqlite` | SQLite chat + config storage, MCP stores, event storage |
+| `checkpointer.type: sqlite` | `pip install orchid-storage-sqlite` | LangGraph SQLite checkpointer |
+| Events with SQLite backends | `pip install orchid-storage-sqlite` | SQLite signal queue + event storage |
+| `storage.class: orchid_storage_postgres.*` | `pip install orchid-storage-postgres` | PostgreSQL chat + config storage, MCP stores, event storage |
+| `checkpointer.type: postgres` | `pip install orchid-storage-postgres` | LangGraph Postgres checkpointer |
+| Events with PostgreSQL backends | `pip install orchid-storage-postgres` | Postgres signal queue + event storage |
 | `rag.vector_backend: qdrant` | `pip install orchid-rag-qdrant` | Qdrant vector store + doc store |
 | `rag.vector_backend: chroma` | `pip install orchid-rag-chroma` | ChromaDB on-disk vector store |
 | `rag.vector_backend: neo4j` | `pip install orchid-rag-neo4j` | Neo4j graph store |
-| `storage.class: orchid_storage_postgres.*` | `pip install orchid-storage-postgres` | PostgreSQL chat persistence |
-| `checkpointer_type: postgres` | `pip install orchid-storage-postgres` | LangGraph Postgres checkpointer |
-| Events with PostgreSQL backends | `pip install orchid-storage-postgres` | Postgres signal queue + event storage |
 
 Missing a plugin raises a clear startup error. For example, setting
-`vector_backend: qdrant` without installing `orchid-rag-qdrant` produces:
+`storage.class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage` without installing `orchid-storage-sqlite` produces:
 ```
-ValueError: Unknown vector backend 'qdrant'. Install the missing
-plugin: pip install orchid-rag-qdrant. Registered built-ins: ['null'].
+ImportError: Cannot resolve chat storage class
+'orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage'.
+Install the missing plugin: pip install orchid-storage-sqlite
 ```
+
+`orchid-api` and `orchid-cli` pre-install `orchid-storage-sqlite`, and `orchid-cli` also pre-installs `orchid-rag-chroma` — their defaults (durable SQLite persistence, on-disk vectors) work with no additional installs. The bare `orchid-ai` library defaults to the in-memory backends.
 
 `orchid-api` and `orchid-cli` are thin consumers. They import `orchid` as a Python dependency, add the runtime surface (HTTP routes, CLI commands, Docker entrypoints), and delegate all agent execution back to the framework library. Because the split is at the Python package boundary, the framework can be upgraded independently of the serving layer.
 
@@ -58,11 +66,11 @@ plugin: pip install orchid-rag-qdrant. Registered built-ins: ['null'].
 URL: https://orchestratorindex.com/quickstart
 Description: Run Orchid locally in under ten minutes with the basketball demo.
 
-This guide takes you from a fresh clone to your first agent reply in under ten minutes, using the basketball demo — a self-contained pair of agents (NBA stats expert and sports psychologist) that runs entirely on local models via Ollama.
+This guide takes you from a fresh clone to your first agent reply in under ten minutes, using the basketball demo — a self-contained pair of agents (NBA stats expert and sports psychologist) with PostgreSQL persistence and Qdrant RAG, running on local models via Ollama.
 
 ## Prerequisites
 
-You need Docker Desktop (or Docker Engine + Compose v2) and Ollama with three models pulled:
+You need Docker Desktop (or Docker Engine + Compose v2) and Ollama running on the host with three models pulled:
 
 ```bash
 ollama pull llama3.2
@@ -74,47 +82,57 @@ ollama pull minicpm-v
 
 ## Clone
 
+The examples live in a dedicated repository. Clone it and enter the basketball example:
+
 ```bash
-git clone https://github.com/gadz82/orchid
-cd orchid
+git clone https://github.com/gadz82/orchid-examples
+cd orchid-examples/basketball
+cp .env.example .env   # optional — the defaults work with local Ollama
 ```
 
 ## Run the basketball demo
 
-The demo ships with a single Compose file that starts the API server, Qdrant vector store, and all dependencies. For a zero-infrastructure alternative (no Docker, ChromaDB instead of Qdrant), try the [Recipes example](/examples/recipes) which runs entirely locally with Ollama.
+The example ships with its own Compose file that starts the API, PostgreSQL, Qdrant, the web UI, and the MCP gateway. Ollama stays on your host — the API reaches it through `host.docker.internal`.
 
 ```bash
-docker compose -f docker-compose.demo.yml up --build
+docker compose up --build
 ```
 
-The first build takes a few minutes to pull base images and install Python dependencies. Subsequent starts are fast because Docker caches the layers. Once you see `Application startup complete` in the logs, the API is ready on `http://localhost:8000`.
+The first build takes a few minutes to pull base images and install Python dependencies. Subsequent starts are fast because Docker caches the layers. Once you see `Application startup complete` in the logs, you have:
+
+- API: `http://localhost:8080`
+- Web UI: `http://localhost:3000`
+- MCP gateway: `http://localhost:9000/mcp`
+- Qdrant: `http://localhost:6333`
+
+For a zero-infrastructure alternative (no Docker, SQLite + ChromaDB instead of PostgreSQL + Qdrant), try the [Recipes example](/examples/recipes) which runs entirely locally with Ollama.
 
 ## First call
 
-Send your first message through the API or the CLI:
+Create a chat session, then send your first message:
 
 ```bash
-curl -X POST http://localhost:8000/chats/demo/messages \
-  -H "Content-Type: application/json" \
-  -d '{"content": "Tell me about LeBron James"}'
+# 1. Create a chat and capture its id
+curl -s -X POST http://localhost:8080/chats \
+  -H "Content-Type: application/json" -d '{}' \
+  | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])"
+
+# 2. Send a message (the endpoint expects multipart/form-data)
+curl -X POST http://localhost:8080/chats/<chat_id>/messages \
+  -F "message=Tell me about LeBron James"
 ```
 
-Or using the CLI directly:
+Or open `http://localhost:3000` and chat from the UI.
 
-```bash
-orchid chat send "Tell me about LeBron James" \
-  --config examples/basketball/orchid.yml
-```
-
-The basketball agent calls the `get_player_stats` tool, retrieves career stats from the built-in data store, and returns a structured analysis. Ask the psychologist anything about player motivation or team dynamics — it has its own dedicated tools.
+The basketball agent calls the `get_player_stats` tool, retrieves career stats from the example's data store, and returns a structured analysis. Ask the psychologist anything about player motivation or team dynamics — it has its own dedicated tools.
 
 ## What just happened?
 
-Orchid loaded `examples/basketball/agents.yaml`, which declares two `GenericAgent` instances with named tools and prompts. No custom Python classes were needed — the entire agent configuration lives in YAML. The framework built a [LangGraph supervisor](/concepts/supervisor) graph, which routes your message to the right agent based on content and available tools.
+Orchid loaded `basketball/agents.yaml`, which declares the agents, their tools, and the cross-agent skills. The tools are implemented as `OrchidTool` subclasses in the example's Python package, and the entire agent configuration lives in YAML. The framework built a [LangGraph supervisor](/concepts/supervisor) graph, which routes your message to the right agent based on content and available tools.
 
 The supervisor also manages [conversation history](/concepts/agents) across turns, so follow-up questions work naturally. When you ask about a player's mental state, the supervisor automatically forwards relevant context from the basketball agent to the psychologist agent as part of a multi-step skill.
 
-Behind the scenes, the API persists chat history to SQLite (the demo default) and streams responses via Server-Sent Events. The [RAG pipeline](/concepts/rag) is configured but not indexed yet — uploading a PDF via `POST /chats/demo/documents` would make it retrievable in future turns.
+Behind the scenes, chat history is persisted to PostgreSQL via the `orchid-storage-postgres` plugin and responses are streamed via Server-Sent Events. The [RAG pipeline](/concepts/rag) is configured but not indexed yet — uploading a PDF through `POST /chats/{chat_id}/upload` would make it retrievable in future turns.
 
 ## Next steps
 
@@ -152,13 +170,14 @@ The base class also provides shared helpers every subclass can use without reimp
 
 ## GenericAgent: no Python required
 
-For most use cases, `GenericAgent` is the right choice. It is a concrete subclass whose behaviour is entirely driven by an `OrchidAgentConfig` parsed from config files. Its `run()` executes a fixed six-step pipeline:
+For most use cases, `GenericAgent` is the right choice. It is a concrete subclass whose behaviour is entirely driven by an `OrchidAgentConfig` parsed from config files. Its `run()` executes a fixed pipeline of six stages:
 
 1. RAG retrieval (tenant-scoped via `OrchidRAGScope`)
-2. Skill check — if the query matches a configured skill, run it and skip to step 6
-3. Agentic tool-calling loop — MCP + built-in tools via native `tool_calls`
-4. Dynamic RAG injection — write tool results back to the vector store for future retrieval
-5. LLM summarisation — synthesise the final response
+2. Injectable-tool cache check — reuse recent results when available
+3. Skill check — if the query matches a configured skill, run it and skip the agentic loop
+4. Agentic tool-calling loop — MCP + built-in tools via native `tool_calls`
+5. Dynamic RAG injection — write tool results back to the vector store for future retrieval
+6. LLM summarisation — synthesise the final response
 
 ## Defining an agent
 
@@ -273,7 +292,7 @@ All supervisor options live under the `supervisor:` key:
 The supervisor calls `OrchidAgent.extract_conversation_history()` before every routing, synthesis, and sequential-advance step. This static method:
 
 - Filters out internal supervisor routing messages (any message starting with `[Supervisor`)
-- Strips agent-name prefixes from AI messages (e.g. `[Basketball Agent]\n…` → `…`)
+- Optionally strips agent-name prefixes from AI messages via `strip_prefixes` (`GenericAgent` passes its own agent tag; the supervisor's routing calls leave prefixes in place)
 - Excludes the current user query (added separately as the trigger)
 - Caps the result to `history_max_turns * 2` messages
 
@@ -374,13 +393,13 @@ Orchid agents can call any MCP server over Streamable HTTP or SSE transport. The
 
 ## Three auth modes
 
-Each MCP server declaration carries exactly one field under `auth:` — the `mode`. No credentials, no endpoints, no client IDs live in config.
+Each MCP server declaration carries a `mode` under `auth:`; for MCP-2025-03-26-compliant servers that is the only field — no credentials, no endpoints, no client IDs live in config. Non-compliant servers can opt into explicit endpoints and credentials with `auth.manual_registration` (see [OAuth & Authentication](/concepts/oauth)).
 
 | Mode | Behaviour |
 |------|-----------|
 | `none` (default) | No auth headers. For local or public servers. |
 | `passthrough` | Forwards the graph's `OrchidAuthContext` bearer token on every call. The MCP server and Orchid share the same identity provider. |
-| `oauth` | Full MCP 2025-03-26 flow. On the first `401` the framework discovers everything — protected resource metadata, authorization server metadata, and dynamic client registration — and stores per-user tokens in `OrchidMCPTokenStore`. See [OAuth & Authentication](/concepts/oauth). |
+| `oauth` | Full MCP 2025-03-26 flow. When no stored token exists, the client raises `OrchidMCPAuthRequiredError`; the authorization route then discovers protected resource metadata, authorization server metadata, and dynamic client registration, and stores per-user tokens in `OrchidMCPTokenStore`. Non-compliant servers can seed endpoints via `auth.manual_registration` instead. See [OAuth & Authentication](/concepts/oauth). |
 
 ## Proactive capability warming
 
@@ -416,24 +435,28 @@ Both modes attach auth credentials to MCP calls, but they draw those credentials
 
 | Mode | Where the token comes from |
 |------|---------------------------|
-| `passthrough` | The graph's `OrchidAuthContext` bearer token — obtained **once** at the API entry point via `OrchidIdentityResolver` and threaded through the graph state |
+| `passthrough` | The graph's `OrchidAuthContext` bearer token — obtained **once** at the API entry point via `OrchidIdentityResolver` and passed through the LangGraph run configuration (never stored in graph state) |
 | `oauth` | A per-user, per-MCP-server token stored in `OrchidMCPTokenStore` — resolved independently of the graph auth |
 
 Use `passthrough` when the MCP server shares your identity provider. Use `oauth` when the MCP server has its own independent OAuth server.
 
-## Discovery on first 401
+## Discovery on demand
 
-When `auth.mode: oauth` is configured and a tool call hits the server for the first time, the sequence is:
+When `auth.mode: oauth` is configured and no stored token exists for the user yet, the sequence is:
 
 ```
 agent calls tool
-  → MCP server returns 401 + WWW-Authenticate: Bearer resource_metadata="…"
+  → MCP client finds no stored token → raises OrchidMCPAuthRequiredError
+  → orchid-api surfaces the auth requirement (per-server status via GET /mcp/auth/servers)
+
+GET /mcp/auth/servers/{name}/authorize:
+  → probe the MCP server → 401 + WWW-Authenticate: Bearer resource_metadata="…"
   → RFC 9728: fetch Protected Resource Metadata → names the auth server
   → RFC 8414: fetch Authorization Server Metadata → endpoints + grant types
   → RFC 7591: POST Dynamic Client Registration → receive client_id (+ optional client_secret)
   → persist OrchidMCPClientRegistration (endpoints + DCR credentials, one row per MCP server)
-  → raise OrchidMCPAuthRequiredError to the agent boundary
-  → orchid-api /mcp/auth/* routes drive the browser OAuth dance
+  → return the browser authorization URL
+  → user completes the OAuth dance → GET /mcp/auth/callback
   → per-user access + refresh tokens stored in OrchidMCPTokenStore
 ```
 
@@ -443,20 +466,22 @@ Subsequent calls resolve the token from `OrchidMCPTokenStore` and auto-refresh u
 
 | Store | Contents | Scope |
 |---|---|---|
-| `OrchidMCPTokenStore` | Per-user access + refresh tokens | One row per `(user_id, server_name)` |
+| `OrchidMCPTokenStore` | Per-user access + refresh tokens | One row per `(tenant_id, user_id, server_name)` |
 | `OrchidMCPClientRegistrationStore` | Discovered endpoints + DCR credentials | One row per MCP server (shared across all users) |
 
-Both ABCs live in `orchid_ai/core/mcp.py`. SQLite and PostgreSQL implementations ship in `orchid_ai/persistence/`.
+Both ABCs are defined in `orchid_ai/core/mcp_tokens.py` and `orchid_ai/core/mcp_registration.py` and re-exported from the `orchid_ai/core/mcp.py` umbrella. The framework ships dependency-free in-memory stores; durable implementations ship in plugin packages — `orchid-storage-sqlite` (`OrchidSQLiteMCPTokenStore`, `OrchidSQLiteMCPClientRegistrationStore`) and `orchid-storage-postgres` (`OrchidPostgresMCPTokenStore`, `OrchidPostgresMCPClientRegistrationStore`). `orchid-api` and `orchid-cli` default to the SQLite stores.
 
 ## No credentials in YAML
 
 The MCP 2025-03-26 authorization model is zero-config by design. The only field in config is:
 
-No `client_id`, `client_secret`, `authorization_endpoint`, or `token_endpoint`. The authorization server **must** advertise RFC 7591 dynamic client registration. If it doesn't, seed `OrchidMCPClientRegistrationStore` with the pre-known endpoints and credentials before first use.
+For MCP-2025-03-26-compliant servers, no `client_id`, `client_secret`, `authorization_endpoint`, or `token_endpoint` is needed — the framework discovers them. The authorization server **must** advertise RFC 7591 dynamic client registration.
+
+For non-compliant servers (a bare 401 without `resource_metadata`), seed the endpoints and credentials explicitly with `auth.manual_registration`; the framework then skips auto-discovery:
 
 ## OrchidAuthContext entry point
 
-`OrchidAuthContext` — the graph's identity token — is resolved **once** per HTTP request by `OrchidIdentityResolver` at the API entry point. It flows through the entire LangGraph state unchanged. MCP servers with `auth.mode: passthrough` receive its `bearer_header`; MCP servers with `auth.mode: oauth` bypass it entirely and use their own per-user token.
+`OrchidAuthContext` — the graph's identity token — is resolved **once** per HTTP request by `OrchidIdentityResolver` at the API entry point. It travels in the LangGraph run configuration (`config["configurable"]["auth_context"]`) and is re-injected for every entry point — it is never written to graph state or a checkpoint. MCP servers with `auth.mode: passthrough` receive its `bearer_header`; MCP servers with `auth.mode: oauth` bypass it entirely and use their own per-user token.
 
 ## External reading
 
@@ -482,7 +507,7 @@ Orchid uses pluggable embedding models to convert documents and queries into den
 
 Set the embedding model:
 
-Any LiteLLM-compatible embedding model string is accepted. The `LiteLLMEmbedder` in `orchid_ai/rag/embeddings.py` delegates the actual call to LiteLLM.
+Any LiteLLM-compatible embedding model string is accepted. The `build_embeddings()` factory in `orchid_ai/rag/embeddings.py` returns a LiteLLM-backed embedder that delegates the actual call to LiteLLM.
 
 ## How embeddings are generated
 
@@ -572,9 +597,9 @@ The graph builder creates LangChain `BaseChatModel` instances via `build_chat_mo
 
 ### Chat Persistence
 URL: https://orchestratorindex.com/concepts/persistence
-Description: OrchidChatStorage ABC, built-in SQLite backend, PostgreSQL via plugin, and pluggable custom backends.
+Description: OrchidChatStorage ABC, the built-in in-memory default, and durable SQLite/PostgreSQL backends via plugins.
 
-Orchid persists chat sessions and messages through the `OrchidChatStorage` ABC. The library ships two built-in backends; consumers can supply their own by pointing `storage.class` at any importable subclass.
+Orchid persists chat sessions and messages through the `OrchidChatStorage` ABC. The `orchid-ai` library ships one dependency-free implementation — an in-memory store used as the zero-configuration default. Durable backends come from plugin packages (`orchid-storage-sqlite`, `orchid-storage-postgres`) or from consumer projects via any importable subclass.
 
 ## OrchidChatStorage interface
 
@@ -596,24 +621,45 @@ class OrchidChatStorage(ABC):
 
 The API layer depends only on this interface — swapping the backend requires no code changes in routers or agents.
 
-## Built-in backends
+## Default: in-memory
 
-| Class | Driver | When to use |
-|---|---|---|
-| `OrchidSQLiteChatStorage` | `aiosqlite` | Local development, single-process demos |
-| `OrchidPostgresChatStorage` | `asyncpg` | Production, multi-worker deployments |
+When no storage backend is configured, the framework resolves `storage.class` to the `"memory"` sentinel and uses `OrchidInMemoryChatStorage` — sessions and messages live in process memory for the lifetime of the process. It has no external dependencies and no migration step, which keeps tests, embedded runs, and quick starts working out of the box.
+
+`orchid-api` and `orchid-cli` **bundle the `orchid-storage-sqlite` plugin** and pass an explicit `storage.class` at startup, so both default to durable SQLite (`~/.orchid/chats.db`) instead of the framework in-memory store.
+
+## Pluggable backends
+
+| Class | Provided by | Driver | When to use |
+|---|---|---|---|
+| `OrchidInMemoryChatStorage` | `orchid-ai` (built-in) | — | Tests, embedded runs, demos — framework default |
+| `OrchidSQLiteChatStorage` | `orchid-storage-sqlite` | `aiosqlite` | Local development, single-process deployments, CLI — default for `orchid-api` / `orchid-cli` |
+| `OrchidPostgresChatStorage` | `orchid-storage-postgres` | `asyncpg` | Production, multi-worker deployments |
 
 Configure via config:
+
+## Strict resolution — no silent fallback
+
+A configured dotted class path is always resolved strictly. If the import fails — a typo, a missing extra, or a plugin that was never installed — startup raises immediately with the package to install:
+
+```text
+ImportError: Cannot resolve chat storage class
+'orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage'.
+Install the missing plugin: pip install orchid-storage-sqlite
+```
+
+Only the `"memory"` sentinel (or an empty value) selects the in-memory backend. The framework never falls back silently from a configured backend to in-memory, so a misconfigured deployment fails fast instead of quietly dropping persistence.
 
 ## Custom backends
 
 Subclass `OrchidChatStorage` in your own project and reference it by dotted import path:
 
-The factory resolves the class at startup via `importlib`. The constructor must accept `*, dsn: str`.
+The factory resolves the class at startup via `importlib`. The constructor must accept keyword-only `dsn: str` and `extra_migrations_package: str | None = None`.
 
 ## Migrations
 
-The migration system uses versioned modules named `v{NNN}_{description}.py` (e.g. `v001_initial_schema.py`). Each module exposes `VERSION`, `up(conn, *, dialect)`, and `down(conn, *, dialect)`. `OrchidMigrationRunner` runs framework migrations first, then integrator migrations from `extra_migrations_package` — recorded with an `"ext:"` prefix to avoid collisions.
+Durable backends own their migration modules: `orchid-storage-sqlite` ships `v001_initial_schema` (every framework table) and `v002_ingestion_manifest`, while `orchid-storage-postgres` ships its own Postgres DDL. Migrations are versioned modules named `v{NNN}_{description}.py`; each exposes `VERSION`, `up(conn, *, dialect)`, and `down(conn, *, dialect)`.
+
+Integrators can append their own migrations on top of a backend's by setting `extra_migrations_package`. Those run after the backend's migrations and are recorded with an `"ext:"` prefix in the shared `_migrations` table to avoid collisions.
 
 ---
 
@@ -649,6 +695,7 @@ class OrchidToolCallStrategy(ABC):
         *,
         agent_name: str = "",
         server_config: OrchidMCPServerConfig | None = None,
+        llm_model: str | None = None,
         chat_model: Any | None = None,
     ) -> dict[str, Any]:
         ...
@@ -745,7 +792,7 @@ Mini-agents are an opt-in per-agent fan-out mechanism. When a user sends a messa
 
 ## How it works
 
-Enabling mini-agents on a parent agent adds three nodes to the LangGraph graph for that agent:
+Enabling mini-agents on a parent agent adds two nodes to that agent's subgraph — a decomposer/fan-out node and an aggregator node — plus a conditional fork edge:
 
 ```
 supervisor ──Send──> {name}_agent (parent + decomposer hook)
@@ -787,9 +834,9 @@ Mini-agents fail gracefully. The aggregator handles partial failures:
 | Condition | Mini outcome | Aggregator action |
 |---|---|---|
 | Loop completes successfully | `status="ok"`, `summary=<text>` | Use as-is |
-| MCP transport error (after retry) | `status="failed"`, `error=<msg>` | LLM mentions failure |
-| Unhandled exception | `status="failed"`, `error=<repr>` | LLM mentions failure |
-| Timeout exceeded | `status="timeout"`, `error="timed out"` | LLM mentions delay |
+| MCP transport error | `status="failed"`, `error=<msg>` | LLM mentions failure |
+| Unhandled exception | `status="failed"`, `error="<ExceptionType>: <message>"` | LLM mentions failure |
+| Timeout exceeded | `status="timeout"`, `error="timed out after {timeout}s"` | LLM mentions delay |
 | All minis failed | n/a | Deterministic error AIMessage — no synthesis LLM call |
 
 Only the parent's synthesised `AIMessage` is persisted in chat history. Mini outcomes are invisible to the conversation record.
@@ -824,7 +871,7 @@ Every standard Orchid run is synchronous: a user sends a message, the API resolv
 
 **Pollen** is the event substrate. It ingests, persists, and dispatches immutable `Signal`s. Every signal that enters the system is written to the `signals` table before any trigger runs — signals are replayable by definition.
 
-**Bloom** is the execution layer. Triggers match signals using JMESPath filter expressions, build `JobSpec`s, and the `JobRunner` invokes the existing LangGraph supervisor with a synthesised `OrchidAgentState`. A `JobRun` is the unit of execution, persisted with status, result, and error.
+**Bloom** is the execution layer. Triggers match signals using JMESPath filter expressions, build `JobSpec`s, and the `GraphJobRunner` invokes the existing LangGraph supervisor with a synthesised `OrchidAgentState`. A `JobRun` is the unit of execution, persisted with status, result, and error.
 
 ```
               ┌──────── Pollen — ingest path (non-blocking) ──────────┐
@@ -858,15 +905,17 @@ Scheduling is not a separate concept — `Schedule` rows produce synthetic `cron
 
 ## Configuring Pollen + Bloom
 
+The event backends are plugin-provided: `PostgresEventStorage` and `PostgresSignalQueue` ship in `orchid-storage-postgres` (`pip install orchid-storage-postgres`), while `SQLiteEventStorage` and `SQLiteSignalQueue` ship in `orchid-storage-sqlite`. The in-memory event backend is built into `orchid-ai` for local development.
+
 ## Signal sources
 
 All ingress paths normalise to a `Signal` and flow through the same dispatcher:
 
 | Path | Producer | Notes |
 |---|---|---|
-| `POST /signals` (HTTP) | `HTTPIngestionProducer` | HMAC-SHA256 per source. Returns `202 Accepted` with `signal_id` — never blocks on processing. |
-| Cron schedule | `SchedulerProducer` | APScheduler-driven; synthetic `signal.type = "cron"`. |
-| MCP tool `orchid_signal_emit` | `MCPIngestionProducer` | Gateway forwards to `POST /signals`. |
+| `POST /signals` (HTTP) | `HTTPIngestionProducer` | An `orchid-api` adapter — mounted automatically when `events.ingestion.sources` is non-empty. HMAC/bearer validators per source; returns `202 Accepted` with `signal_id` — never blocks on processing. |
+| Cron schedule | `SchedulerProducer` | APScheduler-driven; `events.schedules[]` rows emit synthetic `signal.type = "cron"` signals. |
+| MCP tool `orchid_signal_emit` | orchid-mcp gateway tool | The gateway posts to the API's `/signals` route as source id `mcp-gateway` — declare a matching `events.ingestion.sources[]` entry so the request validates. |
 | Agent `self.emit_signal(...)` | `InternalEmissionProducer` | Non-blocking; inherits the agent's `OrchidAuthContext`. |
 | Custom bus | `OrchidSignalProducer` subclass | Kafka, SQS, Redis Streams, file watcher — wired via `events.producers:` YAML. |
 
@@ -880,7 +929,7 @@ Every signal carries an identity claim. The **processor** (not the ingest path) 
 | `addressed_to_user` | Platform, scoped to a user's data | Service account + `user_id` in `JobSpec` |
 | `act_as_user` | The user (impersonation) | `OrchidIdentityResolver.mint_for_user(tenant_key, user_id)` |
 
-`mint_for_user` is an optional extension point on `OrchidIdentityResolver`. The default raises `OrchidIdentityNotMintableError`; consumers implement it according to what their identity provider supports.
+`mint_for_user` is an optional extension point on `OrchidIdentityResolver`. The default raises `MintingProbeUnsupportedError`; resolvers that support impersonation override it and may raise `OrchidIdentityNotMintableError` for specific users they cannot mint for. The trigger registry probes this method at boot for every `act_as_user` trigger and refuses to start when the resolver cannot mint at all.
 
 ## Extension points
 
@@ -892,7 +941,7 @@ All three layers between emitter and supervisor are independently pluggable:
 | New event source (Kafka topic, file watcher) | `OrchidSignalProducer` | `events.producers:` list |
 | Different worker model (Celery, Lambda) | `OrchidSignalProcessor` | `events.processors:` list |
 | Custom webhook auth (mTLS, signed JWT) | `SignalAuthValidator` | per-source `validator.class:` |
-| Cross-cutting enrichment (PII redaction) | `SignalIngestMiddleware` | `events.middleware:` ordered list |
+| Cross-cutting enrichment (PII redaction) | `SignalIngestMiddleware` | programmatic dispatcher wiring (`events.middleware:` is parsed but not wired yet) |
 
 ## Idempotency and retry
 
@@ -904,7 +953,7 @@ All three layers between emitter and supervisor are independently pluggable:
 
 ## Streaming
 
-`GET /runs/{run_id}/stream` reuses the existing SSE infrastructure. It emits the same events the chat stream produces (`agent.started`, `tool.called`, `tool.completed`, `agent.finished`), plus four Bloom-specific events: `bloom.signal.ingested`, `bloom.run.queued`, `bloom.run.started`, `bloom.run.finished`.
+`GET /runs/{run_id}/stream` opens a Server-Sent Events stream scoped to a single `JobRun`. It carries the run lifecycle — `bloom.run.queued`, `bloom.run.started`, and the terminal `bloom.run.finished` — and closes after the terminal event or an idle timeout. Chat-bound runs additionally project progress onto the chat channel as `chat.bloom.attached` and `chat.bloom.finished`; the final assistant message itself is persisted to chat storage through the normal chat path.
 
 ---
 
@@ -912,7 +961,7 @@ All three layers between emitter and supervisor are independently pluggable:
 URL: https://orchestratorindex.com/concepts/chat-summarization
 Description: Running summaries, structured entity extraction, RAG-augmented conversation memory, and configurable truncation strategies.
 
-Orchid replaces the naive O(n²) stateless re-summarization anti-pattern with a layered conversation memory system: **incremental running summaries**, **structured JSON entity extraction**, and **Qdrant-backed semantic retrieval** of past turns. All message filtering is consolidated into a single configurable pipeline.
+Orchid replaces the naive O(n²) stateless re-summarization anti-pattern with a layered conversation memory system: **incremental running summaries**, **structured JSON entity extraction**, and **Qdrant-backed semantic retrieval** of past turns. All message filtering is consolidated behind `extract_conversation_history()` in `core/helpers.py`.
 
 ## Configuration
 
@@ -1021,24 +1070,24 @@ All compression prompts are overridable per-agent. Message truncation strategies
 
 Implementation: `OrchidTruncationStrategy` enum, `truncate_content()` / `truncate_content_async()` in `core/truncation.py`.
 
-## Message Filtering Pipeline (Phase 5)
+## Message Filtering
 
-Before Phase 5, message filtering was duplicated across 6+ call sites with slightly different logic. The `MessageFilterPipeline` consolidates all filtering:
+All history filtering lives behind `orchid_ai/core/helpers.py:extract_conversation_history()`. It skips supervisor routing noise (`skip_prefixes`), strips agent name tags (`strip_prefixes`), excludes the current query (the last user message), truncates long messages with the configured strategy, and caps the result to `max_turns` exchange pairs:
 
 ```python
-from orchid_ai.core.message_filter import MessageFilter, MessageFilterPipeline
+from orchid_ai.core.helpers import extract_conversation_history
 
-# Built-in presets
-from orchid_ai.core.message_filter import SUPERVISOR_PIPELINE
-# Skips: [Supervisor], [Conversation summary], tool types
-# Excludes last user message
-
-# Per-agent pipeline
-from orchid_ai.core.message_filter import agent_pipeline
-pipeline = agent_pipeline(("[MyAgent]\n",), max_chars=1000, max_turns=10)
+history = extract_conversation_history(
+    state,
+    max_turns=10,
+    max_chars=1000,
+    skip_prefixes=("[Supervisor",),
+    strip_prefixes=("[MyAgent]\n",),
+    truncation_strategy="middle",
+)
 ```
 
-`extract_conversation_history()` accepts an optional `pipeline=` parameter. When provided, it delegates to the pipeline. When `None`, it builds one from the legacy `skip_prefixes`/`strip_prefixes` parameters for backward compatibility.
+`OrchidAgent.extract_conversation_history()` is a thin delegate to the same function — custom agents should call it rather than reimplementing the filtering rules.
 
 ## Architecture
 
@@ -1046,7 +1095,7 @@ pipeline = agent_pipeline(("[MyAgent]\n",), max_chars=1000, max_turns=10)
 User message
   │
   ▼
-extract_conversation_history()          ── MessageFilterPipeline
+extract_conversation_history()          ── core/helpers.py
   │  ┌─ Skip [Supervisor] routing noise
   │  ├─ Strip [Agent] prefixes
   │  ├─ Truncate long messages (hard | middle | llm)
@@ -1134,7 +1183,8 @@ Description: The core Python library: ABCs, agents, graph builder, RAG, and pers
 pip install orchid-ai
 
 # Backends are separate plugin packages — install what you need:
-pip install orchid-storage-postgres   # PostgreSQL chat storage + checkpointer
+pip install orchid-storage-sqlite    # SQLite chat storage + MCP stores + checkpointer
+pip install orchid-storage-postgres  # PostgreSQL chat storage + checkpointer
 pip install orchid-rag-qdrant         # Qdrant vector + doc store
 pip install orchid-rag-chroma         # ChromaDB on-disk vector store
 pip install orchid-rag-neo4j          # Neo4j graph store
@@ -1163,7 +1213,7 @@ Lower-level plumbing (the `build_*` factories, concrete built-in backends, LangC
 ```python
 from orchid_ai.checkpointing import build_checkpointer
 from orchid_ai.rag.factory import build_reader
-from orchid_ai.persistence.sqlite import OrchidSQLiteChatStorage
+from orchid_ai.persistence.factory import build_chat_storage
 ```
 
 > **Auth is execution context, not graph state.** It travels in the LangGraph `RunnableConfig` (`config["configurable"]["auth_context"]`), never in `OrchidAgentState`, so it is never written to a checkpoint. Inside a custom agent, read it via `self._current_auth`; entry points attach it with `with_auth(...)`.
@@ -1188,11 +1238,11 @@ YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`)
 
 ### `rag/`
 
-Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends. The library ships with null + in-memory backends; Qdrant, ChromaDB, and Neo4j backends are separate plugin packages that auto-register via entry points. All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. See [RAG](/concepts/rag).
+Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends. The library ships a `null` vector backend plus in-memory doc-store and graph-store backends; Qdrant, ChromaDB, and Neo4j backends are separate plugin packages that auto-register via entry points. All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. See [RAG](/concepts/rag).
 
 ### `persistence/`
 
-`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) — the default, single-file persistent store that requires no external services. PostgreSQL storage (`OrchidPostgresChatStorage`), the checkpointer, and the visibility fragment are provided by the separate `orchid-storage-postgres` plugin. Also contains the outbound MCP OAuth token stores and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
+`OrchidChatStorage` ABC for chat and message CRUD, plus the framework's dependency-free in-memory backend (`OrchidInMemoryChatStorage`) — the zero-configuration default. Durable persistence lives in plugins: `orchid-storage-sqlite` (chat storage, config storage, MCP stores, event storage, checkpointer) and `orchid-storage-postgres` (the same surface backed by `asyncpg`). The framework never falls back silently: a configured class path that cannot be imported fails at startup with a `pip install` hint. See [Persistence](/concepts/persistence).
 
 ### `documents/`
 
@@ -1224,6 +1274,7 @@ When YAML alone isn't enough, subclass `OrchidAgent` in your consumer project an
 from __future__ import annotations
 
 from orchid_ai.core.agent import OrchidAgent
+from orchid_ai.core.scopes import OrchidRAGScope
 from orchid_ai.core.state import OrchidAgentState
 
 class CatalogAgent(OrchidAgent):
@@ -1239,13 +1290,17 @@ class CatalogAgent(OrchidAgent):
         query = self.extract_user_query(state)
         history = self.extract_conversation_history(state)
 
-        # Retrieve relevant catalog chunks
-        rag_context = await self.fetch_rag_context(query, scope=self._rag_scope(state))
+        # Retrieve relevant catalog chunks (scope built from the injected auth)
+        auth = self._current_auth
+        scope = OrchidRAGScope(tenant_id=auth.tenant_key, user_id=auth.user_id)
+        rag_context = await self.fetch_rag_context(query, scope)
 
-        # Synthesise a response using the injected LLM
+        # Synthesise a response using the injected chat model
         response = await self.summarise(
             query,
+            mcp_data={},
             rag_data=rag_context,
+            system_prompt="You are a catalog specialist...",
             conversation_history=history,
         )
         return {"messages": [response]}
@@ -1277,13 +1332,16 @@ ruff format orchid_ai/
 URL: https://orchestratorindex.com/packages/orchid-api
 Description: FastAPI server exposing the Orchid framework over HTTP with SSE streaming.
 
-`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, and identity bridging. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface. The API does **not** bundle storage or RAG backends; install the corresponding plugin packages alongside it.
+`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, and identity bridging. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface. It bundles the **`orchid-storage-sqlite`** plugin, so durable SQLite persistence works out of the box; RAG backends are not bundled — install the corresponding plugin packages alongside it.
 
 ## Installation and startup
 
 ```bash
-pip install orchid-ai orchid-api orchid-storage-postgres orchid-rag-qdrant
+pip install orchid-ai orchid-api orchid-rag-qdrant   # SQLite persistence is bundled
 ORCHID_CONFIG=orchid.yml uvicorn orchid_api.main:app --port 8000
+
+# Optional: swap the bundled SQLite backend for PostgreSQL
+pip install orchid-storage-postgres
 ```
 
 For local development with hot-reload:
@@ -1298,15 +1356,15 @@ Endpoints are split across domain-scoped routers. New endpoints always go into t
 
 ### `chats` — Session CRUD
 
-`POST /chats` creates a new chat session. `GET /chats` lists sessions for the authenticated user. `DELETE /chats/{id}` removes a session and its messages. These are the lightweight bookkeeping operations; message content lives in the messages and streaming routers.
+`POST /chats` creates a new chat session. `GET /chats` lists sessions for the authenticated user. `GET /chats/{id}/messages` returns the message history for a session. `DELETE /chats/{id}` removes a session and its messages. These are the lightweight bookkeeping operations; message content lives in the messages and streaming routers.
 
 ### `messages` — Send and upload
 
-`POST /chats/{id}/messages` sends a message and returns the full assistant response (non-streaming, `multipart/form-data`). `POST /chats/{id}/upload` accepts a file upload and indexes it into the chat's RAG scope. `GET /chats/{id}/messages` returns the message history for a session.
+`POST /chats/{id}/messages` sends a message and returns the full assistant response (non-streaming, `multipart/form-data`). `POST /chats/{id}/upload` accepts a file upload and indexes it into the chat's RAG scope.
 
 ### `streaming` — SSE-streamed send
 
-`POST /chats/{id}/messages/stream` opens a Server-Sent Events stream and emits a rich event vocabulary: `assistant.delta` (token-by-token), `supervisor.routing_decision`, `mini_agent.{decomposed,started,finished,aggregated}`, `tool_call.requires_approval`, and `assistant.complete`. The frontend and `orchid-mcp` gateway both consume this endpoint.
+`POST /chats/{id}/messages/stream` opens a Server-Sent Events stream. Every event carries a `type` field: `token` (token-by-token deltas, with hand-off buffering so agent transitions don't leak partial text), `handoff` (inline agent-to-agent transitions), `status` (agent started/finished), `mini_agent.*` (decomposition progress when enabled), `done` (final response plus `agents_used` and `auth_required`), and `error`. The frontend and the `orchid-mcp` gateway both consume this endpoint.
 
 ### `resume` — HITL approval
 
@@ -1341,9 +1399,8 @@ Endpoints are split across domain-scoped routers. New endpoints always go into t
 At startup the FastAPI lifespan function calls `lifecycle.setup_orchid()`, which:
 
 1. Loads `OrchidAgentsConfig` from `ORCHID_CONFIG`.
-2. Calls `build_graph()` to wire the LangGraph supervisor and agent nodes.
-3. Initialises the configured `OrchidChatStorage` backend.
-4. Warms MCP capability caches for all `auth.mode: none` servers.
+2. Bootstraps the `Orchid` facade, which wires the LangGraph supervisor, the agent nodes, and the configured `OrchidChatStorage` backend (SQLite by default via the bundled `orchid-storage-sqlite` plugin).
+3. Warms MCP capability caches for all `auth.mode: none` servers.
 
 The result is stored in `AppContext` (`orchid_api/context.py`) as `app_ctx.orchid` — a single `Orchid` facade instance. All routers access it via `from ..context import app_ctx`. There are no module-level globals.
 
@@ -1358,7 +1415,7 @@ See [Configuration](/configuration) for the full reference. The most commonly se
 ORCHID_CONFIG=orchid.yml           # Path to agents.yaml / orchid.yml
 LITELLM_MODEL=openai/gpt-4o-mini   # Default LLM for all agents
 QDRANT_URL=http://qdrant:6333      # Vector store
-CHAT_DB_DSN=postgresql+asyncpg://user:pass@db:5432/orchid
+CHAT_DB_DSN=postgresql://user:pass@db:5432/orchid
 
 # Auth
 IDENTITY_RESOLVER_CLASS=myproject.identity.MyIdentityResolver
@@ -1380,7 +1437,7 @@ Set `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` to enable LangSmith. All
 URL: https://orchestratorindex.com/packages/orchid-cli
 Description: Command-line interface for interacting with Orchid without running the API.
 
-`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. The default storage is SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
+`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. It bundles the **`orchid-storage-sqlite`** plugin, so the default storage is durable SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
 
 The CLI bundles the **`orchid-rag-chroma`** plugin as a dependency for zero-infrastructure RAG — vectors live on disk at `~/.orchid/chroma/`, no Qdrant container required. Set `VECTOR_BACKEND=qdrant` and install `orchid-rag-qdrant` to switch when you need sparse/hybrid search or scope promotion.
 
@@ -1388,15 +1445,17 @@ The CLI bundles the **`orchid-rag-chroma`** plugin as a dependency for zero-infr
 
 ```bash
 pip install orchid-ai orchid-cli
-# orchid-rag-chroma is included — no extra install needed for on-disk RAG
+# orchid-rag-chroma (on-disk RAG) and orchid-storage-sqlite (durable chat
+# persistence) are included — no extra install needed
+```
 
 After installation the `orchid` command is available in your shell.
 
 ## Quick start
 
 ```bash
-# Validate a config before deploying
-orchid config validate examples/basketball/orchid.yml
+# Validate the agent config before deploying
+orchid config validate examples/basketball/agents.yaml
 
 # Start an interactive chat session
 orchid chat interactive --config examples/basketball/orchid.yml
@@ -1426,7 +1485,7 @@ Authentication is required when MCP servers or tools need a real Bearer token. W
 | `orchid chat list --config <path>` | List all chat sessions |
 | `orchid chat history <id> --config <path>` | Show message history |
 | `orchid chat send <id> "msg" --config <path>` | Send a single message and stream the response |
-| `orchid chat interactive --config <path>` | Interactive REPL with slash commands (`/switch`, `/new`, `/share`) |
+| `orchid chat interactive --config <path>` | Interactive REPL with slash commands (`/list`, `/switch`, `/new`, `/rename`, `/history`) |
 | `orchid chat rename <id> "title" --config <path>` | Rename a chat |
 | `orchid chat share <id> --config <path>` | Promote chat RAG data to user scope |
 | `orchid chat delete <id> --config <path>` | Delete a chat session |
@@ -1570,10 +1629,10 @@ Goodbye.
 
 1. Load `OrchidAgentsConfig` from the config path.
 2. Call `build_graph()` to wire the LangGraph supervisor and agent nodes.
-3. Initialise `OrchidChatStorage` (SQLite by default).
+3. Initialise `OrchidChatStorage` (SQLite by default via the bundled `orchid-storage-sqlite` plugin).
 4. Warm MCP capability caches for all `auth.mode: none` servers.
 
-Every `chat`, `index`, and `mcp` command goes through `commands/_session.py:resolve_session()`, which bootstraps the framework, resolves auth, and warms `passthrough`/`oauth` MCP caches once per `(tenant_key, user_id)`. The result is an `Orchid` facade and an `OrchidAuthContext` — the same objects the API hands to its routers.
+Every `chat` command goes through `commands/_session.py:resolve_session()`, which bootstraps the framework, resolves auth, and warms `passthrough`/`oauth` MCP caches once per `(tenant_key, user_id)`. The result is an `Orchid` facade and an `OrchidAuthContext` — the same objects the API hands to its routers. The `index` and `mcp` commands bootstrap the framework directly via `bootstrap.py` without the per-user session warm-up.
 
 The CLI is an independent OAuth 2.0 client: it runs a full Authorization Code + PKCE flow against the upstream IdP, stores tokens in `~/.orchid/tokens.json` (permissions `0o600`), and refreshes them automatically when they expire. It never delegates auth to `orchid-api`.
 
@@ -1602,7 +1661,7 @@ When `cli_rag:` is absent, the CLI falls back to `rag:` as usual. The `cli_rag:`
 URL: https://orchestratorindex.com/packages/orchid-mcp
 Description: Node.js MCP gateway that exposes Orchid to any MCP-capable host LLM.
 
-`orchid-mcp` is a **fork-and-deploy boilerplate**, not a published npm package. It is a TypeScript/Node.js MCP gateway that exposes your Orchid deployment to any MCP-capable host LLM — Claude Desktop, Claude Code, Cursor, or anything that speaks the MCP 2025-03-26 Streamable HTTP transport. Clone the source, configure a handful of environment variables, and any host LLM can call `orchid_ask(...)` as naturally as a built-in tool.
+`orchid-mcp` is a TypeScript/Node.js MCP gateway that exposes your Orchid deployment to any MCP-capable host LLM — Claude Desktop, Claude Code, Cursor, or anything that speaks the MCP 2025-03-26 Streamable HTTP transport. It is published on npm as `@orchid-ai/orchid-mcp` and doubles as forkable boilerplate: configure a handful of environment variables and any host LLM can call `orchid_ask(...)` as naturally as a built-in tool.
 
 The gateway is intentionally thin: it owns MCP transport, identity resolution, session mapping, and HTTP translation. It never duplicates framework logic. All agent routing, RAG retrieval, tool execution, and HITL approvals happen upstream in `orchid-api`.
 
@@ -1614,8 +1673,8 @@ MCP client         orchid-mcp            orchid-api
                            │
                     ┌──────┴──────────────────────┐
                     │  AuthStrategy (per session)  │
-                    │  SessionMap (LRU / Redis)     │
-                    │  OrchidAPIClient (undici)     │
+                    │  SessionMap (in-memory LRU)   │
+                    │  OrchidAPIClient (fetch)      │
                     │  opossum circuit breaker      │
                     │  Pino + OTEL + rate limiter   │
                     └─────────────────────────────-┘
@@ -1623,9 +1682,9 @@ MCP client         orchid-mcp            orchid-api
 
 ### Key internal modules
 
-**`OrchidAPIClient`** — zod-validated HTTP client backed by undici. Every response shape is parsed at the boundary; a schema mismatch raises a clear error rather than silently passing garbage to tool handlers.
+**`OrchidAPIClient`** — zod-validated HTTP client built on Node's `fetch`. Every response shape is parsed at the boundary; a schema mismatch raises a clear error rather than silently passing garbage to tool handlers.
 
-**`SessionMap`** — maps an MCP session ID to its bound Orchid chat ID and resolved identity. The default implementation is an in-process LRU cache. For multi-replica deployments swap in the Redis-backed implementation via `ORCHID_MCP_SESSION_BACKEND=redis`.
+**`SessionMap`** — maps an MCP session ID to its bound Orchid chat ID and pending-interrupt state. The implementation is an in-process LRU cache; a shared Redis-backed map for multi-replica deployments is not shipped yet. Identity is resolved per request, not stored in the map.
 
 **`AuthStrategy` ABC** — pluggable authentication. Two implementations ship: `service_account` (one static Bearer token shared across all MCP users) and `oauth` / `discover` (MCP 2025-03-26 OAuth 2.0 authorization-server role with Dynamic Client Registration). The gateway holds no upstream secrets; code exchange, identity resolution, and token refresh all delegate to `orchid-api`.
 
@@ -1639,12 +1698,12 @@ The gateway registers nine MCP tools on every session. All tool handlers go thro
 
 | Tool | Purpose | Key params |
 |------|---------|------------|
-| `orchid_ask` | Ask Orchid's supervisor a question. Auto-creates a chat on first call. | `query: string`, optional `files: [{name, base64}]` |
+| `orchid_ask` | Ask Orchid's supervisor a question. Auto-creates a chat on first call. | `message: string`, optional `files: [{filename, contentB64, mimeType?}]` |
 | `orchid_new_chat` | Start a fresh chat and bind the MCP session to it. | optional `title: string` |
 | `orchid_list_chats` | List the user's existing chats. | — |
-| `orchid_switch_chat` | Bind the current MCP session to a prior chat. | `chat_id: string` |
-| `orchid_upload_file` | Upload a file into the current chat's RAG scope. | `name: string`, `content_b64: string` |
-| `orchid_resume_chat` | Resume a HITL-paused chat with an approve/deny decision. | `chat_id: string`, `decision: "approve" \| "deny"` |
+| `orchid_switch_chat` | Bind the current MCP session to a prior chat. | `chatId: string` |
+| `orchid_upload_file` | Upload a file into the current chat's RAG scope. | `filename: string`, `contentB64: string`, optional `mimeType: string` |
+| `orchid_resume_chat` | Resume a HITL-paused chat with an approve/deny decision. | `approved: boolean` |
 
 ### Event tools (three)
 
@@ -1714,21 +1773,21 @@ Add to `~/.cursor/mcp.json`:
 
 ## Fork and deploy checklist
 
-1. **Set `ORCHID_MCP_UPSTREAM_URL`** to the base URL of your `orchid-api` instance (e.g. `http://orchid-api:8000`).
+1. **Set `ORCHID_MCP_ORCHID_API_URL`** to the base URL of your `orchid-api` instance (e.g. `http://orchid-api:8000`).
 2. **Choose an auth mode** via `ORCHID_MCP_AUTH_MODE`: `service_account` for single-user personal installs; `discover` for multi-user deployments (pulls auth metadata from `orchid-api`'s `/auth-info`).
 3. **Set `ORCHID_MCP_SERVICE_ACCOUNT_TOKEN`** if using `service_account` mode.
-4. **Configure session backend**: `ORCHID_MCP_SESSION_BACKEND=redis` + `ORCHID_MCP_REDIS_URL` for multi-replica; leave at default (`memory`) for single-instance.
-5. **Wire observability**: set `ORCHID_MCP_TRACING_ENABLED=true` and `ORCHID_MCP_OTLP_ENDPOINT` for your OTEL collector; `ORCHID_MCP_LOG_LEVEL` defaults to `info`.
-6. **Review hardening defaults**: rate limiter (`ORCHID_MCP_RATE_LIMIT_RPM`, `ORCHID_MCP_RATE_LIMIT_BURST`) and circuit breaker (`ORCHID_MCP_CIRCUIT_BREAKER_THRESHOLD`) ship with sensible defaults — tune for your traffic profile.
+4. **Session maps live in process memory** — run a single gateway replica, or wait for the shared session-map backend (Redis support is not shipped yet).
+5. **Wire observability**: set `ORCHID_MCP_TRACING_ENABLED=true` and `ORCHID_MCP_OTEL_EXPORTER_OTLP_ENDPOINT` for your OTEL collector; `ORCHID_MCP_LOG_LEVEL` defaults to `info`.
+6. **Review hardening defaults**: rate limiter (`ORCHID_MCP_RATE_LIMIT_RPM`, `ORCHID_MCP_RATE_LIMIT_BURST`) and circuit breaker (`ORCHID_MCP_CIRCUIT_BREAKER_ERROR_THRESHOLD_PCT`) ship with sensible defaults — tune for your traffic profile.
 7. **Run checks**: `npm run typecheck && npm run lint && npm test` must all be green before deploying.
 
 ---
 
 ### orchid-frontend
 URL: https://orchestratorindex.com/packages/orchid-frontend
-Description: Next.js 15 multi-chat UI with SSE streaming and file upload support.
+Description: Next.js 16 multi-chat UI with SSE streaming and file upload support.
 
-`orchid-frontend` is a **fork-and-deploy boilerplate**, not a published npm package. It is a Next.js 15 multi-chat UI that talks to `orchid-api` over HTTP via Server Actions. Clone it, customise the theme tokens and branding, point it at your API, and you have a production-ready chat interface — no framework knowledge required.
+`orchid-frontend` is a **fork-and-deploy boilerplate**, not a published npm package. It is a Next.js 16 multi-chat UI that talks to `orchid-api` over HTTP via Server Actions. Clone it, customise the theme tokens and branding, point it at your API, and you have a production-ready chat interface — no framework knowledge required.
 
 The frontend has no direct dependency on the `orchid` Python library. It is a pure TypeScript/React project whose only runtime dependency is the `orchid-api` HTTP endpoint.
 
@@ -1744,12 +1803,13 @@ src/
 │   └── api/               SSE proxies for streaming and Bloom events
 ├── components/chat/
 │   ├── chat-container.tsx Main layout: sidebar + chat + drag-drop + MCP auth panel
-│   ├── chat-sidebar.tsx   Session list with create/rename/share/delete
+│   ├── chat-sidebar.tsx   Session list with create/share/delete
 │   ├── chat-input.tsx     Message input with file attachment
 │   ├── message-bubble.tsx User/assistant bubbles with Markdown rendering
-│   ├── message-list.tsx   Scrollable thread with inline Bloom progress cards
-│   ├── hitl-approval-card.tsx  Approve / deny HITL tool-call pauses
-│   └── mini-agent-trace.tsx    Per-mini-agent lifecycle markers
+│   ├── message-list.tsx   Scrollable thread
+│   ├── inline-bloom-progress.tsx  In-chat Bloom progress card
+│   ├── bloom-activity-pill.tsx    Compact Bloom activity indicator
+│   └── mcp-auth-status.tsx        Per-server MCP OAuth status panel
 ├── components/bloom/      Bloom operator panel primitives
 ├── hooks/
 │   ├── use-chat-stream.ts Per-message SSE subscription
@@ -1769,10 +1829,8 @@ Every visible UI behaviour is driven by a YAML key in `agents.yaml` or an `orchi
 | Streaming token-by-token output | SSE endpoint `POST /chats/{id}/messages/stream` in `orchid-api` |
 | Auth bearer used for all API calls | Obtained via NextAuth server-side; passed downstream into `OrchidAuthContext` |
 | Multi-turn history depth | `supervisor.history_max_turns` in `agents.yaml` (default 20) |
-| Summarisation indicator | `supervisor.history_summary_enabled` in `agents.yaml` |
 | Tool-call animation and sequencing | `OrchidToolCallStrategy` selected per agent (`all`, `sequential`, `llm_decides`) |
-| HITL approval card visibility | `requires_approval: true` on a tool definition in `agents.yaml` |
-| Mini-agent trace pane | `mini_agent.enabled: true` on an agent in `agents.yaml` |
+| Inline Bloom progress cards | `events.enabled: true` in `agents.yaml` |
 | MCP OAuth server panel | Presence of `auth.mode: oauth` servers in `agents.yaml` |
 | Bloom operator panel | `events.enabled: true` in `agents.yaml` |
 
@@ -1784,31 +1842,138 @@ The supervisor reads the new `agents:` section at startup and includes the agent
 
 ## Authentication and bearer propagation
 
-The OAuth access token is stored **only** in the server-side NextAuth JWT. It never reaches the browser. The data flow is:
+The OAuth access token is held in the NextAuth session (server-side, httpOnly cookie) and consumed by Server Actions — browser code never calls `orchid-api` directly. The data flow is:
 
 1. User logs in via the generic OAuth2/OIDC provider (`lib/auth/oauth-provider.ts`). The `OAUTH_ISSUER` env var enables OIDC auto-discovery; explicit endpoints are also supported.
-2. NextAuth stores the access token in a server-side session (httpOnly cookie — never exposed as JavaScript).
-3. Every API call goes through a Server Action that reads the session server-side and attaches the Bearer to `orchid-api` requests.
+2. NextAuth stores the session in a server-side, httpOnly cookie.
+3. Every API call goes through a Server Action (or route handler) that reads the session server-side and attaches the Bearer to `orchid-api` requests.
 4. `orchid-api` passes the Bearer to `get_auth_context`, which calls the operator's `OrchidIdentityResolver` to produce an `OrchidAuthContext`. From that point the framework owns identity.
 
 This proxy pattern means the frontend never needs to know anything about the upstream IdP structure — it just holds a NextAuth session and lets Server Actions handle the rest.
 
 ## Fork and deploy checklist
 
-1. **Set `NEXT_PUBLIC_API_URL`** to your `orchid-api` base URL (e.g. `http://localhost:8000`).
+1. **Set `AGENTS_API_URL`** to your `orchid-api` base URL (e.g. `http://localhost:8000`); set `NEXT_PUBLIC_AGENTS_API_URL` to the browser-reachable URL for the SSE proxies.
 2. **Configure OAuth**: set `OAUTH_ISSUER` (for OIDC auto-discovery) and `OAUTH_CLIENT_ID` + `OAUTH_CLIENT_SECRET`. Or use explicit `OAUTH_AUTHORIZATION_URL`, `OAUTH_TOKEN_URL`, `OAUTH_USERINFO_URL`.
-3. **Set `NEXTAUTH_SECRET`** to a random string (at least 32 characters).
+3. **Set `AUTH_SECRET`** to a random string (at least 32 characters).
 4. **Override theme tokens**: edit only `src/app/globals.css`. The `@theme inline` block contains all colour tokens (`--orchid-bg`, `--orchid-accent`, etc.) — re-skin without touching a component.
 5. **Swap branding files**: replace `src/app/icon.svg` and any logo assets.
 6. **Build and verify**: `npm run build && npm run lint && npm test` must all pass.
 
 ---
 
+### orchid-storage-sqlite
+URL: https://orchestratorindex.com/packages/orchid-storage-sqlite
+Description: SQLite storage plugin: chat persistence, MCP stores, event storage, migrations, and the sqlite checkpointer.
+
+`orchid-storage-sqlite` is the zero-infrastructure storage plugin for the Orchid AI framework. It provides SQLite-backed implementations of every framework storage ABC — chat persistence, agent-config CRUD, MCP OAuth stores, event storage, and the LangGraph checkpointer — in a single installable package. The checkpointer and visibility fragment auto-register through Python entry points; storage classes are referenced by dotted import path in YAML.
+
+`orchid-api` and `orchid-cli` **depend on this plugin and ship with it installed** — SQLite is their out-of-the-box persistence backend. A bare `orchid-ai` install without a storage plugin defaults to the framework's built-in in-memory backend instead.
+
+## Installation
+
+```bash
+pip install orchid-ai orchid-storage-sqlite
+```
+
+## What It Provides
+
+| Component | Class | Purpose |
+|-----------|-------|---------|
+| Chat storage | `OrchidSQLiteChatStorage` | Full `OrchidChatStorage` implementation — sessions, messages, conversation summaries |
+| Config storage | `OrchidSQLiteConfigStorage` | `OrchidConfigStorage` CRUD for database-backed agent definitions |
+| MCP token store | `OrchidSQLiteMCPTokenStore` | Per-user OAuth tokens for outbound MCP servers |
+| MCP registration store | `OrchidSQLiteMCPClientRegistrationStore` | RFC 7591 dynamic-client registrations |
+| MCP gateway state | `OrchidSQLiteMCPGatewayStateStore` | Inbound gateway clients, auth codes, and tokens |
+| Ingestion manifest | `OrchidSQLiteIngestionManifest` | Content-hash tracking for idempotent indexing |
+| Event storage | `SQLiteEventStorage` | Pollen + Bloom signal / job / schedule / trigger persistence |
+| Signal queue | `SQLiteSignalQueue` | Durable lease-based queue with dead-lettering |
+| Checkpointer | `_build_sqlite_checkpointer` | LangGraph `AsyncSqliteSaver` for the `sqlite` checkpointer type |
+| Visibility | `_build_sqlite_filter` | SQLite visibility fragment with named bind parameters (`:tenant_key`, `:user_id`) for run filtering |
+| Migrations | `SQLiteMigrationRunner` | v001 (all framework tables) + v002 (ingestion manifest) |
+
+## Auto-Registration
+
+The package registers its extension points through `importlib.metadata` — no manual `register_*()` calls are needed:
+
+```toml
+[project.entry-points."orchid.visibility_fragments"]
+sqlite = "orchid_storage_sqlite:_register"
+
+[project.entry-points."orchid.checkpointers"]
+sqlite = "orchid_storage_sqlite:_register"
+```
+
+Once installed, `build_run_filter_clause(auth, dialect="sqlite")` and `build_checkpointer("sqlite", dsn=…)` resolve to this package's implementations.
+
+## Configuration
+
+Reference the classes you need in `orchid.yml`:
+
+```yaml
+storage:
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
+  dsn: ~/.orchid/chats.db
+
+checkpointer:
+  type: sqlite
+  dsn: ~/.orchid/checkpoints.db
+
+mcp_auth:
+  token_store_class: orchid_storage_sqlite.mcp_token_store.OrchidSQLiteMCPTokenStore
+  token_store_dsn: ~/.orchid/chats.db
+  client_registration_store_class: orchid_storage_sqlite.mcp_client_registration_store.OrchidSQLiteMCPClientRegistrationStore
+  client_registration_store_dsn: ~/.orchid/chats.db
+```
+
+For database-backed agent configs and the event layer, add:
+
+```yaml
+# agents.yaml
+config_storage:
+  enabled: true
+  class: orchid_storage_sqlite.config_storage.OrchidSQLiteConfigStorage
+  dsn: ~/.orchid/chats.db
+
+events:
+  enabled: true
+  store:
+    class: orchid_storage_sqlite.event_storage.SQLiteEventStorage
+    extra_args:
+      dsn: ~/.orchid/chats.db
+  queue:
+    class: orchid_storage_sqlite.event_queue.SQLiteSignalQueue
+```
+
+The MCP gateway-state store has no `orchid.yml` mapping — configure it with the `MCP_GATEWAY_STATE_STORE_CLASS` and `MCP_GATEWAY_STATE_STORE_DSN` environment variables.
+
+Use `:memory:` as the DSN for tests and ephemeral runs: each store supports it, and nothing touches disk.
+
+## Schema ownership
+
+A single `v001_initial_schema` migration creates **all** framework-owned tables — chat, MCP, events, agent configs, conversation summaries — in one pass; `v002_ingestion_manifest` adds the indexing manifest. Every store class in this package shares the same migration runner, so it does not matter which class triggers `init_db()` first: subsequent calls are no-ops thanks to `CREATE TABLE IF NOT EXISTS`.
+
+Integrators can append their own migrations on top by setting `extra_migrations_package` to a dotted import path. Their migrations run after the framework's and are recorded with an `ext:` prefix in the shared `_migrations` table.
+
+## Usage notes
+
+`orchid-api` and `orchid-cli` default to this backend at `~/.orchid/chats.db`; installing the plugin is only an explicit step when you write your own integration on top of the bare `orchid-ai` library. A configured class path is resolved strictly — if the import fails, startup raises an actionable error such as:
+
+```text
+ImportError: Cannot resolve chat storage class
+'orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage'.
+Install the missing plugin: pip install orchid-storage-sqlite
+```
+
+There is no silent fallback to the in-memory default, so a typo or a missing dependency fails fast instead of quietly dropping persistence.
+
+---
+
 ### orchid-storage-postgres
 URL: https://orchestratorindex.com/packages/orchid-storage-postgres
-Description: PostgreSQL storage plugin: chat persistence, checkpointer, and visibility fragment.
+Description: PostgreSQL storage plugin: chat and config persistence, MCP stores, events, checkpointer, and visibility fragment.
 
-`orchid-storage-postgres` is the PostgreSQL storage plugin for the Orchid AI framework. It provides production-grade PostgreSQL backends for chat persistence, LangGraph checkpointing, and SQL visibility filtering — all in a single installable package that auto-registers via Python entry points.
+`orchid-storage-postgres` is the production-grade PostgreSQL storage plugin for the Orchid AI framework. It implements the same storage surface as [`orchid-storage-sqlite`](/packages/orchid-storage-sqlite) — chat persistence, agent-config CRUD, MCP OAuth stores, event storage, and the LangGraph checkpointer — backed by `asyncpg`, with all extension points auto-registering via Python entry points.
 
 ## Installation
 
@@ -1821,9 +1986,15 @@ pip install orchid-ai orchid-storage-postgres
 | Component | Class | Purpose |
 |-----------|-------|---------|
 | Chat storage | `OrchidPostgresChatStorage` | Full `OrchidChatStorage` implementation backed by `asyncpg` |
+| Config storage | `OrchidPostgresConfigStorage` | `OrchidConfigStorage` CRUD for database-backed agent definitions |
+| MCP token store | `OrchidPostgresMCPTokenStore` | Per-user OAuth tokens for outbound MCP servers |
+| MCP registration store | `OrchidPostgresMCPClientRegistrationStore` | RFC 7591 dynamic-client registrations |
+| MCP gateway state | `OrchidPostgresMCPGatewayStateStore` | Inbound gateway clients, auth codes, and tokens |
+| Event storage | `PostgresEventStorage` | Pollen + Bloom signal / job / schedule / trigger persistence |
+| Signal queue | `PostgresSignalQueue` | Durable lease-based queue (`FOR UPDATE SKIP LOCKED` + `pg_notify`) |
 | Checkpointer | `_build_postgres_checkpointer` | LangGraph `AsyncPostgresSaver` for agent-state persistence |
 | Visibility | `_build_postgres_filter` | PostgreSQL `$1..$N` positional-parameter visibility fragment |
-| Migrations | `PostgresMigrationRunner` | Unified v001 DDL for all framework-owned tables |
+| Migrations | `v001_initial_schema` + `v002_ingestion_manifest` | Unified DDL for all framework-owned tables + the indexing manifest |
 
 ## Auto-Registration
 
@@ -1836,7 +2007,21 @@ postgres = "orchid_storage_postgres:_register"
 postgres = "orchid_storage_postgres:_register"
 ```
 
-No manual `register_visibility_fragment()` or `register_checkpointer()` calls are needed by integrators. The chat storage is referenced via dotted class path in YAML config.
+No manual `register_visibility_fragment()` or `register_checkpointer()` calls are needed by integrators. The storage classes are referenced via dotted class path in YAML config.
+
+## Configuration
+
+```yaml
+storage:
+  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
+  dsn: postgresql://user:pass@host:5432/orchid
+
+checkpointer:
+  type: postgres
+  dsn: postgresql://user:pass@host:5432/orchid
+```
+
+`orchid-api` and `orchid-cli` bundle SQLite defaults; point `storage.class` at `OrchidPostgresChatStorage` (and `checkpointer.type` at `postgres`) to move state to PostgreSQL for multi-replica deployments. See [Persistence](/concepts/persistence) for the full backend comparison.
 
 ---
 
@@ -1908,16 +2093,23 @@ For CLI users, `orchid-cli` already depends on `orchid-rag-chroma` — no extra 
 chroma = "orchid_rag_chroma:_register"
 ```
 
-The plugin reads `CHROMA_PATH` from the environment to switch from HTTP to persistent (local on-disk) mode.
+The plugin reads `CHROMA_PATH` from the environment to switch from HTTP to persistent (local on-disk) mode. `orchid-cli` sets a persistent path by default (`~/.orchid/chroma`).
 
 ## Configuration
 
 ```yaml
 rag:
   vector_backend: chroma
-  chroma_path: ~/.orchid/chroma        # local on-disk (persistent mode)
   embedding_model: text-embedding-3-small
 ```
+
+Set `CHROMA_PATH` in the environment for persistent mode, e.g.:
+
+```bash
+export CHROMA_PATH=~/.orchid/chroma
+```
+
+Without `CHROMA_PATH` the plugin talks HTTP to the Chroma server at `chroma_host` / `chroma_port` (defaults `localhost:8000`).
 
 ---
 
@@ -1948,13 +2140,28 @@ neo4j = "orchid_rag_neo4j:_register"
 
 ## Configuration
 
-```yaml
-rag:
-  graph_backend: neo4j
-  neo4j_uri: bolt://localhost:7687
-  neo4j_user: neo4j
-  neo4j_password: ${NEO4J_PASSWORD}
+There is no `orchid.yml` key for the graph store — the framework does not construct one during bootstrap. Wire it from a startup hook (or embedded integration) before the graph is built:
+
+```python
+# myproject/hooks/startup.py
+from orchid_ai.rag.factory import build_graph_store
+
+async def wire_graph_store(*, runtime, **_):
+    runtime.graph_store = build_graph_store(
+        graph_store_backend="neo4j",
+        url="bolt://localhost:7687",
+        username="neo4j",
+        password="…",
+    )
 ```
+
+```yaml
+# orchid.yml
+startup:
+  hook: myproject.hooks.startup.wire_graph_store
+```
+
+The builder forwards its keyword arguments to `Neo4jGraphStore(url, username, password)`.
 
 ---
 
@@ -1978,13 +2185,13 @@ Both formats produce identical `OrchidAgentsConfig` output. The tables below cov
 
 ## Infrastructure Config
 
-Runtime and infrastructure keys. In YAML these live in `orchid.yml`; in Markdown they are the frontmatter of `orchid.md`. Every key maps to a flat environment variable via `ORCHID_CONFIG` → `YAML_TO_ENV`. When the same variable is set in both the config file and the environment, the environment wins.
+Runtime and infrastructure keys. In YAML these live in `orchid.yml`; in Markdown they are the frontmatter of `orchid.md`. Keys map to flat environment variables through `YAML_TO_ENV` (plus an API-specific subset); when the same variable is set in both the config file and the environment, the environment wins.
 
 ---
 
 ## Agent Behavior Config
 
-Agent behavior and orchestration configuration. In YAML these live in `agents.yaml`; in Markdown they are individual `agents/<name>.md` files with YAML frontmatter + Markdown body. Validated against `OrchidAgentsConfig` at startup — unknown keys raise an error, so typos surface immediately. Defaults cascade: values set under `defaults:` apply to every agent unless overridden per-agent.
+Agent behavior and orchestration configuration. In YAML these live in `agents.yaml`; in Markdown they are individual `agents/<name>.md` files with YAML frontmatter + Markdown body. Validated against `OrchidAgentsConfig` at startup — strict sections reject unknown keys, so most typos surface immediately. Defaults cascade: values set under `defaults:` apply to every agent unless overridden per-agent.
 
 ---
 
@@ -2038,7 +2245,7 @@ ORCHID_RELOAD_INTERVAL=10
 
 ### `orchid.md` — Root Config
 
-Infrastructure keys (llm, auth, rag, storage) map to environment variables. Agent behavior keys (version, defaults, tools, skills, supervisor, guardrails, events) are validated against the Pydantic schema. The body after the closing `---` is free-form documentation.
+Infrastructure keys (llm, auth, rag, storage) map to environment variables. Agent behavior keys (version, defaults, agents, tools, skills, supervisor, guardrails, events, config_storage, mcp_gateway, external_agents) are validated against the Pydantic schema. The body after the closing `---` is free-form documentation.
 
 ### `agents/<name>.md` — Per-Agent Config
 
@@ -2059,7 +2266,8 @@ Each agent file has YAML frontmatter for structured fields and a Markdown body f
 MD and YAML configs produce identical `OrchidAgentsConfig` output. Run the equivalence test:
 
 ```bash
-cd orchid && .venv/bin/python examples/md-config/test_equivalence.py
+# From the examples repository (orchid-examples)
+python md-config/test_equivalence.py
 ```
 
 ---
@@ -2362,7 +2570,7 @@ auth:
 | | |
 |---|---|
 | **Short** | Dotted import path to a startup hook function. |
-| **Detailed** | Called once after the LangGraph is initialised and before the API starts serving requests. Use this for one-time setup: warming caches, registering custom tools, or running database migrations. The function signature must be `async def hook(app_context) -> None`. |
+| **Detailed** | Called once during bootstrap — before the graph is built — with the signature `async def hook(reader, settings, runtime, **_)`. Use it for one-time setup: seeding the vector store, registering custom tools, or wiring collaborators such as `runtime.graph_store`. `settings` is the API's `Settings` instance (or `None` for CLI / embedded runs). |
 | **Default** | `null` |
 | **Available values** | Any dotted Python path to an async callable |
 | **Env var** | `STARTUP_HOOK` |
@@ -2380,9 +2588,9 @@ startup:
 | | |
 |---|---|
 | **Short** | Vector database backend type. |
-| **Detailed** | The persistence layer for embeddings and vector search. Currently only Qdrant is supported. Setting this to `null` disables vector storage entirely. |
+| **Detailed** | The persistence layer for embeddings and vector search. `qdrant`, `chroma`, and `neo4j` are provided by the corresponding `orchid-rag-*` plugin packages; the built-in `null` backend disables vector storage. To disable storage, use the quoted string `vector_backend: "null"` (a bare YAML `null` is coerced to the string `"None"` and rejected). |
 | **Default** | `qdrant` |
-| **Available values** | `qdrant`, `null` |
+| **Available values** | `qdrant`, `chroma`, `neo4j`, `"null"` (quoted), or any registered backend name |
 | **Env var** | `VECTOR_BACKEND` |
 
 ```yaml
@@ -2441,7 +2649,7 @@ rag:
 <a id="orchid-yml__cli_rag"></a>
 ## `cli_rag` (optional)
 
-CLI-specific RAG override. When present, `orchid-cli` uses these values instead of `rag:`. The API ignores this section entirely. This allows Docker-based examples (with `rag.vector_backend: qdrant`) to run locally via the CLI without requiring Qdrant infrastructure.
+CLI-specific RAG override. When present, `orchid-cli` uses these values instead of `rag:`. This allows Docker-based examples (with `rag.vector_backend: qdrant`) to run locally via the CLI without requiring Qdrant infrastructure. The API does not interpret `cli_rag:` — but both sections map to the same environment variables (first value wins), so keep `rag:` before `cli_rag:` in the file when the same config is also used by the API.
 
 Same keys as `rag:`:
 
@@ -2530,21 +2738,21 @@ upload:
 | | |
 |---|---|
 | **Short** | Dotted import path to an `OrchidChatStorage` subclass. |
-| **Detailed** | The persistence backend for chat sessions and messages. The built-in SQLite backend is sufficient for single-process deployments. For multi-replica API deployments, switch to PostgreSQL or a custom backend so all instances share state. |
-| **Default** | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` |
-| **Available values** | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage`, `orchid_ai.persistence.postgres.OrchidPostgresChatStorage`, or any dotted path to a custom subclass |
+| **Detailed** | The persistence backend for chat sessions and messages. The `orchid-ai` framework defaults to the built-in **in-memory** store (`memory`), which is non-durable. `orchid-api` and `orchid-cli` bundle the `orchid-storage-sqlite` plugin and default to a durable SQLite file. For multi-replica API deployments, switch to PostgreSQL or a custom backend so all instances share state. |
+| **Default** | `memory` (framework) · `orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage` (orchid-api / orchid-cli) |
+| **Available values** | `memory`, `orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage`, `orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage`, or any dotted path to a custom subclass |
 | **Env var** | `CHAT_STORAGE_CLASS` |
 
 ```yaml
 storage:
-  class: orchid_ai.persistence.postgres.OrchidPostgresChatStorage
+  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
   dsn: postgresql://orchid:orchid@postgres:5432/orchid
 ```
 
 ```md
 ---
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: ~/.orchid/chats.db
 ---
 ```
@@ -2555,7 +2763,7 @@ storage:
 | | |
 |---|---|
 | **Short** | Database connection string or file path. |
-| **Detailed** | For SQLite this is a file path (supports `~` expansion). For PostgreSQL this is a `postgresql://` URI. |
+| **Detailed** | For SQLite this is a file path (supports `~` expansion); for PostgreSQL this is a `postgresql://` URI. Ignored by the in-memory backend. |
 | **Default** | `~/.orchid/chats.db` |
 | **Env var** | `CHAT_DB_DSN` |
 
@@ -2577,14 +2785,14 @@ storage:
 | | |
 |---|---|
 | **Short** | Enable database-backed agent configuration store. |
-| **Detailed** | When enabled, Orchid loads agent configurations from a PostgreSQL database at startup and merges them into the YAML-loaded config. This allows runtime CRUD management of agent definitions without editing YAML files. The store is controlled declaratively — no constructor parameters needed. |
+| **Detailed** | When enabled, Orchid loads agent configurations from a database (SQLite via `orchid-storage-sqlite`, or PostgreSQL via `orchid-storage-postgres`) at startup and merges them into the YAML-loaded config. This allows runtime CRUD management of agent definitions without editing YAML files. The store is controlled declaratively — no constructor parameters needed. |
 | **Default** | `false` |
 | **Available values** | `true`, `false` |
 
 ```yaml
 config_storage:
   enabled: true
-  class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+  class: orchid_storage_postgres.config_storage.OrchidPostgresConfigStorage
   dsn: postgresql://orchid:orchid@postgres:5432/orchid
 ```
 
@@ -2594,9 +2802,9 @@ config_storage:
 | | |
 |---|---|
 | **Short** | Dotted import path to an `OrchidConfigStorage` subclass. |
-| **Detailed** | The persistence backend for agent configurations. The built-in PostgreSQL implementation (`OrchidPostgresConfigStorage`) provides full CRUD: `list_configs`, `get_config`, `upsert_config`, `patch_config`, `delete_config`. Custom implementations can target any database by subclassing `OrchidConfigStorage`. |
+| **Detailed** | The persistence backend for agent configurations. PostgreSQL (`OrchidPostgresConfigStorage`, from `orchid-storage-postgres`) and SQLite (`OrchidSQLiteConfigStorage`, from `orchid-storage-sqlite`) implementations provide full CRUD: `list_configs`, `get_config`, `upsert_config`, `patch_config`, `delete_config`. Custom implementations can target any database by subclassing `OrchidConfigStorage`. |
 | **Default** | `""` (empty — ignored when `enabled: false`) |
-| **Available values** | `orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage`, or any dotted path to a custom subclass |
+| **Available values** | `orchid_storage_postgres.config_storage.OrchidPostgresConfigStorage`, `orchid_storage_sqlite.config_storage.OrchidSQLiteConfigStorage`, or any dotted path to a custom subclass |
 
 <a id="orchid-yml__config_storage.dsn"></a>
 ### `config_storage.dsn`
@@ -2615,8 +2823,8 @@ config_storage:
 | | |
 |---|---|
 | **Short** | Dotted import path to an `OrchidMCPTokenStore` subclass. |
-| **Detailed** | Stores per-user OAuth tokens for MCP servers configured with `auth.mode: oauth`. The SQLite backend shares the same database file as chat storage by default. |
-| **Default** | `orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore` |
+| **Detailed** | Stores per-user OAuth tokens for MCP servers configured with `auth.mode: oauth`. The SQLite backend (`orchid-storage-sqlite`) shares the same database file as chat storage by default; the PostgreSQL backend ships in `orchid-storage-postgres`. |
+| **Default** | `orchid_storage_sqlite.mcp_token_store.OrchidSQLiteMCPTokenStore` (orchid-api / orchid-cli) · `memory` (framework) |
 | **Env var** | `MCP_TOKEN_STORE_CLASS` |
 
 <a id="orchid-yml__mcp_auth.token_store_dsn"></a>
@@ -2635,8 +2843,8 @@ config_storage:
 | | |
 |---|---|
 | **Short** | Dotted import path to an `OrchidMCPClientRegistrationStore` subclass. |
-| **Detailed** | Stores per-server OAuth endpoint metadata and dynamic client registration (DCR) credentials. Required when using MCP servers with `auth.mode: oauth`. |
-| **Default** | `orchid_ai.persistence.mcp_client_registration_sqlite.OrchidSQLiteMCPClientRegistrationStore` |
+| **Detailed** | Stores per-server OAuth endpoint metadata and dynamic client registration (DCR) credentials. Required when using MCP servers with `auth.mode: oauth`. SQLite ships in `orchid-storage-sqlite`; PostgreSQL ships in `orchid-storage-postgres`. |
+| **Default** | `orchid_storage_sqlite.mcp_client_registration_store.OrchidSQLiteMCPClientRegistrationStore` (orchid-api / orchid-cli) · `memory` (framework) |
 | **Env var** | `MCP_CLIENT_REGISTRATION_STORE_CLASS` |
 
 <a id="orchid-yml__mcp_auth.client_registration_store_dsn"></a>
@@ -2656,14 +2864,14 @@ config_storage:
 | | |
 |---|---|
 | **Short** | LangGraph state persistence backend. |
-| **Detailed** | Persists the LangGraph state machine across restarts. Without a checkpointer, in-flight conversations lose their graph state on process restart. `memory` stores state in RAM (lost on restart). `sqlite` and `postgres` provide durable persistence. A dotted class path enables custom backends. |
+| **Detailed** | Persists the LangGraph state machine across restarts. Without a checkpointer, in-flight conversations lose their graph state on process restart. `memory` stores state in RAM (built into `orchid-ai`, lost on restart). `sqlite` (requires `orchid-storage-sqlite`) and `postgres` (requires `orchid-storage-postgres`) provide durable persistence. A dotted class path enables custom backends. |
 | **Default** | `null` (disabled) |
 | **Available values** | `memory`, `sqlite`, `postgres`, or any dotted Python path to a `BaseCheckpointSaver` subclass |
 | **Env var** | `CHECKPOINTER_TYPE` |
 
 ```yaml
 checkpointer:
-  type: sqlite
+  type: sqlite                      # requires: pip install orchid-storage-sqlite
   dsn: ~/.orchid/checkpoints.db
 ```
 
@@ -2740,7 +2948,7 @@ Runtime keys: LLM providers, auth, vector DB, storage, tracing, API behaviour. E
 
 Agent behaviour: defaults, supervisor, agent definitions, tools, skills, guardrails, MCP gateway, events.
 
-- **600+ properties** documented
+- **500+ properties** documented
 - Top-of-page index with quick-links
 - Per-property anchors for deep-linking from the Atlas
 
@@ -3713,7 +3921,7 @@ agents:
 |---|---|
 | **Short** | Qdrant collection namespace for this agent. |
 | **Detailed** | Documents indexed for this agent are stored in this namespace. Different agents can share a namespace (common knowledge base) or use separate ones (isolated domains). |
-| **Default** | `""` (uses agent name as namespace) |
+| **Default** | `""` (used as-is — no agent-name substitution) |
 
 ##### `agents[].rag.payload_indexes`
 
@@ -3792,7 +4000,8 @@ agents:
 
 - **`none`** — No authentication headers are sent. Use for local servers on private networks.
 - **`passthrough`** — Forwards the graph's `OrchidAuthContext` bearer token unchanged. Use when the MCP server trusts the same identity provider.
-- **`oauth`** — Per-user OAuth 2.0 via MCP 2025-03-26 spec. On the first 401, Orchid discovers the server's OAuth metadata (RFC 9728), fetches the authorization server metadata (RFC 8414), and performs dynamic client registration (RFC 7591). No `client_id` or `client_secret` lives in config — everything is discovered at runtime.
+- **`oauth`** — Per-user OAuth 2.0 via MCP 2025-03-26 spec. When no stored token exists, the client raises `OrchidMCPAuthRequiredError`; the authorization route then discovers the server's OAuth metadata (RFC 9728), fetches the authorization server metadata (RFC 8414), and performs dynamic client registration (RFC 7591).
+- **`oauth` + `manual_registration`** — For servers that do not implement MCP 2025-03-26 discovery, set `auth.manual_registration` with explicit `authorization_endpoint`, `token_endpoint`, `client_id`, `client_secret`, `scopes`, and `issuer`; the framework skips auto-discovery and uses those values.
 
 ##### `agents[].mcp_servers[].tools`
 
@@ -4173,8 +4382,8 @@ Global built-in tool declarations. Each key is a tool name; the value defines it
 | | |
 |---|---|
 | **Short** | Dotted import path to the Python function. |
-| **Detailed** | The function implementing this tool. Auto-extracted signature is used for parameter schema unless `parameters` is explicitly defined. Sync handlers are automatically wrapped with `asyncio.to_thread`. |
-| **Default** | Required |
+| **Detailed** | The function implementing this tool. Auto-extracted signature is used for parameter schema unless `parameters` is explicitly defined. Sync handlers are automatically wrapped with `asyncio.to_thread`. Either `handler` or `class` (a dotted path to an `OrchidTool` subclass) must be provided. |
+| **Default** | Required (unless `class` is set) |
 
 <a id="agents-yaml__tools[].description"></a>
 #### `tools[].description`
@@ -4670,15 +4879,15 @@ Pollen + Bloom event-driven activation layer. `null` or absent = disabled (zero 
 | | |
 |---|---|
 | **Short** | Event storage backend. |
-| **Detailed** | Required when `enabled: true`. Stores event state, trigger history, and schedule metadata. |
-| **Default** | `null` |
+| **Detailed** | Optional. Stores event state, trigger history, and schedule metadata. When omitted, the built-in in-memory event store is used (non-durable). Durable stores ship in `orchid-storage-sqlite` and `orchid-storage-postgres`. |
+| **Default** | `null` → built-in in-memory store |
 
 ##### `events.store.class`
 
 | | |
 |---|---|
 | **Short** | Dotted import path for the event store. |
-| **Default** | Required when `enabled: true` |
+| **Default** | Built-in in-memory store; e.g. `orchid_storage_sqlite.event_storage.SQLiteEventStorage` (plugin) |
 
 ##### `events.store.extra_args`
 
@@ -4693,15 +4902,15 @@ Pollen + Bloom event-driven activation layer. `null` or absent = disabled (zero 
 | | |
 |---|---|
 | **Short** | Signal queue backend configuration. |
-| **Detailed** | Required when `enabled: true`. Buffers signals between producers and processors. |
-| **Default** | `null` |
+| **Detailed** | Optional. Buffers signals between producers and processors. When omitted, the built-in `InMemorySignalQueue` is used (non-durable). Durable queues ship in the storage plugins. |
+| **Default** | `null` → built-in in-memory queue |
 
 ##### `events.queue.class`
 
 | | |
 |---|---|
 | **Short** | Dotted import path for the queue backend. |
-| **Default** | Required when `enabled: true` |
+| **Default** | Built-in in-memory queue; e.g. `orchid_storage_sqlite.event_queue.SQLiteSignalQueue` (plugin) |
 
 ##### `events.queue.notify_enabled`
 
@@ -4749,7 +4958,7 @@ Pollen + Bloom event-driven activation layer. `null` or absent = disabled (zero 
 | | |
 |---|---|
 | **Short** | Scheduler backend for cron-based triggers. |
-| **Detailed** | Optional. Required only if you use cron schedules. Typically an APScheduler wrapper. |
+| **Detailed** | Reserved. Cron schedules are driven by the built-in `SchedulerProducer`, which currently always uses `APSchedulerBackend` — configuring this block has no effect today. |
 | **Default** | `null` |
 
 ##### `events.scheduler.class`
@@ -4757,7 +4966,7 @@ Pollen + Bloom event-driven activation layer. `null` or absent = disabled (zero 
 | | |
 |---|---|
 | **Short** | Dotted import path for the scheduler. |
-| **Default** | Required when schedules are used |
+| **Default** | — (not consumed; the built-in `SchedulerProducer` always uses `APSchedulerBackend`) |
 
 ##### `events.scheduler.extra_args`
 
@@ -4852,7 +5061,7 @@ Pollen + Bloom event-driven activation layer. `null` or absent = disabled (zero 
 | | |
 |---|---|
 | **Short** | Processing middleware. |
-| **Detailed** | Applied to signals before they reach processors. Can transform, filter, or enrich signals. |
+| **Detailed** | Reserved. Entries are parsed by the schema but not instantiated by the bootstrap today; middleware can be wired programmatically on the dispatcher. |
 | **Default** | `[]` |
 
 ##### `events.middleware[].class`
@@ -4912,7 +5121,7 @@ Pollen + Bloom event-driven activation layer. `null` or absent = disabled (zero 
 | | |
 |---|---|
 | **Short** | Secret reference. |
-| **Detailed** | e.g. An HMAC key name or certificate thumbprint. |
+| **Detailed** | `env:VAR` references are resolved from the environment; other schemes raise a startup error (v1 supports `env:` only). |
 | **Default** | `null` |
 
 ####### `events.ingestion.sources[].validator.extra_args`
@@ -5051,7 +5260,7 @@ Pollen + Bloom event-driven activation layer. `null` or absent = disabled (zero 
 | | |
 |---|---|
 | **Short** | Prompt template for the agent. |
-| **Detailed** | Sent to the agent as the user query when the trigger fires. Can use template variables from the signal envelope. |
+| **Detailed** | Sent to the agent as the user query when the trigger fires. Supports `{{tenant_key}}`, `{{user_id}}`, `{{signal.id}}`, `{{signal.type}}`, `{{signal.source}}`, `{{signal.user_id}}`, `{{signal.tenant_key}}`, `{{identity.mode}}`, and `{{payload.<key>}}` (top-level keys only). Unknown placeholders are left verbatim. |
 | **Default** | Required |
 
 ###### `events.triggers[].emits.identity`
@@ -5149,11 +5358,13 @@ Pollen + Bloom event-driven activation layer. `null` or absent = disabled (zero 
 events:
   enabled: true
   store:
-    class: orchid_ai.events.stores.sqlite.SQLiteEventStore
+    class: orchid_storage_sqlite.event_storage.SQLiteEventStorage   # pip install orchid-storage-sqlite
   queue:
-    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
+    class: orchid_storage_sqlite.event_queue.SQLiteSignalQueue
+  producers:
+    - class: orchid_ai.events.producers.scheduler.SchedulerProducer
   processors:
-    - class: orchid_ai.events.processors.default.DefaultProcessor
+    - class: orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor
       concurrency: 4
   schedules:
     - id: daily_digest
@@ -5164,15 +5375,15 @@ events:
         name: scheduler
   triggers:
     - id: morning_briefing
-      on:
+      "on":
         signal: cron
+        cron: "0 7 * * 1-5"
       emits:
         agent: digest
-        prompt_template: "Generate the morning briefing for {{user.name}}"
+        prompt_template: "Generate the morning briefing for tenant {{tenant_key}}"
         identity:
-          mode: addressed_to_user
-          service_account: scheduler
-          user_id_from: signal.user_id
+          mode: service_account
+          name: scheduler
       retry:
         max: 3
         backoff: exponential
@@ -5210,57 +5421,35 @@ ORCHID_RELOAD_INTERVAL=10
 
 ### Basketball Demo
 URL: https://orchestratorindex.com/examples/basketball
-Description: Minimal end-to-end Orchid example: two GenericAgents, built-in tools, SQLite storage, and cross-agent skills.
+Description: Minimal end-to-end Orchid example: GenericAgents with built-in tool classes, PostgreSQL storage, cross-agent skills, and an event-driven trivia agent.
 
 ## What this demonstrates
 
-The basketball demo is Orchid's "hello world". It wires two `GenericAgent` instances — an NBA stats expert and a sports psychologist — using only built-in tools defined in YAML and a file-based SQLite storage backend. No MCP servers, no external APIs, and no custom Python agent classes are required. Everything the demo needs is declared in `orchid.yml` and `agents.yaml`.
+The basketball demo is Orchid's "hello world". It wires two chat-facing `GenericAgent` instances — an NBA stats expert and a sports psychologist — using built-in tools implemented as `OrchidTool` subclasses in the example's Python package, plus the PostgreSQL storage backend provided by the `orchid-storage-postgres` plugin. A third agent, `trivia_generator`, is activated by the example's Pollen + Bloom schedule to produce a weekday morning trivia digest. No MCP servers, no external APIs, and no custom agent classes are required — the agent definitions live in `agents.yaml`.
 
 ## Run it
 
-Start with Docker (includes Qdrant, Ollama, and the API):
-
 ```bash
-docker compose -f docker-compose.demo.yml up --build
+git clone https://github.com/gadz82/orchid-examples
+cd orchid-examples/basketball
+cp .env.example .env
+docker compose up --build
 ```
 
-Or run the API directly (Ollama must be running on the host with `llama3.2` and `nomic-embed-text`):
-
-```bash
-pip install -e ./orchid -e ./orchid-api
-ORCHID_CONFIG=examples/basketball/orchid.yml uvicorn orchid_api.main:app --port 8000
-```
-
-Or use the CLI for a quick one-off chat:
-
-```bash
-pip install -e ./orchid -e ./orchid-cli
-orchid chat interactive --config examples/basketball/orchid.yml
-```
+This starts the API (`http://localhost:8080`), the web UI (`http://localhost:3000`), PostgreSQL, Qdrant, and the MCP gateway. Ollama runs on your host with `llama3.2` and `nomic-embed-text` (plus `minicpm-v` for document uploads).
 
 ## Configuration walkthrough
 
 `orchid.yml` sets the runtime environment — LLM, storage backend, and pointer to agent configs:
 
-Agent configs define the agents, their tools, and two cross-agent skills:
-
-The `basketball` agent lives in `agents/basketball.md`:
-
-```markdown
----
-description: "NBA basketball expert with player stats and roster tools."
-tools: [get_player_stats, compare_players, get_team_roster]
----
-
-You are a Basketball Expert AI assistant. Provide insightful
-basketball analysis using the stats from your tools.
-```
+Agent configs define the agents, their tools, the cross-agent skills, and the morning-trivia event wiring:
 
 ## What to look for
 
-- `storage.class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage` → any importable `OrchidChatStorage` subclass can be plugged in here; the framework resolves it via dotted import at startup.
-- `tools.<name>.handler` → built-in tools are plain Python functions referenced by dotted path; no MCP server needed.
+- `storage.class: orchid_storage_postgres.OrchidPostgresChatStorage` → the `orchid-storage-postgres` plugin provides chat persistence; any importable `OrchidChatStorage` subclass can be plugged in here, and the framework resolves it via dotted import at startup.
+- `tools.<name>.class` → built-in tools are `OrchidTool` subclasses referenced by dotted path; plain Python functions referenced with `handler:` are also supported.
 - `skills.player_performance_review.steps` → a cross-agent skill chains two agents in sequence; the supervisor executes each step in order and passes context forward.
+- `events.schedules` + `events.triggers` → a weekday cron schedule activates the event-driven `trivia_generator` agent. See [Pollen + Bloom](/concepts/pollen-bloom).
 - `defaults.rag.enabled: false` → RAG is disabled globally; individual agents can override this per-field.
 - `auth.dev_bypass: true` → skips identity resolution for local development; remove this in production.
 
@@ -5284,6 +5473,7 @@ The helpdesk example shows how to go beyond `GenericAgent`. A custom `SupportAge
 
 ```bash
 pip install -e ./orchid -e ./orchid-api
+export GEMINI_API_KEY=...   # required by this example's orchid.yml
 ORCHID_CONFIG=examples/helpdesk/config/orchid.yml uvicorn orchid_api.main:app --port 8000
 ```
 
@@ -5300,23 +5490,20 @@ orchid chat interactive --config examples/helpdesk/config/orchid.yml
 
 Agent configs define a three-agent pipeline with a cross-agent skill and event-driven triage:
 
-The `support` agent lives in `agents/support.md` with its own frontmatter and Markdown body:
+The `support` agent is a custom `OrchidAgent` subclass (`agents/support.py`), wired in `config/agents.yaml`:
 
-```markdown
----
-class: examples.helpdesk.agents.support.SupportAgent
-description: "Technical support agent with KB search and ticket status."
-tools: [classify_ticket, search_kb, get_ticket_status]
-mini_agent:
-  enabled: true
-  max_count: 3
-parallel_tools: true
-rag:
-  namespace: knowledge_base
-  k: 5
----
-
-Technical support agent with KB search and ticket status.
+```yaml
+support:
+  class: examples.helpdesk.agents.support.SupportAgent
+  description: "Technical support agent with KB search and ticket status."
+  tools: [classify_ticket, search_kb, get_ticket_status]
+  mini_agent:
+    enabled: true
+    max_count: 3
+  parallel_tools: true
+  rag:
+    namespace: knowledge_base
+    k: 5
 ```
 
 ## What to look for
@@ -5342,7 +5529,7 @@ Description: RAG with dynamic injection, multi-agent sequential routing, custom 
 
 ## What this demonstrates
 
-The restaurant example is the canonical demonstration of RAG in Orchid. A `menu` agent uses `multi_query` retrieval with `reformulate` query transformations to answer dietary and recommendation questions from a vector knowledge base. A custom `ReviewsAgent` performs sentiment analysis. An `orders` agent handles order placement and billing using built-in tools. A cross-agent `full_dining_experience` skill chains all three agents in sequence. The example also shows how an agent can emit a signal mid-run to trigger a background Bloom (event-driven deep research that replies back into the originating chat).
+The restaurant example is the canonical demonstration of RAG in Orchid. A `menu` agent uses `multi_query` retrieval with `reformulate` query transformations to answer dietary and recommendation questions from a vector knowledge base. A custom `ReviewsAgent` performs sentiment analysis. An `orders` agent handles order placement and billing using built-in tools. A cross-agent `full_dining_experience` skill chains all three agents in sequence. The example also wires a chat-bound event trigger: a `research.requested` signal starts a background Bloom that runs the `reviews` agent and posts its result back into the originating chat.
 
 ## Run it
 
@@ -5360,7 +5547,7 @@ orchid chat interactive --config examples/restaurant/config/orchid.yml
 
 ## Configuration walkthrough
 
-`orchid.yml` connects the LLM, Qdrant, and the custom SQLite storage backend:
+`orchid.yml` connects the LLM, Qdrant, and the SQLite storage backend (via the `orchid-storage-sqlite` plugin):
 
 Agent configs show the three agents, their skills, and the event trigger:
 
@@ -5394,20 +5581,21 @@ Two agents — `cookbook` and `mealplanner` — draw on a shared recipe corpus s
 ## Run it
 
 ```bash
-# From the repo root
-pip install -e orchid -e orchid-cli
+# From a workspace where this repo is checked out as ./examples
+pip install orchid-ai orchid-cli
 
-# Send a recipe question
-orchid chat send "What can I make with chicken and rice?" \
+# Create a chat and note the returned id
+orchid chat create --config examples/recipes/orchid.yml
+
+# Send a recipe question, then a meal-plan follow-up
+orchid chat send <chat_id> "What can I make with chicken and rice?" \
   --config examples/recipes/orchid.yml
-
-# Ask for a meal plan
-orchid chat send "Plan a vegan dinner for Monday" \
-  --agent mealplanner \
+orchid chat send <chat_id> "Plan a vegan dinner for Monday" \
   --config examples/recipes/orchid.yml
 
 # Interactive session
 orchid chat interactive --config examples/recipes/orchid.yml
+```
 ```
 
 Ollama must be running locally with `llama3.2` and `nomic-embed-text` pulled.
@@ -5465,10 +5653,10 @@ defaults:
     model: ollama/llama3.2
     temperature: 0.2
 ---`}
-  mdLabel="orchid.md (infra + defaults)"
+  mdLabel="orchid.md"
 />
 
-The `cookbook` agent lives in `agents/cookbook.md`:
+In the MD-config format, the same agent would live in `agents/cookbook.md`:
 
 ```markdown
 ---
@@ -5515,6 +5703,7 @@ The Education Studio example turns uploaded course material into quizzes, lesson
 
 ```bash
 pip install -e ./orchid -e ./orchid-api
+export GEMINI_API_KEY=...   # required by this example's orchid.yml
 ORCHID_CONFIG=examples/education/orchid.yml uvicorn orchid_api.main:app --port 8000
 ```
 
@@ -5543,12 +5732,12 @@ Agent configs define the four agents, their tools, three cross-agent skills, and
 - `tools.*.parallel_safe` → content-analysis tools are `parallel_safe: true` (stateless reads), while export tools that write files are `parallel_safe: false` (sequential I/O).
 - `mini_agent.enabled: true` on `quiz-generator` → multi-section source material fans out into parallel mini-agents, each drafting questions from one section. Custom `decomposer_prompt` and `aggregator_prompt` control the split/merge logic.
 - Three cross-agent skills (`generate_quiz`, `generate_lesson`, `generate_full_package`) → chain agents sequentially; each step passes context forward. The `generate_full_package` skill demonstrates a four-agent pipeline.
-- `rag.namespace: education-source` / `education` / `education-exports` → three distinct RAG namespaces isolate source content from generated quizzes from export artifacts.
+- `rag.namespace: education-source` / `education` → source content and generated quizzes use separate RAG namespaces; `format-exporter` declares `education-exports` with `rag.enabled: false`, so export formatting does no retrieval.
 - `events.schedules[].cron: "0 8 * * 1"` → the APScheduler backend fires a weekly cron that triggers `quiz-generator` to produce a tenant-wide review quiz every Monday at 08:00.
 - `identity.mode: service_account` on the weekly quiz → the Bloom runs as `quiz-bot`, visible to all users in the tenant via `visibility: tenant`.
 - `respect_chat_binding: true` on `chat-bound-generation` → when a Bloom is triggered from within a chat context, its output is attached to that conversation rather than creating a standalone artifact.
 - `format-exporter` agent has `rag.enabled: false` → export formatting doesn't need retrieval; saves embedding and context overhead.
-- `eywords` → `EducationIdentityResolver` implements `resolve_service_account()` and `mint_for_user()`, enabling both cron-driven service-account flows and per-user event scoping.
+- `content-analyzer.class: examples.education.agents.bloom_agent.EducationAgent` → a custom `OrchidAgent` subclass; `EducationIdentityResolver` implements `resolve_service_account()` and `mint_for_user()`, enabling both cron-driven service-account flows and per-user event scoping.
 - `upload:` section in `orchid.yml` → file uploads target the `education-uploads` Qdrant namespace; the framework auto-chunks and indexes uploaded material at 1000-char chunks with 200-char overlap.
 
 ## Related concepts
@@ -5576,7 +5765,7 @@ The examples repository contains:
 - Ready-to-run configurations (`orchid.yml` and `agents.yaml`)
 - Custom agent implementations
 - Built-in tool definitions
-- Storage backends (SQLite and PostgreSQL)
+- Storage backends (in-memory built-in; SQLite via `orchid-storage-sqlite`; PostgreSQL via `orchid-storage-postgres`)
 - Identity resolvers
 - Startup hooks and event producers
 - Test suites for each example
@@ -5599,18 +5788,17 @@ Description: Pollen + Bloom event pattern: a weekly cron emits one signal per le
 
 ## What this demonstrates
 
-The learning example demonstrates the Pollen + Bloom fan-out pattern. A custom `WeeklyDigestFanoutProducer` fires every Monday at 06:00 UTC, enumerates active learners, and emits one `weekly-digest.due` signal per `(tenant, user)` pair. Each signal triggers a Bloom that runs under the `addressed_to_user` identity — the service account acts on each learner's RAG scope without impersonating them. Because `parallelism: per_user` is set, all digests run concurrently. Each user only sees their own digest (`visibility: addressed`).
+The learning example demonstrates the Pollen + Bloom fan-out pattern. A custom `WeeklyDigestFanoutProducer` enumerates active learners and emits one `weekly-digest.due` signal per `(tenant, user)` pair — one tick fans out into N parallel Bloom runs. Each signal triggers a Bloom that runs under the `addressed_to_user` identity — the service account acts on each learner's RAG scope without impersonating them. Because `parallelism: per_user` is set, all digests run concurrently. Each user only sees their own digest (`visibility: addressed`).
 
-This example does not include a separate `orchid.yml`; the event and agent configuration are self-contained in `agents.yaml`. Wire it into any `orchid.yml` via `agents.config_path`.
+The producer's `start()` deliberately leaves timing to the caller; the example drives a tick programmatically via `fanout_now()`, and a real deployment hooks that method into its own scheduler.
 
 ## Run it
 
-Wire `agents.yaml` into an `orchid.yml` with your storage and LLM settings:
+The example ships its own `orchid.yml` pointing at `agents.yaml`:
 
 ```bash
 pip install -e ./orchid -e ./orchid-api
-# Point your orchid.yml at examples/learning/agents.yaml
-ORCHID_CONFIG=<your-orchid.yml> uvicorn orchid_api.main:app --port 8000
+ORCHID_CONFIG=examples/learning/orchid.yml uvicorn orchid_api.main:app --port 8000
 ```
 
 Or drive a single fan-out tick in a test without the scheduler:
@@ -5624,25 +5812,9 @@ pip install -e ./orchid -e ./orchid-cli
 
 `agents.yaml` defines the digest agent and the full event pipeline:
 
-The `digest` agent lives in `agents/digest.md`:
-
-```markdown
----
-description: "Personalised weekly learning digest."
-rag:
-  enabled: false
-execution_hints:
-  parallel_safe: true
----
-
-Build a short personalised digest for the named learner.
-Sections: Highlights from last week, Recommended next steps,
-One stretch goal. Keep it under 150 words.
-```
-
 ## What to look for
 
-- `producers[0].class: examples.learning.producers.weekly_digest.WeeklyDigestFanoutProducer` → a custom `OrchidSignalProducer` subclass; the framework calls its `tick()` at each cron interval and it decides how many signals to emit.
+- `producers[0].class: examples.learning.producers.weekly_digest.WeeklyDigestFanoutProducer` → a custom `OrchidSignalProducer` subclass; the example calls its `fanout_now()` to run one fan-out tick (wire that method into your own scheduler for production use).
 - `identity.mode: addressed_to_user` → the Bloom runs with the learner's `user_id` in scope (for RAG scoping) without requiring the user to be logged in.
 - `parallelism: per_user` → one concurrent Bloom per `(tenant, user)` pair; the framework ensures two digests for the same user don't overlap.
 - `visibility: addressed` (implicit default) → each user only sees their own digest via the API; other users in the same tenant cannot access it.
@@ -5712,7 +5884,7 @@ Description: Fleet of ten RAG-powered GenericAgent experts covering every Orchid
 
 The Orchid Experts example deploys a **fleet of ten RAG-powered GenericAgent experts**, each the chief of knowledge for one orchid-* package or cross-cutting concept. This is the canonical "ask our docs" demo — every agent is a `GenericAgent` (zero custom Python code), and all domain knowledge lives in 86 markdown files ingested into Qdrant at startup.
 
-No MCP servers. No auth. Just pure YAML + MD + RAG.
+No MCP servers and no custom agent classes — pure YAML + Markdown + RAG, with a small custom identity resolver for per-user auth.
 
 ## Agents
 
@@ -5731,10 +5903,11 @@ No MCP servers. No auth. Just pure YAML + MD + RAG.
 
 ## Run it
 
-Start with Docker (includes Qdrant, Ollama, and the API):
+Start with Docker (includes Qdrant and the API; Ollama runs on the host):
 
 ```bash
-bash script/start_orchid_experts.sh
+cd examples/orchid_experts
+docker compose up --build
 ```
 
 Or run the API directly (Ollama must be running on the host with `llama3.2` and `nomic-embed-text`):
@@ -5776,12 +5949,12 @@ rag:
   embedding_model: ollama/nomic-embed-text
 
 storage:
-  class: examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: /data/experts_chats.db
 
 # config_storage:          # optional — manage agents via PostgreSQL
 #   enabled: true
-#   class: orchid_ai.persistence.config_postgres.OrchidPostgresConfigStorage
+#   class: orchid_storage_postgres.config_storage.OrchidPostgresConfigStorage
 #   dsn: postgresql://...
 
 startup:
@@ -5883,7 +6056,7 @@ knowledge/
 - **All 10 agents use `GenericAgent`** — no `class:` field anywhere in `agents.yaml`. Every agent is defined purely in YAML with a system prompt and RAG namespace.
 - **Startup hook seeds knowledge** — `seed_experts_knowledge()` iterates the `knowledge/` directory, reads each `.md` file, and calls `ingest_document(pre_extracted_text=content)` with `RecursiveIngestion`. The parse-once pattern is followed: text is read once, passed to both the prompt builder and the ingestion pipeline.
 - **9 cross-agent skills** — The supervisor chains agents sequentially for multi-domain questions (e.g., "How do I secure my Orchid deployment?" triggers `secure-deployment`: `orchid` → `auth` → `ai-integration`).
-- **Per-agent topic restrictions** — Each agent has `topic_restriction` in `warn` mode with 10–15 allowed keyword terms, keeping answers within the agent's domain without blocking edge-case queries.
+- **Per-agent topic restrictions** — Each agent has `topic_restriction` in `warn` mode with 17–22 allowed keyword terms, keeping answers within the agent's domain without blocking edge-case queries.
 - **Zero MCP dependencies** — This example is pure RAG. No `mcp_servers:` in any agent config. The startup hook alone populates the knowledge base.
 
 ## Related concepts
@@ -5926,11 +6099,11 @@ The `orchid.yml` references the plugin classes directly:
 ```yaml
 storage:
   class: orchid_storage_postgres.OrchidPostgresChatStorage
-  dsn: postgresql://postgres:postgres@postgres:5432/orchid
+  dsn: postgresql://orchid:${POSTGRES_PASSWORD:-orchid}@postgres:5432/orchid
 
 checkpointer:
   type: postgres
-  dsn: postgresql://postgres:postgres@postgres:5432/orchid
+  dsn: postgresql://orchid:${POSTGRES_PASSWORD:-orchid}@postgres:5432/orchid
 
 rag:
   vector_backend: qdrant
@@ -5944,10 +6117,10 @@ The `orchid-rag-qdrant` and `orchid-storage-postgres` packages are installed alo
 After sending a few messages, connect to the running PostgreSQL instance:
 
 ```bash
-docker exec -it postgres psql -U postgres -d orchid
+docker compose exec postgres psql -U orchid -d orchid
 
 # Chat sessions
-SELECT id, title, tenant_key, user_id, created_at FROM chat_sessions;
+SELECT id, title, tenant_id, user_id, created_at FROM chat_sessions;
 
 # LangGraph checkpoints
 SELECT count(*) FROM checkpoints;
@@ -5966,14 +6139,8 @@ The weather fleet example shows how to integrate a **remote MCP server** into an
 ## Run it
 
 ```bash
-cp examples/weather/.env.example .env   # fill in GEMINI_API_KEY (or use ollama)
-docker compose -f docker-compose.demo.yml up --build
-```
-
-Or use the dedicated compose file:
-
-```bash
 cd examples/weather
+cp .env.example .env        # optional — the defaults use local Ollama
 docker compose up --build
 ```
 
@@ -6059,23 +6226,32 @@ class OutfitAdvisorAgent(OrchidAgent):
         return {"messages": [AIMessage(content=summary)]}
 ```
 
-The weather MCP server is a standalone Node.js service using the `@modelcontextprotocol/sdk`. It wraps the free Open-Meteo API and exposes two tools — `get_forecast` and `get_current_weather` — each accepting a city name that is resolved via the Open-Meteo geocoding API:
+The weather MCP server is a standalone Node.js service built on Express that hand-rolls the JSON-RPC MCP surface (`initialize`, `tools/list`, `tools/call`) instead of using the MCP SDK. It wraps the free Open-Meteo API and exposes `get_forecast` and `get_current_weather`, each accepting a city name that is resolved via the Open-Meteo geocoding API:
 
 ```javascript
-server.tool(
-  "get_forecast",
-  "7-day weather forecast for any city.",
-  { city: z.string().describe("City name") },
-  async ({ city }) => {
-    const loc = await geocode(city);
-    const url = new URL("https://api.open-meteo.com/v1/forecast");
+TOOLS["get_forecast"] = {
+  schema: {
+    name: "get_forecast",
+    description: "7-day weather forecast for a given city.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        city: { type: "string", description: "City name" },
+        days: { type: "integer", minimum: 1, maximum: 7, default: 7 },
+      },
+      required: ["city"],
+    },
+  },
+  async handler(args) {
+    const loc = await geocode(args.city);
+    const url = new URL(OPEN_METEO_FORECAST);
     url.searchParams.set("latitude", loc.lat.toString());
     url.searchParams.set("longitude", loc.lon.toString());
-    // ... daily parameters ...
-    const res = await fetch(url);
-    return { content: [{ type: "text", text: JSON.stringify(result) }] };
-  }
-);
+    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    const data = await res.json();
+    // ... map the daily arrays into forecast entries ...
+  },
+};
 ```
 
 Startup hook `bootstrap_weather()` seeds two RAG namespaces — `clothing-guides` (articles on dressing for hot, cold, rainy, windy, snowy weather) and `safety-guides` (emergency kit lists, heat safety, flood safety, winter storm safety) — into Qdrant:
@@ -6097,7 +6273,7 @@ async def bootstrap_weather(reader, settings, **_):
 - `outfit-advisor.class: examples.weather.agents.outfit.OutfitAdvisorAgent` → custom `OrchidAgent` subclass reads sibling agent results from `state["mcp_context"]`.
 - `skills.prepare_for_day.steps` → three-agent sequential chain; each step receives the previous agent's output as context.
 - `startup.hook: examples.weather.hooks.startup.bootstrap_weather` → RAG data is seeded at process startup; no manual indexing required.
-- `storage.class: orchid_storage_postgres.OrchidPostgresChatStorage` → PostgreSQL plugin replaces the default SQLite backend.
+- `storage.class: orchid_storage_postgres.OrchidPostgresChatStorage` → the `orchid-storage-postgres` plugin switches chat persistence to PostgreSQL instead of the API's bundled SQLite backend.
 
 ## Related concepts
 
@@ -6116,7 +6292,7 @@ Description: Plug in a custom OrchidChatStorage subclass via the storage.class f
 
 ## What this demonstrates
 
-The `custom-storage` example shows how to replace Orchid's built-in PostgreSQL or SQLite backends with any `OrchidChatStorage` subclass — in this case a JSON-file backend. The framework resolves the class at startup via dotted import path, calls its constructor with `dsn=` and `extra_migrations_package=`, and uses it for all chat session and message persistence. The agent itself is a trivial echo so the demo keeps focus on the storage layer.
+The `custom-storage` example shows how to replace the framework's default in-memory store — or a plugin backend such as SQLite or PostgreSQL — with any `OrchidChatStorage` subclass, in this case a JSON-file backend. The framework resolves the class at startup via dotted import path, calls its constructor with `dsn=` and `extra_migrations_package=`, and uses it for all chat session and message persistence. The agent itself is a trivial echo so the demo keeps focus on the storage layer.
 
 ## Run it
 
@@ -6141,7 +6317,7 @@ After sending a few messages, inspect `/data/custom_storage_chats.json` to see t
 
 Agent configs define a single echo agent — its only purpose is generating chat history for the storage backend to persist:
 
-The `echo` agent lives in `agents/echo.md`:
+In the MD-config format, the same agent would live in `agents/echo.md`:
 
 ```markdown
 ---
@@ -6183,18 +6359,14 @@ Four agents share the same `release_notes` knowledge base but each uses a differ
 pip install -e ./orchid -e ./orchid-api
 ORCHID_CONFIG=examples/rag-strategies/orchid.yml \
   uvicorn orchid_api.main:app --port 8000
+
+# Create a chat, then ask your question
+curl -s -X POST http://localhost:8000/chats -H "Content-Type: application/json" -d '{}'
+curl -X POST http://localhost:8000/chats/<chat_id>/messages \
+  -F "message=what changed in release 5.4?"
 ```
 
-Ask the same question through each agent:
-
-```bash
-pip install -e ./orchid -e ./orchid-cli
-orchid chat send "what changed in release 5.4?" \
-  --agent simple_searcher \
-  --config examples/rag-strategies/orchid.yml
-```
-
-Replace `simple_searcher` with `multi_query_searcher`, `hyde_searcher`, or `recency_searcher` to compare.
+The four search agents (`simple_searcher`, `multi_query_searcher`, `hyde_searcher`, `recency_searcher`) share the same corpus; the supervisor routes each query to the best match. The example's tests invoke each strategy deterministically for side-by-side comparison.
 
 ## Configuration walkthrough
 
@@ -6207,7 +6379,7 @@ Agent configs define four agents with identical prompts but different `rag.retri
 - `strategy: simple` → single dense nearest-neighbour lookup; fastest, best for well-formed queries where the corpus contains a near-verbatim match.
 - `strategy: multi_query` → the LLM generates N paraphrases, retrieves against each independently, then merges by score; improves recall for ambiguous or informal questions.
 - `strategy: hyde` + `n_hypothetical: 2` → generates N hypothetical answer paragraphs and retrieves documents similar to those; effective when user vocabulary differs from corpus vocabulary.
-- `strategy: recency_simple` → registered via `startup.hook`; shows how to add custom strategies with `register_strategy()` without modifying the framework.
+- `strategy: recency_simple` → registered via `startup.hook`; shows how to add custom retrieval strategies with `register_retrieval_strategy()` without modifying the framework.
 - `prompt: &shared_prompt` / `prompt: *shared_prompt` → YAML anchors keep the prompt identical across agents so the only variable is the retrieval strategy.
 
 ## Related concepts
@@ -6223,7 +6395,7 @@ Description: all, sequential, llm_decides, and a custom priority strategy in one
 
 ## What this demonstrates
 
-Five agents hit the same knowledge-base MCP server but with different `tool_call_strategy` settings. `fanout_lookup` calls all tools concurrently (`all`). `pipeline_lookup` runs them in order, passing each result to the next (`sequential`). `smart_lookup` lets the LLM choose which tools to call (`llm_decides`). `cascade_lookup` uses a custom `priority` strategy — registered by a startup hook — that short-circuits as soon as one tool returns a non-empty result. A fifth agent, `parallel_searcher`, demonstrates the orthogonal `parallel_tools` flag for the agentic loop. This is the reference example for understanding how skill-execution strategies compose with MCP servers.
+Four agents hit the same knowledge-base MCP server but with different `tool_call_strategy` settings. `fanout_lookup` calls all tools concurrently (`all`). `pipeline_lookup` runs them in order, passing each result to the next (`sequential`). `smart_lookup` lets the LLM choose which tools to call (`llm_decides`). `cascade_lookup` uses a custom `priority` strategy — registered by a startup hook — that short-circuits as soon as one tool returns a non-empty result. A fifth agent, `parallel_searcher`, is built-in-tools-only and demonstrates the orthogonal `parallel_tools` flag for the agentic loop. This is the reference example for understanding how skill-execution strategies compose with MCP servers.
 
 ## Run it
 
@@ -6322,7 +6494,7 @@ The **Gallery Curator** is a single `GenericAgent` that helps gallery directors 
 |---|---|---|
 | **Incremental running summary** | `supervisor.memory.strategy: running_summary` | Each new turn extends the summary instead of re-summarizing from scratch |
 | **Structured JSON entity extraction** | `supervisor.memory.structured_output: true` | Artists, venues, exhibitions tracked as typed entities; deduplicated across turns |
-| **RAG-augmented semantic retrieval** | `supervisor.memory.strategy: rag_augmented` | Past turns retrieved from Qdrant via embedding similarity to the current query |
+| **RAG-augmented semantic retrieval** | `supervisor.memory.strategy: rag_augmented` (the shipped config uses `running_summary`; switch to enable — see below) | Past turns retrieved from Qdrant via embedding similarity to the current query |
 | **Configurable compression prompts** | `agents[].prompt_sections` | Gallery-specific instructions for the compression LLM |
 | **Smart message truncation** | `supervisor.memory.truncation_strategy: middle` | Long auction listings truncated keeping start (which item?) and end (how much?) |
 | **SQLite persistence** | `storage.class` + `persist_summary: true` | Summaries survive restarts via `conversation_summaries` table |
@@ -6331,9 +6503,9 @@ The **Gallery Curator** is a single `GenericAgent` that helps gallery directors 
 ## Run it
 
 ```bash
-# From the monorepo root
+# From a workspace with the framework and examples checked out
 pip install -e ./orchid -e ./orchid-api
-ORCHID_CONFIG=examples/gallery-curator/orchid.yml \
+ORCHID_CONFIG=examples/gallery_curator/orchid.yml \
   uvicorn orchid_api.main:app --port 8000
 ```
 
@@ -6341,13 +6513,13 @@ Or validate the YAML:
 
 ```bash
 pip install -e ./orchid -e ./orchid-cli
-orchid config validate examples/gallery-curator/agents.yaml
+orchid config validate examples/gallery_curator/agents.yaml
 ```
 
 Or via the CLI (no API server needed):
 
 ```bash
-orchid chat interactive --config examples/gallery-curator/orchid.yml
+orchid chat interactive --config examples/gallery_curator/orchid.yml
 ```
 
 ## Configuration walkthrough
@@ -6431,7 +6603,7 @@ Turn 15: "Remind me of all Venice decisions."
 ## Files
 
 ```text
-examples/gallery-curator/
+examples/gallery_curator/
 ├── README.md       # Full documentation with entity examples
 ├── orchid.yml      # Infrastructure: SQLite, Qdrant, Ollama
 └── agents.yaml     # Agent + supervisor + memory config
@@ -6462,11 +6634,11 @@ Every feature of the summarization pipeline (Phases 1–5) is active.
 ## Run it
 
 ```bash
-ORCHID_CONFIG=examples/festival-producer/orchid.yml uvicorn orchid_api.main:app
+ORCHID_CONFIG=examples/festival_producer/orchid.yml uvicorn orchid_api.main:app
 # or:
-orchid chat interactive --config examples/festival-producer/orchid.yml
+orchid chat interactive --config examples/festival_producer/orchid.yml
 # or validate:
-orchid config validate examples/festival-producer/agents.yaml
+orchid config validate examples/festival_producer/agents.yaml
 ```
 
 ## Agents and tools
@@ -6515,7 +6687,7 @@ supervisor:
 ## Files
 
 ```text
-examples/festival-producer/
+examples/festival_producer/
 ├── README.md
 ├── orchid.yml
 ├── agents.yaml
@@ -6552,9 +6724,9 @@ similarity threshold (0.45) to catch terminology variants across disciplines.
 ## Run it
 
 ```bash
-ORCHID_CONFIG=examples/architecture-review/orchid.yml uvicorn orchid_api.main:app
-orchid chat interactive --config examples/architecture-review/orchid.yml
-orchid config validate examples/architecture-review/agents.yaml
+ORCHID_CONFIG=examples/architecture_review/orchid.yml uvicorn orchid_api.main:app
+orchid chat interactive --config examples/architecture_review/orchid.yml
+orchid config validate examples/architecture_review/agents.yaml
 ```
 
 ## Agents and tools
@@ -6604,7 +6776,7 @@ supervisor:
 ## Files
 
 ```text
-examples/architecture-review/
+examples/architecture_review/
 ├── README.md
 ├── orchid.yml
 ├── agents.yaml
@@ -6630,8 +6802,8 @@ Note: the source directory uses an underscore (`graph_kb`) but the route is `/ex
 
 ```bash
 pip install -e ./orchid -e ./orchid-api
-orchid chat send "Who does Bob report to?" \
-  --agent org_chart \
+orchid chat create --config examples/graph_kb/orchid.yml
+orchid chat send <chat_id> "Who does Bob report to?" \
   --config examples/graph_kb/orchid.yml
 ```
 
@@ -6648,7 +6820,7 @@ ORCHID_CONFIG=examples/graph_kb/orchid.yml \
 
 Agent configs configure the `graph_rag` strategy with hop limits and relation filters:
 
-The `org_chart` agent lives in `agents/org_chart.md`:
+In the MD-config format, the same agent would live in `agents/org_chart.md`:
 
 ```markdown
 ---
@@ -6705,8 +6877,8 @@ Ask through the `docs` agent:
 
 ```bash
 pip install -e ./orchid -e ./orchid-cli
-orchid chat send "How do I configure hybrid RAG?" \
-  --agent docs \
+orchid chat create --config examples/wiki/orchid.yml
+orchid chat send <chat_id> "How do I configure hybrid RAG?" \
   --config examples/wiki/orchid.yml
 ```
 
@@ -6718,7 +6890,7 @@ Agent configs show the two-tier corpus and the per-tool RAG override:
 
 ## What to look for
 
-- `ingestion.strategy: headered` on `docs` → wraps recursive splitting with a contextual-header post-processor; each chunk is prepended with `{source_file} > {nearest_heading}`, so retrieval includes section context even for chunks deep in a page.
+- `ingestion.strategy: headered` on `docs` → wraps recursive splitting with a contextual-header post-processor; each chunk is prepended with a two-line header (`# {title}` from the filename, then `## {section}` for the nearest heading), so retrieval includes section context even for chunks deep in a page.
 - `retrieval.strategy: hybrid` → fans out to both dense embeddings and BM25; `fusion: rrf` merges the ranked lists with Reciprocal Rank Fusion; effective for jargon-heavy queries (error codes, exact feature names).
 - `inject_to_rag: true` on `lookup_glossary` → when the tool returns a glossary entry it is automatically chunked and indexed into `glossary_cache`; subsequent hybrid searches can surface definitions alongside doc-page hits.
 - `rag` block on the `lookup_glossary` tool → a per-tool override; the tool's results use a different namespace and ingestion strategy than the agent's main corpus.
@@ -6746,7 +6918,7 @@ Orchid's RAG system uses a five-level hierarchy: **root → tenant → user → 
 
 Use **tenant scope** for shared knowledge that every user in an organisation should access — product documentation, company policies, public FAQs. Indexing once at tenant level avoids duplicating vectors per user.
 
-Use **user scope** for personal context that must not leak across accounts — uploaded CVs, private notes, user-specific preferences. The `OrchidRAGScope.user(tenant_key, user_id)` factory enforces this boundary automatically.
+Use **user scope** for personal context that must not leak across accounts — uploaded CVs, private notes, user-specific preferences. Construct it as `OrchidRAGScope(tenant_id=..., user_id=...)` — the scope filter enforces this boundary automatically.
 
 Use **chat scope** sparingly — only when a document is relevant only to a single conversation thread. Chat-scoped collections accumulate quickly and should be pruned on chat deletion.
 
@@ -6758,14 +6930,14 @@ See [Hierarchical RAG](/concepts/rag) for the full scope API.
 
 ## Sliding-Window Summarization
 
-The supervisor keeps a rolling conversation window in graph state. By default it retains the last 20 turns verbatim (`supervisor.history_max_turns`). For long-running sessions this inflates token usage on every LLM call.
+The supervisor keeps a rolling conversation window in graph state. By default it retains the last 20 turns verbatim (`supervisor.history_max_turns`) and **sliding-window summarization is enabled** (`supervisor.history_summary_enabled` defaults to `true`): older turns are compressed into a running summary via a cheap LLM call, while the most recent `history_summary_recent_turns` (default 10) exchanges stay verbatim.
 
-**Enable** sliding-window summarization (`supervisor.history_summary_enabled: true`) when:
+**Keep it enabled** when:
 - Sessions routinely exceed 15 turns.
 - You are using a paid API provider and cost is a concern.
 - The conversation topic shifts over time (summaries compress stale context well).
 
-**Disable** it when:
+**Disable** it (`supervisor.history_summary_enabled: false`) when:
 - Sessions are short-form (customer support, single-question Q&A).
 - Exact verbatim recall of earlier turns is required (legal, compliance).
 - You are running a local Ollama model where token cost is irrelevant.
@@ -6784,7 +6956,7 @@ Orchid supports any embedding model exposed via LiteLLM. The three most common c
 | `text-embedding-3-small` (OpenAI) | 1536 | Low cost, strong multilingual |
 | `gemini-embedding-001` (Google) | 3072 | Highest quality, highest cost |
 
-**Switching embedding models requires a full re-index.** Vector store collections are created with a fixed vector dimension. If you change `embeddings.model` in `orchid.yml` after data has been indexed, you must drop and recreate every collection. There is no automatic migration — this applies equally to Qdrant and ChromaDB.
+**Switching embedding models requires a full re-index.** Vector store collections are created with a fixed vector dimension. If you change `rag.embedding_model` in `orchid.yml` after data has been indexed, you must drop and recreate every collection. There is no automatic migration — this applies equally to Qdrant and ChromaDB.
 
 Establish your embedding model choice before ingesting production data. If you anticipate switching, keep a record of which model was used for each collection in your operational runbook.
 
@@ -6823,22 +6995,24 @@ See [Tool Strategies](/concepts/tool-strategies) for implementation details.
 
 ## Persistence
 
-Orchid ships a built-in SQLite backend (`orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage`) as the default. PostgreSQL is available via the `orchid-storage-postgres` plugin (`pip install orchid-storage-postgres`).
+The `orchid-ai` library ships a dependency-free **in-memory** store as its zero-configuration default — ideal for tests and embedded runs, but non-durable. For durable persistence install **`orchid-storage-sqlite`** (`pip install orchid-storage-sqlite`) for single-process deployments, or **`orchid-storage-postgres`** for multi-replica deployments. `orchid-api` and `orchid-cli` bundle the SQLite plugin, so both persist to `~/.orchid/chats.db` out of the box.
 
 **Write a custom `OrchidChatStorage`** when:
 - You need a different database engine (DynamoDB for serverless, Redis for ephemeral sessions).
 - Your platform has an existing chat/session store you must integrate with.
-- You need custom retention policies or encryption at rest beyond what the built-in backends provide.
+- You need custom retention policies or encryption at rest beyond what the plugin backends provide.
 
 **Use the `orchid-storage-postgres` plugin** when:
 - You already run PostgreSQL (or can add it).
-- You want zero-maintenance schema migrations (the plugin ships `v001_initial_schema.py` and future migrations).
+- You want zero-maintenance schema migrations (the plugin ships its own versioned migrations).
 - Multi-tenant isolation via `tenant_key` is sufficient.
 - You need multi-replica API deployments sharing state.
 
-**Use the built-in SQLite backend** when:
+**Use the `orchid-storage-sqlite` plugin** when:
 - Single-process deployments (development, demos, CLI).
 - No external database dependency desired.
+
+A configured `storage.class` is resolved strictly: if the dotted path cannot be imported, startup fails with the `pip install` command that provides it — there is no silent fallback to in-memory.
 
 The `OrchidChatStorage` ABC defines the full contract. Implement all methods — partial implementations will fail at runtime when the supervisor calls an unimplemented method.
 
@@ -6846,9 +7020,9 @@ See [Persistence](/concepts/persistence) for the ABC reference and migration gui
 
 ## Observability
 
-**LangSmith tracing** is enabled by setting `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` in your environment. The `orchid-api` lifespan calls `setup_tracing()` automatically when these variables are present. Every graph run is traced end-to-end with agent names, tool calls, and token counts.
+**LangSmith tracing** is enabled by setting `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` in your environment. The `orchid-api` lifespan calls `configure_tracing()` automatically when these variables are present. Every graph run is traced end-to-end with agent names, tool calls, and token counts.
 
-**Structured logging** in `orchid-api` uses Python's standard `logging` module with JSON formatting in production. Set `LOG_LEVEL=DEBUG` to see per-request detail including auth context resolution and MCP capability cache hits/misses.
+**Logging** in `orchid-api` uses Python's standard `logging` module at INFO level with a timestamped plain-text format, and a redaction filter that scrubs Bearer tokens from every handler. `LANGCHAIN_DEBUG=true` adds verbose LLM/tool traces, and `ORCHID_ENABLE_PERF_LOGS=true` turns on `[PERF]` profiling lines for latency investigations.
 
 **Correlation IDs** in `orchid-mcp` flow via `AsyncLocalStorage` — every log line emitted during an MCP tool call carries the same `correlationId` as the originating HTTP request. This makes cross-service tracing possible without a full distributed tracing stack.
 
@@ -6864,7 +7038,7 @@ These patterns appear frequently in early Orchid integrations and cause subtle b
 
 **Bypassing `register_parser` / `register_strategy`.** Do not modify `PARSER_REGISTRY` or `STRATEGY_REGISTRY` directly from consumer code. Use the public registration functions. Direct mutation breaks the Open/Closed principle and will conflict with future framework versions that may replace the registry implementation.
 
-**Importing `litellm` at module level in consumer agents.** Use `self.summarise()` or `self._llm_service` for simple completions. Reserve direct `litellm` imports (inside methods, with a comment) for agentic tool-calling loops where you need the raw `tool_calls` response object.
+**Importing `litellm` at module level in consumer agents.** Use `self.summarise()` (backed by the injected `self._chat_model`) for simple completions. Reserve direct `litellm` imports (inside methods, with a comment) for agentic tool-calling loops where you need the raw `tool_calls` response object.
 
 **Calling `extract_text()` more than once per document.** PDF and image parsing is expensive. Call `extract_text()` once, pass the result to both the prompt builder and `ingest_document(pre_extracted_text=...)`. Parsing twice doubles latency and cost for no benefit.
 
@@ -6908,18 +7082,18 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 | **Embedding** | A fixed-length numeric vector that encodes the semantic meaning of a text chunk. Orchid uses embeddings to index and retrieve documents in the vector store (Qdrant or ChromaDB). See [Embeddings](/concepts/embeddings). |
 | **Hierarchical RAG** | Orchid's five-level scoping system (root → tenant → user → chat → agent) that controls which vector collections an agent can read from. See [Hierarchical RAG](/concepts/rag). |
 | **Bloom** | The execution layer of Pollen + Bloom. Triggers match incoming Signals and run them through the LangGraph supervisor as `JobRun`s. See [Pollen + Bloom](/concepts/pollen-bloom). |
-| **`LLMProvider`** | The abstract interface (`orchid_ai.core.llm`) for simple text completions. Injected by the graph builder; consumer agents call `self.summarise()` rather than depending on a concrete provider. |
+| **Chat model** | A LangChain `BaseChatModel` injected into every agent by the graph builder via `build_chat_model()` (`llm_factory.py`). Consumer agents call `self.summarise()` rather than depending on a concrete provider. |
 | **Mini-agent** | A parallel sub-agent forked by an opt-in parent during a single turn. The parent decomposes the request, N minis run focused agentic loops in parallel, and an aggregator synthesises the outcomes. See [Mini-Agents](/concepts/mini-agents). |
 | **`OrchidAgent`** | The base ABC (`orchid_ai.core.agent`) that every agent class extends. Provides `run()`, `summarise()`, `extract_conversation_history()`, and RAG helpers. See [Agents](/concepts/agents). |
-| **`OrchidAuthContext`** | A dataclass (`orchid_ai.core.state`) carrying `tenant_key`, `user_id`, and `bearer_header`. Resolved once at the API entry point and threaded through the graph. See [OAuth & Auth](/concepts/oauth). |
-| **`OrchidChatStorage`** | The ABC (`orchid_ai.persistence.base`) for chat session and message persistence. The library ships a PostgreSQL implementation; consumers can provide alternatives. See [Persistence](/concepts/persistence). |
+| **`OrchidAuthContext`** | A context object (`orchid_ai.core.state`) carrying `tenant_key`, `user_id`, and `bearer_header`. Resolved once at the API entry point and passed via the LangGraph run configuration — never persisted in graph state. See [OAuth & Auth](/concepts/oauth). |
+| **`OrchidChatStorage`** | The ABC (`orchid_ai.persistence.base`) for chat session and message persistence. The framework ships a dependency-free in-memory implementation as the default; durable SQLite and PostgreSQL implementations live in the `orchid-storage-sqlite` and `orchid-storage-postgres` plugins. See [Persistence](/concepts/persistence). |
 | **`OrchidMCPClient`** | The abstract MCP client (`orchid_ai.core.mcp`) combining `OrchidMCPToolCaller` and `OrchidMCPDiscoverable`. Handles capability discovery, caching, and tool invocation. See [MCP Integration](/concepts/mcp). |
 | **`OrchidRAGScope`** | A frozen dataclass (`orchid_ai.rag.scopes`) that constructs typed, hierarchical filter objects for the vector store backend. Always use this — never pass raw `tenant_id` strings. See [Hierarchical RAG](/concepts/rag). |
 | **Parse-once** | The pattern of calling `extract_text()` exactly once per document and passing the result to both the prompt builder and `ingest_document(pre_extracted_text=...)`. Avoids double-parsing cost. See [Document Parsing](/concepts/document-parsing). |
 | **Pollen** | The event-ingestion substrate of Pollen + Bloom. Ingests, persists, and dispatches immutable `Signal`s from webhooks, schedulers, agents, or custom producers. See [Pollen + Bloom](/concepts/pollen-bloom). |
 | **Passthrough auth** | MCP auth mode where the user's bearer token is forwarded unchanged to the MCP server. The server must trust the same identity provider as the Orchid API. See [MCP Integration](/concepts/mcp). |
 | **Scope (RAG)** | A level in the five-level hierarchy (root / tenant / user / chat / agent) that determines which vector collections are visible to a retrieval query. See [Hierarchical RAG](/concepts/rag). |
-| **Sliding-window summarization** | An opt-in supervisor feature that compresses older conversation turns into a summary, keeping only the most recent exchanges verbatim. Reduces token usage for long sessions. See [Supervisor](/concepts/supervisor). |
+| **Sliding-window summarization** | A supervisor feature (enabled by default) that compresses older conversation turns into a summary, keeping only the most recent exchanges verbatim. Reduces token usage for long sessions. See [Supervisor](/concepts/supervisor). |
 | **Supervisor** | The LangGraph node that routes user messages to the correct agent, manages conversation history, and assembles the final response. Configurable via the `supervisor:` YAML section. See [Supervisor](/concepts/supervisor). |
 | **Tool strategy** | The algorithm used by `GenericAgent` to invoke tools during skill execution: `all` (parallel), `sequential`, or `llm_decides`. See [Tool Strategies](/concepts/tool-strategies). |
 | **Vector store** | A database optimised for approximate nearest-neighbour search over embedding vectors. Orchid supports Qdrant (full-featured, containerised) and ChromaDB (embedded, on-disk, zero-infra CLI default). See [Hierarchical RAG](/concepts/rag). |

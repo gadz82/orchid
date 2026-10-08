@@ -41,17 +41,22 @@ and the YAML-to-env mapping in `orchid_ai.config.yaml_env`.  Re-run whenever eit
 ```bash
 cd orchid-website
 
-# Using the orchid virtualenv (recommended):
+# Inside the monorepo — use the orchid virtualenv:
+../workspace-py/orchid/.venv/bin/python scripts/extract_config_schema.py --out src/data/config-schema.json
+
+# Standalone checkouts (sibling orchid/ and examples/ directories):
 ../../orchid/.venv/bin/python scripts/extract_config_schema.py --out src/data/config-schema.json
 
 # Or via the npm script (uses whatever `python` is on PATH):
 npm run extract:schema
 ```
 
-The extractor walks `OrchidAgentsConfig` recursively for `agents.yaml` fields and reads
-`YAML_TO_ENV` for `orchid.yml` fields.  Both the script and the generated JSON must be
-committed together.  Best-practice notes live in `src/data/config-best-practices.json`
-and are maintained by hand — re-running the extractor does not overwrite them.
+The extractor discovers the `orchid` library and `examples/` directory in both layouts
+(monorepo `workspace-py/…` and standalone siblings).  It walks `OrchidAgentsConfig`
+recursively for `agents.yaml` fields and reads `YAML_TO_ENV` for `orchid.yml` fields.
+Both the script and the generated JSON must be committed together.  Best-practice notes
+live in `src/data/config-best-practices.json` and are maintained by hand — re-running the
+extractor does not overwrite them.
 
 ## Directory structure
 

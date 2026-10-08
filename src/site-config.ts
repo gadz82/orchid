@@ -15,6 +15,7 @@ export const siteConfig = {
     'orchid-cli': 'https://github.com/gadz82/orchid-cli',
     'orchid-mcp': 'https://github.com/gadz82/orchid-mcp',
     'orchid-frontend': 'https://github.com/gadz82/orchid-frontend',
+    'orchid-storage-sqlite': 'https://github.com/gadz82/orchid-storage-sqlite',
   } as const,
 
   /** Maintainer contact channels (Contact page + Footer). */

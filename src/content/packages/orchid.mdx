@@ -29,7 +29,8 @@ external: []
 pip install orchid-ai
 
 # Backends are separate plugin packages — install what you need:
-pip install orchid-storage-postgres   # PostgreSQL chat storage + checkpointer
+pip install orchid-storage-sqlite    # SQLite chat storage + MCP stores + checkpointer
+pip install orchid-storage-postgres  # PostgreSQL chat storage + checkpointer
 pip install orchid-rag-qdrant         # Qdrant vector + doc store
 pip install orchid-rag-chroma         # ChromaDB on-disk vector store
 pip install orchid-rag-neo4j          # Neo4j graph store
@@ -58,7 +59,7 @@ Lower-level plumbing (the `build_*` factories, concrete built-in backends, LangC
 ```python
 from orchid_ai.checkpointing import build_checkpointer
 from orchid_ai.rag.factory import build_reader
-from orchid_ai.persistence.sqlite import OrchidSQLiteChatStorage
+from orchid_ai.persistence.factory import build_chat_storage
 ```
 
 > **Auth is execution context, not graph state.** It travels in the LangGraph `RunnableConfig` (`config["configurable"]["auth_context"]`), never in `OrchidAgentState`, so it is never written to a checkpoint. Inside a custom agent, read it via `self._current_auth`; entry points attach it with `with_auth(...)`.
@@ -83,11 +84,11 @@ YAML schema (`OrchidAgentsConfig`, `OrchidAgentConfig`, `OrchidMCPServerConfig`)
 
 ### `rag/`
 
-Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends. The library ships with null + in-memory backends; Qdrant, ChromaDB, and Neo4j backends are separate plugin packages that auto-register via entry points. All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. See [RAG](/concepts/rag).
+Five-level hierarchical RAG: scoping (`OrchidRAGScope`), indexer, embedding factory, and pluggable backends. The library ships a `null` vector backend plus in-memory doc-store and graph-store backends; Qdrant, ChromaDB, and Neo4j backends are separate plugin packages that auto-register via entry points. All vector access goes through `OrchidVectorReader` / `OrchidVectorWriter` / `OrchidVectorStoreAdmin` — never through backend-specific imports outside `rag/backends/`. See [RAG](/concepts/rag).
 
 ### `persistence/`
 
-`OrchidChatStorage` ABC for chat and message CRUD, with built-in SQLite (`OrchidSQLiteChatStorage`) — the default, single-file persistent store that requires no external services. PostgreSQL storage (`OrchidPostgresChatStorage`), the checkpointer, and the visibility fragment are provided by the separate `orchid-storage-postgres` plugin. Also contains the outbound MCP OAuth token stores and the inbound gateway-state stores used by `orchid-mcp`. See [Persistence](/concepts/persistence).
+`OrchidChatStorage` ABC for chat and message CRUD, plus the framework's dependency-free in-memory backend (`OrchidInMemoryChatStorage`) — the zero-configuration default. Durable persistence lives in plugins: `orchid-storage-sqlite` (chat storage, config storage, MCP stores, event storage, checkpointer) and `orchid-storage-postgres` (the same surface backed by `asyncpg`). The framework never falls back silently: a configured class path that cannot be imported fails at startup with a `pip install` hint. See [Persistence](/concepts/persistence).
 
 ### `documents/`
 
@@ -119,6 +120,7 @@ When YAML alone isn't enough, subclass `OrchidAgent` in your consumer project an
 from __future__ import annotations
 
 from orchid_ai.core.agent import OrchidAgent
+from orchid_ai.core.scopes import OrchidRAGScope
 from orchid_ai.core.state import OrchidAgentState
 
 
@@ -135,13 +137,17 @@ class CatalogAgent(OrchidAgent):
         query = self.extract_user_query(state)
         history = self.extract_conversation_history(state)
 
-        # Retrieve relevant catalog chunks
-        rag_context = await self.fetch_rag_context(query, scope=self._rag_scope(state))
+        # Retrieve relevant catalog chunks (scope built from the injected auth)
+        auth = self._current_auth
+        scope = OrchidRAGScope(tenant_id=auth.tenant_key, user_id=auth.user_id)
+        rag_context = await self.fetch_rag_context(query, scope)
 
-        # Synthesise a response using the injected LLM
+        # Synthesise a response using the injected chat model
         response = await self.summarise(
             query,
+            mcp_data={},
             rag_data=rag_context,
+            system_prompt="You are a catalog specialist...",
             conversation_history=history,
         )
         return {"messages": [response]}
@@ -170,7 +176,7 @@ You are a catalog specialist...`}
 The framework resolves the class at startup via `importlib`. The agent inherits `summarise()`, `fetch_rag_context()`, `extract_user_query()`, and `extract_conversation_history()` from the base class — override only what you need.
 
 <Callout variant="info" title="core/ has zero external dependencies">
-`orchid_ai/core/` imports only the Python standard library and `langchain-core` (for `Document` and message types). Concrete implementations — Qdrant, ChromaDB, asyncpg, litellm — live in `rag/backends/`, `persistence/`, `agents/`, and `orchid-cli/orchid_cli/rag/` respectively. This boundary is enforced: adding any external import to `core/` is an architectural bug.
+`orchid_ai/core/` imports only the Python standard library — including its own dependency-free `OrchidDocument` model (importing `langchain` or any other third-party package there is an architectural bug, enforced by a dependency-boundary test). Concrete implementations — litellm adapters, the Streamable HTTP MCP client — live in `llm_factory.py`, `mcp/`, and `agents/`; external backends (Qdrant, ChromaDB, Neo4j, SQLite, PostgreSQL) ship as separate plugin packages.
 </Callout>
 
 ## LLM configuration

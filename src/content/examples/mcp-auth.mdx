@@ -56,7 +56,7 @@ auth:
 
 # MCP OAuth token storage (per-user, same DB as chat history)
 mcp_auth:
-  token_store_class: orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore
+  token_store_class: orchid_storage_sqlite.mcp_token_store.OrchidSQLiteMCPTokenStore
   token_store_dsn: ~/.orchid/chats.db
 
 # Base URL used to build the OAuth redirect URI
@@ -71,7 +71,7 @@ auth:
   dev_bypass: true
 
 mcp_auth:
-  token_store_class: orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore
+  token_store_class: orchid_storage_sqlite.mcp_token_store.OrchidSQLiteMCPTokenStore
   token_store_dsn: ~/.orchid/chats.db
 
 api:
