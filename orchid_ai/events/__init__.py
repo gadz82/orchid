@@ -7,8 +7,10 @@ verified by ``tests/test_dependency_boundaries.py``.
 
 Subpackages:
 
-- ``queues/`` — ``InMemorySignalQueue`` and the future Postgres /
-  SQLite / Relay queues.
+- ``queues/`` — in-memory queue + stores, relay queue skeleton.  Durable
+  SQLite / PostgreSQL queues live in the storage plugin packages.
+- ``backends/`` — the ``InMemoryEventStorage`` facade (framework
+  default).  Durable store backends live in the storage plugins.
 - ``producers/`` — built-in producers (HTTP ingest, scheduler tick,
   internal emission, MCP gateway forward).
 - ``processors/`` — built-in processors (asyncio worker pool today;
@@ -16,11 +18,6 @@ Subpackages:
 - ``runners/`` — ``GraphJobRunner`` plus integrator-supplied alternatives.
 - ``registry`` (module) — the in-memory trigger registry with JMESPath
   match logic.
-
-Phase 1 ships only the in-memory queue + store + job-store, the
-in-memory trigger registry, the ``DispatcherSignalEmitter``, the
-asyncio worker-pool processor, and a stubbed ``GraphJobRunner``.
-Postgres / SQLite backends and APScheduler land in the next phase.
 """
 
 from __future__ import annotations

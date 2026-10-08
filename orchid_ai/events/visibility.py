@@ -7,18 +7,22 @@ The ``visibility`` model on ``JobRun`` rows splits the world into:
 - ``tenant`` — visible to every authenticated user in the tenant.
 - ``admin`` — visible only to ``admin``-role users.
 
-Two flavours of filter ship here:
+Two flavours ship here:
 
-- :func:`build_run_filter_clause` returns SQL fragments for the built-in
-  SQLite dialect.  The PostgreSQL fragment lives in ``orchid-storage-postgres``.
-  Routers paste this onto every ``SELECT FROM job_runs`` (and onto
-  ``signals`` queries via the join).
+- :func:`build_run_filter_clause` returns SQL fragments for a requested
+  dialect by delegating to a registered fragment builder.  Dialect
+  implementations live in the storage plugins (``sqlite`` via
+  ``orchid-storage-sqlite``, ``postgres`` via
+  ``orchid-storage-postgres``) and register through the
+  ``orchid.visibility_fragments`` entry-point group.  Routers paste the
+  fragment onto every ``SELECT FROM job_runs`` (and onto ``signals``
+  queries via the join).
 - :func:`run_is_visible` is the in-memory predicate used by tests
   and by the in-memory backend (which skips SQL).
 
 Cross-tenant access is always rejected (returns 404, never 403,
-per §26.6) — the SQL fragment ANDs the tenant key in regardless of
-role.
+per §26.6) — every dialect fragment ANDs the tenant key in regardless
+of role.
 """
 
 from __future__ import annotations
@@ -51,8 +55,16 @@ class _Filter:
 
 
 # Pluggable registry for dialect-specific SQL fragments.
-# Plugins (e.g. orchid-storage-postgres) register their fragments here.
+# Plugins (e.g. orchid-storage-sqlite / orchid-storage-postgres)
+# register their fragments here.
 _VISIBILITY_FRAGMENT_REGISTRY: dict[str, Callable[..., _Filter]] = {}
+
+#: Dialects whose implementation lives in a plugin package — used to
+#: raise an actionable error when the fragment isn't registered.
+_DIALECT_PLUGIN_HINTS: dict[str, str] = {
+    "sqlite": "orchid-storage-sqlite",
+    "postgres": "orchid-storage-postgres",
+}
 
 
 def register_visibility_fragment(dialect: str, fn: Callable[..., _Filter]) -> None:
@@ -73,34 +85,20 @@ def build_run_filter_clause(auth: Any, *, dialect: str = "sqlite") -> _Filter:
     short-circuit to a tenant-only filter; everyone else gets
     visibility-by-row.
 
-    The fragment uses named parameters (``:tenant_key``-style) for SQLite.
-    Callers with other dialects should register a fragment via
-    :func:`register_visibility_fragment`.
+    Dialect fragments are provided by plugin packages and loaded through
+    :func:`orchid_ai.plugins.lazy_init_plugins`.  Unknown dialects (or a
+    missing plugin) raise :class:`ValueError` with an install hint.
     """
     # Delegate to a registered plugin fragment when available.
     plugin_fn = _VISIBILITY_FRAGMENT_REGISTRY.get(dialect)
     if plugin_fn is not None:
         return plugin_fn(auth)
 
-    tenant_key = getattr(auth, "tenant_key", "default")
-    user_id = getattr(auth, "user_id", "")
-    roles = getattr(auth, "roles", frozenset())
-
-    if "admin" in roles:
-        return _Filter(
-            where="tenant_key = :tenant_key",
-            params={"tenant_key": tenant_key},
-        )
-    return _Filter(
-        where=(
-            "tenant_key = :tenant_key AND ("
-            "visibility = 'tenant' "
-            "OR (visibility IN ('actor', 'addressed') "
-            "    AND visibility_user_id = :user_id)"
-            ")"
-        ),
-        params={"tenant_key": tenant_key, "user_id": user_id},
-    )
+    message = f"No visibility fragment registered for dialect '{dialect}'."
+    hint = _DIALECT_PLUGIN_HINTS.get(dialect)
+    if hint is not None:
+        message += f" Install the matching plugin: pip install {hint}"
+    raise ValueError(message)
 
 
 def run_is_visible(run: Any, auth: Any) -> bool:

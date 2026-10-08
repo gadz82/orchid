@@ -113,13 +113,20 @@ def _trigger(id: str = "t1", signal_type: str = "demo.event") -> OrchidTriggerCo
     )
 
 
-def test_enabled_requires_store_queue_processors() -> None:
+def test_enabled_requires_processors() -> None:
     with pytest.raises(ValidationError) as excinfo:
         OrchidEventsConfig.model_validate({"enabled": True})
     msg = str(excinfo.value)
-    assert "events.store" in msg
-    assert "events.queue" in msg
     assert "events.processors" in msg
+    # store / queue are optional — omitted → in-memory defaults at bootstrap.
+    assert "events.store" not in msg
+    assert "events.queue" not in msg
+
+
+def test_enabled_allows_omitting_store_and_queue() -> None:
+    cfg = OrchidEventsConfig.model_validate({"enabled": True, "processors": [{"class": "x.P"}]})
+    assert cfg.store is None
+    assert cfg.queue is None
 
 
 def test_disabled_does_not_require_store_queue_processors() -> None:

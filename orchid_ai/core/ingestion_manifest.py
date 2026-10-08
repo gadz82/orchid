@@ -1,8 +1,10 @@
 """Ingestion manifest — track indexed source files for idempotent re-runs.
 
 This module lives in ``core/`` and therefore depends only on the Python
-standard library.  Concrete manifest stores (SQLite, PostgreSQL) live in
-``persistence/`` and ``orchid-storage-postgres/`` respectively.
+standard library.  Concrete manifest stores live in plugin packages
+(``orchid-storage-sqlite``, ``orchid-storage-postgres``) or consumer
+projects; the framework default is in-memory
+(:mod:`orchid_ai.persistence.in_memory`).
 """
 
 from __future__ import annotations

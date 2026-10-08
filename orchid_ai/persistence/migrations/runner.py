@@ -51,9 +51,12 @@ def discover_migrations(package: str | None = None) -> list[Migration]:
     ----------
     package : str | None
         Dotted import path of the package to scan (e.g.
-        ``"examples.basketball.storage.migrations"``).  If *None*, falls back
-        to ``orchid_ai.persistence.migrations`` (the library default, used by
-        the built-in ``OrchidSQLiteChatStorage``).
+        ``"orchid_storage_sqlite.migrations"`` or
+        ``"examples.basketball.storage.migrations"``).  If *None*, the
+        framework's own :mod:`orchid_ai.persistence.migrations` package
+        is scanned — it carries no migration modules, so the result is
+        an empty list.  Subclassed runners always set
+        ``migrations_package`` to their backend's package.
 
     Each module in the package whose name starts with ``v`` and
     exposes ``VERSION``, ``up()``, and ``down()`` is collected.

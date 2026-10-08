@@ -55,18 +55,23 @@ from .utils import import_class
 logger = logging.getLogger(__name__)
 
 # ── Hardcoded defaults — used when neither args nor env supply a value ──
+#
+# Storage defaults resolve to the built-in in-memory backend (the
+# ``"memory"`` sentinel) so the framework works with zero storage
+# packages installed.  Configure a class path (or install a storage
+# plugin and point the key at it) for durable persistence.  The DSN
+# default below is only meaningful for file-backed backends; the
+# in-memory backend ignores it.
 
 _DEFAULT_MODEL = "ollama/llama3.2"
 _DEFAULT_VECTOR_BACKEND = "qdrant"
 _DEFAULT_QDRANT_URL = "http://qdrant:6333"
 _DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
-_DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
+_DEFAULT_STORAGE_CLASS = "memory"
 _DEFAULT_STORAGE_DSN = "~/.orchid/chats.db"
-_DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore"
-_DEFAULT_REGISTRATION_STORE_CLASS = (
-    "orchid_ai.persistence.mcp_client_registration_sqlite.OrchidSQLiteMCPClientRegistrationStore"
-)
-_DEFAULT_GATEWAY_STATE_STORE_CLASS = "orchid_ai.persistence.mcp_gateway_state_sqlite.OrchidSQLiteMCPGatewayStateStore"
+_DEFAULT_TOKEN_STORE_CLASS = "memory"
+_DEFAULT_REGISTRATION_STORE_CLASS = "memory"
+_DEFAULT_GATEWAY_STATE_STORE_CLASS = "memory"
 
 
 @dataclass
@@ -171,16 +176,20 @@ async def _build_runtime(
     model, vector_backend, qdrant_url, embedding_model : str
         Primary LLM + RAG settings.
     chat_storage_class, chat_db_dsn : str
-        Chat persistence backend.  Defaults to SQLite at
-        ``~/.orchid/chats.db``.
+        Chat persistence backend.  Defaults to the built-in in-memory
+        backend (``"memory"`` — not durable across restarts).  Point the
+        class path at a storage package (e.g. ``orchid-storage-sqlite``)
+        for durable storage.
     chat_extra_migrations_package : str | None
         Optional dotted import path of an integrator-supplied migrations
         package.  Applied after the framework's migrations by both the
         chat storage and the MCP token store (they share the DB).  See
         :class:`orchid_ai.persistence.migrations.runner.OrchidMigrationRunner`.
+        Ignored by the in-memory default.
     mcp_token_store_class, mcp_token_store_dsn : str
-        MCP per-server OAuth token store.  DSN defaults to the chat DB
-        path (same file).
+        MCP per-server OAuth token store.  Defaults to the in-memory
+        backend; the DSN defaults to the chat DB path (same file) for
+        file-backed stores.
     checkpointer_type, checkpointer_dsn : str
         Optional LangGraph checkpointer for state persistence.  Required
         for the HITL resume flow.

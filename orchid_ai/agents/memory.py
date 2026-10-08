@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class OrchidInMemoryConversationMemory(OrchidConversationMemory):
-    """Stores running summaries in ``OrchidChatStorage`` (SQLite or PostgreSQL).
+    """Stores running summaries in the configured ``OrchidChatStorage``.
 
     Uses the chat storage backend to persist summaries between
     invocations.  The LLM call for summary extension uses the

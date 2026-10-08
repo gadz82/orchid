@@ -9,7 +9,7 @@ import uuid as _uuid
 import pytest
 
 from orchid_ai.core.events.signal import Signal
-from orchid_ai.events.backends.sqlite import SQLiteEventStorage
+from orchid_ai.events.backends.inmemory import InMemoryEventStorage
 from orchid_ai.events.queues.inmemory import InMemorySignalQueue
 from orchid_ai.events.queues.relay import (
     InMemoryBusPublisher,
@@ -21,7 +21,7 @@ from orchid_ai.events.queues.relay import (
 
 @pytest.fixture
 async def storage():
-    s = SQLiteEventStorage(dsn=":memory:")
+    s = InMemoryEventStorage()
     await s.init_db()
     yield s
     await s.close()

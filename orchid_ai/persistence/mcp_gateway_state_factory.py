@@ -2,11 +2,14 @@
 :class:`OrchidMCPGatewayAuthCodeStore` /
 :class:`OrchidMCPGatewayTokenStore` backends.
 
-A single class implements all three ABCs (see
-:class:`OrchidSQLiteMCPGatewayStateStore`), so this factory returns
-the concrete instance typed as the union — downstream code can cast
-to whichever interface it needs.  Mirrors
+A single class implements all three ABCs (see the in-memory default and
+the SQLite/PostgreSQL plugin stores), so this factory returns the
+concrete instance typed as the union — downstream code can cast to
+whichever interface it needs.  Mirrors
 :func:`build_mcp_client_registration_store` / :func:`build_mcp_token_store`.
+
+The ``"memory"`` sentinel (also the empty string) selects the built-in
+in-memory backend; configured dotted paths resolve strictly.
 """
 
 from __future__ import annotations
@@ -18,7 +21,9 @@ from ..core.mcp_gateway_state import (
     OrchidMCPGatewayClientStore,
     OrchidMCPGatewayTokenStore,
 )
-from ..utils import import_class
+from ..utils import import_class, is_memory_storage_sentinel
+from .in_memory import OrchidInMemoryMCPGatewayStateStore
+from .plugin_hints import with_plugin_hint
 
 logger = logging.getLogger(__name__)
 
@@ -36,15 +41,22 @@ def build_mcp_gateway_state_store(
     any of the three interface views.  Runtime error if the resolved
     class doesn't cover all three.
     """
+    if is_memory_storage_sentinel(class_path):
+        logger.info("[OrchidMCPGatewayStateStore] Using built-in in-memory backend")
+        return OrchidInMemoryMCPGatewayStateStore(dsn=dsn, extra_migrations_package=extra_migrations_package)
+
     try:
         cls = import_class(class_path)
     except ImportError as exc:
         raise ImportError(
-            f"Cannot resolve MCP-gateway-state store class '{class_path}'.  "
-            f"Ensure it is a valid dotted import path to a class that "
-            f"subclasses all three of OrchidMCPGatewayClientStore, "
-            f"OrchidMCPGatewayAuthCodeStore, OrchidMCPGatewayTokenStore.  "
-            f"Error: {exc}"
+            with_plugin_hint(
+                f"Cannot resolve MCP-gateway-state store class '{class_path}'.  "
+                f"Ensure it is a valid dotted import path to a class that "
+                f"subclasses all three of OrchidMCPGatewayClientStore, "
+                f"OrchidMCPGatewayAuthCodeStore, OrchidMCPGatewayTokenStore.  "
+                f"Error: {exc}",
+                class_path,
+            )
         ) from exc
 
     required = (

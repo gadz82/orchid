@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -38,45 +38,21 @@ class TestBuildCheckpointerMemory:
         assert isinstance(saver, MemorySaver)
 
 
-class TestBuildCheckpointerSQLite:
-    """build_checkpointer('sqlite') — built-in."""
+class TestBuildCheckpointerPluginTypes:
+    """``sqlite`` / ``postgres`` are provided by storage plugin packages."""
 
     @pytest.mark.asyncio
-    async def test_sqlite_missing_dsn(self):
+    async def test_sqlite_without_plugin_names_package(self):
         from orchid_ai.checkpointing import build_checkpointer
 
-        with pytest.raises(ValueError, match="DSN"):
-            await build_checkpointer("sqlite", dsn="")
+        with pytest.raises(ImportError, match="orchid-storage-sqlite"):
+            await build_checkpointer("sqlite", dsn="cp.db")
 
     @pytest.mark.asyncio
-    async def test_sqlite_builds_real_saver(self, tmp_path):
-        # Regression: from_conn_string returns an async context manager, not a
-        # saver — the factory must construct AsyncSqliteSaver from a live
-        # connection so .setup() works and the saver is usable/closeable.
-        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-
-        from orchid_ai.checkpointing import build_checkpointer, shutdown_checkpointer
-
-        dsn = str(tmp_path / "cp.db")
-        saver = await build_checkpointer("sqlite", dsn=dsn)
-        assert isinstance(saver, AsyncSqliteSaver)
-        await shutdown_checkpointer(saver)  # closes the underlying connection
-
-
-class TestBuildCheckpointerPostgres:
-    """build_checkpointer('postgres') — requires plugin."""
-
-    @pytest.mark.asyncio
-    async def test_postgres_missing_plugin(self):
+    async def test_postgres_without_plugin_names_package(self):
         from orchid_ai.checkpointing import build_checkpointer
 
-        with (
-            patch.dict(
-                "sys.modules",
-                {"langgraph.checkpoint.postgres": None, "langgraph.checkpoint.postgres.aio": None},
-            ),
-            pytest.raises(ImportError),
-        ):
+        with pytest.raises(ImportError, match="orchid-storage-postgres"):
             await build_checkpointer("postgres", dsn="postgresql://localhost/test")
 
 

@@ -5,53 +5,57 @@ fires synthetic ``cron`` signals at the dispatcher, and updates
 ``last_fire_at`` / ``next_fire_at`` after each fire.
 
 We use 1-second intervals with an aggressive ``next_run_time`` hint so
-the tests don't wait the full minute.  This is the Phase 2 exit demo
-in code form.
+the tests don't wait the full minute.  The store/queue under test are
+the framework's in-memory backends; durable-store parity is covered by
+the storage plugin packages.
 """
 
 from __future__ import annotations
 
 import asyncio
 import datetime as _dt
-from pathlib import Path
 
 import pytest
 
 pytest.importorskip("apscheduler")
 
-import aiosqlite
-
 from orchid_ai.core.events.dispatcher import OrchidSignalDispatcher
 from orchid_ai.core.events.store import OrchidScheduleRecord
-from orchid_ai.events.backends.sqlite import SQLiteEventStorage
+from orchid_ai.events.backends.inmemory import InMemoryEventStorage
 from orchid_ai.events.producers.scheduler import SchedulerProducer
-from orchid_ai.events.queues.sqlite import SQLiteSignalQueue
+from orchid_ai.events.queues.inmemory import InMemorySignalQueue
 from orchid_ai.events.schedulers.apscheduler import APSchedulerBackend
 
 # ── Fixtures ────────────────────────────────────────────────
 
 
 @pytest.fixture
-async def shared_db(tmp_path: Path):
-    dsn = str(tmp_path / "scheduler.db")
-    conn = await aiosqlite.connect(dsn)
-    conn.row_factory = aiosqlite.Row
-    await conn.execute("PRAGMA journal_mode=WAL")
-    await conn.execute("PRAGMA foreign_keys=ON")
-
-    storage = SQLiteEventStorage(conn=conn)
+async def event_store():
+    storage = InMemoryEventStorage()
     await storage.init_db()
-    queue = SQLiteSignalQueue(conn=conn)
-    yield {"queue": queue, "storage": storage, "conn": conn, "dsn": dsn}
-    await conn.close()
+    queue = InMemorySignalQueue()
+    return {"queue": queue, "storage": storage}
+
+
+def _record(schedule_id: str, *, enabled: bool = True) -> OrchidScheduleRecord:
+    return OrchidScheduleRecord(
+        schedule_id=schedule_id,
+        trigger_id="t",
+        cron=None,
+        interval_seconds=1,
+        identity_claim={"mode": "service_account", "name": "bot", "tenant_key": "t-1"},
+        last_fire_at=None,
+        next_fire_at=None,
+        enabled=enabled,
+    )
 
 
 # ── Tests ───────────────────────────────────────────────────
 
 
-async def test_producer_fires_cron_signal_end_to_end(shared_db) -> None:
-    storage: SQLiteEventStorage = shared_db["storage"]
-    queue: SQLiteSignalQueue = shared_db["queue"]
+async def test_producer_fires_cron_signal_end_to_end(event_store) -> None:
+    storage: InMemoryEventStorage = event_store["storage"]
+    queue: InMemorySignalQueue = event_store["queue"]
 
     # Register a 1-second interval schedule.
     record = OrchidScheduleRecord(
@@ -119,32 +123,12 @@ async def test_producer_fires_cron_signal_end_to_end(shared_db) -> None:
     assert refreshed.last_fire_at is not None
 
 
-async def test_producer_skips_disabled_schedules(shared_db) -> None:
-    storage: SQLiteEventStorage = shared_db["storage"]
-    queue: SQLiteSignalQueue = shared_db["queue"]
+async def test_producer_skips_disabled_schedules(event_store) -> None:
+    storage: InMemoryEventStorage = event_store["storage"]
+    queue: InMemorySignalQueue = event_store["queue"]
 
-    enabled = OrchidScheduleRecord(
-        schedule_id="enabled-one",
-        trigger_id="t",
-        cron=None,
-        interval_seconds=1,
-        identity_claim={"mode": "service_account", "name": "bot", "tenant_key": "t-1"},
-        last_fire_at=None,
-        next_fire_at=None,
-        enabled=True,
-    )
-    disabled = OrchidScheduleRecord(
-        schedule_id="disabled-one",
-        trigger_id="t",
-        cron=None,
-        interval_seconds=1,
-        identity_claim={"mode": "service_account", "name": "bot", "tenant_key": "t-1"},
-        last_fire_at=None,
-        next_fire_at=None,
-        enabled=False,
-    )
-    await storage.schedules.upsert(enabled)
-    await storage.schedules.upsert(disabled)
+    await storage.schedules.upsert(_record("enabled-one", enabled=True))
+    await storage.schedules.upsert(_record("disabled-one", enabled=False))
 
     dispatcher = OrchidSignalDispatcher(store=storage.signals, queue=queue)
     producer = SchedulerProducer(schedule_store=storage.schedules)
@@ -157,33 +141,19 @@ async def test_producer_skips_disabled_schedules(shared_db) -> None:
     await producer.stop()
 
 
-async def test_producer_dedup_protects_against_duplicate_fires(shared_db) -> None:
+async def test_producer_dedup_protects_against_duplicate_fires(event_store) -> None:
     """Two callbacks racing on the same wall-clock second must result
     in exactly one persisted signal — the dedupe key holds."""
-    storage: SQLiteEventStorage = shared_db["storage"]
-    queue: SQLiteSignalQueue = shared_db["queue"]
+    storage: InMemoryEventStorage = event_store["storage"]
+    queue: InMemorySignalQueue = event_store["queue"]
 
-    record = OrchidScheduleRecord(
-        schedule_id="dedup-test",
-        trigger_id="t",
-        cron=None,
-        interval_seconds=60,
-        identity_claim={"mode": "service_account", "name": "bot", "tenant_key": "t-1"},
-        last_fire_at=None,
-        next_fire_at=None,
-        enabled=True,
-    )
+    record = _record("dedup-test")
     await storage.schedules.upsert(record)
 
     dispatcher = OrchidSignalDispatcher(store=storage.signals, queue=queue)
     producer = SchedulerProducer(schedule_store=storage.schedules)
     await producer.start(dispatcher)
 
-    callback = producer._make_callback(
-        schedule_id="dedup-test",
-        identity_claim=record.identity_claim,
-        tenant_key="t-1",
-    )
     # Pin clock so both fires share the same dedupe key.
     fixed = _dt.datetime(2026, 5, 6, 7, 0, 0, tzinfo=_dt.UTC)
     producer._clock = lambda: fixed
@@ -205,51 +175,25 @@ async def test_producer_dedup_protects_against_duplicate_fires(shared_db) -> Non
     assert len(signals) == 1
 
 
-async def test_producer_restart_reloads_schedules(tmp_path: Path) -> None:
-    """The producer reads schedules from the durable store on every
-    boot — the in-memory APScheduler jobstore is intentionally
-    transient."""
-    dsn = str(tmp_path / "restart.db")
+async def test_producer_restart_reloads_schedules(event_store) -> None:
+    """The producer reads schedules from the store on every boot — the
+    in-memory APScheduler jobstore is intentionally transient."""
+    storage: InMemoryEventStorage = event_store["storage"]
+    queue: InMemorySignalQueue = event_store["queue"]
 
     # ── Lifecycle 1: write a schedule, start producer, stop. ─
-    conn1 = await aiosqlite.connect(dsn)
-    conn1.row_factory = aiosqlite.Row
-    await conn1.execute("PRAGMA journal_mode=WAL")
-    storage1 = SQLiteEventStorage(conn=conn1)
-    await storage1.init_db()
-    queue1 = SQLiteSignalQueue(conn=conn1)
+    await storage.schedules.upsert(_record("durable-1"))
 
-    record = OrchidScheduleRecord(
-        schedule_id="durable-1",
-        trigger_id="t",
-        cron=None,
-        interval_seconds=1,
-        identity_claim={"mode": "service_account", "name": "bot", "tenant_key": "t-1"},
-        last_fire_at=None,
-        next_fire_at=None,
-        enabled=True,
-    )
-    await storage1.schedules.upsert(record)
-
-    dispatcher1 = OrchidSignalDispatcher(store=storage1.signals, queue=queue1)
-    producer1 = SchedulerProducer(schedule_store=storage1.schedules)
+    dispatcher1 = OrchidSignalDispatcher(store=storage.signals, queue=queue)
+    producer1 = SchedulerProducer(schedule_store=storage.schedules)
     await producer1.start(dispatcher1)
     assert producer1.backend.get_next_fire("durable-1") is not None
     await producer1.stop()
-    await conn1.close()
 
-    # ── Lifecycle 2: reopen, start, schedule reappears. ─────
-    conn2 = await aiosqlite.connect(dsn)
-    conn2.row_factory = aiosqlite.Row
-    await conn2.execute("PRAGMA journal_mode=WAL")
-    storage2 = SQLiteEventStorage(conn=conn2)
-    await storage2.init_db()
-    queue2 = SQLiteSignalQueue(conn=conn2)
-
-    dispatcher2 = OrchidSignalDispatcher(store=storage2.signals, queue=queue2)
-    producer2 = SchedulerProducer(schedule_store=storage2.schedules)
+    # ── Lifecycle 2: new producer against the same store. ────
+    dispatcher2 = OrchidSignalDispatcher(store=storage.signals, queue=queue)
+    producer2 = SchedulerProducer(schedule_store=storage.schedules)
     await producer2.start(dispatcher2)
     # The same schedule_id must be live again.
     assert producer2.backend.get_next_fire("durable-1") is not None
     await producer2.stop()
-    await conn2.close()

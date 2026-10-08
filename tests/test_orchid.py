@@ -12,7 +12,7 @@ from langgraph.errors import GraphInterrupt
 from orchid_ai import Orchid, OrchidInvokeResult, OrchidPendingApproval
 from orchid_ai.config.schema import OrchidAgentConfig, OrchidAgentsConfig, OrchidRAGConfig
 from orchid_ai.core.state import OrchidAuthContext
-from orchid_ai.persistence.sqlite import OrchidSQLiteChatStorage
+from orchid_ai.persistence.in_memory import OrchidInMemoryChatStorage
 from orchid_ai.runtime import OrchidRuntime
 
 # ── Test doubles ────────────────────────────────────────────────
@@ -312,7 +312,7 @@ class TestResume:
 class TestPersistence:
     @pytest.mark.asyncio
     async def test_persists_messages_when_enabled(self, minimal_config, noop_runtime):
-        chat_repo = OrchidSQLiteChatStorage(dsn=":memory:")
+        chat_repo = OrchidInMemoryChatStorage()
         await chat_repo.init_db()
 
         with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
@@ -338,7 +338,7 @@ class TestPersistence:
 
     @pytest.mark.asyncio
     async def test_persist_false_skips_storage(self, minimal_config, noop_runtime):
-        chat_repo = OrchidSQLiteChatStorage(dsn=":memory:")
+        chat_repo = OrchidInMemoryChatStorage()
         await chat_repo.init_db()
 
         with patch("orchid_ai.orchid.lifecycle.build_graph") as build:
@@ -364,7 +364,7 @@ class TestPersistence:
 
     @pytest.mark.asyncio
     async def test_history_loaded_from_repo_when_chat_exists(self, minimal_config, noop_runtime):
-        chat_repo = OrchidSQLiteChatStorage(dsn=":memory:")
+        chat_repo = OrchidInMemoryChatStorage()
         await chat_repo.init_db()
 
         chat = await chat_repo.create_chat(tenant_id="t", user_id="u", title="seed")
@@ -400,7 +400,7 @@ class TestPersistence:
             checkpointer=MemorySaver(),
         )
 
-        chat_repo = OrchidSQLiteChatStorage(dsn=":memory:")
+        chat_repo = OrchidInMemoryChatStorage()
         await chat_repo.init_db()
         chat = await chat_repo.create_chat(tenant_id="t", user_id="u")
         await chat_repo.add_message(chat.id, "user", "old")

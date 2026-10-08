@@ -27,7 +27,7 @@ Orchid (alias for Orchestrator-Index) lets you define AI agents via YAML configu
 - **Internal prompt customisation** — every supervisor / synthesis / agent / RAG-transformer / mini-agent / summarise prompt is YAML- and Python-configurable with backwards-compatible defaults
 - **Sliding-window history summarisation** — opt-in compression of older turns by a cheaper LLM so long conversations stay within budget
 - **AI Guardrails** — 3-tier safety layer (global input, per-agent, global output) with built-in prompt injection, PII, content safety, topic restriction, max length, and groundedness checks
-- **Pluggable persistence** — SQLite (default) and PostgreSQL backends for chat history; integrators can plug any `OrchidChatStorage` subclass
+- **Pluggable persistence** — dependency-free in-memory backend by default; SQLite and PostgreSQL backends ship as plugins (`orchid-storage-sqlite`, `orchid-storage-postgres`), and integrators can plug any `OrchidChatStorage` subclass
 - **HITL graph interrupts** — `requires_approval: true` tools pause the graph; resume via the API or CLI with the user's decision
 - **MCP capability cache warming** — `OrchidSessionWarmer` keeps tool inventories ready so the first agentic round avoids discovery RPCs
 - **Pollen & Bloom (event-driven activation)** — opt-in async substrate that turns external webhooks, cron schedules, and in-graph `emit_signal` calls into background LangGraph runs. Triggers match signals to agent invocations under a synthesised `OrchidAuthContext`; run results can be appended back into a real user chat.
@@ -143,7 +143,7 @@ orchid/
   graph/            LangGraph supervisor + graph builder
   rag/              Scoping, indexing, embeddings, dynamic injection, Qdrant backend
   documents/        PDF/DOCX/XLSX/CSV/Image parsers + chunking pipeline
-  persistence/      OrchidChatStorage ABC + SQLite (default) + PostgreSQL backends + migrations
+  persistence/      OrchidChatStorage ABC + in-memory default + migration-runner ABC
   mcp/              StreamableHttpMCPClient
   events/           Pollen + Bloom — concrete impls of core/events ABCs:
                       backends/, queues/, processors/, runners/, producers/,
@@ -183,7 +183,7 @@ documents/   -> core/
 | `OrchidVectorStoreAdmin` | `core/repository.py` | Collection management |
 | `OrchidChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
 | `OrchidSignalDispatcher` | `core/events/dispatcher.py` | Persist + enqueue a `SignalEnvelope` (Pollen ingest) |
-| `OrchidSignalQueue` | `core/events/queue.py` | Durable signal buffer (in-memory / SQLite / Postgres / relay) |
+| `OrchidSignalQueue` | `core/events/queue.py` | Durable signal buffer (in-memory default / SQLite / Postgres via plugins / relay) |
 | `OrchidSignalProducer` | `core/events/producer.py` | Surface external events as signals (HTTP / scheduler / internal) |
 | `OrchidSignalProcessor` | `core/events/processor.py` | Drain the queue, match triggers, execute Blooms |
 | `OrchidJobRunner` | `core/events/runner.py` | Invoke the LangGraph supervisor under a synthesised auth context |
@@ -583,8 +583,8 @@ Top-level block that wires the event-driven activation layer. **Omit it (or set 
 | `triggers` | list — signal → agent rules | `[]` |
 
 - **`enabled`** -- Master switch. The full block is still parsed when `false` so typos in your YAML still fail loudly, but no runtime objects are constructed. Default `false` is the zero-overhead opt-out.
-- **`store`** -- Backend for the seven events tables (`signals`, `signal_queue`, `signal_queue_dead_letter`, `triggers`, `schedules`, `job_runs`, `signal_sources`). Built-in: `orchid_ai.events.backends.sqlite.SQLiteEventStorage`. PostgreSQL events backend available via `orchid-storage-postgres` plugin. The migrations live alongside chat/MCP migrations in `persistence/migrations/v001_initial_schema.py` — one root migration covers all three concerns.
-- **`queue`** -- Durable signal buffer. Built-ins: `orchid_ai.events.queues.inmemory.InMemorySignalQueue` (tests/demos), `orchid_ai.events.queues.sqlite.SQLiteSignalQueue` (single-process durable), `orchid_ai.events.queues.relay.RelayingSignalQueue` (publish-then-mark adapter for external buses). PostgreSQL signal queue (FOR UPDATE SKIP LOCKED, optional `pg_notify` on commit) available via `orchid-storage-postgres` plugin. Tunable knobs: `notify_enabled` (default `true`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `dead_letter_table` (default `signal_queue_dead_letter`).
+- **`store`** -- Backend for the seven events tables (`signals`, `signal_queue`, `signal_queue_dead_letter`, `triggers`, `schedules`, `job_runs`, `signal_sources`). Defaults to the dependency-free in-memory facade (`orchid_ai.events.backends.inmemory.InMemoryEventStorage`) when omitted. Durable backends: `orchid_storage_sqlite.event_storage.SQLiteEventStorage` (install `orchid-storage-sqlite`) and `orchid_storage_postgres.event_storage.PostgresEventStorage` (install `orchid-storage-postgres`). Each storage plugin owns its migrations (SQLite v001, PostgreSQL v001) — one root migration covers all framework tables.
+- **`queue`** -- Durable signal buffer. Built-ins: `orchid_ai.events.queues.inmemory.InMemorySignalQueue` (default when omitted; tests/demos) and `orchid_ai.events.queues.relay.RelayingSignalQueue` (publish-then-mark adapter for external buses). Durable queues: `orchid_storage_sqlite.event_queue.SQLiteSignalQueue` (single-process; install `orchid-storage-sqlite`) and `orchid_storage_postgres.event_queue.PostgresSignalQueue` (FOR UPDATE SKIP LOCKED, optional `pg_notify` on commit; install `orchid-storage-postgres`). Tunable knobs: `notify_enabled` (default `true`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `dead_letter_table` (default `signal_queue_dead_letter`).
 - **`scheduler`** -- Cron / interval driver. Built-in: `orchid_ai.events.schedulers.apscheduler.APSchedulerBackend` (wraps `apscheduler.AsyncIOScheduler`, no SQLAlchemy — durability lives in the `schedules` table; APScheduler's in-memory jobstore is re-populated on every boot).
 - **`producers`** -- Sources of signals. Built-ins: `orchid_ai.events.producers.scheduler.SchedulerProducer` (drives the configured `scheduler`), `orchid_ai.events.producers.internal.InternalEmissionProducer` (wires `OrchidAgent.emit_signal` and `DispatcherSignalEmitter`), `orchid_ai.events.producers.relay_recovery.RelayRecoveryProducer` (periodic re-publish sweep when using `RelayingSignalQueue`). When using **orchid-api**, `HTTPIngestionProducer` (from `orchid_api.events.producers.http`) is mounted automatically whenever `events.ingestion.sources` is non-empty — no explicit entry needed here.
 - **`processors`** -- Drain the queue and run the matched Blooms. Built-in: `orchid_ai.events.processors.asyncio_pool.AsyncioWorkerPoolProcessor`. Tunable knobs: `concurrency` (default `4`), `poll_interval_ms` (default `200`), `lease_seconds` (default `30`), `max_attempts` (default `5`), `drain_timeout_seconds` (default `10.0`).
@@ -652,10 +652,10 @@ events:
   enabled: true
 
   store:
-    class: orchid_ai.events.backends.sqlite.SQLiteEventStorage
+    class: orchid_storage_sqlite.event_storage.SQLiteEventStorage
     dsn: /data/events.db
   queue:
-    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
+    class: orchid_storage_sqlite.event_queue.SQLiteSignalQueue
     notify_enabled: true
     lease_seconds: 60
   scheduler:
@@ -812,11 +812,13 @@ Runtime configuration consumed by orchid-api and orchid-cli. Each nested YAML ke
 
 | YAML Key | Env Var | Default |
 |----------|---------|---------|
-| `storage.class` | `CHAT_STORAGE_CLASS` | `"orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"` |
+| `storage.class` | `CHAT_STORAGE_CLASS` | `"memory"` |
 | `storage.dsn` | `CHAT_DB_DSN` | `"~/.orchid/chats.db"` |
 
-- **`storage.class`** -- Dotted import path to the `OrchidChatStorage` implementation. The class is dynamically imported at startup. Built-in options:
-  - `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` -- Default. Stores chats in a local SQLite file. Zero config, no external database needed. Best for development, demos, and single-user deployments.
+- **`storage.class`** -- Dotted import path to the `OrchidChatStorage` implementation, or the `"memory"` sentinel (also the empty string) for the built-in backend. The class is dynamically imported at startup. Options:
+  - `"memory"` -- Default. Dependency-free, process-local, **not durable** across restarts. Best for tests and zero-config quick starts.
+  - `orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage` -- Durable local SQLite file. Install `orchid-storage-sqlite`. Best for development, demos, and single-user deployments.
+  - `orchid_storage_postgres.OrchidPostgresChatStorage` -- Durable PostgreSQL. Install `orchid-storage-postgres`. Best for multi-user / production deployments.
   - `orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage` -- PostgreSQL backend. Requires `pip install orchid-storage-postgres` and a running PostgreSQL instance. Best for production, multi-user, and Docker deployments.
   - Custom backends: implement the `OrchidChatStorage` ABC and reference your class here.
 - **`storage.dsn`** -- Database connection string. For SQLite: a file path (e.g. `"~/.orchid/chats.db"`, `"/data/chats.db"`). The directory is created automatically. For PostgreSQL: a full DSN (e.g. `"postgresql://user:pass@localhost:5432/orchid"`).
@@ -1501,7 +1503,9 @@ storage:
   dsn: redis://localhost:6379/0
 ```
 
-The library ships SQLite (default) and PostgreSQL backends.  See
+The library ships a dependency-free in-memory backend by default; durable
+SQLite / PostgreSQL backends are available via the `orchid-storage-sqlite`
+and `orchid-storage-postgres` plugins.  See
 [`examples/custom-storage/`](../examples/custom-storage/) for a
 JSON-file backend with the full contract checklist.
 

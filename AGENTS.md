@@ -32,14 +32,16 @@ orchid/
     graph/                LangGraph wiring: supervisor.py, graph.py, state.py
     rag/                  Scopes, indexer, embeddings, factory, backends/qdrant.py
     documents/            Parsers (PDF/DOCX/XLSX/CSV/Image), chunker, pipeline
-    persistence/          OrchidChatStorage + OrchidMCPTokenStore + gateway-state stores + shared migrations:
-      sqlite.py                       OrchidSQLiteChatStorage (default, aiosqlite — core dep)
-      mcp_token_sqlite.py             OrchidSQLiteMCPTokenStore (outbound MCP OAuth tokens)
+    persistence/          Storage contracts + in-memory default + migration-runner ABC:
+      base.py                         OrchidChatStorage ABC — the contract
+      models.py                       OrchidChatSession / OrchidChatMessage dataclasses
+      in_memory.py                    OrchidInMemory* stores (framework default)
+      factory.py                      build_chat_storage(class_path, dsn) — "memory" sentinel
+      plugin_hints.py                 pip-install hints for plugin class paths
       mcp_token_factory.py            build_mcp_token_store()
-      mcp_client_registration_*.py    Per-server discovered endpoints + DCR creds (RFC 7591)
-      mcp_gateway_state_sqlite.py     Inbound gateway-state store (SQLite)
+      mcp_client_registration_factory.py
       mcp_gateway_state_factory.py    build_mcp_gateway_state_store()
-      migrations/                     Unified v001 — chat + outbound MCP + inbound gateway tables
+      migrations/runner.py            OrchidMigrationRunner ABC + discover_migrations()
     mcp/                  StreamableHttpMCPClient + OrchidMCPAuthRegistry
       client.py           StreamableHttpMCPClient (dual-mode: none/passthrough/oauth)
       auth_registry.py    OrchidMCPAuthRegistry — scans config for OAuth-requiring servers
@@ -97,8 +99,9 @@ documents/   → core/  (standalone)
 | langchain-community | Community integrations | Core |
 | langchain-text-splitters | RecursiveCharacterTextSplitter | Core |
 | litellm | Multi-provider LLM routing (fallback) | Core |
-| qdrant-client | Vector DB client | Core |
-| aiosqlite | SQLite async driver (default storage) | Core |
+| qdrant-client | Vector DB client | Optional (via `orchid-rag-qdrant`) |
+| aiosqlite | SQLite async driver (storage backend) | Optional (via `orchid-storage-sqlite`) |
+| langgraph-checkpoint-sqlite | LangGraph SQLite checkpointer | Optional (via `orchid-storage-sqlite`) |
 | asyncpg | PostgreSQL async driver | Optional (via `orchid-storage-postgres`) |
 | langchain-openai | OpenAI provider (optional, improves perf) | Optional |
 | langchain-google-genai | Google AI provider (optional) | Optional |
@@ -282,7 +285,7 @@ implementations live in consumer projects.
 
 - `OrchidAuthConfigProvider` resolves the non-secret upstream-OAuth discovery shape (`OrchidUpstreamOAuthConfig`) consumed by `orchid-api`'s `/auth-info`. Pure: no network calls, no side effects; reads env vars seeded from `orchid.yml`.
 - `OrchidAuthExchangeClient` holds the upstream `client_secret` and performs the authorization-code (`exchange_code`) and refresh-token (`refresh_token`) grants on behalf of downstream public PKCE clients. Default `refresh_token` raises `NotImplementedError` — exchange-only consumers don't break, and the `/auth-info` flag gating `refresh_via_api` checks the method override identity.
-- Three `OrchidMCPGatewayClient/AuthCode/Token Store` ABCs back the inbound MCP gateway's OAuth state. One concrete class implements all three against the shared chat DB (SQLite / Postgres). `OrchidMCPGatewayToken` carries `idp_access_token` + `idp_refresh_token` + `idp_expires_at` so the refresh path has the upstream pair to swap.
+- Three `OrchidMCPGatewayClient/AuthCode/Token Store` ABCs back the inbound MCP gateway's OAuth state. One concrete class implements all three against the shared storage DB (e.g. via `orchid-storage-sqlite` / `orchid-storage-postgres`). `OrchidMCPGatewayToken` carries `idp_access_token` + `idp_refresh_token` + `idp_expires_at` so the refresh path has the upstream pair to swap.
 - `OrchidIdentityResolver` (already pre-existing) does double-duty: per-request bearer validation AND the upstream-token → identity bridge exposed at `/auth/resolve-identity`.
 
 ## Split Agent Configuration Across Files

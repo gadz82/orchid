@@ -8,9 +8,9 @@ opt-out.
 
 What this module owns:
 
-- Resolving ``events.store`` / ``events.queue`` dotted paths into
-  live :class:`SQLiteEventStorage`
-  instance and a matching :class:`OrchidSignalQueue`.
+- Resolving ``events.store`` / ``events.queue`` dotted paths into live
+  store / queue instances.  When either is omitted the dependency-free
+  in-memory backend ships as the default.
 - Building the trigger registry from
   :attr:`OrchidEventsConfig.triggers`, with the §13 / §25 / §26
   registration-time validations.
@@ -82,7 +82,7 @@ class EventsRuntime:
     schedule_store: Any | None = None
     trigger_store: Any | None = None
     trigger_registry: InMemoryTriggerRegistry | None = None
-    storage: Any | None = None  # SQLiteEventStorage (Postgres available via plugin)
+    storage: Any | None = None  # InMemoryEventStorage by default; SQLite/Postgres via plugins
     processor: AsyncioWorkerPoolProcessor | None = None
     producers: list[OrchidSignalProducer] = field(default_factory=list)
     http_producer: Any = None  # set by orchid-api after building HTTPIngestionProducer
@@ -258,7 +258,13 @@ async def stop_events(runtime: EventsRuntime | None) -> None:
 
 async def _build_storage(cfg: OrchidEventsConfig) -> Any:
     if cfg.store is None:
-        raise RuntimeError("events.store is required when events.enabled=true")
+        # No store configured → dependency-free in-memory default.
+        from orchid_ai.events.backends.inmemory import InMemoryEventStorage
+
+        storage = InMemoryEventStorage()
+        await storage.init_db()
+        return storage
+
     cls = import_class(cfg.store.class_path)
     args = dict(cfg.store.extra_args)
     instance = cls(**args)
@@ -269,7 +275,11 @@ async def _build_storage(cfg: OrchidEventsConfig) -> Any:
 
 async def _build_queue(cfg: OrchidEventsConfig, *, storage: Any) -> OrchidSignalQueue:
     if cfg.queue is None:
-        raise RuntimeError("events.queue is required when events.enabled=true")
+        # No queue configured → dependency-free in-memory default.
+        from orchid_ai.events.queues.inmemory import InMemorySignalQueue
+
+        return InMemorySignalQueue()
+
     cls = import_class(cfg.queue.class_path)
     extras = {
         k: v

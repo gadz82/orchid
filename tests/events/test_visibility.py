@@ -19,7 +19,6 @@ from __future__ import annotations
 import datetime as _dt
 import uuid as _uuid
 
-import aiosqlite
 import pytest
 from pydantic import ValidationError
 
@@ -34,7 +33,6 @@ from orchid_ai.config.schema_events import (
 from orchid_ai.core.events.errors import TriggerRegistrationError
 from orchid_ai.core.events.signal import Signal
 from orchid_ai.core.state import OrchidAuthContext
-from orchid_ai.events.backends.sqlite import SQLiteEventStorage
 from orchid_ai.events.registry import (
     _DEFAULT_VISIBILITY,
     build_registry_from_config,
@@ -237,66 +235,6 @@ def test_explicit_visibility_override_propagates() -> None:
     spec = trigger.build_job_spec(_make_signal(user_id=None))
     assert spec.visibility == "tenant"
     assert spec.visibility_user_id is None
-
-
-# ── DB CHECK constraint ─────────────────────────────────────
-
-
-async def test_db_check_constraint_rejects_inconsistent_row() -> None:
-    """SQLite enforces the table-level CHECK that
-    ``visibility_user_id`` is NULL iff visibility ∈ {tenant, admin}."""
-    conn = await aiosqlite.connect(":memory:")
-    conn.row_factory = aiosqlite.Row
-    storage = SQLiteEventStorage(conn=conn)
-    await storage.init_db()
-
-    # Need a parent signal row first (FK constraint).
-    sig_id = str(_uuid.uuid4())
-    now_iso = _dt.datetime.now(tz=_dt.UTC).isoformat()
-    await conn.execute(
-        "INSERT INTO signals "
-        "(signal_id, type, source, payload, tenant_key, occurred_at, persisted_at) "
-        "VALUES (?, 'x', 'src', '{}', 't-1', ?, ?)",
-        (sig_id, now_iso, now_iso),
-    )
-    await conn.commit()
-
-    # ``tenant`` visibility with a non-NULL user_id must be rejected.
-    with pytest.raises(aiosqlite.IntegrityError):
-        await conn.execute(
-            "INSERT INTO job_runs "
-            "(run_id, trigger_id, signal_id, attempt_number, status, "
-            " agent_name, parallelism_key, spec, visibility, "
-            " visibility_user_id, queued_at) "
-            "VALUES (?, 't', ?, 1, 'pending', 'a', 'k', '{}', "
-            "        'tenant', 'u-7', ?)",
-            (str(_uuid.uuid4()), sig_id, now_iso),
-        )
-
-    # And ``actor`` with NULL user_id must be rejected.
-    with pytest.raises(aiosqlite.IntegrityError):
-        await conn.execute(
-            "INSERT INTO job_runs "
-            "(run_id, trigger_id, signal_id, attempt_number, status, "
-            " agent_name, parallelism_key, spec, visibility, "
-            " visibility_user_id, queued_at) "
-            "VALUES (?, 't', ?, 1, 'pending', 'a', 'k', '{}', "
-            "        'actor', NULL, ?)",
-            (str(_uuid.uuid4()), sig_id, now_iso),
-        )
-
-    # And an unknown visibility level must be rejected.
-    with pytest.raises(aiosqlite.IntegrityError):
-        await conn.execute(
-            "INSERT INTO job_runs "
-            "(run_id, trigger_id, signal_id, attempt_number, status, "
-            " agent_name, parallelism_key, spec, visibility, "
-            " visibility_user_id, queued_at) "
-            "VALUES (?, 't', ?, 1, 'pending', 'a', 'k', '{}', "
-            "        'world', NULL, ?)",
-            (str(_uuid.uuid4()), sig_id, now_iso),
-        )
-    await conn.close()
 
 
 # ── OrchidAuthContext.roles round-trip ──────────────────────

@@ -2,52 +2,69 @@
 
 ## Overview
 
-Provides the chat persistence framework. The library ships the contract (`OrchidChatStorage` ABC), data models, migration runner, and **built-in SQLite (default)** backend. PostgreSQL backends are available via the `orchid-storage-postgres` plugin package. Consumers can override via dotted import paths.
+Provides the storage persistence framework. The library ships the
+contracts (`OrchidChatStorage` ABC, `OrchidConfigStorage`, the MCP store
+ABCs), data models, dependency-free **in-memory defaults**, and the
+migration-runner ABC. Durable backends are provided by plugin packages:
+
+- `orchid-storage-sqlite` — chat, config, MCP stores, ingestion
+  manifest, events backend/queue, migrations v001 + v002.
+- `orchid-storage-postgres` — the same surface against PostgreSQL.
+
+Consumers can also provide their own backends via dotted import paths.
 
 ## Architecture
 
 ```
-orchid/persistence/                   ← LIBRARY (framework + built-in SQLite backend)
+orchid/persistence/                   ← LIBRARY (contracts + in-memory default)
   base.py                               OrchidChatStorage ABC — the contract
-  sqlite.py                             OrchidSQLiteChatStorage — built-in DEFAULT
-  factory.py                            build_chat_storage(class_path, dsn) — dynamic import
   models.py                             OrchidChatSession, OrchidChatMessage — pure dataclasses
-
-  mcp_token_sqlite.py                   OrchidSQLiteMCPTokenStore — per-user OAuth tokens
+  in_memory.py                          OrchidInMemory* stores — framework DEFAULT
+  factory.py                            build_chat_storage(class_path, dsn) — dynamic import
+  plugin_hints.py                       pip-install hints for plugin class paths
   mcp_token_factory.py                  build_mcp_token_store(class_path, dsn)
-
-  mcp_client_registration_sqlite.py     OrchidSQLiteMCPClientRegistrationStore —
-                                         per-server discovered endpoints + DCR
-                                         credentials (MCP 2025-03-26 / RFC 7591)
-  mcp_client_registration_factory.py    build_mcp_client_registration_store(class_path, dsn)
+  mcp_client_registration_factory.py    build_mcp_client_registration_store(...)
+  mcp_gateway_state_factory.py          build_mcp_gateway_state_store(...)
 
   migrations/
-    runner.py                           OrchidMigrationRunner base + discover_migrations(package)
-    v001_initial_schema.py              chat_sessions, chat_messages, mcp_oauth_tokens
-    v002_mcp_client_registrations.py    mcp_client_registrations (MCP 2025-03-26 DCR)
+    runner.py                           OrchidMigrationRunner ABC + discover_migrations(package)
 ```
 
-Consumer projects can provide their own storage backends (e.g. PostgreSQL with custom migrations) by subclassing `OrchidChatStorage` and referencing via dotted import path.
+Concrete migrations live in the plugin packages
+(`orchid_storage_sqlite.migrations`, `orchid_storage_postgres.migrations`)
+or in consumer projects.
 
 ## How It Works
 
-The factory resolves a **dotted import path** to a `OrchidChatStorage` subclass at runtime:
+Storage class resolution has two modes:
+
+1. **`"memory"` sentinel** (also the empty string) — selects the built-in
+   in-memory backend. This is the framework default when no storage is
+   configured; state is process-local and **not durable**.
+2. **Dotted import path** — dynamically imported at runtime. A configured
+   path always wins over the default and fails strictly when it cannot be
+   imported (never silently falls back to in-memory). Known plugin
+   prefixes get an actionable hint: `pip install orchid-storage-sqlite` /
+   `pip install orchid-storage-postgres`.
 
 ```env
-# PostgreSQL (install orchid-storage-postgres plugin first):
+# In-memory (default — no configuration needed)
+CHAT_STORAGE_CLASS=memory
+
+# SQLite (install orchid-storage-sqlite):
+CHAT_STORAGE_CLASS=orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
+CHAT_DB_DSN=~/.orchid/chats.db
+
+# PostgreSQL (install orchid-storage-postgres):
 CHAT_STORAGE_CLASS=orchid_storage_postgres.OrchidPostgresChatStorage
 CHAT_DB_DSN=postgresql://user:pass@host:5432/db
-
-# SQLite (basketball example):
-CHAT_STORAGE_CLASS=examples.basketball.storage.sqlite.OrchidSQLiteChatStorage
-CHAT_DB_DSN=/data/chats.db
 ```
 
 ```python
 # orchid_ai/persistence/factory.py
 storage = build_chat_storage(
-    class_path=settings.chat_storage_class,
-    dsn=settings.chat_db_dsn,
+    class_path=settings.chat_storage_class,  # "memory" or a dotted path
+    dsn=settings.chat_db_dsn,  # ignored by the in-memory backend
 )
 await storage.init_db()
 ```
@@ -68,6 +85,10 @@ class OrchidChatStorage(ABC):
     async def get_messages(chat_id, limit, offset) -> list[OrchidChatMessage]
 ```
 
+`get_chat_metadata` / `can_write` / `get_conversation_summary` /
+`save_conversation_summary` have concrete ABC defaults so existing
+backends keep working unchanged.
+
 ## Writing a Custom Backend
 
 1. Create a Python file anywhere importable (e.g., `my_project/storage/mysql.py`)
@@ -78,16 +99,15 @@ class OrchidChatStorage(ABC):
 6. Set `CHAT_STORAGE_CLASS=my_project.storage.mysql.MySQLChatStorage`
 
 **Integrator migrations (recommended path for most consumers).** If you
-only need extra tables/indices on top of the built-in SQLite backend
-(or the `orchid-storage-postgres` plugin's PostgreSQL backend), don't
-subclass anything — point `storage.class` at the framework / plugin
-backend and set `storage.extra_migrations_package` to the dotted
-path of your migrations package:
+only need extra tables/indices on top of a plugin backend, don't subclass
+anything — point `storage.class` at the plugin backend and set
+`storage.extra_migrations_package` to the dotted path of your migrations
+package:
 
 ```yaml
 storage:
-  class: orchid_storage_postgres.chat_storage.OrchidPostgresChatStorage
-  dsn: postgresql://...
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
+  dsn: ~/.orchid/chats.db
   extra_migrations_package: myapp.migrations
 ```
 
@@ -104,7 +124,7 @@ package automatically (it shares the DB).
 ```python
 class OrchidMigrationRunner:
     dialect: str = "postgres"          # subclass sets this
-    migrations_package: str | None     # framework package (subclass default)
+    migrations_package: str | None     # backend package (subclass default)
     extra_migrations_package: str | None  # integrator (passed at construction)
 
     async def ensure_migrations_table(conn)
@@ -117,7 +137,7 @@ class OrchidMigrationRunner:
 
 The runner applies migrations in **two passes**:
 
-1. Framework migrations from `self.migrations_package`, recorded with
+1. Backend migrations from `self.migrations_package`, recorded with
    bare version keys (`"001"`, `"002"`, …).
 2. Integrator migrations from `self.extra_migrations_package` (if set),
    recorded with the `"ext:"` prefix from
@@ -128,12 +148,17 @@ dependency direction.
 
 ### discover_migrations(package)
 
-Scans the given package for modules starting with `v` that expose `VERSION`, `up(conn, *, dialect)`, `down(conn, *, dialect)`. The `package` parameter is a dotted import path (e.g., `"orchid_ai.persistence.migrations"`).
+Scans the given package for modules starting with `v` that expose
+`VERSION`, `up(conn, *, dialect)`, `down(conn, *, dialect)`. The
+`package` parameter is a dotted import path (e.g.,
+`"orchid_storage_sqlite.migrations"`). The framework package itself
+carries no migration modules — a runner subclass always sets its
+backend's package.
 
 ### Dialect-Aware Migrations
 
 ```python
-async def up(conn, *, dialect: str = "postgres") -> None:
+async def up(conn, *, dialect: str = "sqlite") -> None:
     if dialect == "sqlite":
         await conn.execute("...")  # SQLite SQL
     else:
@@ -142,7 +167,14 @@ async def up(conn, *, dialect: str = "postgres") -> None:
 
 ## Important
 
-- **`aiosqlite` is a core dependency** — it ships with the library for the built-in SQLite default backend.
-- **`asyncpg` is NOT a dependency of orchid-ai** — install via `pip install orchid-storage-postgres` for the PostgreSQL backend.
-- **Constructor signature:** All backends must accept `*, dsn: str` (keyword-only).
-- **The factory uses `importlib`.** The class path must be importable from the working directory.
+- **No database driver is a core dependency.** In-memory defaults are
+  stdlib-only; `aiosqlite` ships with `orchid-storage-sqlite`,
+  `asyncpg` with `orchid-storage-postgres`.
+- **Constructor signature:** All backends must accept `*, dsn: str`
+  (keyword-only) plus `extra_migrations_package: str | None = None` for
+  the SQL-backed ones.
+- **The factory uses `importlib`.** The class path must be importable
+  from the working directory.
+- **Never silently fall back.** A configured-but-unimportable class path
+  is a hard error (with the pip hint); only the unset/`"memory"` default
+  selects the in-memory backend.

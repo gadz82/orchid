@@ -4,16 +4,17 @@
 Concrete backends live under ``orchid_ai/events/queues/``:
 
 - ``inmemory.py`` — reference, for tests + single-process demos.
-- ``sqlite.py`` / ``postgres.py`` — production-shaped.  Both implement
-  the transactional outbox via ``transaction()`` returning a
-  :class:`DBTransaction` handle the dispatcher can pass back into
-  :meth:`enqueue` so the ``Signal`` insert and the ``signal_queue``
-  insert commit atomically.
 - ``relay.py`` — adapter that wraps an external bus (Kafka / SQS /
   Redis Streams).  External buses can't participate in DB transactions,
   so the relay queue uses the publish-then-mark fallback (write
   ``signals.relay_status='pending_publish'`` first, publish next, mark
   ``'published'`` after).
+
+Durable queues ship in plugin packages (``orchid-storage-sqlite``,
+``orchid-storage-postgres``).  Both implement the transactional outbox
+via ``transaction()`` returning a :class:`DBTransaction` handle the
+dispatcher can pass back into :meth:`enqueue` so the ``Signal`` insert
+and the ``signal_queue`` insert commit atomically.
 
 The ABC is deliberately small — a queue is just a ring buffer with
 leases.
@@ -49,9 +50,8 @@ class QueuedSignal:
 
 class DBTransaction(ABC):
     """Opaque transaction handle threaded from the queue back to the
-    dispatcher.  Concrete subclasses wrap a ``psycopg`` /
-    ``aiosqlite`` connection; external-bus implementations return a
-    no-op handle.
+    dispatcher.  Concrete subclasses wrap the backend connection;
+    external-bus implementations return a no-op handle.
 
     The dispatcher only needs to *pass* a ``DBTransaction``, never to
     inspect it — so the ABC stays empty."""
