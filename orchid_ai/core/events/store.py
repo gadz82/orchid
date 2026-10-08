@@ -1,11 +1,12 @@
 """Persistence ABCs for signals, jobs, schedules, and the trigger
 config row.
 
-Concrete stores live in ``orchid_ai/events/backends/`` (Postgres,
-SQLite) and ``orchid_ai/events/queues/inmemory.py`` (the in-memory
-reference used by tests).  All four stores typically share a single
-backing connection / pool — the split exists so callers depend only on
-the surface they need (interface segregation).
+Concrete stores live in plugin packages (``orchid-storage-sqlite``,
+``orchid-storage-postgres``) and in
+``orchid_ai/events/queues/inmemory.py`` (the in-memory reference used by
+tests and as the framework default).  All four stores typically share a
+single backing connection / pool — the split exists so callers depend
+only on the surface they need (interface segregation).
 """
 
 from __future__ import annotations

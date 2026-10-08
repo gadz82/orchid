@@ -31,7 +31,7 @@ re-exported here — import it from its submodule when you genuinely need it::
 
     from orchid_ai.checkpointing import build_checkpointer
     from orchid_ai.rag.factory import build_reader
-    from orchid_ai.persistence.sqlite import OrchidSQLiteChatStorage
+    from orchid_ai.persistence.in_memory import OrchidInMemoryChatStorage
     from orchid_ai.observability import OrchidMetricsHandler
 """
 

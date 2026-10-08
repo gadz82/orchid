@@ -10,8 +10,8 @@ def utcnow() -> datetime:
     """Naive UTC ``datetime`` — replacement for the deprecated ``datetime.utcnow()``.
 
     **Always treat the return value as UTC**; the ``tzinfo`` is stripped
-    only to preserve compatibility with the existing SQLite / PostgreSQL
-    columns, which were created before :class:`datetime.utcnow` was
+    only to preserve compatibility with the existing storage columns,
+    which were created before :class:`datetime.utcnow` was
     deprecated and accept naive values.
 
     Tech debt

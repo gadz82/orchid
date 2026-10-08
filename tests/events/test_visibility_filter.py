@@ -1,8 +1,8 @@
 """Tests for ``orchid_ai.events.visibility``.
 
-Verifies that the SQL fragment shape and the in-memory predicate
-agree across the §26.3 matrix and that cross-tenant access always
-returns false regardless of role.
+Verifies that the in-memory predicate matches the §26.3 matrix and that
+cross-tenant access always returns false regardless of role.  The
+dialect-specific SQL fragments are tested in the storage plugin suites.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import pytest
 from orchid_ai.core.events.job import JobRun, JobSpec, JobStatus
 from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.events.visibility import (
-    build_run_filter_clause,
     run_is_visible,
 )
 
@@ -39,24 +38,6 @@ def _run(*, visibility: str, visibility_user_id: str | None, tenant: str = "t-1"
         status=JobStatus.SUCCEEDED,
         queued_at=_dt.datetime.now(tz=_dt.UTC),
     )
-
-
-# ── SQL fragment (SQLite only) ─────────────────────────────
-
-
-def test_sqlite_admin_fragment() -> None:
-    auth = OrchidAuthContext(access_token="t", tenant_key="t-1", user_id="u-7", roles={"admin"})
-    f = build_run_filter_clause(auth, dialect="sqlite")
-    assert "tenant_key = :tenant_key" in f.where
-    assert f.params == {"tenant_key": "t-1"}
-
-
-def test_sqlite_non_admin_fragment() -> None:
-    auth = OrchidAuthContext(access_token="t", tenant_key="t-1", user_id="u-7")
-    f = build_run_filter_clause(auth, dialect="sqlite")
-    assert ":tenant_key" in f.where
-    assert ":user_id" in f.where
-    assert f.params == {"tenant_key": "t-1", "user_id": "u-7"}
 
 
 # ── In-memory predicate ─────────────────────────────────────

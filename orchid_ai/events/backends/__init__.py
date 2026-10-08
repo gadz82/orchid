@@ -1,33 +1,20 @@
-"""Persistent backends for the events stores.
+"""Backends for the events stores.
 
-Each backend exposes four narrow store classes
-(:class:`OrchidSignalStore`, :class:`OrchidJobStore`,
-:class:`OrchidScheduleStore`, :class:`OrchidTriggerStore`) that share
-one connection / pool with the chat-storage backend; migration
-``v001`` creates the tables, the chat storage's migration runner
-applies it on boot, and the event stores reuse the result.
+:class:`InMemoryEventStorage` is the dependency-free framework default —
+used when ``events.enabled: true`` but no ``events.store`` is configured.
+It composes the four in-memory stores from
+:mod:`orchid_ai.events.queues.inmemory`.
 
-A :class:`SQLiteEventStorage` facade owns the lifecycle (open, run
-migrations, close) and exposes the four stores via attributes
-(``signals``, ``jobs``, ``schedules``, ``triggers``).
+Durable backends live in plugin packages:
 
-The PostgreSQL backend lives in ``orchid-storage-postgres``.
+- SQLite — ``orchid-storage-sqlite``
+  (``orchid_storage_sqlite.event_storage.SQLiteEventStorage``).
+- PostgreSQL — ``orchid-storage-postgres``
+  (``orchid_storage_postgres.event_storage.PostgresEventStorage``).
 """
 
 from __future__ import annotations
 
-from .sqlite import (
-    SQLiteEventStorage,
-    SQLiteJobStore,
-    SQLiteScheduleStore,
-    SQLiteSignalStore,
-    SQLiteTriggerStore,
-)
+from .inmemory import InMemoryEventStorage
 
-__all__ = [
-    "SQLiteEventStorage",
-    "SQLiteJobStore",
-    "SQLiteScheduleStore",
-    "SQLiteSignalStore",
-    "SQLiteTriggerStore",
-]
+__all__ = ["InMemoryEventStorage"]

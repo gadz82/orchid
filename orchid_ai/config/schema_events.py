@@ -364,11 +364,11 @@ class OrchidEventsConfig(BaseModel):
     def _required_when_enabled(self) -> OrchidEventsConfig:
         if not self.enabled:
             return self
+        # ``store`` / ``queue`` are optional: omitting them selects the
+        # dependency-free in-memory backends built into the framework.
+        # A processor is still required — enabled events with no consumer
+        # is almost always a misconfiguration.
         missing: list[str] = []
-        if self.store is None:
-            missing.append("events.store")
-        if self.queue is None:
-            missing.append("events.queue")
         if not self.processors:
             missing.append("events.processors")
         if missing:

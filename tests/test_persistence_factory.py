@@ -5,6 +5,15 @@ from __future__ import annotations
 import pytest
 
 from orchid_ai.persistence.factory import build_chat_storage
+from orchid_ai.persistence.in_memory import (
+    OrchidInMemoryChatStorage,
+    OrchidInMemoryMCPClientRegistrationStore,
+    OrchidInMemoryMCPGatewayStateStore,
+    OrchidInMemoryMCPTokenStore,
+)
+from orchid_ai.persistence.mcp_client_registration_factory import build_mcp_client_registration_store
+from orchid_ai.persistence.mcp_gateway_state_factory import build_mcp_gateway_state_store
+from orchid_ai.persistence.mcp_token_factory import build_mcp_token_store
 from orchid_ai.utils import import_class
 
 
@@ -30,20 +39,34 @@ class TestBuildChatStorage:
         with pytest.raises(TypeError, match="not a OrchidChatStorage subclass"):
             build_chat_storage("orchid_ai.persistence.models.OrchidChatSession", dsn="sqlite:///test.db")
 
-    def test_forwards_extra_migrations_package(self):
-        """The factory threads ``extra_migrations_package`` into the concrete backend."""
-        storage = build_chat_storage(
-            "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
-            dsn=":memory:",
-            extra_migrations_package="my.integrator.migrations",
-        )
-        # The kwarg lands on the migrator that the storage owns.
-        assert storage._migrator.extra_migrations_package == "my.integrator.migrations"
 
-    def test_defaults_extra_migrations_package_to_none(self):
-        """Callers that omit the kwarg get ``None`` (no extras discovered)."""
-        storage = build_chat_storage(
-            "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
-            dsn=":memory:",
+class TestMemorySentinel:
+    """The ``"memory"`` sentinel (and empty string) select the built-in backends."""
+
+    @pytest.mark.parametrize("sentinel", ["memory", "MEMORY", " memory ", ""])
+    def test_chat_storage(self, sentinel):
+        assert isinstance(build_chat_storage(sentinel, dsn=""), OrchidInMemoryChatStorage)
+
+    @pytest.mark.parametrize("sentinel", ["memory", "MEMORY", " memory ", ""])
+    def test_mcp_token_store(self, sentinel):
+        assert isinstance(build_mcp_token_store(sentinel, dsn=""), OrchidInMemoryMCPTokenStore)
+
+    @pytest.mark.parametrize("sentinel", ["memory", "MEMORY", " memory ", ""])
+    def test_mcp_client_registration_store(self, sentinel):
+        assert isinstance(
+            build_mcp_client_registration_store(sentinel, dsn=""),
+            OrchidInMemoryMCPClientRegistrationStore,
         )
-        assert storage._migrator.extra_migrations_package is None
+
+    @pytest.mark.parametrize("sentinel", ["memory", "MEMORY", " memory ", ""])
+    def test_mcp_gateway_state_store(self, sentinel):
+        assert isinstance(build_mcp_gateway_state_store(sentinel, dsn=""), OrchidInMemoryMCPGatewayStateStore)
+
+    def test_configured_path_never_silently_falls_back(self):
+        """An explicitly configured dotted path fails loudly — no in-memory fallback."""
+        with pytest.raises(ImportError, match="pip install orchid-storage-sqlite"):
+            build_chat_storage("orchid_storage_sqlite.nope.Nope", dsn="x")
+
+    def test_known_plugin_prefix_gets_pip_hint(self):
+        with pytest.raises(ImportError, match="pip install orchid-storage-postgres"):
+            build_chat_storage("orchid_storage_postgres.nope.Nope", dsn="x")

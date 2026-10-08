@@ -46,7 +46,8 @@ storage rows are written.
 6. **Idempotency by construction.** ``UNIQUE (source, dedupe_key)``
    on signals; ``UNIQUE (trigger_id, signal_id, attempt_number)`` on
    job runs. The in-memory backend enforces both via dicts; the
-   Postgres / SQLite backends will use real constraints. Retries
+   durable plugin backends (``orchid-storage-sqlite`` /
+   ``orchid-storage-postgres``) use real constraints. Retries
    become new ``JobRun`` rows — never in-place updates.
 7. **No vendor / product names** — same hard rule as the rest of
    ``orchid/``. Use ``acme.example``, ``MyAuthExchange``,
@@ -64,12 +65,11 @@ orchid_ai/events/
     inmemory.py                 InMemorySignalQueue + InMemoryJobStore +
                                 InMemorySignalStore + InMemoryScheduleStore +
                                 InMemoryTriggerStore (single test-friendly bundle)
-    sqlite.py                   SQLiteSignalQueue (durable, single-process)
     relay.py                    RelayingSignalQueue + BusPublisher ABC +
                                 InMemoryBusPublisher (for tests / demos)
   backends/
     __init__.py
-    sqlite.py                   SQLiteEventStorage facade + four narrow stores
+    inmemory.py                 InMemoryEventStorage facade + four narrow stores
                                 (signals / jobs / schedules / triggers)
   schedulers/
     __init__.py
@@ -122,8 +122,10 @@ What this package ships:
   ``OrchidTriggerStore``, ``SignalIngestMiddleware``,
   ``OrchidSignalDispatcher`` plus the exception hierarchy).
 - ``InMemorySignalQueue`` + the four in-memory stores under one roof.
-- ``SQLiteSignalQueue`` + ``SQLiteEventStorage`` (durable single-process
-  queue, FOREIGN-KEY-cascading job runs, transactional outbox).
+- ``InMemoryEventStorage`` — the dependency-free events facade used when
+  no ``events.store`` is configured.
+- Durable SQLite / PostgreSQL queues + stores live in the storage plugin
+  packages (transactional outbox, FOREIGN-KEY-cascading job runs).
 - ``RelayingSignalQueue`` — publish-then-mark adapter for external
   buses with the ``BusPublisher`` ABC.  ``RelayRecoveryProducer``
   drives the durable ``relay_status`` column through a periodic
@@ -210,7 +212,7 @@ What this package ships:
   ``published`` after a successful re-publish; leaves rows pending
   on publisher failure for the next tick.  Plays nicely with
   :class:`RelayingSignalQueue`'s publish-then-mark contract.
-  In-memory + SQLite + Postgres stores all expose
+  In-memory + plugin-backed stores all expose
   ``list_by_relay_status`` so the sweep doesn't scan the whole
   table.
 - ``BloomEventStream`` — in-process channel-keyed pub/sub.  The
@@ -224,10 +226,10 @@ What this package ships:
   :class:`AsyncioWorkerPoolProcessor` — ``bloom.run.queued`` /
   ``.started`` / ``.finished`` are emitted automatically once a
   stream is injected.
-- ``visibility.build_run_filter_clause`` (Postgres + SQLite SQL
-  fragments) and ``visibility.run_is_visible`` (in-memory predicate)
-  — used by the orchid-api routers to enforce run visibility on
-  every ``SELECT FROM job_runs`` and the analogous ``signals``
+- ``visibility.build_run_filter_clause`` (delegates to plugin-registered
+  dialect fragments) and ``visibility.run_is_visible`` (in-memory
+  predicate) — used by the orchid-api routers to enforce run visibility
+  on every ``SELECT FROM job_runs`` and the analogous ``signals``
   query.  Cross-tenant access is always rejected, even for admins.
 
 ## In-chat streaming
@@ -270,8 +272,9 @@ Live in-chat progress for chat-bound Blooms.  See
   channel only.
 - ``OrchidJobStore.list(chat_binding_chat_id=…, statuses=[…])``
   filter for the chat-events endpoint's discovery query —
-  implemented for in-memory, SQLite (``json_extract``), and
-  Postgres (JSONB ``->'chat_binding'->>'chat_id'``).
+  implemented in-memory in the framework and for SQLite
+  (``json_extract``) / PostgreSQL (JSONB
+  ``->'chat_binding'->>'chat_id'``) in the storage plugins.
 - New endpoint ``GET /chats/{chat_id}/events/stream`` in
   ``orchid_api/routers/chat_events.py`` with discovery →
   subscribe pattern.  ``require_chat_owner_or_admin`` returns
@@ -283,8 +286,8 @@ Live in-chat progress for chat-bound Blooms.  See
 events:
   enabled: true
 
-  store: { class: orchid_ai.events.backends.sqlite.SQLiteEventStorage }
-  queue: { class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue }
+  store: { class: orchid_storage_sqlite.event_storage.SQLiteEventStorage }
+  queue: { class: orchid_storage_sqlite.event_queue.SQLiteSignalQueue }
   scheduler: { class: orchid_ai.events.schedulers.apscheduler.APSchedulerBackend }
 
   # HTTPIngestionProducer (orchid-api adapter) is mounted automatically

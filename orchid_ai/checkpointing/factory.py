@@ -1,9 +1,11 @@
 """
 Factory for LangGraph checkpointers — pluggable state persistence.
 
-Resolves well-known type strings (``"memory"``, ``"sqlite"``) or any dotted
-class path to a ``BaseCheckpointSaver`` instance.  SQLite is built-in;
-PostgreSQL ships in ``orchid-storage-postgres``.
+Resolves well-known type strings (``"memory"``) or any dotted class path
+to a ``BaseCheckpointSaver`` instance.  ``"memory"`` is built-in; durable
+backends ship in plugins (``"sqlite"`` via ``orchid-storage-sqlite``,
+``"postgres"`` via ``orchid-storage-postgres``) and are loaded through
+their entry points.
 
 Example — built-in types::
 
@@ -12,7 +14,7 @@ Example — built-in types::
     # In-memory (testing / dev)
     saver = await build_checkpointer("memory")
 
-    # SQLite (built-in)
+    # SQLite (requires: pip install orchid-storage-sqlite)
     saver = await build_checkpointer("sqlite", dsn="~/.orchid/checkpoints.db")
 
     # PostgreSQL (requires: pip install orchid-storage-postgres)
@@ -43,6 +45,7 @@ from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from ..persistence.plugin_hints import with_plugin_hint
 from ..plugins import iter_entry_point_plugins
 from ..utils import import_class
 
@@ -52,8 +55,11 @@ logger = logging.getLogger(__name__)
 # Maps type string → async factory callable(dsn) -> BaseCheckpointSaver
 _CHECKPOINTER_REGISTRY: dict[str, Callable[..., Coroutine[Any, Any, BaseCheckpointSaver]]] = {}
 
-_CHECKPOINTER_PACKAGE_HINTS: dict[str, str] = {
-    "orchid_storage_postgres.": "orchid-storage-postgres",
+# Type strings provided by plugin packages.  Used to raise an actionable
+# ImportError when the plugin isn't installed (the registry stays empty).
+_CHECKPOINTER_TYPE_HINTS: dict[str, str] = {
+    "sqlite": "orchid-storage-sqlite",
+    "postgres": "orchid-storage-postgres",
 }
 
 
@@ -63,11 +69,7 @@ def _augment_checkpointer_import_error(class_path: str, exc: Exception) -> Impor
         f"Ensure it is a valid dotted import path to a BaseCheckpointSaver subclass. "
         f"Error: {exc}"
     )
-    for prefix, package in _CHECKPOINTER_PACKAGE_HINTS.items():
-        if class_path.startswith(prefix):
-            msg += f" Install the missing plugin: pip install {package}"
-            break
-    return ImportError(msg)
+    return ImportError(with_plugin_hint(msg, class_path))
 
 
 def register_checkpointer(
@@ -101,7 +103,9 @@ async def build_checkpointer(
     ----------
     checkpointer_type : str
         One of ``"memory"``, ``"sqlite"``, ``"postgres"``, or a fully-qualified
-        dotted class path to a ``BaseCheckpointSaver`` subclass.
+        dotted class path to a ``BaseCheckpointSaver`` subclass.  The
+        ``"sqlite"`` / ``"postgres"`` types are provided by plugin packages
+        (``orchid-storage-sqlite`` / ``orchid-storage-postgres``).
     dsn : str
         Connection string or file path.  Required for ``"sqlite"`` and
         ``"postgres"``.  Ignored for ``"memory"``.  Supports ``~`` expansion.
@@ -109,13 +113,14 @@ async def build_checkpointer(
     Returns
     -------
     BaseCheckpointSaver
-        A ready-to-use checkpointer.  For ``"postgres"``, the schema tables
-        are created automatically via ``setup()``.
+        A ready-to-use checkpointer.  Durable backends create their schema
+        automatically via ``setup()``.
 
     Raises
     ------
     ImportError
-        When the required checkpoint package is not installed.
+        When a plugin-provided checkpointer type is requested but its
+        package is not installed.
     TypeError
         When a custom class path does not resolve to a ``BaseCheckpointSaver``
         subclass.
@@ -124,7 +129,7 @@ async def build_checkpointer(
     """
     resolved_dsn = os.path.expanduser(dsn) if dsn else dsn
 
-    # Check custom registry first (integrators can register types)
+    # Check custom registry first (integrators + plugins can register types)
     if checkpointer_type in _CHECKPOINTER_REGISTRY:
         factory_fn = _CHECKPOINTER_REGISTRY[checkpointer_type]
         logger.info("[Checkpointer] Using registered type: %s", checkpointer_type)
@@ -136,21 +141,13 @@ async def build_checkpointer(
         logger.info("[Checkpointer] Using MemorySaver (in-memory, non-persistent)")
         return MemorySaver()
 
-    if checkpointer_type == "sqlite":
-        import aiosqlite
-        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-
-        if not resolved_dsn:
-            raise ValueError("DSN is required for sqlite checkpointer (e.g. ~/.orchid/checkpoints.db)")
-        # ``AsyncSqliteSaver.from_conn_string`` is an async *context manager*,
-        # not a saver — awaiting ``.setup()`` on it raises AttributeError.
-        # Construct the saver from a long-lived connection so it outlives
-        # this call; ``shutdown_checkpointer`` closes the connection.
-        conn = await aiosqlite.connect(resolved_dsn)
-        checkpointer = AsyncSqliteSaver(conn)
-        await checkpointer.setup()
-        logger.info("[Checkpointer] SQLite checkpointer ready — %s", _mask_dsn(resolved_dsn))
-        return checkpointer
+    # Plugin-provided durable types that aren't registered (package missing).
+    if checkpointer_type in _CHECKPOINTER_TYPE_HINTS:
+        package = _CHECKPOINTER_TYPE_HINTS[checkpointer_type]
+        raise ImportError(
+            f"Checkpointer type '{checkpointer_type}' requires the '{package}' plugin. "
+            f"Install it with: pip install {package}"
+        )
 
     # ── Custom dotted class path ──────────────────────────────
     try:
@@ -196,16 +193,3 @@ async def shutdown_checkpointer(saver: BaseCheckpointSaver | None) -> None:
         logger.info("[Checkpointer] %s shut down", name)
     except Exception as exc:
         logger.warning("[Checkpointer] Error shutting down %s: %s", name, exc)
-
-
-def _mask_dsn(dsn: str) -> str:
-    """Mask password in DSN for safe logging."""
-    if "@" in dsn and "://" in dsn:
-        # postgresql://user:pass@host/db → postgresql://user:***@host/db
-        prefix, rest = dsn.split("://", 1)
-        if "@" in rest:
-            creds, host = rest.rsplit("@", 1)
-            if ":" in creds:
-                user, _ = creds.split(":", 1)
-                return f"{prefix}://{user}:***@{host}"
-    return dsn

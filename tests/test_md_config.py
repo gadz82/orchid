@@ -208,12 +208,12 @@ class TestMDInfrastructureToEnv:
     def test_maps_storage(self):
         frontmatter = {
             "storage": {
-                "class": "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
+                "class": "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage",
                 "dsn": "sqlite:///./orchid.db",
             }
         }
         env = md_infrastructure_to_env(frontmatter)
-        assert env["CHAT_STORAGE_CLASS"] == "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
+        assert env["CHAT_STORAGE_CLASS"] == "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage"
         assert env["CHAT_DB_DSN"] == "sqlite:///./orchid.db"
 
     def test_unknown_keys_skipped(self):
@@ -235,7 +235,7 @@ class TestMDInfrastructureToEnv:
         frontmatter = {
             "llm": {"model": "gemini/gemini-2.5-flash"},
             "storage": {
-                "class": "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
+                "class": "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage",
                 "dsn": "sqlite:///./orchid.db",
             },
         }
@@ -248,7 +248,7 @@ class TestMDInfrastructureToEnv:
         frontmatter = {
             "llm": {"model": "gemini/gemini-2.5-flash"},
             "storage": {
-                "class": "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
+                "class": "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage",
                 "dsn": "sqlite:///./orchid.db",
             },
             "rag": {"embedding_model": "nomic-embed-text"},
@@ -263,7 +263,7 @@ class TestMDInfrastructureToEnv:
         frontmatter = {
             "llm": {"model": "gemini/gemini-2.5-flash"},
             "storage": {
-                "class": "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
+                "class": "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage",
                 "dsn": "sqlite:///./orchid.db",
             },
         }
@@ -273,7 +273,7 @@ class TestMDInfrastructureToEnv:
         assert "CHAT_DB_DSN" in env
 
     def test_skip_sections_empty_set_skips_nothing(self):
-        frontmatter = {"storage": {"class": "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"}}
+        frontmatter = {"storage": {"class": "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage"}}
         env = md_infrastructure_to_env(frontmatter, skip_sections=set())
         assert "CHAT_STORAGE_CLASS" in env
 
@@ -281,7 +281,7 @@ class TestMDInfrastructureToEnv:
         frontmatter = {
             "llm": {"model": "gemini/gemini-2.5-flash"},
             "storage": {
-                "class": "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage",
+                "class": "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage",
                 "dsn": "sqlite:///./orchid.db",
             },
             "rag": {"embedding_model": "nomic-embed-text"},

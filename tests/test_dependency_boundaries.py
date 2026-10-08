@@ -59,8 +59,18 @@ ALLOWED_LOCATIONS: dict[str, list[str]] = {
     "memgraph": [],
     "psycopg": [],
     "psycopg2": [],
+    "aiosqlite": [],
     "langchain": [],
 }
+
+
+# Import strings that must never appear anywhere under ``orchid_ai/``.
+# Checked with a text scan (not an import scan) so plugin/backend
+# modules cannot sneak back into the core library.
+FORBIDDEN_SOURCE_STRINGS: list[str] = [
+    "langgraph.checkpoint.sqlite",
+    "langgraph.checkpoint.postgres",
+]
 
 
 # Modules that must never appear under ``core/``.  ``core/`` is the
@@ -155,3 +165,21 @@ def test_no_legacy_null_module() -> None:
     """``rag/null.py`` was removed in favour of ``rag/backends/null.py``."""
     legacy = PACKAGE_ROOT / "rag" / "null.py"
     assert not legacy.exists(), f"{legacy} should be deleted (use rag/backends/null.py)"
+
+
+@pytest.mark.parametrize("forbidden", FORBIDDEN_SOURCE_STRINGS)
+def test_concrete_checkpoint_backends_are_not_referenced(forbidden: str) -> None:
+    """Durable checkpoint backends live in storage plugins.
+
+    A text scan (not an import scan) so no module — not even a docstring
+    or a lazy import inside a function — can reintroduce the dependency.
+    """
+    violations: list[str] = []
+    for py_file in _python_files():
+        if forbidden in py_file.read_text(encoding="utf-8"):
+            violations.append(str(py_file.relative_to(PACKAGE_ROOT)))
+
+    assert not violations, (
+        f"{forbidden!r} referenced inside orchid_ai/ — durable checkpoint backends "
+        f"belong in the storage plugin packages.\n  - " + "\n  - ".join(violations)
+    )

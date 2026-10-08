@@ -6,8 +6,8 @@ triple and rotates on refresh / revocation.
 
 Security note — encryption at rest
 -----------------------------------
-By default, tokens are stored as plaintext in the backing store (SQLite
-or PostgreSQL).  The threat model assumes the host is trusted.  For
+By default, tokens are stored as plaintext in the configured backing
+store.  The threat model assumes the host is trusted.  For
 deployments that require encryption at rest, integrators inject a custom
 :class:`OrchidTokenSerializer` into the token store at construction
 time.  The serializer is called around every read/write of the

@@ -84,11 +84,11 @@ class RelayingSignalQueue(OrchidSignalQueue):
       the dispatcher's outbox semantics hold for the durable signal
       write.
 
-    Construction takes an inner queue (typically the SQLite or
-    Postgres queue) **and** the publisher.  The inner queue is what
-    ``transaction()`` delegates to — the relay queue itself doesn't
-    own a DB transaction; it just needs the signal store updates to
-    commit alongside the producer's other writes.
+    Construction takes an inner queue (a durable or in-memory queue)
+    **and** the publisher.  The inner queue is what ``transaction()``
+    delegates to — the relay queue itself doesn't own a DB transaction;
+    it just needs the signal store updates to commit alongside the
+    producer's other writes.
     """
 
     def __init__(

@@ -11,7 +11,8 @@ balancer: each replica has its own private copy of the state, so a
 token minted on replica A is invisible to replica B.
 
 This module defines three ABCs the gateway can implement against a
-shared backend (orchid-api's PostgreSQL / SQLite):
+shared backend (the configured storage, e.g. via
+``orchid-storage-sqlite`` or ``orchid-storage-postgres``):
 
 - :class:`OrchidMCPGatewayClientStore` — RFC 7591 DCR client records.
 - :class:`OrchidMCPGatewayAuthCodeStore` — pending authorization
@@ -192,8 +193,9 @@ class OrchidMCPGatewayAuthCodeStore(ABC):
     enforce **one-shot** semantics on :meth:`consume` — once a row is
     consumed it must never be returned again, even if another replica
     attempts the same exchange concurrently.  Use atomic
-    ``DELETE … RETURNING`` (Postgres) or ``SELECT`` inside a
-    transaction followed by ``DELETE`` (SQLite) to achieve this.
+    ``DELETE … RETURNING`` where the backend supports it, or a
+    ``SELECT`` inside a transaction followed by ``DELETE``, to achieve
+    this.
     """
 
     @abstractmethod

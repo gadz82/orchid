@@ -3,9 +3,10 @@ Auth as execution context — carried in the LangGraph ``RunnableConfig``,
 never in the (checkpointed) graph state.
 
 The graph state is *durable computation state* and is serialised by
-persisting checkpointers (SQLite, PostgreSQL).  An :class:`OrchidAuthContext`
-is a *credential*, not state: it is short-lived, rotates, and must never
-land in a checkpoint at rest.  So auth travels out-of-band in
+persisting checkpointers (see :mod:`orchid_ai.checkpointing`).  An
+:class:`OrchidAuthContext` is a *credential*, not state: it is
+short-lived, rotates, and must never land in a checkpoint at rest.  So
+auth travels out-of-band in
 ``config["configurable"]["auth_context"]`` — LangGraph delivers the
 config to every node at runtime but does **not** serialise arbitrary
 ``configurable`` values into the checkpoint (only ``thread_id`` /

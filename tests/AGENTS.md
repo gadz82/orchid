@@ -34,6 +34,7 @@ tests/
 5. **Don't reference files outside `orchid/`.** Tests that need example configs should use `tests/fixtures/` or skip with `pytest.skip()` when the workspace isn't available.
 6. **Mock external services.** Never make real network calls. Use `MockMCPClient`, `MockVectorReader`, or `unittest.mock.patch`.
 7. **Coverage minimum is 79%.** Enforced via `--cov-fail-under=79` in `pyproject.toml`.
+8. **The suite runs with zero storage plugins installed.** Storage tests use the in-memory backends in `orchid_ai.persistence.in_memory` / `orchid_ai.events.backends.inmemory`; SQLite / PostgreSQL coverage lives in the `orchid-storage-sqlite` / `orchid-storage-postgres` packages. The boundary test forbids `aiosqlite` and `langgraph.checkpoint.*` references in `orchid_ai/`.
 
 ## Key Fixtures (conftest.py)
 

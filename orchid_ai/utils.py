@@ -6,6 +6,19 @@ from __future__ import annotations
 
 import importlib
 
+#: Class-path sentinel selecting the built-in in-memory storage backend.
+MEMORY_STORAGE_SENTINEL = "memory"
+
+
+def is_memory_storage_sentinel(class_path: str) -> bool:
+    """Return ``True`` when ``class_path`` selects the in-memory backend.
+
+    The sentinel is ``"memory"`` (case-insensitive, surrounding whitespace
+    ignored).  The empty string also selects it, so unset configuration
+    falls back to the framework's dependency-free default.
+    """
+    return not class_path or class_path.strip().lower() == MEMORY_STORAGE_SENTINEL
+
 
 def unwrap_exception_group(exc: BaseException) -> BaseException:
     """Return the first concrete exception inside an ``ExceptionGroup``.

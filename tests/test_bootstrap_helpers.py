@@ -13,6 +13,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from orchid_ai.bootstrap import (
+    _DEFAULT_GATEWAY_STATE_STORE_CLASS,
+    _DEFAULT_REGISTRATION_STORE_CLASS,
+    _DEFAULT_STORAGE_CLASS,
+    _DEFAULT_TOKEN_STORE_CLASS,
     _prepare_reader,
     _resolve_overrides,
     _run_startup_hook,
@@ -33,6 +37,11 @@ def clean_env(monkeypatch):
         "CHAT_EXTRA_MIGRATIONS_PACKAGE",
         "MCP_TOKEN_STORE_CLASS",
         "MCP_TOKEN_STORE_DSN",
+        "MCP_CLIENT_REGISTRATION_STORE_CLASS",
+        "MCP_CLIENT_REGISTRATION_STORE_DSN",
+        "MCP_GATEWAY_STATE_STORE_CLASS",
+        "MCP_GATEWAY_STATE_STORE_DSN",
+        "CONTENT_SOURCES",
         "CHECKPOINTER_TYPE",
         "CHECKPOINTER_DSN",
         "STARTUP_HOOK",
@@ -111,8 +120,18 @@ class TestResolveOverrides:
             runtime_overrides=None,
         )
         assert ov.model == "ollama/llama3.2"
+        assert ov.storage_class == "memory"
+        assert ov.token_store_class == "memory"
+        assert ov.registration_store_class == "memory"
+        assert ov.gateway_state_store_class == "memory"
         assert ov.storage_dsn == "~/.orchid/chats.db"
         assert ov.token_store_dsn == ov.storage_dsn  # same-file default
+
+    def test_storage_class_defaults_are_in_memory(self):
+        assert _DEFAULT_STORAGE_CLASS == "memory"
+        assert _DEFAULT_TOKEN_STORE_CLASS == "memory"
+        assert _DEFAULT_REGISTRATION_STORE_CLASS == "memory"
+        assert _DEFAULT_GATEWAY_STATE_STORE_CLASS == "memory"
 
     def test_extra_migrations_arg_wins_over_env(self, clean_env, monkeypatch):
         monkeypatch.setenv("CHAT_EXTRA_MIGRATIONS_PACKAGE", "from.env.pkg")
