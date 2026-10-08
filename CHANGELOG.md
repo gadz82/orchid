@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-10-08)
+
+### Features
+
+- Orchid storage sqlite extraced from the core
+  ([`4311811`](https://github.com/gadz82/orchid/commit/4311811e33c7a55771d7767133e7c9145bca3bc9))
+
+
 ## v1.10.0 (2026-09-15)
 
 ### Bug Fixes
