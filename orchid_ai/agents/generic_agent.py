@@ -70,7 +70,12 @@ class GenericAgent(OrchidAgent):
         summary_config: dict[str, Any] | None = None,
         graph_store: OrchidGraphStore | None = None,
         skill_decision_model: Any | None = None,
-        skill_confidence_threshold: float = 0.8,
+        skill_confidence_threshold: float = 0.75,
+        tool_decision_model: Any | None = None,
+        tool_confidence_threshold: float = 0.75,
+        tool_max_candidates: int = 32,
+        rag_decision_model: Any | None = None,
+        rag_confidence_threshold: float = 0.75,
         **kwargs: Any,
     ):
         super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
@@ -102,10 +107,15 @@ class GenericAgent(OrchidAgent):
             content_sources=self._content_sources,
             max_skill_depth=config.max_skill_depth,
         )
+        self._tool_decision_model = tool_decision_model
+        self._tool_confidence_threshold = max(0.0, min(1.0, tool_confidence_threshold))
+        self._tool_max_candidates = max(1, min(64, tool_max_candidates))
         self._rag_pipeline = RagPipeline(
             reader=reader,
             chat_model=chat_model,
             graph_store=graph_store,
+            decision_model=rag_decision_model,
+            confidence_threshold=rag_confidence_threshold,
         )
         self._prompt_builder = SystemPromptBuilder(config.prompt_sections)
 
@@ -215,9 +225,12 @@ class GenericAgent(OrchidAgent):
                 len(cached_tools),
             )
 
-        # Skill check — if matched, run the skill and skip the agentic loop
+        # Skill check — if the supervisor already selected an orchestrator
+        # skill on the decision path, do not let an agent-level skill hijack it.
+        routing = state.get("routing_metadata") or {}
+        orchestrator_skill = routing.get("skill") if routing.get("path") == "decision" else None
         skill_start = time.perf_counter()
-        skill_name = await self._detect_skill(query)
+        skill_name = None if orchestrator_skill else await self._detect_skill(query)
         skill_detect_elapsed = (time.perf_counter() - skill_start) * 1000
         if self._config.skills:
             perf_logger.info(
@@ -539,6 +552,8 @@ class GenericAgent(OrchidAgent):
         if not all_tool_defs:
             return None, {}, []
 
+        tool_subset = await self._shortlist_tools(query, all_tool_defs)
+
         # ── Build LangChain tool wrappers ───────────────────
         lc_tools = build_langchain_tools(
             builtin_names=builtin_tool_names,
@@ -582,9 +597,74 @@ class GenericAgent(OrchidAgent):
             parallel_safety=parallel_safety,
             max_tool_rounds=self._config.max_tool_rounds,
             max_consecutive_dupes=self._config.max_consecutive_dupes,
+            tool_subset=tool_subset,
         )
         final_text, tool_results = await loop.run(messages)
         return final_text, tool_results, loop._events
+
+    async def _shortlist_tools(self, query: str, all_tool_defs: list[dict[str, Any]]) -> list[str] | None:
+        """Ask the tool decision provider which tools to bind.
+
+        Returns ``None`` on any uncertainty or failure, which means "bind every
+        tool". A decision answer supplies names only; arguments stay with the
+        LLM or the human-approval path.
+        """
+        if self._tool_decision_model is None:
+            return None
+        candidates: list[tuple[str, str]] = []
+        for tool_def in all_tool_defs:
+            function = tool_def.get("function", {})
+            name = function.get("name")
+            if isinstance(name, str) and name:
+                candidates.append((name, str(function.get("description", ""))))
+        if not candidates:
+            return None
+        if len(candidates) > self._tool_max_candidates:
+            logger.warning(
+                "[%s] %d tools exceed the shortlist cap (%d); binding all tools",
+                self.name,
+                len(candidates),
+                self._tool_max_candidates,
+            )
+            return None
+
+        from ..core.decision import (
+            OrchidDecisionError,
+            OrchidDecisionQuestion,
+            OrchidDecisionState,
+            aggregate_shortlist,
+        )
+
+        questions = [
+            OrchidDecisionQuestion(
+                name=f"tool:{name}",
+                kind="boolean",
+                instructions=f"Should the {name} tool be used for this request? {description}",
+            )
+            for name, description in candidates
+        ]
+        try:
+            result = await self._tool_decision_model.decide(
+                OrchidDecisionState(text=query[:4000], payload={"tools": [name for name, _ in candidates]}),
+                questions,
+            )
+        except OrchidDecisionError as exc:
+            logger.warning("[%s] tool decision provider failed code=%s", self.name, exc.code)
+            return None
+        except Exception:
+            logger.warning("[%s] tool decision provider raised an unexpected error", self.name, exc_info=True)
+            return None
+
+        selected = aggregate_shortlist(
+            result,
+            [f"tool:{name}" for name, _ in candidates],
+            threshold=self._tool_confidence_threshold,
+        )
+        if not selected:
+            return None
+        names = [name[len("tool:") :] for name in selected]
+        logger.info("[%s] tool shortlist: %s", self.name, names)
+        return names
 
     # ── Parallel-dispatch safety resolver ───────────────────────
 

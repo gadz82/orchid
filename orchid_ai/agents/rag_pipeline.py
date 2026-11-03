@@ -38,10 +38,15 @@ class RagPipeline:
         reader: OrchidVectorReader,
         chat_model: Any | None = None,
         graph_store: Any | None = None,
+        *,
+        decision_model: Any | None = None,
+        confidence_threshold: float = 0.75,
     ) -> None:
         self._reader = reader
         self._chat_model = chat_model
         self._graph_store = graph_store
+        self._decision_model = decision_model
+        self._confidence_threshold = max(0.0, min(1.0, confidence_threshold))
 
     async def retrieve(
         self,
@@ -110,6 +115,7 @@ class RagPipeline:
             )
 
         combined.sort(key=lambda d: d.get("score", 0), reverse=True)
+        combined = await self._gate_passages(query, combined)
         return combined[:k]
 
     async def check_cache(
@@ -178,3 +184,56 @@ class RagPipeline:
 
         pairs = await _asyncio.gather(*(_lookup(name, ttl) for name, ttl in tool_ttls.items()))
         return {name: val for name, val in pairs if val is not None}
+
+    async def _gate_passages(self, query: str, passages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep only passages the decision provider judges useful.
+
+        Fails open: no provider, too many candidates, a provider error, or an
+        empty/low-confidence selection all return the original ranking.
+        """
+        if self._decision_model is None or not passages:
+            return passages
+        candidates = passages[:32]
+        if len(passages) > 32:
+            return passages
+
+        from ..core.decision import (
+            OrchidDecisionError,
+            OrchidDecisionQuestion,
+            OrchidDecisionState,
+            aggregate_shortlist,
+        )
+
+        questions = [
+            OrchidDecisionQuestion(
+                name=f"chunk:{index}",
+                kind="boolean",
+                instructions=f"Does this passage help answer the query? {str(passage.get('text', ''))[:300]}",
+            )
+            for index, passage in enumerate(candidates)
+        ]
+        try:
+            result = await self._decision_model.decide(
+                OrchidDecisionState(
+                    text=query[:4000],
+                    payload={"passages": [str(p.get("text", ""))[:500] for p in candidates]},
+                ),
+                questions,
+            )
+        except OrchidDecisionError as exc:
+            logger.warning("[RAG] decision provider failed code=%s; keeping the original ranking", exc.code)
+            return passages
+        except Exception:
+            logger.warning("[RAG] decision provider raised an unexpected error", exc_info=True)
+            return passages
+
+        selected = aggregate_shortlist(
+            result,
+            [f"chunk:{index}" for index in range(len(candidates))],
+            threshold=self._confidence_threshold,
+        )
+        if not selected:
+            return passages
+        keep = {int(name.split(":", 1)[1]) for name in selected}
+        logger.info("[RAG] gated %d/%d passages", len(keep), len(passages))
+        return [passage for index, passage in enumerate(passages) if index in keep]

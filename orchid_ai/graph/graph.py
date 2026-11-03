@@ -306,7 +306,12 @@ def _instantiate_agent(
     content_sources: Any | None = None,
     upload_namespace: str = "uploads",
     skill_decision_model: Any | None = None,
-    skill_confidence_threshold: float = 0.8,
+    skill_confidence_threshold: float = 0.75,
+    tool_decision_model: Any | None = None,
+    tool_confidence_threshold: float = 0.75,
+    tool_max_candidates: int = 32,
+    rag_decision_model: Any | None = None,
+    rag_confidence_threshold: float = 0.75,
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -367,6 +372,13 @@ def _instantiate_agent(
     if skill_decision_model is not None:
         kwargs["skill_decision_model"] = skill_decision_model
         kwargs["skill_confidence_threshold"] = skill_confidence_threshold
+    if tool_decision_model is not None:
+        kwargs["tool_decision_model"] = tool_decision_model
+        kwargs["tool_confidence_threshold"] = tool_confidence_threshold
+        kwargs["tool_max_candidates"] = tool_max_candidates
+    if rag_decision_model is not None:
+        kwargs["rag_decision_model"] = rag_decision_model
+        kwargs["rag_confidence_threshold"] = rag_confidence_threshold
 
     return cls(**kwargs)
 
@@ -656,12 +668,40 @@ def build_graph(
             )
             subgraph_nodes[agent_name] = subgraph
         else:
-            skill_binding = config.resolve_decision("skills", agent_name)
+            skill_binding = config.decisions.resolve("skills", agent_config.decisions)
             skill_model = (
                 runtime.get_decision_model(skill_binding.model)
                 if skill_binding is not None and skill_binding.model
                 else None
             )
+            if skill_binding is not None and skill_binding.model and skill_model is None:
+                logger.warning(
+                    "[Graph] agent '%s' skills provider %r is configured but missing from the runtime",
+                    agent_name,
+                    skill_binding.model,
+                )
+            rag_binding = config.decisions.resolve("rag", agent_config.decisions)
+            rag_model = (
+                runtime.get_decision_model(rag_binding.model) if rag_binding is not None and rag_binding.model else None
+            )
+            if rag_binding is not None and rag_binding.model and rag_model is None:
+                logger.warning(
+                    "[Graph] agent '%s' RAG provider %r is configured but missing from the runtime",
+                    agent_name,
+                    rag_binding.model,
+                )
+            tool_binding = config.decisions.resolve("tools", agent_config.decisions)
+            tool_model = (
+                runtime.get_decision_model(tool_binding.model)
+                if tool_binding is not None and tool_binding.model
+                else None
+            )
+            if tool_binding is not None and tool_binding.model and tool_model is None:
+                logger.warning(
+                    "[Graph] agent '%s' tools provider %r is configured but missing from the runtime",
+                    agent_name,
+                    tool_binding.model,
+                )
             agent = _instantiate_agent(
                 agent_name,
                 agent_config,
