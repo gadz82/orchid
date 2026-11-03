@@ -3,24 +3,98 @@
 The blocks are additive and optional. A configuration without
 ``decision_models``/``decisions`` parses into empty defaults and the framework
 behaves exactly as before. Validation happens at load time so a bad provider
-reference or an unsafe endpoint fails before a request starts.
+reference, an unsafe endpoint, or an allowlist mismatch fails before a request
+starts.
 """
 
 from __future__ import annotations
 
 import ipaddress
+import re
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-DecisionProtocol = Literal["state-questions", "openai-compatible", "llm", "stub"]
+from .errors import OrchidConfigError
 
-_HTTP_PROTOCOLS = frozenset({"state-questions", "openai-compatible"})
-_POINTS = ("routing", "skills", "tools", "rag")
+_PROTOCOL_ALIASES = {"systemone": "state-questions", "openai-decisions": "openai-compatible"}
+_HTTP_LIKE_EXCLUDED = frozenset({"llm", "stub"})
 _AGENT_POINTS = ("skills", "tools", "rag")
+_ALL_POINTS = ("routing", "skills", "tools", "rag")
+_ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-_BLOCKED_HOSTNAMES = frozenset({"localhost", "localhost.localdomain", "metadata.google.internal"})
+_BLOCKED_HOSTNAMES = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+        "metadata.google.internal",
+        "metadata.goog",
+    }
+)
+_BLOCKED_ADDRESSES = frozenset(
+    {
+        ipaddress.ip_address("100.100.100.200"),  # Alibaba Cloud metadata
+        ipaddress.ip_address("fd00:ec2::254"),  # AWS IMDSv2 IPv6
+    }
+)
+
+
+def _normalise_host(value: str, *, label: str) -> str:
+    """Canonicalise a hostname or IP literal for comparison and safety checks."""
+    host = value.strip().lower()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    if not host:
+        raise ValueError(f"{label}: host must be non-empty")
+    if any(marker in host for marker in ("/", "*", "@", "?", "#", " ", "\\")):
+        raise ValueError(f"{label}: host {value!r} contains an invalid character")
+    if host.count(":") == 1:
+        raise ValueError(f"{label}: host {value!r} must not include a port")
+    host = host.rstrip(".")
+    if not host or host.startswith(".") or ".." in host:
+        raise ValueError(f"{label}: host {value!r} is not a valid name")
+    try:
+        host = host.encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise ValueError(f"{label}: host {value!r} is not a valid international name") from exc
+    return host
+
+
+def _parse_address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """Return the address for a literal host, or ``None`` for a DNS name."""
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return None
+    mapped = getattr(address, "ipv4_mapped", None)
+    if mapped is not None:
+        return mapped
+    return address
+
+
+def _reject_numeric_alias(host: str, *, label: str) -> None:
+    """Reject non-canonical numeric hosts that resolvers expand to loopback.
+
+    ``127.1``, ``2130706433``, and ``0x7f.0.0.1`` all resolve to ``127.0.0.1``
+    through ``getaddrinfo`` but are not parseable by :mod:`ipaddress`.
+    """
+    compact = host.replace(".", "")
+    numeric = compact.isdigit() or host.startswith("0x")
+    if numeric and _parse_address(host) is None:
+        raise ValueError(f"{label}: host {host!r} is a non-canonical numeric address")
+
+
+def _validate_host_safety(host: str, *, label: str) -> None:
+    if host in _BLOCKED_HOSTNAMES:
+        raise ValueError(f"{label}: host {host!r} is not allowed")
+    address = _parse_address(host)
+    if address is None:
+        return
+    if address in _BLOCKED_ADDRESSES:
+        raise ValueError(f"{label}: host {host!r} is a metadata endpoint")
+    if address.is_loopback or address.is_link_local or address.is_unspecified or address.is_multicast:
+        raise ValueError(f"{label}: host {host!r} is not routable")
 
 
 def _validate_base_url(value: str, *, provider: str) -> str:
@@ -28,35 +102,35 @@ def _validate_base_url(value: str, *, provider: str) -> str:
 
     HTTPS only, no embedded credentials, no loopback/link-local/metadata
     targets, and no query/fragment. A path is allowed because gateways expose
-    versioned prefixes.
+    versioned prefixes. DNS aliases to metadata endpoints cannot be detected
+    here; the transport re-checks the peer address at request time.
     """
     parsed = urlsplit(value)
     if parsed.scheme != "https":
         raise ValueError(f"decision provider {provider!r}: base_url must use https")
-    if parsed.username or parsed.password:
+    if "@" in parsed.netloc:
         raise ValueError(f"decision provider {provider!r}: base_url must not embed credentials")
     if parsed.query or parsed.fragment:
         raise ValueError(f"decision provider {provider!r}: base_url must not carry a query or fragment")
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError(f"decision provider {provider!r}: base_url must include a host")
-    if hostname.lower() in _BLOCKED_HOSTNAMES:
-        raise ValueError(f"decision provider {provider!r}: base_url host {hostname!r} is not allowed")
     try:
-        address = ipaddress.ip_address(hostname)
-    except ValueError:
-        return value
-    if address.is_loopback or address.is_link_local or address.is_unspecified or address.is_multicast:
-        raise ValueError(f"decision provider {provider!r}: base_url host {hostname!r} is not routable")
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(f"decision provider {provider!r}: base_url has an invalid port") from exc
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError(f"decision provider {provider!r}: base_url port must be between 1 and 65535")
+    if not parsed.hostname:
+        raise ValueError(f"decision provider {provider!r}: base_url must include a host")
+    host = _normalise_host(parsed.hostname, label=f"decision provider {provider!r}")
+    _reject_numeric_alias(host, label=f"decision provider {provider!r}")
+    _validate_host_safety(host, label=f"decision provider {provider!r}")
     return value
 
 
 def validate_allowed_host(value: str) -> str:
-    host = value.strip().lower()
-    if not host:
-        raise ValueError("allowed_decision_hosts entries must be non-empty")
-    if any(marker in host for marker in ("/", ":", "@", "?", "#")):
-        raise ValueError(f"allowed_decision_hosts entry {value!r} must be a bare hostname")
+    """Normalise and safety-check one ``allowed_decision_hosts`` entry."""
+    host = _normalise_host(value, label="allowed_decision_hosts")
+    _reject_numeric_alias(host, label="allowed_decision_hosts")
+    _validate_host_safety(host, label="allowed_decision_hosts")
     return host
 
 
@@ -66,7 +140,8 @@ class OrchidDecisionBudgetConfig(BaseModel):
     ``max_calls_per_turn`` bounds how many provider calls one user turn may
     make across all decision points. ``max_total_ms`` bounds the wall clock.
     ``breaker_cooldown_s`` is how long a failing provider is skipped before a
-    half-open probe.
+    half-open probe. ``failure_threshold`` is the number of consecutive
+    failures that opens the breaker.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -80,14 +155,17 @@ class OrchidDecisionBudgetConfig(BaseModel):
 class OrchidDecisionModelConfig(BaseModel):
     """One declared decision provider.
 
-    ``protocol`` selects the wire dialect, not the vendor. ``systemone`` is
-    accepted as an alias for ``state-questions``. ``api_key_env`` names an
-    environment variable; the value is never stored in configuration.
+    # ORCHID-MEM: 01a1a11f-f53f-78ee-8b4c-6a1d186786f7 — Declared decision provider with protocol, endpoint, and egress validation.
+
+    ``protocol`` selects the wire dialect, not the vendor. Aliases
+    ``systemone`` and ``openai-decisions`` normalise to their neutral names.
+    ``api_key_env`` names an environment variable and is validated as an
+    identifier so a pasted secret is rejected at load time.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    protocol: DecisionProtocol = "state-questions"
+    protocol: str = "state-questions"
     model: str = ""
     base_url: str | None = None
     api_key_env: str | None = None
@@ -99,30 +177,38 @@ class OrchidDecisionModelConfig(BaseModel):
     @field_validator("protocol", mode="before")
     @classmethod
     def _normalise_protocol(cls, value: Any) -> Any:
-        if value == "systemone":
-            return "state-questions"
-        return value
+        if not isinstance(value, str):
+            return value
+        normalised = value.strip().lower()
+        return _PROTOCOL_ALIASES.get(normalised, normalised)
 
     @model_validator(mode="after")
     def _validate_provider(self) -> OrchidDecisionModelConfig:
-        if self.protocol in _HTTP_PROTOCOLS:
-            if not self.model.strip():
-                raise ValueError(f"decision provider with protocol {self.protocol!r} requires a model")
-            if not self.base_url:
-                raise ValueError(f"decision provider with protocol {self.protocol!r} requires a base_url")
-            _validate_base_url(self.base_url, provider=self.model)
+        if self.protocol == "stub":
+            if self.model.strip():
+                raise ValueError("decision provider with protocol 'stub' must not set model")
+            if self.base_url:
+                raise ValueError("decision provider with protocol 'stub' must not set base_url")
         elif self.protocol == "llm":
             if not self.model.strip():
                 raise ValueError("decision provider with protocol 'llm' requires a chat model")
             if self.base_url:
                 raise ValueError("decision provider with protocol 'llm' must not set base_url")
         else:
-            if self.model.strip():
-                raise ValueError("decision provider with protocol 'stub' must not set model")
-            if self.base_url:
-                raise ValueError("decision provider with protocol 'stub' must not set base_url")
-        if self.api_key_env is not None and not self.api_key_env.strip():
-            raise ValueError("api_key_env must be a non-empty environment variable name")
+            # HTTP dialects, including custom protocols registered at runtime.
+            if not self.model.strip():
+                raise ValueError(f"decision provider with protocol {self.protocol!r} requires a model")
+            if not self.base_url:
+                raise ValueError(f"decision provider with protocol {self.protocol!r} requires a base_url")
+            _validate_base_url(self.base_url, provider=self.model)
+        if self.api_key_env is not None:
+            env_name = self.api_key_env.strip()
+            if not _ENV_NAME_RE.match(env_name):
+                raise ValueError(
+                    "api_key_env must be an environment variable identifier "
+                    "(letters, digits, underscore; not a pasted secret)"
+                )
+            self.api_key_env = env_name
         if self.state_transform is not None and not self.state_transform.strip():
             raise ValueError("state_transform must be a non-empty import path")
         return self
@@ -131,18 +217,33 @@ class OrchidDecisionModelConfig(BaseModel):
 class OrchidDecisionPointConfig(BaseModel):
     """A binding from one decision point to a provider.
 
-    ``default`` in :class:`OrchidDecisionsConfig` supplies parameters only; it
-    never enables a point on its own. ``escalate`` is valid only for routing,
-    because tool and RAG paths have no user-facing seam.
+    ``enabled=False`` disables the point for the scope it is declared on,
+    including an inherited global binding. ``escalate`` is valid only for
+    routing, because tool and RAG paths have no user-facing seam.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    enabled: bool | None = None
     model: str | None = None
     confidence_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
     on_low_confidence: Literal["llm", "default", "escalate"] = "llm"
     max_candidates: int | None = Field(default=None, ge=1, le=64)
     mode: Literal["filter"] | None = None
+
+
+class OrchidDecisionDefaultConfig(BaseModel):
+    """Parameters inherited by every enabled point. Never enables a point.
+
+    ``model``, ``max_candidates``, and ``mode`` are deliberately absent: they
+    are binding or point-specific and a fleet-wide default would make them
+    ambiguous.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    confidence_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
+    on_low_confidence: Literal["llm", "default"] = "llm"
 
 
 class OrchidDecisionsConfig(BaseModel):
@@ -151,14 +252,14 @@ class OrchidDecisionsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     budget: OrchidDecisionBudgetConfig = Field(default_factory=OrchidDecisionBudgetConfig)
-    default: OrchidDecisionPointConfig | None = None
+    default: OrchidDecisionDefaultConfig | None = None
     routing: OrchidDecisionPointConfig | None = None
     skills: OrchidDecisionPointConfig | None = None
     tools: OrchidDecisionPointConfig | None = None
     rag: OrchidDecisionPointConfig | None = None
 
     def _global_binding(self, point: str) -> OrchidDecisionPointConfig | None:
-        if point not in _POINTS:
+        if point not in _ALL_POINTS:
             raise ValueError(f"unknown decision point {point!r}")
         return getattr(self, point)
 
@@ -171,20 +272,27 @@ class OrchidDecisionsConfig(BaseModel):
 
         Returns ``None`` when no block enables the point. ``decisions.default``
         contributes parameters only, so a default block alone never enables a
-        decision.
+        decision. An ``enabled=False`` override disables an inherited binding;
+        ``routing`` is fleet-level and ignores per-agent overrides.
         """
         global_binding = self._global_binding(point)
-        agent_binding = agent.get(point) if agent is not None else None
+        agent_binding = agent.get(point) if agent is not None and point in _AGENT_POINTS else None
+
+        if agent_binding is not None and agent_binding.enabled is False:
+            return None
+        if agent_binding is None and global_binding is not None and global_binding.enabled is False:
+            return None
         if agent_binding is None and global_binding is None:
             return None
 
         merged: dict[str, Any] = {}
         if self.default is not None:
             merged.update(self.default.model_dump(exclude_unset=True))
-        if global_binding is not None:
+        if global_binding is not None and global_binding.enabled is not False:
             merged.update(global_binding.model_dump(exclude_unset=True))
         if agent_binding is not None:
             merged.update(agent_binding.model_dump(exclude_unset=True))
+        merged.pop("enabled", None)
         return OrchidDecisionPointConfig.model_validate(merged)
 
 
@@ -217,29 +325,41 @@ class OrchidAgentDecisionsConfig(BaseModel):
         return getattr(self, point)
 
 
+def iter_agents(agents: dict[str, Any], prefix: str = "") -> list[tuple[str, Any]]:
+    found: list[tuple[str, Any]] = []
+    for name, agent in agents.items():
+        path = f"{prefix}.{name}" if prefix else name
+        found.append((path, agent))
+        children = getattr(agent, "children", None)
+        if children:
+            found.extend(iter_agents(children, path))
+    return found
+
+
 def validate_decision_bindings(config: Any) -> None:
     """Validate provider references, egress, and point-specific options.
 
     Called from the root model validator and again after ``merge_from_db`` so a
-    DB-sourced agent cannot bypass it.
+    DB-sourced agent cannot bypass it. Nested agents are validated with a path
+    label. An allowlisted host must match the provider's base URL at load time;
+    the transport repeats the check before every request.
     """
     errors: list[str] = []
     enabled: list[str] = []
 
-    for point in _POINTS:
+    for point in _ALL_POINTS:
         binding = config.decisions._global_binding(point)
         if binding is None:
             continue
-        enabled.append(point)
-        _validate_binding_shape(f"decisions.{point}", point, binding, errors)
         resolved = config.decisions.resolve(point)
-        model_name = resolved.model if resolved is not None else None
-        if not model_name:
-            errors.append(f"decisions.{point} is enabled but no provider is selected")
-        elif model_name not in config.decision_models:
-            errors.append(f"decisions.{point} references unknown decision provider {model_name!r}")
+        if resolved is None:
+            continue
+        label = f"decisions.{point}"
+        enabled.append(label)
+        _validate_binding_shape(label, point, resolved, errors)
+        _validate_provider_reference(config, label, resolved, errors, expected_transform=None)
 
-    for agent_name, agent in config.agents.items():
+    for path, agent in iter_agents(config.agents):
         agent_decisions = getattr(agent, "decisions", None)
         if agent_decisions is None:
             continue
@@ -247,15 +367,14 @@ def validate_decision_bindings(config: Any) -> None:
             binding = agent_decisions.get(point)
             if binding is None:
                 continue
-            label = f"agents.{agent_name}.decisions.{point}"
-            enabled.append(label)
-            _validate_binding_shape(label, point, binding, errors)
             resolved = config.decisions.resolve(point, agent_decisions)
-            model_name = resolved.model if resolved is not None else None
-            if not model_name:
-                errors.append(f"{label} is enabled but no provider is selected")
-            elif model_name not in config.decision_models:
-                errors.append(f"{label} references unknown decision provider {model_name!r}")
+            if resolved is None:
+                continue
+            label = f"agents.{path}.decisions.{point}"
+            enabled.append(label)
+            _validate_binding_shape(label, point, resolved, errors)
+            expected_transform = _provider_transform(config, config.decisions.resolve(point))
+            _validate_provider_reference(config, label, resolved, errors, expected_transform=expected_transform)
 
     if enabled and not config.allowed_decision_hosts:
         errors.append(
@@ -264,7 +383,45 @@ def validate_decision_bindings(config: Any) -> None:
         )
 
     if errors:
-        raise ValueError("; ".join(errors))
+        raise OrchidConfigError("; ".join(errors))
+
+
+def _provider_transform(config: Any, binding: OrchidDecisionPointConfig | None) -> str | None:
+    if binding is None or not binding.model:
+        return None
+    provider = config.decision_models.get(binding.model)
+    return provider.state_transform if provider is not None else None
+
+
+def _validate_provider_reference(
+    config: Any,
+    label: str,
+    resolved: OrchidDecisionPointConfig,
+    errors: list[str],
+    *,
+    expected_transform: str | None,
+) -> None:
+    model_name = resolved.model
+    if not model_name:
+        errors.append(f"{label} is enabled but no provider is selected")
+        return
+    provider = config.decision_models.get(model_name)
+    if provider is None:
+        errors.append(f"{label} references unknown decision provider {model_name!r}")
+        return
+    if expected_transform is not None and provider.state_transform != expected_transform:
+        errors.append(
+            f"{label} selects provider {model_name!r} which changes the global state_transform; "
+            "per-agent overrides may not weaken redaction"
+        )
+    if provider.protocol in _HTTP_LIKE_EXCLUDED:
+        return
+    assert provider.base_url is not None  # validated by OrchidDecisionModelConfig
+    host = _normalise_host(urlsplit(provider.base_url).hostname or "", label=label)
+    if host not in config.allowed_decision_hosts:
+        errors.append(
+            f"{label} uses provider {model_name!r} with host {host!r}, which is not listed in allowed_decision_hosts"
+        )
 
 
 def _validate_binding_shape(

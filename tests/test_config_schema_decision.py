@@ -80,6 +80,17 @@ def test_stub_protocol_rejects_model_and_base_url() -> None:
         "https://localhost",
         "https://169.254.169.254",
         "https://[::1]",
+        "https://localhost.",
+        "https://127.1",
+        "https://2130706433",
+        "https://0x7f.0.0.1",
+        "https://100.100.100.200",
+        "https://metadata.goog",
+        "https://[::ffff:127.0.0.1]",
+        "https://api.example.com:0",
+        "https://api.example.com:99999",
+        "https://api.example.com:abc",
+        "https://@api.example.com",
     ],
 )
 def test_provider_rejects_unsafe_base_url(base_url: str) -> None:
@@ -138,7 +149,7 @@ def test_allowed_decision_hosts_normalise_and_validate() -> None:
 def test_default_alone_does_not_enable_a_point() -> None:
     config = _config(
         decision_models={"fast": PROVIDER},
-        decisions={"default": {"model": "fast", "confidence_threshold": 0.9}},
+        decisions={"default": {"confidence_threshold": 0.9}},
         allowed_decision_hosts=["api.example.com"],
     )
     assert config.decisions.resolve("routing") is None
@@ -235,3 +246,192 @@ def test_merge_from_db_revalidates_bindings() -> None:
                 }
             ]
         )
+
+
+# ── Default block is parameters-only ────────────────────────
+
+
+@pytest.mark.parametrize("value", [{"model": "fast"}, {"max_candidates": 4}, {"mode": "filter"}])
+def test_default_block_rejects_bindings_and_point_options(value: dict) -> None:
+    with pytest.raises(ValidationError):
+        _config(decision_models={"fast": PROVIDER}, decisions={"default": value})
+
+
+def test_default_escalate_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        _config(decision_models={"fast": PROVIDER}, decisions={"default": {"on_low_confidence": "escalate"}})
+
+
+def test_default_escalate_cannot_reach_a_tool_point() -> None:
+    with pytest.raises(ValidationError):
+        _config(
+            decision_models={"fast": PROVIDER},
+            decisions={"default": {"on_low_confidence": "escalate"}, "tools": {"model": "fast"}},
+            allowed_decision_hosts=["api.example.com"],
+        )
+
+
+# ── Egress allowlist ────────────────────────────────────────
+
+
+def test_enabled_http_point_requires_allowlisted_host() -> None:
+    with pytest.raises(ValidationError, match="not listed in allowed_decision_hosts"):
+        _config(
+            decision_models={"fast": PROVIDER},
+            decisions={"routing": {"model": "fast"}},
+            allowed_decision_hosts=["other.example.com"],
+        )
+
+
+@pytest.mark.parametrize("bad", ["localhost", "127.0.0.1", "169.254.169.254", "*", ".example.com", "api..example.com"])
+def test_allowlist_rejects_unsafe_entries(bad: str) -> None:
+    with pytest.raises(ValidationError):
+        _config(allowed_decision_hosts=[bad])
+
+
+def test_allowlist_normalises_trailing_dot_and_idna() -> None:
+    config = _config(allowed_decision_hosts=["API.Example.com.", "BÜCHER.example"])
+    assert config.allowed_decision_hosts == ["api.example.com", "xn--bcher-kva.example"]
+
+
+# ── Nested agents ───────────────────────────────────────────
+
+
+def _nested(child_decisions: dict) -> dict:
+    return {
+        "description": "parent",
+        "prompt": "parent",
+        "children": {
+            "kid": {
+                "description": "child",
+                "prompt": "child",
+                "decisions": child_decisions,
+            }
+        },
+    }
+
+
+def test_child_only_point_requires_allowlist() -> None:
+    with pytest.raises(ValidationError, match="allowed_decision_hosts"):
+        _config(
+            agents={"a": _nested({"tools": {"model": "fast"}})},
+            decision_models={"fast": PROVIDER},
+        )
+
+
+def test_child_unknown_provider_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="unknown decision provider"):
+        _config(
+            agents={"a": _nested({"tools": {"model": "missing"}})},
+            decision_models={"fast": PROVIDER},
+            allowed_decision_hosts=["api.example.com"],
+        )
+
+
+def test_child_resolution_uses_full_path() -> None:
+    config = _config(
+        agents={"a": _nested({"tools": {"model": "fast", "confidence_threshold": 0.9}})},
+        decision_models={"fast": PROVIDER},
+        allowed_decision_hosts=["api.example.com"],
+    )
+    resolved = config.resolve_decision("tools", "a.kid")
+    assert resolved is not None
+    assert resolved.confidence_threshold == 0.9
+
+
+# ── Resolution fixes ────────────────────────────────────────
+
+
+def test_routing_resolution_ignores_agent_context() -> None:
+    config = _config(
+        agents={"a": _agent()},
+        decision_models={"fast": PROVIDER},
+        decisions={"routing": {"model": "fast"}},
+        allowed_decision_hosts=["api.example.com"],
+    )
+    resolved = config.resolve_decision("routing", "a")
+    assert resolved is not None
+    assert resolved.model == "fast"
+
+
+def test_unknown_agent_name_is_rejected() -> None:
+    config = _config()
+    with pytest.raises(KeyError):
+        config.resolve_decision("tools", "missing")
+
+
+def test_agent_can_disable_an_inherited_point() -> None:
+    config = _config(
+        agents={"a": _agent({"tools": {"enabled": False}})},
+        decision_models={"fast": PROVIDER},
+        decisions={"tools": {"model": "fast"}},
+        allowed_decision_hosts=["api.example.com"],
+    )
+    assert config.decisions.resolve("tools") is not None
+    assert config.resolve_decision("tools", "a") is None
+
+
+def test_agent_override_may_not_change_state_transform() -> None:
+    with pytest.raises(ValidationError, match="state_transform"):
+        _config(
+            agents={"a": _agent({"tools": {"model": "redacted"}})},
+            decision_models={
+                "fast": {**PROVIDER, "state_transform": "acme.decisions.redact"},
+                "redacted": {**PROVIDER, "state_transform": "acme.decisions.other"},
+            },
+            decisions={"tools": {"model": "fast"}},
+            allowed_decision_hosts=["api.example.com"],
+        )
+
+
+# ── Provider aliases and custom protocols ───────────────────
+
+
+def test_openai_decisions_alias() -> None:
+    config = _config(decision_models={"fast": {**PROVIDER, "protocol": "openai-decisions"}})
+    assert config.decision_models["fast"].protocol == "openai-compatible"
+
+
+def test_custom_http_protocol_is_accepted() -> None:
+    config = _config(decision_models={"acme": {**PROVIDER, "protocol": "acme-decisions"}})
+    assert config.decision_models["acme"].protocol == "acme-decisions"
+
+
+@pytest.mark.parametrize("secret", ["sk-live-abc123", "MY-KEY", "KEY WITH SPACES", "123KEY"])
+def test_api_key_env_rejects_non_identifiers(secret: str) -> None:
+    with pytest.raises(ValidationError, match="api_key_env"):
+        _config(decision_models={"fast": {**PROVIDER, "api_key_env": secret}})
+
+
+# ── merge_from_db safety ────────────────────────────────────
+
+
+def test_merge_from_db_preserves_inherited_parameters() -> None:
+    config = _config(
+        agents={"a": _agent({"tools": {"model": "fast"}})},
+        decision_models={"fast": PROVIDER},
+        decisions={"tools": {"model": "fast", "confidence_threshold": 0.5, "max_candidates": 4}},
+        allowed_decision_hosts=["api.example.com"],
+    )
+    before = config.resolve_decision("tools", "a")
+    assert before is not None and before.confidence_threshold == 0.5
+
+    config.merge_from_db([{"name": "a", "config": {"description": "updated", "prompt": "updated"}}], strict=False)
+    after = config.resolve_decision("tools", "a")
+    assert after is not None
+    assert after.confidence_threshold == 0.5
+    assert after.max_candidates == 4
+
+
+def test_failed_merge_restores_the_previous_agents() -> None:
+    config = _config(
+        decision_models={"fast": PROVIDER},
+        decisions={"routing": {"model": "fast"}},
+        allowed_decision_hosts=["api.example.com"],
+    )
+    original = set(config.agents)
+    with pytest.raises(ValueError):
+        config.merge_from_db(
+            [{"name": "b", "config": _agent({"tools": {"model": "missing"}})}],
+        )
+    assert set(config.agents) == original
