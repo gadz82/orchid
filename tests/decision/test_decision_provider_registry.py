@@ -48,6 +48,8 @@ class FakeChat:
 
 
 def _config(providers: dict, decisions: dict | None = None) -> OrchidAgentsConfig:
+    if decisions is None and providers:
+        decisions = {"routing": {"model": next(iter(providers))}}
     return OrchidAgentsConfig.model_validate(
         {
             "agents": {"a": {"description": "test", "prompt": "test"}},

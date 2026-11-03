@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..config.errors import OrchidConfigError
-from ..config.schema_decision import OrchidDecisionModelConfig
+from ..config.schema_decision import OrchidDecisionModelConfig, iter_agents
 from ..core.decision import OrchidDecisionError, OrchidDecisionModel, OrchidDecisionState
 from ..utils import import_class
 from .http import DecisionHttpClient
@@ -138,8 +138,11 @@ def build_decision_model(
             f"decision provider {name!r} uses unknown protocol {config.protocol!r}; "
             f"known protocols: {sorted(_PROTOCOL_BUILDERS)}"
         )
+    transform = _resolve_transform(name, config.state_transform)
     provider = builder(name, config, context)
-    return _wrap_transform(name, provider, config.state_transform)
+    if transform is None:
+        return provider
+    return _TransformDecisionModel(inner=provider, transform=transform, provider=name)
 
 
 def build_decision_models(
@@ -168,11 +171,15 @@ def build_decision_models(
         client_factory=client_factory,
         extras=dict(extras or {}),
     )
-    built = {name: build_decision_model(name, provider, context=context) for name, provider in providers.items()}
-    for name in built:
-        if name not in _referenced_providers(config):
+    referenced = _referenced_providers(config)
+    for name in providers:
+        if name not in referenced:
             logger.warning("[Decision] provider %r is declared but no decision point references it", name)
-    return built
+    return {
+        name: build_decision_model(name, provider, context=context)
+        for name, provider in providers.items()
+        if name in referenced
+    }
 
 
 def _referenced_providers(config: Any) -> set[str]:
@@ -181,12 +188,12 @@ def _referenced_providers(config: Any) -> set[str]:
         resolved = config.decisions.resolve(point)
         if resolved is not None and resolved.model:
             referenced.add(resolved.model)
-    for agent_name in config.agents:
+    for _path, agent in iter_agents(config.agents):
+        decisions = getattr(agent, "decisions", None)
+        if decisions is None:
+            continue
         for point in ("skills", "tools", "rag"):
-            try:
-                resolved = config.resolve_decision(point, agent_name)
-            except (KeyError, ValueError):
-                continue
+            resolved = config.decisions.resolve(point, decisions)
             if resolved is not None and resolved.model:
                 referenced.add(resolved.model)
     return referenced
@@ -246,9 +253,9 @@ class _TransformDecisionModel(OrchidDecisionModel):
         await self._inner.aclose()
 
 
-def _wrap_transform(name: str, provider: OrchidDecisionModel, state_transform: str | None) -> OrchidDecisionModel:
+def _resolve_transform(name: str, state_transform: str | None) -> Callable[..., Any] | None:
     if not state_transform:
-        return provider
+        return None
     try:
         transform = import_class(state_transform)
     except Exception as exc:
@@ -257,4 +264,4 @@ def _wrap_transform(name: str, provider: OrchidDecisionModel, state_transform: s
         ) from exc
     if not callable(transform):
         raise OrchidConfigError(f"decision provider {name!r}: state_transform {state_transform!r} is not callable")
-    return _TransformDecisionModel(inner=provider, transform=transform, provider=name)
+    return transform

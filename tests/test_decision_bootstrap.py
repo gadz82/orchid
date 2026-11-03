@@ -53,8 +53,14 @@ async def test_hot_reload_rebuilds_and_closes_providers(monkeypatch) -> None:
     new = MagicMock()
     new.aclose = AsyncMock()
     runtime = OrchidRuntime(default_model="ollama/llama3.2", decision_models={"old": old})
+    changed_config = OrchidAgentsConfig.model_validate(
+        {
+            "agents": {"helper": {"description": "Answers questions.", "prompt": "You are a helper."}},
+            "decision_models": {"stub": {"protocol": "stub"}},
+        }
+    )
     watcher = MagicMock()
-    watcher.reload_if_changed.return_value = types.SimpleNamespace(config=_config())
+    watcher.reload_if_changed.return_value = types.SimpleNamespace(config=changed_config)
 
     with (
         patch("orchid_ai.orchid.lifecycle.build_graph", return_value=MagicMock()),
@@ -65,3 +71,13 @@ async def test_hot_reload_rebuilds_and_closes_providers(monkeypatch) -> None:
 
     old.aclose.assert_awaited_once()
     assert runtime.decision_models == {"new": new}
+
+
+def test_invoker_refreshes_graph_after_reload() -> None:
+    from orchid_ai.orchid.invoker import OrchidInvoker
+
+    old = object()
+    new = object()
+    invoker = OrchidInvoker(graph=old)
+    invoker.refresh_graph(new)
+    assert invoker._graph is new

@@ -186,7 +186,10 @@ class OrchidRuntime:
         return BM25Encoder()
 
     def get_decision_model(self, name: str) -> OrchidDecisionModel | None:
-        """Return a configured decision provider, or ``None`` when absent."""
+        """Return a configured decision provider, or ``None`` when absent.
+
+        # ORCHID-MEM: 01a1a1a4-b33b-7fa2-91ad-e092440143f0 — Runtime accessor for providers built at the composition root.
+        """
         return self.decision_models.get(name)
 
     def get_mcp_client_factory(self) -> MCPClientFactory:

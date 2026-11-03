@@ -505,7 +505,10 @@ class Orchid:
 
     async def reload_config(self) -> bool:
         """Check for config changes and hot-reload if any are detected."""
-        return await self._lifecycle.reload_config()
+        changed = await self._lifecycle.reload_config()
+        if changed:
+            self._invoker.refresh_graph(self._lifecycle.graph)
+        return changed
 
     # ── Internal helpers (delegated to OrchidInvoker for backward compat) ──
 

@@ -81,6 +81,10 @@ class OrchidInvoker:
         self._chat_repo = chat_repo
         self._checkpointer = checkpointer
 
+    def refresh_graph(self, graph: Any) -> None:
+        """Point the invoker at a rebuilt graph after a hot reload."""
+        self._graph = graph
+
     async def invoke(
         self,
         message: str,

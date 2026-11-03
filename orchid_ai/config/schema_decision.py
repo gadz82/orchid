@@ -366,6 +366,7 @@ def validate_decision_bindings(config: Any) -> None:
     """
     errors: list[str] = []
     enabled: list[str] = []
+    http_enabled: list[str] = []
 
     for point in _ALL_POINTS:
         binding = config.decisions._global_binding(point)
@@ -378,6 +379,8 @@ def validate_decision_bindings(config: Any) -> None:
         enabled.append(label)
         _validate_binding_shape(label, point, resolved, errors)
         _validate_provider_reference(config, label, resolved, errors, expected_transform=None)
+        if _uses_http(config, resolved):
+            http_enabled.append(label)
 
     for path, agent in iter_agents(config.agents):
         agent_decisions = getattr(agent, "decisions", None)
@@ -395,15 +398,24 @@ def validate_decision_bindings(config: Any) -> None:
             _validate_binding_shape(label, point, resolved, errors)
             expected_transform = _provider_transform(config, config.decisions.resolve(point))
             _validate_provider_reference(config, label, resolved, errors, expected_transform=expected_transform)
+            if _uses_http(config, resolved):
+                http_enabled.append(label)
 
-    if enabled and not config.allowed_decision_hosts:
+    if http_enabled and not config.allowed_decision_hosts:
         errors.append(
-            "allowed_decision_hosts must list at least one host when a decision point is enabled "
-            f"(enabled: {', '.join(enabled)})"
+            "allowed_decision_hosts must list at least one host when an HTTP decision point is enabled "
+            f"(enabled: {', '.join(http_enabled)})"
         )
 
     if errors:
         raise OrchidConfigError("; ".join(errors))
+
+
+def _uses_http(config: Any, binding: OrchidDecisionPointConfig) -> bool:
+    if not binding.model:
+        return False
+    provider = config.decision_models.get(binding.model)
+    return provider is not None and provider.protocol not in _HTTP_LIKE_EXCLUDED
 
 
 def _provider_transform(config: Any, binding: OrchidDecisionPointConfig | None) -> str | None:

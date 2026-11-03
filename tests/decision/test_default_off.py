@@ -54,7 +54,7 @@ def test_unused_provider_logs_a_warning(caplog) -> None:
             client_factory=lambda cfg, key: FakeClient(),
             api_key_resolver=lambda name: "key",
         )
-    assert isinstance(built["fast"], StubDecisionModel) is False
+    assert built == {}
     assert "no decision point references it" in caplog.text
 
 
@@ -63,6 +63,7 @@ def test_stub_protocol_builds_without_any_key() -> None:
         {
             "agents": {"a": {"description": "d", "prompt": "p"}},
             "decision_models": {"stub": {"protocol": "stub"}},
+            "decisions": {"routing": {"model": "stub"}},
         }
     )
     built = build_decision_models(config)
