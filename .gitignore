@@ -26,3 +26,6 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# orchid-sdd workspace override (root config is authoritative)
+/orchid-sdd.yml

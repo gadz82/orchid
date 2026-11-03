@@ -81,6 +81,7 @@ export const NAV_GROUP_LABELS: Record<string, string> = {
   meta: 'Reference',
 };
 
+// ORCHID-MEM: 01a1a0c1-dd2b-7caa-864a-a4a786a06161 — grouped documentation navigation
 export function groupedNav(): NavGroup[] {
   const groups = new Map<string, NavNode[]>();
   for (const node of navNodes) {
