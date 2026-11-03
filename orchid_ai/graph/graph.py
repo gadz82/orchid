@@ -400,6 +400,8 @@ def _build_subgraph(
     graph_store: Any | None = None,
     content_sources: Any | None = None,
     upload_namespace: str = "uploads",
+    root_config: OrchidAgentsConfig | None = None,
+    runtime: Any | None = None,
 ) -> Any:
     """
     Build a sub-graph for an agent with children.
@@ -409,6 +411,14 @@ def _build_subgraph(
     """
     children_agents: list[OrchidAgent] = []
     for child_name, child_config in (agent_config.children or {}).items():
+        child_skill_binding = (
+            root_config.decisions.resolve("skills", child_config.decisions) if root_config is not None else None
+        )
+        child_skill_model = (
+            runtime.get_decision_model(child_skill_binding.model)
+            if runtime is not None and child_skill_binding is not None and child_skill_binding.model
+            else None
+        )
         child_agent = _instantiate_agent(
             child_name,
             child_config,
@@ -421,6 +431,13 @@ def _build_subgraph(
             graph_store=graph_store,
             content_sources=content_sources,
             upload_namespace=upload_namespace,
+            skill_decision_model=child_skill_model,
+            skill_confidence_threshold=(
+                child_skill_binding.confidence_threshold if child_skill_binding is not None else 0.75
+            ),
+            skill_on_low_confidence=(
+                child_skill_binding.on_low_confidence if child_skill_binding is not None else "llm"
+            ),
         )
         children_agents.append(child_agent)
 
@@ -670,6 +687,8 @@ def build_graph(
                 graph_store=graph_store,
                 content_sources=runtime.content_sources,
                 upload_namespace=runtime.upload_namespace,
+                root_config=config,
+                runtime=runtime,
             )
             subgraph_nodes[agent_name] = subgraph
         else:
