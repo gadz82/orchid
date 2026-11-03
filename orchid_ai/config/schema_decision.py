@@ -203,6 +203,7 @@ class OrchidDecisionModelConfig(BaseModel):
     model: str = ""
     base_url: str | None = None
     api_key_env: str | None = None
+    decide_path: str | None = None
     timeout_seconds: float = Field(default=2.0, gt=0.0, le=60.0)
     max_retries: int = Field(default=1, ge=0, le=5)
     max_response_bytes: int = Field(default=262_144, ge=1024, le=1_048_576)
@@ -246,6 +247,8 @@ class OrchidDecisionModelConfig(BaseModel):
             self.api_key_env = env_name
         if self.state_transform is not None and not self.state_transform.strip():
             raise ValueError("state_transform must be a non-empty import path")
+        if self.decide_path is not None and (not self.decide_path.startswith("/") or not self.decide_path.strip()):
+            raise ValueError("decide_path must be an absolute path starting with '/'")
         if self.stub is not None and self.protocol != "stub":
             raise ValueError("the stub block is only valid with protocol 'stub'")
         return self

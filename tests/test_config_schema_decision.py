@@ -455,3 +455,10 @@ def test_stub_block_parses() -> None:
 def test_stub_block_is_rejected_for_http_protocols() -> None:
     with pytest.raises(ValidationError, match="stub block"):
         _config(decision_models={"fast": {**PROVIDER, "stub": {"answers": {}}}})
+
+
+def test_decide_path_parses_and_must_be_absolute() -> None:
+    config = _config(decision_models={"fast": {**PROVIDER, "decide_path": "/v1/systemone"}})
+    assert config.decision_models["fast"].decide_path == "/v1/systemone"
+    with pytest.raises(ValidationError, match="decide_path"):
+        _config(decision_models={"fast": {**PROVIDER, "decide_path": "v1/systemone"}})

@@ -77,7 +77,10 @@ def _http_builder(adapter_cls: type[OrchidDecisionModel]) -> DecisionBuilder:
                 )
             except OrchidDecisionError as exc:
                 raise OrchidConfigError(f"decision provider {name!r}: {exc}") from None
-        return adapter_cls(client=client, model=config.model, provider=name)  # type: ignore[call-arg]
+        adapter_kwargs: dict[str, Any] = {"client": client, "model": config.model, "provider": name}
+        if config.decide_path:
+            adapter_kwargs["decide_path"] = config.decide_path
+        return adapter_cls(**adapter_kwargs)  # type: ignore[call-arg]
 
     return builder
 

@@ -321,3 +321,12 @@ async def test_stub_config_answers_reach_the_provider() -> None:
     )
     assert result.answers["q"].value is False
     assert result.answers["q"].confidence == pytest.approx(0.8)
+
+
+def test_decide_path_is_forwarded_to_the_adapter() -> None:
+    client = FakeClient()
+    config = _config({"fast": {**PROVIDER, "decide_path": "/v1/systemone"}})
+    providers = factory.build_decision_models(
+        config, client_factory=lambda cfg, key: client, api_key_resolver=lambda name: "key"
+    )
+    assert providers["fast"]._decide_path == "/v1/systemone"
