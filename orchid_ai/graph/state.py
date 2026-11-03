@@ -69,6 +69,8 @@ class GraphState(TypedDict, total=False):
 
     # ── orchestrator skill instructions ──────────────────────
     skill_instructions: Annotated[dict[str, Any], merge_dicts]
+    # Per-agent skill-detection metadata, keyed by agent name.
+    skills_metadata: Annotated[dict[str, Any], merge_dicts]
 
     # ── routing observability (metadata only, never auth) ────
     routing_metadata: Annotated[dict[str, Any], replace_dict]

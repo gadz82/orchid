@@ -70,6 +70,10 @@ class OrchidAgentConfig(BaseModel):
     # fleet-level and rejected by the model with an explanatory error.
     decisions: OrchidAgentDecisionsConfig = Field(default_factory=OrchidAgentDecisionsConfig)
 
+    # Optional provider key for custom agents that call ``self.decide(...)``.
+    # It must reference a declared ``decision_models`` entry.
+    decision_model: str | None = None
+
     # Recursive nesting — sub-agents under this agent
     children: dict[str, OrchidAgentConfig] | None = None
 

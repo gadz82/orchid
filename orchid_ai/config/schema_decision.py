@@ -403,6 +403,9 @@ def validate_decision_bindings(config: Any) -> None:
             http_enabled.append(label)
 
     for path, agent in iter_agents(config.agents):
+        agent_model = getattr(agent, "decision_model", None)
+        if agent_model and agent_model not in config.decision_models:
+            errors.append(f"agents.{path}.decision_model references unknown decision provider {agent_model!r}")
         agent_decisions = getattr(agent, "decisions", None)
         if agent_decisions is None:
             continue

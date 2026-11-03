@@ -198,6 +198,9 @@ def _referenced_providers(config: Any) -> set[str]:
         if resolved is not None and resolved.model:
             referenced.add(resolved.model)
     for _path, agent in iter_agents(config.agents):
+        agent_model = getattr(agent, "decision_model", None)
+        if agent_model:
+            referenced.add(agent_model)
         decisions = getattr(agent, "decisions", None)
         if decisions is None:
             continue

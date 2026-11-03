@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from langchain_core.messages import AIMessage
 
 from orchid_ai.agents.skill_detector import SkillDetector
@@ -142,3 +143,37 @@ async def test_reserved_sentinel_skill_falls_back() -> None:
     skills = {**SKILLS, "__none__": type("Skill", (), {"description": "reserved"})()}
     assert await detector.detect("hello", skills) == "refund_request"
     assert chat.calls == 1
+
+
+async def test_metadata_records_an_accepted_skill() -> None:
+    detector = SkillDetector(
+        None,
+        decision_model=StubDecisionModel(answers={"skill": {"choice": "refund_request"}}),
+        provider_name="fast",
+        confidence_threshold=0.8,
+    )
+    assert await detector.detect("please refund me", SKILLS) == "refund_request"
+    metadata = detector.last_metadata
+    assert metadata["provider"] == "fast"
+    assert metadata["outcome"] == "accepted"
+    assert metadata["confidence"] == pytest.approx(0.9)
+    assert metadata["skill"] == "refund_request"
+
+
+async def test_metadata_records_low_confidence() -> None:
+    detector = SkillDetector(None, decision_model=StubDecisionModel(mode="low_confidence"), confidence_threshold=0.9)
+    assert await detector.detect("hello", SKILLS) is None
+    assert detector.last_metadata["outcome"] == "fallback"
+    assert detector.last_metadata["fallback_reason"] == "low_confidence"
+
+
+async def test_default_fallback_skips_the_llm() -> None:
+    chat = FakeChat("refund_request")
+    detector = SkillDetector(
+        chat,
+        decision_model=StubDecisionModel(mode="low_confidence"),
+        confidence_threshold=0.9,
+        on_low_confidence="default",
+    )
+    assert await detector.detect("hello", SKILLS) is None
+    assert chat.calls == 0

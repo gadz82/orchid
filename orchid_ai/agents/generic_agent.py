@@ -71,6 +71,7 @@ class GenericAgent(OrchidAgent):
         graph_store: OrchidGraphStore | None = None,
         skill_decision_model: Any | None = None,
         skill_confidence_threshold: float = 0.75,
+        skill_on_low_confidence: str = "llm",
         tool_decision_model: Any | None = None,
         tool_confidence_threshold: float = 0.75,
         tool_max_candidates: int = 32,
@@ -94,6 +95,7 @@ class GenericAgent(OrchidAgent):
                 chat_model,
                 decision_model=skill_decision_model,
                 confidence_threshold=skill_confidence_threshold,
+                on_low_confidence=skill_on_low_confidence,
             )
         else:
             self._skill_detector = None
@@ -315,10 +317,12 @@ class GenericAgent(OrchidAgent):
         output_messages: list = [AIMessage(content=f"[{self.name.title()} Agent]\n{summary}")]
         for evt in loop_events:
             output_messages.insert(0, evt)
+        metadata = self._skill_detector.last_metadata if self._skill_detector else {}
         return {
             "messages": output_messages,
             "mcp_context": {self.name: mcp_data},
             "rag_context": {self.name: rag_data},
+            "skills_metadata": {self.name: metadata} if metadata else {},
         }
 
     # ── Pipeline steps ──────────────────────────────────────────

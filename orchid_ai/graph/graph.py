@@ -307,11 +307,13 @@ def _instantiate_agent(
     upload_namespace: str = "uploads",
     skill_decision_model: Any | None = None,
     skill_confidence_threshold: float = 0.75,
+    skill_on_low_confidence: str = "llm",
     tool_decision_model: Any | None = None,
     tool_confidence_threshold: float = 0.75,
     tool_max_candidates: int = 32,
     rag_decision_model: Any | None = None,
     rag_confidence_threshold: float = 0.75,
+    decision_model: Any | None = None,
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -372,6 +374,7 @@ def _instantiate_agent(
     if skill_decision_model is not None:
         kwargs["skill_decision_model"] = skill_decision_model
         kwargs["skill_confidence_threshold"] = skill_confidence_threshold
+        kwargs["skill_on_low_confidence"] = skill_on_low_confidence
     if tool_decision_model is not None:
         kwargs["tool_decision_model"] = tool_decision_model
         kwargs["tool_confidence_threshold"] = tool_confidence_threshold
@@ -379,6 +382,8 @@ def _instantiate_agent(
     if rag_decision_model is not None:
         kwargs["rag_decision_model"] = rag_decision_model
         kwargs["rag_confidence_threshold"] = rag_confidence_threshold
+    if decision_model is not None:
+        kwargs["decision_model"] = decision_model
 
     return cls(**kwargs)
 
@@ -679,6 +684,15 @@ def build_graph(
                     "[Graph] agent '%s' skills provider %r is configured but missing from the runtime",
                     agent_name,
                     skill_binding.model,
+                )
+            agent_decision_model = (
+                runtime.get_decision_model(agent_config.decision_model) if agent_config.decision_model else None
+            )
+            if agent_config.decision_model and agent_decision_model is None:
+                logger.warning(
+                    "[Graph] agent '%s' decision_model %r is configured but missing from the runtime",
+                    agent_name,
+                    agent_config.decision_model,
                 )
             rag_binding = config.decisions.resolve("rag", agent_config.decisions)
             rag_model = (
