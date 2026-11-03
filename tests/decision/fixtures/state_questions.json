@@ -1,0 +1,28 @@
+{
+  "success": {
+    "model": "decision-model-v1",
+    "answers": {
+      "relevant": {"type": "noul", "noul": 0.92},
+      "route": {"type": "choice", "choice": "billing", "confidence": 0.88, "probabilities": {"billing": 0.88, "technical": 0.12}},
+      "urgency": {"type": "score", "score": 2.4, "probabilities": {"0": 0.01, "1": 0.04, "2": 0.49, "3": 0.46}}
+    },
+    "usage": {"input_tokens": 120, "output_tokens": 0}
+  },
+  "refusal": {
+    "model": "decision-model-v1",
+    "answers": {
+      "relevant": {"type": "noul", "noul": 0.81},
+      "route": {"type": "refusal", "reason": "insufficient context"}
+    }
+  },
+  "partial": {
+    "model": "decision-model-v1",
+    "answers": {
+      "relevant": {"type": "noul", "noul": 0.7}
+    }
+  },
+  "malformed": {
+    "model": "decision-model-v1",
+    "answers": ["not", "an", "object"]
+  }
+}
