@@ -60,13 +60,14 @@ async def test_request_shape_for_all_three_kinds() -> None:
     await adapter.decide(OrchidDecisionState(text="my invoice is wrong"), questions)
 
     assert client.path == "/v1/decide"
-    assert client.payload is not None
-    assert client.payload["model"] == "decision-model-v1"
-    assert client.payload["state"] == "my invoice is wrong"
-    assert client.payload["questions"] == {
-        "relevant": {"type": "noul", "instructions": "Is it relevant?"},
-        "route": {"type": "choice", "criteria": {"billing": "billing", "technical": "technical"}},
-        "urgency": {"type": "score", "criteria": ["low", "medium", "high"]},
+    assert client.payload == {
+        "model": "decision-model-v1",
+        "state": "my invoice is wrong",
+        "questions": {
+            "relevant": {"type": "noul", "instructions": "Is it relevant?"},
+            "route": {"type": "choice", "criteria": {"billing": "billing", "technical": "technical"}},
+            "urgency": {"type": "score", "criteria": ["low", "medium", "high"]},
+        },
     }
 
 
@@ -200,7 +201,9 @@ async def test_malformed_answers_object_raises() -> None:
 
 
 async def test_usage_is_normalised() -> None:
-    adapter, _ = _adapter(_fixture("success"))
+    adapter, _ = _adapter(
+        {"answers": {"relevant": {"type": "noul", "noul": 0.9}}, "usage": {"input_tokens": 120, "output_tokens": 0}}
+    )
     result = await adapter.decide(
         OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="relevant", kind="boolean")]
     )
@@ -232,3 +235,255 @@ async def test_aclose_delegates() -> None:
     adapter, client = _adapter({"answers": {}})
     await adapter.aclose()
     assert client.closed is True
+
+
+# ── Huge numbers and confidence evidence ───────────────────
+
+
+async def test_huge_integer_score_is_invalid_response() -> None:
+    adapter, _ = _adapter({"answers": {"urgency": {"type": "score", "score": 10**400, "confidence": 0.9}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="urgency", kind="score", rubric=("0", "1"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_boolean_missing_probability_is_invalid() -> None:
+    adapter, _ = _adapter({"answers": {"q": {"type": "noul", "confidence": 0.9}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_boolean_invalid_noul_is_not_rescued_by_confidence() -> None:
+    adapter, _ = _adapter({"answers": {"q": {"type": "noul", "noul": 1.5, "confidence": 0.9}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert excinfo.value.code == "invalid_response"
+
+
+@pytest.mark.parametrize("confidence", [math.nan, math.inf, -0.1, 1.5, "0.9", True, 10**400])
+async def test_choice_invalid_confidence_is_invalid(confidence) -> None:
+    adapter, _ = _adapter(
+        {
+            "answers": {
+                "route": {
+                    "type": "choice",
+                    "choice": "billing",
+                    "confidence": confidence,
+                    "probabilities": {"billing": 0.9},
+                }
+            }
+        }
+    )
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+@pytest.mark.parametrize("confidence", [math.nan, math.inf, -0.1, 1.5, "0.9", True, 10**400])
+async def test_score_invalid_confidence_is_invalid(confidence) -> None:
+    adapter, _ = _adapter(
+        {
+            "answers": {
+                "urgency": {
+                    "type": "score",
+                    "score": 0.5,
+                    "confidence": confidence,
+                    "probabilities": {"0": 0.5, "1": 0.5},
+                }
+            }
+        }
+    )
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="urgency", kind="score", rubric=("0", "1"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_choice_without_confidence_evidence_is_invalid() -> None:
+    adapter, _ = _adapter({"answers": {"route": {"type": "choice", "choice": "billing"}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_choice_confidence_can_come_from_selected_probability() -> None:
+    adapter, _ = _adapter(
+        {
+            "answers": {
+                "route": {"type": "choice", "choice": "billing", "probabilities": {"billing": 0.77, "technical": 0.23}}
+            }
+        }
+    )
+    result = await adapter.decide(
+        OrchidDecisionState(text="x"),
+        [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+    )
+    assert result.answers["route"].confidence == 0.77
+
+
+async def test_score_without_confidence_evidence_is_invalid() -> None:
+    adapter, _ = _adapter({"answers": {"urgency": {"type": "score", "score": 0.5}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="urgency", kind="score", rubric=("0", "1"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+@pytest.mark.parametrize("probability", [-0.1, 1.1, math.nan, math.inf, "0.5", 10**400])
+async def test_declared_probability_values_are_validated(probability) -> None:
+    adapter, _ = _adapter(
+        {"answers": {"route": {"type": "choice", "choice": "billing", "probabilities": {"billing": probability}}}}
+    )
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+# ── Type safety and refusals ───────────────────────────────
+
+
+async def test_answer_type_mismatch_is_invalid() -> None:
+    adapter, _ = _adapter({"answers": {"route": {"type": "noul", "noul": 0.9, "choice": "billing"}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_falsy_non_string_refusal_is_invalid() -> None:
+    adapter, _ = _adapter({"answers": {"q": {"type": "noul", "noul": 0.9, "refusal": 0}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_empty_refusal_string_is_not_a_refusal() -> None:
+    adapter, _ = _adapter({"answers": {"q": {"type": "noul", "noul": 0.9, "refusal": ""}}})
+    result = await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert result.answers["q"].value is True
+    assert result.answers["q"].refusal is None
+
+
+async def test_refusal_reason_is_sanitised_and_capped() -> None:
+    reason = ("bad\x00\x07 reason " * 200).strip()
+    adapter, _ = _adapter({"answers": {"q": {"type": "refusal", "reason": reason}}})
+    result = await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert len(result.answers["q"].refusal or "") <= 500
+    assert "\x00" not in (result.answers["q"].refusal or "")
+
+
+async def test_error_does_not_echo_provider_choice_value() -> None:
+    sentinel = "STATE-ECHO-abcdef"
+    adapter, _ = _adapter({"answers": {"route": {"type": "choice", "choice": sentinel}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert sentinel not in str(excinfo.value)
+
+
+async def test_error_carries_provider_and_host() -> None:
+    adapter, _ = _adapter({"answers": {"route": {"type": "choice", "choice": "sales"}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.provider == "fast"
+    assert excinfo.value.host == "api.example.com"
+    assert excinfo.value.retryable is False
+
+
+# ── Unknown answers, score range, usage, payload collision ──
+
+
+async def test_unknown_answer_name_is_rejected() -> None:
+    adapter, _ = _adapter({"answers": {"q": {"type": "noul", "noul": 0.9}, "extra": {"type": "noul", "noul": 0.9}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert excinfo.value.code == "invalid_response"
+
+
+@pytest.mark.parametrize("score", [-0.1, 2.1, 100.0])
+async def test_score_outside_rubric_range_is_invalid(score: float) -> None:
+    adapter, _ = _adapter({"answers": {"urgency": {"type": "score", "score": score, "confidence": 0.9}}})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="urgency", kind="score", rubric=("0", "1"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_usage_unknown_keys_are_dropped() -> None:
+    adapter, _ = _adapter({"answers": {}, "usage": {"input_tokens": 5, "secret": 99, "output_tokens": -1}})
+    result = await adapter.decide(
+        OrchidDecisionState(text="x"),
+        [OrchidDecisionQuestion(name="q", kind="boolean", required=False)],
+    )
+    assert result.usage == {"input_tokens": 5}
+
+
+async def test_payload_keys_text_and_context_do_not_collide() -> None:
+    adapter, client = _adapter({"answers": {}})
+    state = OrchidDecisionState(text="outer", payload={"text": "inner", "context": "value"})
+    await adapter.decide(state, [OrchidDecisionQuestion(name="q", kind="boolean", required=False)])
+    assert client.payload is not None
+    assert client.payload["state"] == {
+        "text": "outer",
+        "context": {"text": "inner", "context": "value"},
+    }
+
+
+async def test_boolean_tie_resolves_to_true_with_half_confidence() -> None:
+    adapter, _ = _adapter({"answers": {"q": {"type": "noul", "noul": 0.5}}})
+    result = await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert result.answers["q"].value is True
+    assert result.answers["q"].confidence == 0.5
+
+
+async def test_real_transport_huge_integer_is_invalid_response() -> None:
+    import httpx
+
+    from orchid_ai.decision.http import DecisionHttpClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"answers": {"urgency": {"type": "score", "score": 10**400, "confidence": 0.9}}},
+        )
+
+    http_client = DecisionHttpClient(
+        base_url="https://api.example.com",
+        allowed_hosts=["api.example.com"],
+        provider="fast",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        resolver=lambda host: ["203.0.113.10"],
+    )
+    adapter = StateQuestionsDecisionModel(client=http_client, model="decision-model-v1", provider="fast")
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="urgency", kind="score", rubric=("0", "1"))],
+        )
+    assert excinfo.value.code == "invalid_response"

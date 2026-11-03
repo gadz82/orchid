@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections import UserDict
 
 import pytest
 
@@ -369,3 +370,8 @@ def test_aclose_defaults_to_noop() -> None:
     import asyncio
 
     assert asyncio.run(_Provider().aclose()) is None
+
+
+def test_state_rejects_nested_non_dict_mapping() -> None:
+    with pytest.raises(TypeError):
+        OrchidDecisionState(payload={"nested": UserDict({"a": 1})})
