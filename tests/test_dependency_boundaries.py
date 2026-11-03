@@ -80,7 +80,11 @@ FORBIDDEN_SOURCE_STRINGS: list[str] = [
 # ``OrchidDocument`` ↔ LangChain ``Document`` conversion layer used by
 # RAG backends.  Any LangChain import sneaking back into ``core/``
 # violates the H1 architectural rule from the 2026-05-28 code review.
-CORE_FORBIDDEN: list[str] = ["langchain", "langchain_core"]
+#
+# ``httpx`` and ``pydantic`` are listed for the same reason: decision
+# adapters and configuration models live outside ``core/``, so the
+# provider contract stays transport- and schema-free.
+CORE_FORBIDDEN: list[str] = ["langchain", "langchain_core", "httpx", "pydantic"]
 
 
 def _python_files() -> list[Path]:
