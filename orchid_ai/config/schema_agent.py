@@ -4,9 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .mcp_gateway import OrchidMCPGatewayConfig
+from .schema_decision import (
+    OrchidAgentDecisionsConfig,
+    OrchidDecisionModelConfig,
+    OrchidDecisionPointConfig,
+    OrchidDecisionsConfig,
+    validate_allowed_host,
+    validate_decision_bindings,
+)
 from .schema_events import OrchidEventsConfig
 from .schema_external_agent import OrchidExternalAgentConfig
 from .schema_guardrails import OrchidGuardrailsConfig
@@ -56,6 +64,10 @@ class OrchidAgentConfig(BaseModel):
 
     # Per-agent guardrails
     guardrails: OrchidGuardrailsConfig = Field(default_factory=OrchidGuardrailsConfig)
+
+    # Per-agent decision-point overrides (skills, tools, rag). Routing is
+    # fleet-level and rejected by the model with an explanatory error.
+    decisions: OrchidAgentDecisionsConfig = Field(default_factory=OrchidAgentDecisionsConfig)
 
     # Recursive nesting — sub-agents under this agent
     children: dict[str, OrchidAgentConfig] | None = None
@@ -226,6 +238,14 @@ class OrchidAgentsConfig(BaseModel):
     # means no restriction — all hosts are trusted for passthrough.
     allowed_passthrough_hosts: list[str] = Field(default_factory=list)
 
+    # Decision models — opt-in typed decisions used by routing, skills, tool
+    # shortlisting, and RAG gating.  ``allowed_decision_hosts`` is required as
+    # soon as one decision point is enabled: it is the egress allowlist for
+    # user state (see ADR-005).
+    decision_models: dict[str, OrchidDecisionModelConfig] = Field(default_factory=dict)
+    decisions: OrchidDecisionsConfig = Field(default_factory=OrchidDecisionsConfig)
+    allowed_decision_hosts: list[str] = Field(default_factory=list)
+
     # External-agent CLI delegation tools — declared at the top level,
     # registered into TOOL_REGISTRY at graph build, and referenced by
     # name in ``agent.tools:`` like any built-in tool.
@@ -243,12 +263,41 @@ class OrchidAgentsConfig(BaseModel):
     # ``agents`` before the graph is built (strict=True).
     config_storage: OrchidConfigStorageConfig = Field(default_factory=OrchidConfigStorageConfig)
 
+    @field_validator("allowed_decision_hosts")
+    @classmethod
+    def _normalise_allowed_decision_hosts(cls, value: list[str]) -> list[str]:
+        return [validate_allowed_host(entry) for entry in value]
+
     @model_validator(mode="after")
     def _apply_defaults_and_names(self) -> OrchidAgentsConfig:
         """Merge defaults into each agent and set names recursively."""
         for agent_name, agent in self.agents.items():
             _apply_defaults(agent, agent_name, self.defaults, self.tools, self.external_agents)
         return self
+
+    @model_validator(mode="after")
+    def _validate_decision_layer(self) -> OrchidAgentsConfig:
+        """Fail at load time on bad references or unsafe egress."""
+        validate_decision_bindings(self)
+        return self
+
+    def resolve_decision(
+        self,
+        point: str,
+        agent_name: str | None = None,
+    ) -> OrchidDecisionPointConfig | None:
+        """Resolve a decision point through agent → global → default.
+
+        Returns ``None`` when no block enables the point. A per-agent block
+        overlays the global block, and ``decisions.default`` contributes
+        parameters only.
+        """
+        agent_decisions = None
+        if agent_name is not None:
+            agent = self.agents.get(agent_name)
+            if agent is not None:
+                agent_decisions = agent.decisions
+        return self.decisions.resolve(point, agent_decisions)
 
     def merge_from_db(self, db_configs: list[dict], *, strict: bool = True) -> None:
         """Merge DB-sourced agent configs into ``self.agents``.
@@ -296,6 +345,7 @@ class OrchidAgentsConfig(BaseModel):
             else:
                 cfg = OrchidAgentConfig.model_validate(cfg_dict)
                 self.agents[name] = cfg
+        validate_decision_bindings(self)
 
 
 def _inherit_field(agent_obj: Any, defaults_obj: Any, field_name: str) -> None:
