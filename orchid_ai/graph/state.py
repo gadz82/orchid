@@ -32,6 +32,11 @@ def replace_list(existing: list[str] | None, new: list[str] | None) -> list[str]
     return new if new is not None else (existing or [])
 
 
+def replace_dict(existing: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, Any]:
+    """Replace reducer for per-turn metadata — no stale keys across turns."""
+    return new if new is not None else {}
+
+
 # ── Graph State ──────────────────────────────────────────────
 
 
@@ -66,7 +71,7 @@ class GraphState(TypedDict, total=False):
     skill_instructions: Annotated[dict[str, Any], merge_dicts]
 
     # ── routing observability (metadata only, never auth) ────
-    routing_metadata: Annotated[dict[str, Any], merge_dicts]
+    routing_metadata: Annotated[dict[str, Any], replace_dict]
 
     # ── guardrail routing hint ───────────────────────────────
     _has_output_guardrails: bool  # sentinel for route_to_agents()

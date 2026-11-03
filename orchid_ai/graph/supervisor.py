@@ -508,7 +508,7 @@ async def _route(
     )
 
     decision: OrchidRoutingDecision | None = None
-    routing_path = "llm"
+    routing_path = "llm" if routing is None else "llm_fallback"
     if routing is not None:
         try:
             decision = await routing.route(
@@ -516,12 +516,39 @@ async def _route(
                 agent_descriptions=agent_descriptions,
                 orchestrator_skills=orchestrator_skills,
                 auth=auth,
+                context={"auth_hint": auth_hint},
             )
             if decision is not None:
                 routing_path = "decision"
                 logger.info("[Supervisor] decision-model routing: %s", decision.model_dump_json())
         except Exception:
             logger.exception("[Supervisor] decision routing failed; falling back to the LLM")
+
+    routing_metadata: dict[str, Any] | None = None
+    if routing is not None:
+        routing_metadata = {"path": routing_path, "decision_point": "routing"}
+        routing_metadata.update(routing.metadata)
+        routing_metadata.setdefault("outcome", "accepted" if routing_path == "decision" else "fallback")
+        if routing_metadata["outcome"] != "accepted":
+            routing_metadata.setdefault("fallback_reason", "low_confidence")
+        logging.getLogger("orchid.decision").info(
+            "decision point=routing path=%s provider=%s latency_ms=%s confidence=%s outcome=%s",
+            routing_metadata.get("path"),
+            routing_metadata.get("provider"),
+            routing_metadata.get("latency_ms"),
+            routing_metadata.get("confidence"),
+            routing_metadata.get("outcome"),
+        )
+
+    if decision is None and routing is not None and routing.on_low_confidence == "escalate":
+        message = "I can't route this request confidently. I'm handing it to a human for review."
+        return {
+            "messages": [AIMessage(content=message)],
+            "final_response": message,
+            "active_agents": [],
+            "pending_agents": [],
+            "routing_metadata": routing_metadata or {},
+        }
 
     if decision is None:
         clean_history = await _extract_and_compress_history(state, sup, chat_model, memory, auth=auth)
@@ -563,7 +590,7 @@ async def _route(
             return {
                 "messages": [AIMessage(content=response_text)],
                 "next": "END",
-                "routing_metadata": {"error": "llm_api_failure", "details": error_msg},
+                "routing_metadata": {"error": "llm_api_failure"},
             }
 
     routing_metadata: dict[str, Any] = {"path": routing_path, "decision_point": "routing"}
@@ -581,6 +608,8 @@ async def _route(
             agent_descriptions,
         )
         if skill_result is not None:
+            if routing_metadata is not None:
+                skill_result["routing_metadata"] = routing_metadata
             return skill_result
 
     # ── Direct response (no sub-agent needed) ──
@@ -597,7 +626,7 @@ async def _route(
 
     # Recovery: if the LLM returned empty agents but mentioned an agent name
     # in the reasoning (common with small models), extract it.
-    if not valid and not direct:
+    if not valid and not direct and routing_path != "decision":
         valid = _recover_agent_names(decision.reasoning, agent_descriptions)
 
     if not valid:
@@ -624,7 +653,11 @@ async def _route(
             "execution_mode": "sequential",
             "final_response": None,
             "messages": [AIMessage(content=(f"[Supervisor] Sequential pipeline: {' → '.join(valid)}"))],
-            "routing_metadata": routing_metadata,
+            "routing_metadata": {
+                **(routing_metadata or {}),
+                "agents": valid,
+                "execution_mode": "sequential",
+            },
         }
     else:
         # Parallel (default): activate all at once
@@ -635,5 +668,9 @@ async def _route(
             "execution_mode": "parallel",
             "final_response": None,
             "messages": [AIMessage(content=f"[Supervisor] Parallel dispatch: {', '.join(valid)}")],
-            "routing_metadata": routing_metadata,
+            "routing_metadata": {
+                **(routing_metadata or {}),
+                "agents": valid,
+                "execution_mode": "parallel",
+            },
         }
