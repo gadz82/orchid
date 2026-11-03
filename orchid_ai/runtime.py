@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.language_models import BaseChatModel
 
 from .core.content import OrchidContentSource
+from .core.decision import OrchidDecisionModel
 from .core.doc_store import OrchidDocStore
 from .core.graph_store import OrchidGraphStore
 from .core.mcp import OrchidMCPClient, OrchidMCPClientRegistrationStore, OrchidMCPTokenStore
@@ -135,6 +136,10 @@ class OrchidRuntime:
     #: disabled, which makes ``OrchidAgent.emit_signal()`` raise
     #: ``RuntimeError``.
     signal_emitter: Any | None = None
+    #: Decision providers declared in ``decision_models:``. The composition
+    #: root builds them once; consumers look them up by config key. Empty when
+    #: the decision layer is not configured (the default).
+    decision_models: dict[str, OrchidDecisionModel] = field(default_factory=dict)
 
     # ── Resolved accessors (lazy defaults) ──────────────────────
 
@@ -179,6 +184,10 @@ class OrchidRuntime:
         from .rag.sparse.bm25 import BM25Encoder
 
         return BM25Encoder()
+
+    def get_decision_model(self, name: str) -> OrchidDecisionModel | None:
+        """Return a configured decision provider, or ``None`` when absent."""
+        return self.decision_models.get(name)
 
     def get_mcp_client_factory(self) -> MCPClientFactory:
         """Return the configured MCP factory, falling back to the default.

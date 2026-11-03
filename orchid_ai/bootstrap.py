@@ -262,6 +262,11 @@ async def _build_runtime(
     built_content_sources = _build_content_sources(content_sources_config, content_sources)
 
     # ── 7. Assemble runtime + optional checkpointer ──────────
+    from .decision.factory import build_decision_models
+
+    runtime_kwargs = dict(overrides.runtime_overrides)
+    if "decision_models" not in runtime_kwargs:
+        runtime_kwargs["decision_models"] = build_decision_models(agents_config)
     runtime = OrchidRuntime(
         default_model=overrides.model,
         reader=reader,
@@ -271,7 +276,7 @@ async def _build_runtime(
         mcp_gateway_auth_code_store=mcp_gateway_state_store,  # type: ignore[arg-type]
         mcp_gateway_token_store=mcp_gateway_state_store,  # type: ignore[arg-type]
         content_sources=built_content_sources,
-        **overrides.runtime_overrides,
+        **runtime_kwargs,
     )
     await _attach_checkpointer(runtime, overrides.checkpointer_type, overrides.checkpointer_dsn)
 
@@ -588,6 +593,13 @@ async def _teardown_runtime(result: _BootstrapResult) -> None:
     Safe to call multiple times; each shutdown step short-circuits when
     its resource is already ``None`` or closed.
     """
+    for model in list(result.runtime.decision_models.values()):
+        try:
+            await model.aclose()
+        except Exception:
+            logger.warning("[Bootstrap] decision provider close failed", exc_info=True)
+    result.runtime.decision_models = {}
+
     if result.runtime.checkpointer is not None:
         from .checkpointing import shutdown_checkpointer
 
