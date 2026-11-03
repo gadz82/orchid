@@ -40,7 +40,7 @@ _BLOCKED_ADDRESSES = frozenset(
 )
 
 
-def _normalise_host(value: str, *, label: str) -> str:
+def normalise_host(value: str, *, label: str) -> str:
     """Canonicalise a hostname or IP literal for comparison and safety checks."""
     host = value.strip().lower()
     if host.startswith("[") and host.endswith("]"):
@@ -97,7 +97,7 @@ def _validate_host_safety(host: str, *, label: str) -> None:
         raise ValueError(f"{label}: host {host!r} is not routable")
 
 
-def _validate_base_url(value: str, *, provider: str) -> str:
+def validate_decision_base_url(value: str, *, provider: str) -> str:
     """Reject endpoints that cannot safely receive user state.
 
     HTTPS only, no embedded credentials, no loopback/link-local/metadata
@@ -120,7 +120,7 @@ def _validate_base_url(value: str, *, provider: str) -> str:
         raise ValueError(f"decision provider {provider!r}: base_url port must be between 1 and 65535")
     if not parsed.hostname:
         raise ValueError(f"decision provider {provider!r}: base_url must include a host")
-    host = _normalise_host(parsed.hostname, label=f"decision provider {provider!r}")
+    host = normalise_host(parsed.hostname, label=f"decision provider {provider!r}")
     _reject_numeric_alias(host, label=f"decision provider {provider!r}")
     _validate_host_safety(host, label=f"decision provider {provider!r}")
     return value
@@ -128,7 +128,7 @@ def _validate_base_url(value: str, *, provider: str) -> str:
 
 def validate_allowed_host(value: str) -> str:
     """Normalise and safety-check one ``allowed_decision_hosts`` entry."""
-    host = _normalise_host(value, label="allowed_decision_hosts")
+    host = normalise_host(value, label="allowed_decision_hosts")
     _reject_numeric_alias(host, label="allowed_decision_hosts")
     _validate_host_safety(host, label="allowed_decision_hosts")
     return host
@@ -200,7 +200,7 @@ class OrchidDecisionModelConfig(BaseModel):
                 raise ValueError(f"decision provider with protocol {self.protocol!r} requires a model")
             if not self.base_url:
                 raise ValueError(f"decision provider with protocol {self.protocol!r} requires a base_url")
-            _validate_base_url(self.base_url, provider=self.model)
+            validate_decision_base_url(self.base_url, provider=self.model)
         if self.api_key_env is not None:
             env_name = self.api_key_env.strip()
             if not _ENV_NAME_RE.match(env_name):
@@ -417,7 +417,7 @@ def _validate_provider_reference(
     if provider.protocol in _HTTP_LIKE_EXCLUDED:
         return
     assert provider.base_url is not None  # validated by OrchidDecisionModelConfig
-    host = _normalise_host(urlsplit(provider.base_url).hostname or "", label=label)
+    host = normalise_host(urlsplit(provider.base_url).hostname or "", label=label)
     if host not in config.allowed_decision_hosts:
         errors.append(
             f"{label} uses provider {model_name!r} with host {host!r}, which is not listed in allowed_decision_hosts"
