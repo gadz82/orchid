@@ -338,3 +338,186 @@ async def test_aclose_delegates() -> None:
     adapter, client = _adapter({"answers": []})
     await adapter.aclose()
     assert client.closed is True
+
+
+async def test_unnamed_partial_answers_are_rejected() -> None:
+    adapter, _ = _adapter({"answers": [{"type": "predicate", "probability": 0.9}]})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="a", kind="boolean"), OrchidDecisionQuestion(name="b", kind="boolean")],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_mixed_named_and_unnamed_out_of_position_is_rejected() -> None:
+    adapter, _ = _adapter(
+        {
+            "answers": [
+                {"type": "predicate", "name": "c", "probability": 0.9},
+                {"type": "predicate", "probability": 0.8},
+                {"type": "predicate", "name": "a", "probability": 0.7},
+            ]
+        }
+    )
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [
+                OrchidDecisionQuestion(name="a", kind="boolean"),
+                OrchidDecisionQuestion(name="b", kind="boolean"),
+                OrchidDecisionQuestion(name="c", kind="boolean"),
+            ],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_refusal_reason_is_preserved() -> None:
+    adapter, _ = _adapter({"answers": [{"type": "refusal", "name": "q", "refusal": "insufficient context"}]})
+    result = await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert result.answers["q"].refusal == "insufficient context"
+
+
+async def test_bare_refusal_field_is_a_refusal() -> None:
+    adapter, _ = _adapter(
+        {"answers": [{"type": "predicate", "name": "q", "probability": 0.9, "refusal": "not applicable"}]}
+    )
+    result = await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert result.answers["q"].refusal == "not applicable"
+    assert result.answers["q"].value is None
+
+
+async def test_score_label_mismatch_falls_back_to_index() -> None:
+    adapter, _ = _adapter(
+        {
+            "answers": [
+                {
+                    "type": "score",
+                    "name": "urgency",
+                    "score": 1.2,
+                    "probabilities": [
+                        {"label": "low", "value": 0, "probability": 0.1},
+                        {"label": "Medium", "value": 1, "probability": 0.9},
+                    ],
+                }
+            ]
+        }
+    )
+    result = await adapter.decide(
+        OrchidDecisionState(text="x"),
+        [OrchidDecisionQuestion(name="urgency", kind="score", rubric=("low", "mid", "high"))],
+    )
+    answer = result.answers["urgency"]
+    assert answer.confidence == 0.9
+    assert answer.probabilities == {"low": 0.1, "1": 0.9}
+
+
+async def test_choice_label_outside_options_is_rejected() -> None:
+    adapter, _ = _adapter({"answers": [{"type": "choice", "name": "route", "choice": "sales", "confidence": 0.9}]})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+@pytest.mark.parametrize("confidence", [math.nan, math.inf, -0.1, 1.5])
+async def test_choice_and_score_confidence_is_validated(confidence: float) -> None:
+    adapter, _ = _adapter(
+        {
+            "answers": [
+                {"type": "choice", "name": "route", "choice": "billing", "confidence": confidence},
+                {"type": "score", "name": "urgency", "score": 0.5, "confidence": confidence},
+            ]
+        }
+    )
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [
+                OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical")),
+                OrchidDecisionQuestion(name="urgency", kind="score", rubric=("0", "1")),
+            ],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_explicit_null_confidence_is_invalid() -> None:
+    adapter, _ = _adapter(
+        {
+            "answers": [
+                {
+                    "type": "choice",
+                    "name": "route",
+                    "choice": "billing",
+                    "confidence": None,
+                    "probabilities": [{"value": "billing", "probability": 0.9}],
+                }
+            ]
+        }
+    )
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_usage_detail_cannot_override_top_level() -> None:
+    adapter, _ = _adapter(
+        {
+            "answers": [{"type": "predicate", "name": "q", "probability": 0.9}],
+            "usage": {"input_tokens": 100, "input_tokens_details": {"input_tokens": 1}},
+        }
+    )
+    result = await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert result.usage["input_tokens"] == 100
+
+
+@pytest.mark.parametrize(
+    "probabilities",
+    [
+        [{"probability": 0.9}],
+        [{"value": True, "probability": 0.9}],
+        [{"value": "billing", "probability": math.nan}],
+        [{"value": "billing", "probability": 0.9}, {"value": "billing", "probability": 0.1}],
+    ],
+)
+async def test_malformed_choice_probability_entries_are_rejected(probabilities) -> None:
+    adapter, _ = _adapter(
+        {"answers": [{"type": "choice", "name": "route", "choice": "billing", "probabilities": probabilities}]}
+    )
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_real_transport_round_trip() -> None:
+    import httpx
+
+    from orchid_ai.decision.http import DecisionHttpClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/decisions"
+        body = json.loads(request.content)
+        assert body["questions"][0]["type"] == "predicate"
+        return httpx.Response(
+            200,
+            json={"answers": [{"type": "predicate", "name": "q", "probability": 0.95}]},
+        )
+
+    http_client = DecisionHttpClient(
+        base_url="https://api.example.com",
+        allowed_hosts=["api.example.com"],
+        provider="fast",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        resolver=lambda host: ["203.0.113.10"],
+    )
+    adapter = OpenAICompatibleDecisionModel(client=http_client, model="decision-model-v1", provider="fast")
+    result = await adapter.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert result.answers["q"].value is True

@@ -37,6 +37,7 @@ from ..core.decision import (
     validate_question_set,
 )
 from .answers import (
+    MISSING,
     ErrorFactory,
     check_answer_type,
     finite_number,
@@ -188,17 +189,21 @@ def _normalise_answer(question: OrchidDecisionQuestion, raw: Any, error: ErrorFa
         return normalise_choice(
             question,
             raw.get("choice"),
-            raw.get("confidence"),
-            raw.get("probabilities"),
+            _presence(raw, "confidence"),
+            _presence(raw, "probabilities"),
             error,
         )
     return normalise_score(
         question,
         raw.get("score"),
-        raw.get("confidence"),
-        raw.get("probabilities"),
+        _presence(raw, "confidence"),
+        _presence(raw, "probabilities"),
         error,
     )
+
+
+def _presence(raw: Mapping[str, Any], key: str) -> Any:
+    return raw.get(key, MISSING)
 
 
 def _boolean_probability(raw: Mapping[str, Any], error: ErrorFactory) -> float:

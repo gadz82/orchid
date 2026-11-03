@@ -1,5 +1,7 @@
 """Shared answer validation and construction for decision adapters.
 
+# ORCHID-MEM: 01a1a183-d757-7db7-b34b-3b91b3aa107e — Shared decision answer validation across both wire dialects.
+
 Both wire dialects ultimately answer the same three question kinds. Keeping the
 validation here means a choice answer without confidence evidence fails the same
 way whether it arrived as an object map or an array, and the contract suite can
@@ -15,6 +17,7 @@ from typing import Any
 from ..core.decision import OrchidDecisionAnswer, OrchidDecisionError, OrchidDecisionQuestion
 
 __all__ = [
+    "MISSING",
     "ErrorFactory",
     "check_answer_type",
     "finite_number",
@@ -28,6 +31,10 @@ __all__ = [
 ]
 
 ErrorFactory = Callable[[str], OrchidDecisionError]
+
+#: Sentinel for "the field was absent" so an explicit JSON null is rejected
+#: rather than treated as if the provider had not sent the field at all.
+MISSING = object()
 
 _MAX_REFUSAL_CHARS = 500
 
@@ -145,7 +152,7 @@ def refusal_answer(question: OrchidDecisionQuestion, reason: Any) -> OrchidDecis
 
 
 def validate_probabilities(probabilities: Any, *, expected: set[str], error: ErrorFactory) -> dict[str, float]:
-    if probabilities is None:
+    if probabilities is MISSING:
         return {}
     if not isinstance(probabilities, Mapping):
         raise error("probabilities must be an object")
@@ -178,7 +185,7 @@ def sanitise_reason(value: str) -> str:
 
 
 def _optional_confidence(value: Any, error: ErrorFactory) -> float | None:
-    if value is None:
+    if value is MISSING:
         return None
     number = finite_number(value)
     if number is None or not 0.0 <= number <= 1.0:

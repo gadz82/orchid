@@ -9,7 +9,7 @@ Wire shape::
 
     {
       "model": "...",
-      "input": "<text>" | [{"role": "user", "content": [{"type": "input_text", ...}, {"type": "input_json", ...}]}],
+      "input": "<text>" | [{"role": "user", "type": "message", "content": [{"type": "input_text", ...}, {"type": "input_json", ...}]}],
       "questions": [{"type": "predicate" | "choice" | "score", "name": "...", ...}]
     }
 """
@@ -30,8 +30,10 @@ from ..core.decision import (
     validate_question_set,
 )
 from .answers import (
+    MISSING,
     ErrorFactory,
     check_answer_type,
+    finite_number,
     normalise_boolean,
     normalise_choice,
     normalise_score,
@@ -127,17 +129,27 @@ class OpenAICompatibleDecisionModel(OrchidDecisionModel):
         questions: Sequence[OrchidDecisionQuestion],
     ) -> dict[str, Mapping[str, Any]]:
         indexed: dict[str, Mapping[str, Any]] = {}
-        for position, raw in enumerate(raw_answers):
+        for raw in raw_answers:
             if not isinstance(raw, Mapping):
                 raise self._invalid("answer entries must be objects")
+
+        unnamed = any(raw.get("name") in (None, "") for raw in raw_answers)
+        if unnamed:
+            if len(raw_answers) != len(questions):
+                raise self._invalid("unnamed answers must supply exactly one answer per question")
+            for position, raw in enumerate(raw_answers):
+                name = raw.get("name")
+                if name not in (None, "") and name != questions[position].name:
+                    raise self._invalid("named and unnamed answers cannot be mixed out of position")
+                indexed[questions[position].name] = raw
+            return indexed
+
+        expected = {question.name for question in questions}
+        for raw in raw_answers:
             name = raw.get("name")
-            if name is None or name == "":
-                if position >= len(questions):
-                    raise self._invalid("unnamed answer has no matching question")
-                name = questions[position].name
             if not isinstance(name, str):
                 raise self._invalid("answer name must be a string")
-            if name not in {question.name for question in questions}:
+            if name not in expected:
                 raise self._invalid("response contains an answer that was not requested")
             if name in indexed:
                 raise self._invalid("response contains a duplicate answer name")
@@ -195,8 +207,12 @@ def _normalise_answer(question: OrchidDecisionQuestion, raw: Any, error: ErrorFa
     answer_type = raw.get("type")
     check_answer_type(question, answer_type, _EXPECTED_TYPE[question.kind], error)
 
-    if answer_type == "refusal":
-        return refusal_answer(question, "refused")
+    refusal = raw.get("refusal")
+    if answer_type == "refusal" or (isinstance(refusal, str) and refusal.strip()):
+        reason = refusal if isinstance(refusal, str) and refusal.strip() else raw.get("reason")
+        return refusal_answer(question, reason)
+    if refusal is not None and not isinstance(refusal, str):
+        raise error("refusal must be a string")
 
     if question.kind == "boolean":
         return normalise_boolean(question, raw.get("probability"), error)
@@ -204,51 +220,64 @@ def _normalise_answer(question: OrchidDecisionQuestion, raw: Any, error: ErrorFa
         return normalise_choice(
             question,
             raw.get("choice"),
-            raw.get("confidence"),
-            _choice_probabilities(raw.get("probabilities"), error),
+            raw.get("confidence", MISSING),
+            _choice_probabilities(raw.get("probabilities", MISSING), error),
             error,
         )
+    expected = set(question.rubric) | {str(index) for index in range(len(question.rubric))}
     return normalise_score(
         question,
         raw.get("score"),
-        raw.get("confidence"),
-        _score_probabilities(raw.get("probabilities"), error),
+        raw.get("confidence", MISSING),
+        _score_probabilities(raw.get("probabilities", MISSING), expected, error),
         error,
     )
 
 
-def _choice_probabilities(value: Any, error: ErrorFactory) -> dict[str, Any]:
-    if value is None:
-        return {}
+def _choice_probabilities(value: Any, error: ErrorFactory) -> Any:
+    if value is MISSING:
+        return MISSING
     if not isinstance(value, list):
         raise error("probabilities must be an array")
-    result: dict[str, Any] = {}
+    result: dict[str, float] = {}
     for entry in value:
         if not isinstance(entry, Mapping) or "value" not in entry:
             raise error("probability entries must carry a value")
         key = entry["value"]
         if not isinstance(key, str):
-            continue
-        result[key] = entry.get("probability")
+            raise error("probability values must be strings")
+        probability = finite_number(entry.get("probability"))
+        if probability is None or not 0.0 <= probability <= 1.0:
+            raise error("probability must be finite and within [0, 1]")
+        if key in result:
+            raise error("duplicate probability value")
+        result[key] = probability
     return result
 
 
-def _score_probabilities(value: Any, error: ErrorFactory) -> dict[str, Any]:
-    if value is None:
-        return {}
+def _score_probabilities(value: Any, expected: set[str], error: ErrorFactory) -> Any:
+    if value is MISSING:
+        return MISSING
     if not isinstance(value, list):
         raise error("probabilities must be an array")
-    result: dict[str, Any] = {}
+    result: dict[str, float] = {}
     for entry in value:
         if not isinstance(entry, Mapping):
             raise error("probability entries must be objects")
+        probability = finite_number(entry.get("probability"))
+        if probability is None or not 0.0 <= probability <= 1.0:
+            raise error("probability must be finite and within [0, 1]")
         label = entry.get("label")
-        if isinstance(label, str):
-            result[label] = entry.get("probability")
-            continue
-        index = entry.get("value")
-        if isinstance(index, int) and not isinstance(index, bool):
-            result[str(index)] = entry.get("probability")
+        key = label if isinstance(label, str) and label in expected else None
+        if key is None:
+            index = entry.get("value")
+            if isinstance(index, int) and not isinstance(index, bool):
+                key = str(index)
+        if key is None or key not in expected:
+            raise error("score probability entry has no usable label or index")
+        if key in result:
+            raise error("duplicate probability label")
+        result[key] = probability
     return result
 
 
@@ -258,9 +287,10 @@ def _flatten_usage(value: Any) -> dict[str, int]:
     flat: dict[str, Any] = {}
     for key in ("input_tokens", "output_tokens", "total_tokens"):
         if key in value:
-            flat[key] = value[key]
+            flat.setdefault(key, value[key])
     for detail_key in ("input_tokens_details", "output_tokens_details"):
         detail = value.get(detail_key)
         if isinstance(detail, Mapping):
-            flat.update(detail)
+            for key, raw in detail.items():
+                flat.setdefault(key, raw)
     return normalise_usage(flat, keys=_USAGE_KEYS)

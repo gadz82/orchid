@@ -487,3 +487,36 @@ async def test_real_transport_huge_integer_is_invalid_response() -> None:
             [OrchidDecisionQuestion(name="urgency", kind="score", rubric=("0", "1"))],
         )
     assert excinfo.value.code == "invalid_response"
+
+
+async def test_explicit_null_choice_confidence_is_invalid() -> None:
+    adapter, _ = _adapter(
+        {
+            "answers": {
+                "route": {
+                    "type": "choice",
+                    "choice": "billing",
+                    "confidence": None,
+                    "probabilities": {"billing": 0.9},
+                }
+            }
+        }
+    )
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_explicit_null_probabilities_is_invalid() -> None:
+    adapter, _ = _adapter(
+        {"answers": {"route": {"type": "choice", "choice": "billing", "confidence": 0.8, "probabilities": None}}}
+    )
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await adapter.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="route", kind="choice", options=("billing", "technical"))],
+        )
+    assert excinfo.value.code == "invalid_response"
