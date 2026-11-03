@@ -40,7 +40,7 @@ _BLOCKED_ADDRESSES = frozenset(
 )
 
 
-def _normalise_host(value: str, *, label: str) -> str:
+def normalise_host(value: str, *, label: str) -> str:
     """Canonicalise a hostname or IP literal for comparison and safety checks."""
     host = value.strip().lower()
     if host.startswith("[") and host.endswith("]"):
@@ -61,8 +61,15 @@ def _normalise_host(value: str, *, label: str) -> str:
     return host
 
 
+_NAT64_NETWORK = ipaddress.ip_network("64:ff9b::/96")
+
+
 def _parse_address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
-    """Return the address for a literal host, or ``None`` for a DNS name."""
+    """Return the address for a literal host, or ``None`` for a DNS name.
+
+    IPv4-mapped and NAT64 IPv6 forms are unwrapped so a loopback or metadata
+    target cannot hide behind an IPv6 literal.
+    """
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
@@ -70,6 +77,8 @@ def _parse_address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address |
     mapped = getattr(address, "ipv4_mapped", None)
     if mapped is not None:
         return mapped
+    if isinstance(address, ipaddress.IPv6Address) and address in _NAT64_NETWORK:
+        return ipaddress.IPv4Address(int(address) & 0xFFFFFFFF)
     return address
 
 
@@ -97,13 +106,13 @@ def _validate_host_safety(host: str, *, label: str) -> None:
         raise ValueError(f"{label}: host {host!r} is not routable")
 
 
-def _validate_base_url(value: str, *, provider: str) -> str:
+def validate_decision_base_url(value: str, *, provider: str) -> str:
     """Reject endpoints that cannot safely receive user state.
 
     HTTPS only, no embedded credentials, no loopback/link-local/metadata
     targets, and no query/fragment. A path is allowed because gateways expose
     versioned prefixes. DNS aliases to metadata endpoints cannot be detected
-    here; the transport re-checks the peer address at request time.
+    here; the transport resolves and validates every address before a request.
     """
     parsed = urlsplit(value)
     if parsed.scheme != "https":
@@ -120,15 +129,26 @@ def _validate_base_url(value: str, *, provider: str) -> str:
         raise ValueError(f"decision provider {provider!r}: base_url port must be between 1 and 65535")
     if not parsed.hostname:
         raise ValueError(f"decision provider {provider!r}: base_url must include a host")
-    host = _normalise_host(parsed.hostname, label=f"decision provider {provider!r}")
+    host = normalise_host(parsed.hostname, label=f"decision provider {provider!r}")
     _reject_numeric_alias(host, label=f"decision provider {provider!r}")
     _validate_host_safety(host, label=f"decision provider {provider!r}")
     return value
 
 
+def validate_resolved_address(value: str, *, label: str = "decision provider") -> None:
+    """Reject a resolved peer address that the egress policy forbids."""
+    address = _parse_address(value)
+    if address is None:
+        raise ValueError(f"{label}: resolved peer {value!r} is not an IP address")
+    if address in _BLOCKED_ADDRESSES:
+        raise ValueError(f"{label}: resolved peer {value!r} is a metadata endpoint")
+    if address.is_loopback or address.is_link_local or address.is_unspecified or address.is_multicast:
+        raise ValueError(f"{label}: resolved peer {value!r} is not routable")
+
+
 def validate_allowed_host(value: str) -> str:
     """Normalise and safety-check one ``allowed_decision_hosts`` entry."""
-    host = _normalise_host(value, label="allowed_decision_hosts")
+    host = normalise_host(value, label="allowed_decision_hosts")
     _reject_numeric_alias(host, label="allowed_decision_hosts")
     _validate_host_safety(host, label="allowed_decision_hosts")
     return host
@@ -200,7 +220,7 @@ class OrchidDecisionModelConfig(BaseModel):
                 raise ValueError(f"decision provider with protocol {self.protocol!r} requires a model")
             if not self.base_url:
                 raise ValueError(f"decision provider with protocol {self.protocol!r} requires a base_url")
-            _validate_base_url(self.base_url, provider=self.model)
+            validate_decision_base_url(self.base_url, provider=self.model)
         if self.api_key_env is not None:
             env_name = self.api_key_env.strip()
             if not _ENV_NAME_RE.match(env_name):
@@ -417,7 +437,7 @@ def _validate_provider_reference(
     if provider.protocol in _HTTP_LIKE_EXCLUDED:
         return
     assert provider.base_url is not None  # validated by OrchidDecisionModelConfig
-    host = _normalise_host(urlsplit(provider.base_url).hostname or "", label=label)
+    host = normalise_host(urlsplit(provider.base_url).hostname or "", label=label)
     if host not in config.allowed_decision_hosts:
         errors.append(
             f"{label} uses provider {model_name!r} with host {host!r}, which is not listed in allowed_decision_hosts"
