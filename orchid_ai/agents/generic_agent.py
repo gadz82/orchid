@@ -69,6 +69,8 @@ class GenericAgent(OrchidAgent):
         chat_model: Any | None = None,
         summary_config: dict[str, Any] | None = None,
         graph_store: OrchidGraphStore | None = None,
+        skill_decision_model: Any | None = None,
+        skill_confidence_threshold: float = 0.8,
         **kwargs: Any,
     ):
         super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
@@ -82,8 +84,12 @@ class GenericAgent(OrchidAgent):
         self._graph_store: OrchidGraphStore | None = graph_store
 
         # ── Create collaborators ──
-        if chat_model:
-            self._skill_detector: SkillDetector | None = SkillDetector(chat_model)
+        if chat_model or skill_decision_model:
+            self._skill_detector: SkillDetector | None = SkillDetector(
+                chat_model,
+                decision_model=skill_decision_model,
+                confidence_threshold=skill_confidence_threshold,
+            )
         else:
             self._skill_detector = None
 

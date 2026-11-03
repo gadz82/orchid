@@ -305,6 +305,8 @@ def _instantiate_agent(
     graph_store: Any | None = None,
     content_sources: Any | None = None,
     upload_namespace: str = "uploads",
+    skill_decision_model: Any | None = None,
+    skill_confidence_threshold: float = 0.8,
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -362,6 +364,9 @@ def _instantiate_agent(
     if content_sources:
         kwargs["content_sources"] = content_sources
     kwargs["upload_namespace"] = upload_namespace
+    if skill_decision_model is not None:
+        kwargs["skill_decision_model"] = skill_decision_model
+        kwargs["skill_confidence_threshold"] = skill_confidence_threshold
 
     return cls(**kwargs)
 
@@ -651,6 +656,12 @@ def build_graph(
             )
             subgraph_nodes[agent_name] = subgraph
         else:
+            skill_binding = config.resolve_decision("skills", agent_name)
+            skill_model = (
+                runtime.get_decision_model(skill_binding.model)
+                if skill_binding is not None and skill_binding.model
+                else None
+            )
             agent = _instantiate_agent(
                 agent_name,
                 agent_config,
@@ -664,6 +675,8 @@ def build_graph(
                 graph_store=graph_store,
                 content_sources=runtime.content_sources,
                 upload_namespace=runtime.upload_namespace,
+                skill_decision_model=skill_model,
+                skill_confidence_threshold=(skill_binding.confidence_threshold if skill_binding is not None else 0.8),
             )
             agents.append(agent)
 
