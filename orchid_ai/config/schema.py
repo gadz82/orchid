@@ -23,6 +23,13 @@ from .schema_agent import (
     OrchidAgentsConfig,
     OrchidDefaultsConfig,
 )
+from .schema_decision import (
+    OrchidAgentDecisionsConfig,
+    OrchidDecisionBudgetConfig,
+    OrchidDecisionModelConfig,
+    OrchidDecisionPointConfig,
+    OrchidDecisionsConfig,
+)
 from .schema_events import (
     ActAsUserIdentity,
     AddressedToUserIdentity,
@@ -72,12 +79,17 @@ __all__ = [
     "BuiltinToolParameter",
     "ExecutionHints",
     "OrchidAgentConfig",
+    "OrchidAgentDecisionsConfig",
     "OrchidAgentPromptConfig",
     "OrchidAgentSkillConfig",
     "OrchidAgentSkillStepConfig",
     "OrchidAgentsConfig",
     "OrchidBuiltinToolConfig",
     "OrchidConfigStorageConfig",
+    "OrchidDecisionBudgetConfig",
+    "OrchidDecisionModelConfig",
+    "OrchidDecisionPointConfig",
+    "OrchidDecisionsConfig",
     "OrchidDefaultsConfig",
     "OrchidEventsConfig",
     "OrchidEventsIngestionConfig",
