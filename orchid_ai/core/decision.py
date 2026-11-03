@@ -2,12 +2,11 @@
 
 A decision model evaluates a *state* against named *questions* and returns
 typed answers with calibrated confidence (boolean, choice, or score). It does
-not generate prose. Providers such as System One decision models and the
-OpenAI Decisions API speak different wire formats, but every consumer in the
-framework depends on the single contract defined here.
+not generate prose. Providers speak different wire dialects, but every
+consumer in the framework depends on the single contract defined here.
 
 This module is deliberately stdlib-only: transport, provider dialects, and
-configuration live in :mod:`orchid_ai.decision` and ``config/``.
+configuration live outside ``core/``.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ import math
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 __all__ = [
     "DecisionErrorCode",
@@ -47,59 +46,96 @@ DecisionErrorCode = Literal[
     "budget_exhausted",
 ]
 
-_DECISION_KINDS: frozenset[str] = frozenset({"boolean", "choice", "score"})
-_DECISION_ERROR_CODES: frozenset[str] = frozenset(
-    {
-        "not_configured",
-        "timeout",
-        "provider_unavailable",
-        "egress_denied",
-        "invalid_response",
-        "refusal",
-        "budget_exhausted",
-    }
-)
+_DECISION_KINDS: frozenset[str] = frozenset(get_args(DecisionKind))
+_DECISION_ERROR_CODES: frozenset[str] = frozenset(get_args(DecisionErrorCode))
+
+_MAX_PAYLOAD_DEPTH = 20
 
 
-def _validate_threshold_value(value: float) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"threshold must be a number, got {type(value).__name__}")
-    number = float(value)
-    if not math.isfinite(number) or not 0.0 <= number <= 1.0:
-        raise ValueError(f"threshold must be finite and within [0, 1], got {value!r}")
-    return number
+def _as_finite_float(value: Any, *, field_name: str) -> float:
+    """Return ``value`` as a finite float, or raise a typed error.
 
-
-def _validate_confidence_value(value: float, *, field_name: str) -> float:
+    ``float(10**400)`` raises ``OverflowError``, which is neither ``TypeError``
+    nor ``ValueError``. A provider can send arbitrarily large integers, so the
+    conversion is centralised here and normalised into the documented error
+    contract callers use for fallback.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{field_name} must be a number, got {type(value).__name__}")
-    number = float(value)
-    if not math.isfinite(number) or not 0.0 <= number <= 1.0:
-        raise ValueError(f"{field_name} must be finite and within [0, 1], got {value!r}")
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{field_name} is too large to represent as a float") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{field_name} must be finite, got {value!r}")
     return number
 
 
-def _validate_probabilities(probabilities: Mapping[str, float]) -> dict[str, float]:
+def _bounded_confidence(value: Any, *, field_name: str) -> float:
+    number = _as_finite_float(value, field_name=field_name)
+    if not 0.0 <= number <= 1.0:
+        raise ValueError(f"{field_name} must be within [0, 1], got {value!r}")
+    return number
+
+
+def _validate_probabilities(probabilities: Any) -> dict[str, float]:
+    if not isinstance(probabilities, Mapping):
+        raise TypeError("probabilities must be a mapping")
     copied: dict[str, float] = {}
     for key, value in probabilities.items():
         if not isinstance(key, str):
             raise TypeError("probability keys must be strings")
-        copied[key] = _validate_confidence_value(value, field_name=f"probability[{key!r}]")
+        copied[key] = _bounded_confidence(value, field_name=f"probability[{key!r}]")
     return copied
 
 
-def _validate_kind(kind: str) -> None:
+def _validate_kind(kind: Any) -> None:
+    if not isinstance(kind, str):
+        raise TypeError(f"kind must be a string, got {type(kind).__name__}")
     if kind not in _DECISION_KINDS:
         raise ValueError(f"kind must be one of {sorted(_DECISION_KINDS)}, got {kind!r}")
+
+
+def _validate_json_value(value: Any, *, path: str = "$", depth: int = 0) -> None:
+    """Reject payload values a JSON transport cannot represent.
+
+    The state crosses a JSON boundary, so a non-string key, a set, bytes, or a
+    non-finite float must fail here rather than after the request starts.
+    """
+    if depth > _MAX_PAYLOAD_DEPTH:
+        raise ValueError(f"payload exceeds maximum nesting depth at {path}")
+    if value is None or isinstance(value, (bool, int, str)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"payload float at {path} must be finite")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _validate_json_value(item, path=f"{path}[{index}]", depth=depth + 1)
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError(f"payload key at {path} must be a string")
+            _validate_json_value(item, path=f"{path}.{key}", depth=depth + 1)
+        return
+    raise TypeError(f"payload value at {path} is not JSON-safe: {type(value).__name__}")
+
+
+def _validate_label_sequence(values: Any, *, field_name: str) -> tuple[str, ...]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        raise TypeError(f"{field_name} must be a sequence of strings")
+    return tuple(values)
 
 
 @dataclass(frozen=True)
 class OrchidDecisionState:
     """The context a decision model evaluates.
 
-    ``payload`` carries structured context (candidates, passages, counts). It
-    is copied on construction so a caller cannot mutate the state after the
-    decision starts, and it must stay JSON-safe because transports serialise it.
+    ``payload`` carries structured context (candidates, passages, counts). It is
+    validated as JSON-safe and deep-copied on construction so a caller cannot
+    mutate the state while an async provider call is in flight.
     """
 
     text: str = ""
@@ -110,7 +146,9 @@ class OrchidDecisionState:
             raise TypeError("state text must be a string")
         if not isinstance(self.payload, Mapping):
             raise TypeError("state payload must be a mapping")
-        object.__setattr__(self, "payload", copy.deepcopy(dict(self.payload)))
+        payload = dict(self.payload)
+        _validate_json_value(payload)
+        object.__setattr__(self, "payload", copy.deepcopy(payload))
 
 
 @dataclass(frozen=True)
@@ -131,13 +169,17 @@ class OrchidDecisionQuestion:
 
     def __post_init__(self) -> None:
         _validate_kind(self.kind)
-        if not isinstance(self.name, str) or not self.name.strip():
-            raise ValueError("question name must be a non-empty string")
+        if not isinstance(self.name, str):
+            raise TypeError("question name must be a string")
+        if not self.name.strip():
+            raise ValueError("question name must be non-empty")
         if not isinstance(self.instructions, str):
             raise TypeError("question instructions must be a string")
+        if not isinstance(self.required, bool):
+            raise TypeError("question required must be a boolean")
 
-        options = tuple(self.options)
-        rubric = tuple(self.rubric)
+        options = _validate_label_sequence(self.options, field_name="options")
+        rubric = _validate_label_sequence(self.rubric, field_name="rubric")
         object.__setattr__(self, "options", options)
         object.__setattr__(self, "rubric", rubric)
 
@@ -160,8 +202,11 @@ class OrchidDecisionQuestion:
 def _validate_label_set(values: tuple[str, ...], *, field_name: str, minimum: int) -> None:
     if len(values) < minimum:
         raise ValueError(f"{field_name} requires at least {minimum} entries")
-    if any(not isinstance(value, str) or not value.strip() for value in values):
-        raise ValueError(f"{field_name} entries must be non-empty strings")
+    for value in values:
+        if not isinstance(value, str):
+            raise TypeError(f"{field_name} entries must be strings")
+        if not value.strip():
+            raise ValueError(f"{field_name} entries must be non-empty")
     if len(set(values)) != len(values):
         raise ValueError(f"{field_name} entries must be unique")
 
@@ -170,10 +215,10 @@ def _validate_label_set(values: tuple[str, ...], *, field_name: str, minimum: in
 class OrchidDecisionAnswer:
     """The normalised result for one question.
 
-    A refusal is a valid answer: ``value`` is ``None``, ``refusal`` explains
-    why, and sibling answers remain usable. ``confidence`` is always finite and
-    within ``[0, 1]`` so a caller can compare it with a threshold without
-    defensive checks.
+    A refusal is a valid answer: ``value`` is ``None``, ``refusal`` explains why,
+    and sibling answers remain usable. ``confidence`` is always finite and within
+    ``[0, 1]`` so a caller can compare it with a threshold without defensive
+    checks.
     """
 
     name: str
@@ -185,37 +230,39 @@ class OrchidDecisionAnswer:
 
     def __post_init__(self) -> None:
         _validate_kind(self.kind)
-        if not isinstance(self.name, str) or not self.name.strip():
-            raise ValueError("answer name must be a non-empty string")
+        if not isinstance(self.name, str):
+            raise TypeError("answer name must be a string")
+        if not self.name.strip():
+            raise ValueError("answer name must be non-empty")
 
         object.__setattr__(
             self,
             "confidence",
-            _validate_confidence_value(self.confidence, field_name="confidence"),
+            _bounded_confidence(self.confidence, field_name="confidence"),
         )
         object.__setattr__(self, "probabilities", _validate_probabilities(self.probabilities))
 
         if self.refusal is not None:
             if not isinstance(self.refusal, str):
-                raise ValueError("refusal must be a string")
+                raise TypeError("refusal must be a string")
             if self.value is not None:
                 raise ValueError("a refused answer must not carry a value")
             return
 
         if self.kind == "boolean":
             if not isinstance(self.value, bool):
-                raise ValueError("boolean answers require a bool value")
+                raise TypeError("boolean answers require a bool value")
             return
 
         if self.kind == "choice":
-            if not isinstance(self.value, str) or not self.value.strip():
-                raise ValueError("choice answers require a non-empty string value")
+            if not isinstance(self.value, str):
+                raise TypeError("choice answers require a string value")
+            if not self.value.strip():
+                raise ValueError("choice answers require a non-empty value")
             return
 
-        if isinstance(self.value, bool) or not isinstance(self.value, (int, float)):
-            raise TypeError("score answers require a numeric value")
-        if not math.isfinite(float(self.value)):
-            raise ValueError("score answers require a finite value")
+        number = _as_finite_float(self.value, field_name="score answer")
+        object.__setattr__(self, "value", number)
 
 
 @dataclass(frozen=True)
@@ -229,15 +276,22 @@ class OrchidDecisionResult:
     usage: Mapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.provider, str) or not self.provider.strip():
-            raise ValueError("result provider must be a non-empty string")
-        if not isinstance(self.model, str) or not self.model.strip():
-            raise ValueError("result model must be a non-empty string")
-        if isinstance(self.latency_ms, bool) or not isinstance(self.latency_ms, (int, float)):
-            raise TypeError("latency_ms must be a number")
-        if not math.isfinite(float(self.latency_ms)) or float(self.latency_ms) < 0.0:
-            raise ValueError("latency_ms must be finite and non-negative")
+        if not isinstance(self.provider, str):
+            raise TypeError("result provider must be a string")
+        if not self.provider.strip():
+            raise ValueError("result provider must be non-empty")
+        if not isinstance(self.model, str):
+            raise TypeError("result model must be a string")
+        if not self.model.strip():
+            raise ValueError("result model must be non-empty")
 
+        latency = _as_finite_float(self.latency_ms, field_name="latency_ms")
+        if latency < 0.0:
+            raise ValueError("latency_ms must be non-negative")
+        object.__setattr__(self, "latency_ms", latency)
+
+        if not isinstance(self.answers, Mapping):
+            raise TypeError("answers must be a mapping")
         copied: dict[str, OrchidDecisionAnswer] = {}
         for key, answer in self.answers.items():
             if not isinstance(key, str) or not isinstance(answer, OrchidDecisionAnswer):
@@ -246,7 +300,19 @@ class OrchidDecisionResult:
                 raise ValueError(f"answer key {key!r} does not match answer name {answer.name!r}")
             copied[key] = answer
         object.__setattr__(self, "answers", copied)
-        object.__setattr__(self, "usage", {str(k): int(v) for k, v in self.usage.items()})
+
+        if not isinstance(self.usage, Mapping):
+            raise TypeError("usage must be a mapping")
+        usage: dict[str, int] = {}
+        for key, value in self.usage.items():
+            if not isinstance(key, str):
+                raise TypeError("usage keys must be strings")
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"usage[{key!r}] must be an integer")
+            if value < 0:
+                raise ValueError(f"usage[{key!r}] must be non-negative")
+            usage[key] = value
+        object.__setattr__(self, "usage", usage)
 
 
 class OrchidDecisionModel(ABC):
@@ -255,9 +321,9 @@ class OrchidDecisionModel(ABC):
     # ORCHID-MEM: 01a1a102-9e83-7b0a-8a8e-333d3a323039 — Provider-agnostic typed decision contract.
 
     Implementations translate :class:`OrchidDecisionQuestion` values into their
-    provider's wire shape and normalise the response. They must not perform
-    side effects, compose tool arguments, or decide workflow on their own: they
-    answer questions, and the framework owns the branch.
+    provider's wire shape and normalise the response. They must not perform side
+    effects, compose tool arguments, or decide workflow on their own: they answer
+    questions, and the framework owns the branch.
 
     Failure modes:
       Implementations raise :class:`OrchidDecisionError` with a stable code.
@@ -282,6 +348,14 @@ class OrchidDecisionModel(ABC):
         """
         ...
 
+    async def aclose(self) -> None:
+        """Release transport resources held by this provider.
+
+        The default is a no-op so an in-process provider needs no cleanup. The
+        composition root calls this uniformly on reload and teardown.
+        """
+        return
+
 
 class OrchidDecisionError(Exception):
     """A decision call failed with a stable, non-leaking error code.
@@ -300,6 +374,8 @@ class OrchidDecisionError(Exception):
         status_code: int | None = None,
         host: str = "",
     ) -> None:
+        if not isinstance(message, str):
+            raise TypeError("error message must be a string")
         if code not in _DECISION_ERROR_CODES:
             raise ValueError(f"unknown decision error code {code!r}")
         super().__init__(message)
@@ -315,7 +391,7 @@ class OrchidDecisionError(Exception):
 
 def validate_threshold(threshold: float) -> float:
     """Return ``threshold`` as a float after validating the confidence range."""
-    return _validate_threshold_value(threshold)
+    return _bounded_confidence(threshold, field_name="threshold")
 
 
 def validate_question_set(questions: Sequence[OrchidDecisionQuestion]) -> tuple[OrchidDecisionQuestion, ...]:
@@ -348,7 +424,7 @@ def require_confidence(
     below ``threshold``. Callers must branch on ``None`` rather than treating a
     missing boolean as ``False``.
     """
-    limit = _validate_threshold_value(threshold)
+    limit = validate_threshold(threshold)
     answer = result.answers.get(name)
     if answer is None or answer.refusal is not None:
         return None
@@ -366,16 +442,16 @@ def answers_or_none(
     """Return every named answer when all are usable, else ``None``.
 
     All-or-nothing keeps a partial response from being mistaken for a complete
-    decision.
+    decision. An empty request returns ``None`` for the same reason.
     """
-    limit = _validate_threshold_value(threshold)
+    limit = validate_threshold(threshold)
     selected: dict[str, OrchidDecisionAnswer] = {}
     for name in names:
         answer = require_confidence(result, name, limit)
         if answer is None:
             return None
         selected[name] = answer
-    return selected
+    return selected or None
 
 
 def aggregate_shortlist(
@@ -387,14 +463,19 @@ def aggregate_shortlist(
     """Return the candidates a boolean decision selected, or ``None``.
 
     Each candidate is a separate boolean question. Only ``True`` answers are
-    considered; unknown names and non-boolean answers are ignored. The
-    aggregate confidence is the **minimum** across selected candidates, so one
-    uncertain inclusion rejects the whole shortlist instead of being averaged
-    away by confident exclusions. Candidate order is preserved.
+    considered; unknown names and non-boolean answers are ignored. The aggregate
+    confidence is the **minimum** across selected candidates, so one uncertain
+    inclusion rejects the whole shortlist instead of being averaged away by
+    confident exclusions. Candidate order is preserved and duplicates are
+    removed.
     """
-    limit = _validate_threshold_value(threshold)
+    limit = validate_threshold(threshold)
     selected: list[OrchidDecisionAnswer] = []
+    seen: set[str] = set()
     for name in candidates:
+        if name in seen:
+            continue
+        seen.add(name)
         answer = result.answers.get(name)
         if answer is None or answer.kind != "boolean" or answer.refusal is not None:
             continue

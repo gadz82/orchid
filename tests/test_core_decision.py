@@ -9,6 +9,7 @@ import pytest
 from orchid_ai.core.decision import (
     OrchidDecisionAnswer,
     OrchidDecisionError,
+    OrchidDecisionModel,
     OrchidDecisionQuestion,
     OrchidDecisionResult,
     OrchidDecisionState,
@@ -247,3 +248,124 @@ def test_aggregate_shortlist_ignores_unknown_and_non_boolean() -> None:
 def test_aggregate_shortlist_returns_none_when_nothing_selected() -> None:
     result = _result(_answer("a", False))
     assert aggregate_shortlist(result, ["a"], threshold=0.5) is None
+
+
+# ── Numeric and container hardening ─────────────────────────
+
+
+def test_huge_integer_confidence_is_a_value_error() -> None:
+    with pytest.raises(ValueError):
+        _answer("flag", True, confidence=10**400)
+
+
+def test_huge_integer_score_is_a_value_error() -> None:
+    with pytest.raises(ValueError):
+        _answer("urgency", 10**400, kind="score")
+
+
+def test_huge_integer_latency_is_a_value_error() -> None:
+    with pytest.raises(ValueError):
+        OrchidDecisionResult(answers={}, provider="test", model="m", latency_ms=10**400)
+
+
+def test_huge_threshold_is_a_value_error() -> None:
+    with pytest.raises(ValueError):
+        validate_threshold(10**400)
+
+
+def test_answer_rejects_non_mapping_probabilities() -> None:
+    with pytest.raises(TypeError):
+        _answer("flag", True, probabilities=[("true", 0.9)])
+
+
+def test_answer_rejects_non_finite_probability_value() -> None:
+    with pytest.raises(ValueError):
+        _answer("flag", True, probabilities={"true": math.nan})
+
+
+def test_result_rejects_non_mapping_answers() -> None:
+    with pytest.raises(TypeError):
+        OrchidDecisionResult(answers=[], provider="test", model="m")  # type: ignore[arg-type]
+
+
+def test_result_rejects_bool_usage() -> None:
+    with pytest.raises(TypeError):
+        OrchidDecisionResult(answers={}, provider="test", model="m", usage={"tokens": True})
+
+
+def test_result_rejects_negative_usage() -> None:
+    with pytest.raises(ValueError):
+        OrchidDecisionResult(answers={}, provider="test", model="m", usage={"tokens": -1})
+
+
+def test_question_rejects_bare_string_options() -> None:
+    with pytest.raises(TypeError):
+        OrchidDecisionQuestion(name="route", kind="choice", options="ab")
+
+
+def test_question_rejects_non_bool_required() -> None:
+    with pytest.raises(TypeError):
+        OrchidDecisionQuestion(name="flag", kind="boolean", required="false")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("payload", [{"x": math.nan}, {"x": {1, 2}}, {1: "x"}, {"x": b"bytes"}])
+def test_state_rejects_non_json_safe_payload(payload: dict) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        OrchidDecisionState(payload=payload)
+
+
+def test_state_rejects_deep_payload() -> None:
+    payload: dict = {}
+    cursor = payload
+    for _ in range(25):
+        child: dict = {}
+        cursor["n"] = child
+        cursor = child
+    with pytest.raises(ValueError):
+        OrchidDecisionState(payload=payload)
+
+
+def test_state_coerces_score_value_to_float() -> None:
+    answer = _answer("urgency", 2, kind="score")
+    assert isinstance(answer.value, float)
+
+
+# ── Refusal and shortlist composition ───────────────────────
+
+
+def test_refusal_does_not_break_sibling_answers() -> None:
+    refusal = OrchidDecisionAnswer(name="b", kind="boolean", value=None, confidence=0.0, refusal="nope")
+    result = _result(_answer("a", True), refusal)
+    assert require_confidence(result, "a", 0.5) is not None
+    assert require_confidence(result, "b", 0.5) is None
+
+
+def test_answers_or_none_returns_none_for_missing_answer() -> None:
+    result = _result(_answer("a", True))
+    assert answers_or_none(result, ["a", "missing"], threshold=0.1) is None
+
+
+def test_answers_or_none_returns_none_for_refusal() -> None:
+    refusal = OrchidDecisionAnswer(name="b", kind="boolean", value=None, confidence=0.0, refusal="nope")
+    result = _result(_answer("a", True), refusal)
+    assert answers_or_none(result, ["a", "b"], threshold=0.1) is None
+
+
+def test_answers_or_none_returns_none_for_empty_request() -> None:
+    result = _result(_answer("a", True))
+    assert answers_or_none(result, [], threshold=0.1) is None
+
+
+def test_aggregate_shortlist_deduplicates_candidates() -> None:
+    result = _result(_answer("a", True), _answer("b", True))
+    assert aggregate_shortlist(result, ["a", "a", "b"], threshold=0.5) == ["a", "b"]
+
+
+def test_aclose_defaults_to_noop() -> None:
+    class _Provider(OrchidDecisionModel):
+        async def decide(self, state, questions, *, timeout=None):
+            raise NotImplementedError
+
+    import asyncio
+
+    assert asyncio.run(_Provider().aclose()) is None
