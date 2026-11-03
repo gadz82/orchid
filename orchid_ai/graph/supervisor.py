@@ -540,15 +540,25 @@ async def _route(
             routing_metadata.get("outcome"),
         )
 
-    if decision is None and routing is not None and routing.on_low_confidence == "escalate":
-        message = "I can't route this request confidently. I'm handing it to a human for review."
-        return {
-            "messages": [AIMessage(content=message)],
-            "final_response": message,
-            "active_agents": [],
-            "pending_agents": [],
-            "routing_metadata": routing_metadata or {},
-        }
+    if decision is None and routing is not None:
+        if routing.on_low_confidence == "escalate":
+            message = "I can't route this request confidently. I'm handing it to a human for review."
+            return {
+                "messages": [AIMessage(content=message)],
+                "final_response": message,
+                "active_agents": [],
+                "pending_agents": [],
+                "routing_metadata": routing_metadata or {},
+            }
+        if routing.on_low_confidence == "default":
+            message = "I couldn't confidently route this request. Please rephrase it or contact support."
+            return {
+                "messages": [AIMessage(content=message)],
+                "final_response": message,
+                "active_agents": [],
+                "pending_agents": [],
+                "routing_metadata": routing_metadata or {},
+            }
 
     if decision is None:
         clean_history = await _extract_and_compress_history(state, sup, chat_model, memory, auth=auth)

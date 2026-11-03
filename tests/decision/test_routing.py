@@ -288,3 +288,23 @@ async def test_escalation_on_low_confidence() -> None:
     assert "human" in result["final_response"].lower()
     assert result["routing_metadata"]["outcome"] == "fallback"
     assert chat.structured.calls == 0
+
+
+async def test_default_fallback_returns_a_deterministic_response() -> None:
+    strategy = DecisionRoutingStrategy(
+        provider=StubDecisionModel(mode="low_confidence"),
+        confidence_threshold=0.9,
+        on_low_confidence="default",
+    )
+    chat = FakeChat(OrchidRoutingDecision(reasoning="llm", agents=["billing"]))
+    result = await _route(
+        _state(),
+        "ollama/llama3.2",
+        AGENTS,
+        chat_model=chat,
+        routing=strategy,
+    )
+    assert result["active_agents"] == []
+    assert "rephrase" in result["final_response"].lower()
+    assert result["routing_metadata"]["outcome"] == "fallback"
+    assert chat.structured.calls == 0
