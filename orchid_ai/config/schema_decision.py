@@ -172,6 +172,20 @@ class OrchidDecisionBudgetConfig(BaseModel):
     failure_threshold: int = Field(default=3, ge=1, le=20)
 
 
+class OrchidStubDecisionConfig(BaseModel):
+    """Deterministic answers for the ``stub`` protocol.
+
+    Keys are question names or ``"<state text>:<question>"`` contextual keys.
+    Values are spec mappings accepted by :class:`StubDecisionModel`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    answers: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    confidence: float = Field(default=0.9, ge=0.0, le=1.0)
+    mode: Literal["answer", "low_confidence", "fail"] = "answer"
+
+
 class OrchidDecisionModelConfig(BaseModel):
     """One declared decision provider.
 
@@ -193,6 +207,7 @@ class OrchidDecisionModelConfig(BaseModel):
     max_retries: int = Field(default=1, ge=0, le=5)
     max_response_bytes: int = Field(default=262_144, ge=1024, le=1_048_576)
     state_transform: str | None = None
+    stub: OrchidStubDecisionConfig | None = None
 
     @field_validator("protocol", mode="before")
     @classmethod
@@ -231,6 +246,8 @@ class OrchidDecisionModelConfig(BaseModel):
             self.api_key_env = env_name
         if self.state_transform is not None and not self.state_transform.strip():
             raise ValueError("state_transform must be a non-empty import path")
+        if self.stub is not None and self.protocol != "stub":
+            raise ValueError("the stub block is only valid with protocol 'stub'")
         return self
 
 

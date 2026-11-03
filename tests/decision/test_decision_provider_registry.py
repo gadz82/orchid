@@ -300,3 +300,24 @@ def test_sync_transform_runs_off_the_event_loop(monkeypatch: pytest.MonkeyPatch)
         )
     )
     assert result.answers["q"].value is True
+
+
+async def test_stub_config_answers_reach_the_provider() -> None:
+
+    from orchid_ai.core.decision import OrchidDecisionQuestion, OrchidDecisionState
+
+    config = _config(
+        {
+            "stub": {
+                "protocol": "stub",
+                "stub": {"answers": {"q": {"probability": 0.2}}, "confidence": 0.8},
+            }
+        }
+    )
+    providers = factory.build_decision_models(config)
+    result = await providers["stub"].decide(
+        OrchidDecisionState(text="x"),
+        [OrchidDecisionQuestion(name="q", kind="boolean")],
+    )
+    assert result.answers["q"].value is False
+    assert result.answers["q"].confidence == pytest.approx(0.8)

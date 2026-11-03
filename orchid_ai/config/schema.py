@@ -29,6 +29,7 @@ from .schema_decision import (
     OrchidDecisionModelConfig,
     OrchidDecisionPointConfig,
     OrchidDecisionsConfig,
+    OrchidStubDecisionConfig,
 )
 from .schema_events import (
     ActAsUserIdentity,
@@ -112,6 +113,7 @@ __all__ = [
     "OrchidRAGDefaultsConfig",
     "OrchidRetrievalConfig",
     "OrchidScheduleConfig",
+    "OrchidStubDecisionConfig",
     "OrchidSupervisorConfig",
     "OrchidToolConfig",
     "OrchidTriggerConfig",

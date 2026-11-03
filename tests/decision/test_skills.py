@@ -92,3 +92,53 @@ async def test_no_skills_returns_none_without_calling_anything() -> None:
     detector = SkillDetector(chat, decision_model=StubDecisionModel())
     assert await detector.detect("hello", {}) is None
     assert chat.calls == 0
+
+
+class HandRolledProvider:
+    def __init__(self, answer) -> None:
+        self.answer = answer
+
+    async def decide(self, state, questions, *, timeout=None):
+        from orchid_ai.core.decision import OrchidDecisionResult
+
+        return OrchidDecisionResult(answers={"skill": self.answer}, provider="test", model="test")
+
+    async def aclose(self):
+        return None
+
+
+async def test_unknown_skill_falls_back_to_the_llm() -> None:
+    from orchid_ai.core.decision import OrchidDecisionAnswer
+
+    chat = FakeChat("refund_request")
+    provider = HandRolledProvider(OrchidDecisionAnswer(name="skill", kind="choice", value="ghost", confidence=0.99))
+    detector = SkillDetector(chat, decision_model=provider)
+    assert await detector.detect("hello", SKILLS) == "refund_request"
+    assert chat.calls == 1
+
+
+async def test_timeout_falls_back_to_the_llm() -> None:
+    from orchid_ai.core.decision import OrchidDecisionError
+
+    class TimeoutProvider:
+        async def decide(self, state, questions, *, timeout=None):
+            raise OrchidDecisionError("timeout", code="timeout", retryable=True)
+
+        async def aclose(self):
+            return None
+
+    chat = FakeChat("outage_report")
+    detector = SkillDetector(chat, decision_model=TimeoutProvider())
+    assert await detector.detect("the site is down", SKILLS) == "outage_report"
+    assert chat.calls == 1
+
+
+async def test_reserved_sentinel_skill_falls_back() -> None:
+    chat = FakeChat("refund_request")
+    detector = SkillDetector(
+        chat,
+        decision_model=StubDecisionModel(answers={"skill": {"choice": "__none__"}}),
+    )
+    skills = {**SKILLS, "__none__": type("Skill", (), {"description": "reserved"})()}
+    assert await detector.detect("hello", skills) == "refund_request"
+    assert chat.calls == 1

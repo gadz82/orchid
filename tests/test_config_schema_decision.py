@@ -435,3 +435,23 @@ def test_failed_merge_restores_the_previous_agents() -> None:
             [{"name": "b", "config": _agent({"tools": {"model": "missing"}})}],
         )
     assert set(config.agents) == original
+
+
+def test_stub_block_parses() -> None:
+    config = _config(
+        decision_models={
+            "stub": {
+                "protocol": "stub",
+                "stub": {"answers": {"q": {"probability": 0.2}}, "confidence": 0.8, "mode": "answer"},
+            }
+        }
+    )
+    stub = config.decision_models["stub"].stub
+    assert stub is not None
+    assert stub.answers["q"] == {"probability": 0.2}
+    assert stub.confidence == 0.8
+
+
+def test_stub_block_is_rejected_for_http_protocols() -> None:
+    with pytest.raises(ValidationError, match="stub block"):
+        _config(decision_models={"fast": {**PROVIDER, "stub": {"answers": {}}}})

@@ -12,6 +12,7 @@ from typing import Any
 
 from ..config.schema import OrchidAgentSkillConfig
 from ..core.decision import (
+    OrchidDecisionError,
     OrchidDecisionModel,
     OrchidDecisionQuestion,
     OrchidDecisionState,
@@ -31,7 +32,7 @@ class SkillDetector:
         chat_model: Any | None = None,
         *,
         decision_model: OrchidDecisionModel | None = None,
-        confidence_threshold: float = 0.8,
+        confidence_threshold: float = 0.75,
         provider_name: str = "",
     ) -> None:
         self._chat_model = chat_model
@@ -58,6 +59,13 @@ class SkillDetector:
         query: str,
         skills: dict[str, OrchidAgentSkillConfig],
     ) -> str | None:
+        model = self._decision_model
+        if model is None:
+            return _NO_DECISION
+        if _SKILL_NONE in skills:
+            logger.warning("[SkillDetector] reserved sentinel %r is a skill name; falling back", _SKILL_NONE)
+            return _NO_DECISION
+
         descriptions = "\n".join(f"- {name}: {skill.description}" for name, skill in skills.items())
         question = OrchidDecisionQuestion(
             name="skill",
@@ -69,19 +77,26 @@ class SkillDetector:
             ),
         )
         try:
-            assert self._decision_model is not None
-            result = await self._decision_model.decide(
+            result = await model.decide(
                 OrchidDecisionState(text=query[:4000]),
                 [question],
             )
+        except OrchidDecisionError as exc:
+            logger.warning("[SkillDetector] decision provider failed code=%s", exc.code)
+            return _NO_DECISION
         except Exception:
-            logger.warning("[SkillDetector] decision provider failed; falling back to the LLM", exc_info=True)
+            logger.warning("[SkillDetector] decision provider raised an unexpected error", exc_info=True)
             return _NO_DECISION
 
         answer = require_confidence(result, "skill", self._threshold)
         if answer is None:
             return _NO_DECISION
-        return None if answer.value == _SKILL_NONE else str(answer.value)
+        if answer.value == _SKILL_NONE:
+            return None
+        if answer.value not in skills:
+            logger.warning("[SkillDetector] provider returned an unknown skill; falling back")
+            return _NO_DECISION
+        return str(answer.value)
 
     async def _detect_by_llm(
         self,
@@ -107,7 +122,7 @@ class SkillDetector:
             text = (result.content or "").strip().strip('"').strip("'")
             if text in skills:
                 return text
-        except (ConnectionError, TimeoutError, ValueError, RuntimeError) as exc:
+        except Exception as exc:  # detection is best-effort; never fail the turn
             logger.warning("[SkillDetector] Detection failed: %s", exc)
 
         return None

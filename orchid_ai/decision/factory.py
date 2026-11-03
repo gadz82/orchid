@@ -103,7 +103,13 @@ def _build_llm(name: str, config: OrchidDecisionModelConfig, context: DecisionBu
 
 
 def _build_stub(name: str, config: OrchidDecisionModelConfig, context: DecisionBuildContext) -> OrchidDecisionModel:
-    return StubDecisionModel(provider=name, answers=context.extras.get("stub_answers"))
+    stub = config.stub
+    return StubDecisionModel(
+        provider=name,
+        answers=(stub.answers if stub is not None else context.extras.get("stub_answers")),
+        confidence=(stub.confidence if stub is not None else 0.9),
+        mode=(stub.mode if stub is not None else "answer"),
+    )
 
 
 _PROTOCOL_BUILDERS: dict[str, DecisionBuilder] = {
