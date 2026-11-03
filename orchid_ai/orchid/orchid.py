@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 # ── Orchid ─────────────────────────────────────────────────
 
 
+# ORCHID-MEM: 01a1a0c1-66d5-7e05-a431-d6b1fff274f5 — async facade for runtime, invoke, and lifecycle
 class Orchid:
     """Programmatic entry point for the Orchid framework.
 
