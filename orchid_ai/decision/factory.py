@@ -168,7 +168,28 @@ def build_decision_models(
         client_factory=client_factory,
         extras=dict(extras or {}),
     )
-    return {name: build_decision_model(name, provider, context=context) for name, provider in providers.items()}
+    built = {name: build_decision_model(name, provider, context=context) for name, provider in providers.items()}
+    for name in built:
+        if name not in _referenced_providers(config):
+            logger.warning("[Decision] provider %r is declared but no decision point references it", name)
+    return built
+
+
+def _referenced_providers(config: Any) -> set[str]:
+    referenced: set[str] = set()
+    for point in ("routing", "skills", "tools", "rag"):
+        resolved = config.decisions.resolve(point)
+        if resolved is not None and resolved.model:
+            referenced.add(resolved.model)
+    for agent_name in config.agents:
+        for point in ("skills", "tools", "rag"):
+            try:
+                resolved = config.resolve_decision(point, agent_name)
+            except (KeyError, ValueError):
+                continue
+            if resolved is not None and resolved.model:
+                referenced.add(resolved.model)
+    return referenced
 
 
 class _TransformDecisionModel(OrchidDecisionModel):

@@ -127,6 +127,22 @@ class OrchidLifecycle:
             return False
 
         async with self._rebuild_lock:
+            from orchid_ai.decision.factory import build_decision_models
+
+            try:
+                new_models = build_decision_models(new_snapshot.config)
+            except Exception:
+                logger.exception("[Lifecycle] decision providers could not be rebuilt; keeping the previous set")
+                new_models = self._runtime.decision_models
+            else:
+                previous = self._runtime.decision_models
+                self._runtime.decision_models = new_models
+                for model in previous.values():
+                    try:
+                        await model.aclose()
+                    except Exception:
+                        logger.warning("[Lifecycle] decision provider close failed", exc_info=True)
+
             self._config = new_snapshot.config
             self._agents.clear()
             self._graph = build_graph(

@@ -67,6 +67,14 @@ from .core.auth_config import (
 
 # ── EXTEND — content ─────────────────────────────────────────
 from .core.content import OrchidContentItem, OrchidContentSource
+from .core.decision import (
+    OrchidDecisionAnswer,
+    OrchidDecisionError,
+    OrchidDecisionModel,
+    OrchidDecisionQuestion,
+    OrchidDecisionResult,
+    OrchidDecisionState,
+)
 
 # ── EXTEND — vector / RAG / documents ────────────────────────
 from .core.doc_store import OrchidDocStore
@@ -220,6 +228,12 @@ __all__ = [  # noqa: RUF022
     # ── EXTEND — content ──────────────────────────────
     "OrchidContentItem",
     "OrchidContentSource",
+    "OrchidDecisionAnswer",
+    "OrchidDecisionError",
+    "OrchidDecisionModel",
+    "OrchidDecisionQuestion",
+    "OrchidDecisionResult",
+    "OrchidDecisionState",
     # ── EXTEND — registries ───────────────────────────
     "register_doc_store_backend",
     "register_graph_store_backend",
