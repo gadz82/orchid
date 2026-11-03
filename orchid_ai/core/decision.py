@@ -114,12 +114,14 @@ def _validate_json_value(value: Any, *, path: str = "$", depth: int = 0) -> None
         for index, item in enumerate(value):
             _validate_json_value(item, path=f"{path}[{index}]", depth=depth + 1)
         return
-    if isinstance(value, Mapping):
+    if isinstance(value, dict):
         for key, item in value.items():
             if not isinstance(key, str):
                 raise TypeError(f"payload key at {path} must be a string")
             _validate_json_value(item, path=f"{path}.{key}", depth=depth + 1)
         return
+    if isinstance(value, Mapping):
+        raise TypeError(f"payload mapping at {path} must be a plain dict")
     raise TypeError(f"payload value at {path} is not JSON-safe: {type(value).__name__}")
 
 
