@@ -202,3 +202,32 @@ def test_decision_contract_imports_only_stdlib() -> None:
     imported = _imported_names(module)
     non_stdlib = {name for name in imported if name not in sys.stdlib_module_names and name != "orchid_ai"}
     assert not non_stdlib, f"core/decision.py imports non-stdlib modules: {sorted(non_stdlib)}"
+
+
+def test_decision_adapters_are_not_reexported() -> None:
+    """Adapters live in ``orchid_ai.decision``; the top level exposes the port only."""
+    import orchid_ai
+
+    for name in (
+        "StateQuestionsDecisionModel",
+        "OpenAICompatibleDecisionModel",
+        "LLMDecisionModel",
+        "StubDecisionModel",
+        "DecisionHttpClient",
+    ):
+        assert not hasattr(orchid_ai, name), f"{name} must not be re-exported from orchid_ai"
+
+
+def test_decision_adapters_import_no_vendor_sdk() -> None:
+    """The adapters speak HTTP dialects directly; no provider SDK is imported."""
+    decision_dir = PACKAGE_ROOT / "decision"
+    forbidden = {"litellm", "openai", "anthropic", "cohere", "groq", "mistralai"}
+    violations: list[str] = []
+    for py_file in decision_dir.rglob("*.py"):
+        if "__pycache__" in py_file.parts:
+            continue
+        imported = _imported_names(py_file)
+        bad = imported & forbidden
+        if bad:
+            violations.append(f"{py_file.relative_to(PACKAGE_ROOT)} imports {sorted(bad)}")
+    assert not violations, "vendor SDK imported in decision/: " + "; ".join(violations)

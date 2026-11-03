@@ -148,6 +148,8 @@ async def test_prompt_carries_state_and_questions() -> None:
     model, chat = _model(_result())
     await model.decide(OrchidDecisionState(text="charged twice", payload={"order": "A-1"}), _questions())
     content = "\n".join(str(message.content) for message in chat.structured.messages)
+    assert "<<<STATE" in content
+    assert "STATE>>>" in content
     assert "charged twice" in content
     assert "A-1" in content
     assert "route" in content
@@ -158,3 +160,40 @@ async def test_result_may_be_a_dict() -> None:
     model, _ = _model({"answers": [{"name": "q", "probability": 0.9}]})
     result = await model.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
     assert result.answers["q"].value is True
+
+
+@pytest.mark.parametrize("raw", [{"answers": "nope"}, None, {"answers": [{}]}])
+async def test_malformed_schema_is_invalid_response(raw) -> None:
+    model, _ = _model(raw)
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await model.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert excinfo.value.code == "invalid_response"
+
+
+async def test_rubric_label_score_is_invalid_response() -> None:
+    model, _ = _model({"answers": [{"name": "urgency", "score": "medium"}]})
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await model.decide(
+            OrchidDecisionState(text="x"),
+            [OrchidDecisionQuestion(name="urgency", kind="score", rubric=("low", "medium", "high"))],
+        )
+    assert excinfo.value.code == "invalid_response"
+
+
+class _RateLimited(Exception):
+    status_code = 429
+
+
+async def test_rate_limit_is_retryable() -> None:
+    model, _ = _model(error=_RateLimited("slow down"))
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await model.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert excinfo.value.code == "provider_unavailable"
+    assert excinfo.value.retryable is True
+
+
+async def test_generic_failure_is_not_retryable() -> None:
+    model, _ = _model(error=RuntimeError("boom"))
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await model.decide(OrchidDecisionState(text="x"), [OrchidDecisionQuestion(name="q", kind="boolean")])
+    assert excinfo.value.retryable is False

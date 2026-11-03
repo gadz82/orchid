@@ -8,6 +8,7 @@ touching the adapters.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 import os
@@ -52,21 +53,30 @@ class DecisionBuildContext:
 
 def _http_builder(adapter_cls: type[OrchidDecisionModel]) -> DecisionBuilder:
     def builder(name: str, config: OrchidDecisionModelConfig, context: DecisionBuildContext) -> OrchidDecisionModel:
-        api_key = context.api_key_resolver(config.api_key_env) if config.api_key_env else ""
+        api_key = ""
+        if config.api_key_env:
+            api_key = (context.api_key_resolver(config.api_key_env) or "").strip()
+            if not api_key:
+                raise OrchidConfigError(
+                    f"decision provider {name!r}: environment variable {config.api_key_env} is not set"
+                )
         if context.client_factory is not None:
             client = context.client_factory(config, api_key)
         else:
-            client = DecisionHttpClient(
-                base_url=config.base_url or "",
-                allowed_hosts=context.allowed_hosts,
-                provider=name,
-                api_key=api_key,
-                timeout=config.timeout_seconds,
-                max_retries=config.max_retries,
-                max_response_bytes=config.max_response_bytes,
-                failure_threshold=context.failure_threshold,
-                cooldown_s=context.cooldown_s,
-            )
+            try:
+                client = DecisionHttpClient(
+                    base_url=config.base_url or "",
+                    allowed_hosts=context.allowed_hosts,
+                    provider=name,
+                    api_key=api_key,
+                    timeout=config.timeout_seconds,
+                    max_retries=config.max_retries,
+                    max_response_bytes=config.max_response_bytes,
+                    failure_threshold=context.failure_threshold,
+                    cooldown_s=context.cooldown_s,
+                )
+            except OrchidDecisionError as exc:
+                raise OrchidConfigError(f"decision provider {name!r}: {exc}") from None
         return adapter_cls(client=client, model=config.model, provider=name)  # type: ignore[call-arg]
 
     return builder
@@ -77,12 +87,18 @@ def _build_llm(name: str, config: OrchidDecisionModelConfig, context: DecisionBu
         raise OrchidConfigError(
             f"decision provider {name!r} uses protocol 'llm' but no chat model factory was supplied"
         )
+    logger.warning(
+        "[Decision] provider %r uses protocol 'llm'; egress is bounded by the chat model provider, "
+        "not allowed_decision_hosts",
+        name,
+    )
     chat_model = context.chat_model_factory(config.model)
+    timeout = config.timeout_seconds if "timeout_seconds" in config.model_fields_set else 10.0
     return LLMDecisionModel(
         chat_model=chat_model,
         model=config.model,
         provider=name,
-        timeout=config.timeout_seconds,
+        timeout=timeout,
     )
 
 
@@ -171,10 +187,20 @@ class _TransformDecisionModel(OrchidDecisionModel):
         timeout: float | None = None,
     ) -> Any:
         try:
-            transformed = self._transform(state)
-            if inspect.isawaitable(transformed):
-                transformed = await transformed
+            if timeout is not None:
+                async with asyncio.timeout(max(0.1, float(timeout))):
+                    transformed = await self._run_transform(state)
+            else:
+                transformed = await self._run_transform(state)
+        except TimeoutError:
+            raise OrchidDecisionError(
+                "state transform timed out",
+                code="timeout",
+                provider=self._provider,
+                retryable=True,
+            ) from None
         except Exception:
+            logger.exception("[Decision] state transform failed provider=%s", self._provider)
             raise OrchidDecisionError(
                 "state transform failed",
                 code="invalid_response",
@@ -190,6 +216,11 @@ class _TransformDecisionModel(OrchidDecisionModel):
             )
         return await self._inner.decide(transformed, questions, timeout=timeout)
 
+    async def _run_transform(self, state: OrchidDecisionState) -> Any:
+        if inspect.iscoroutinefunction(self._transform):
+            return await self._transform(state)
+        return await asyncio.to_thread(self._transform, state)
+
     async def aclose(self) -> None:
         await self._inner.aclose()
 
@@ -199,7 +230,7 @@ def _wrap_transform(name: str, provider: OrchidDecisionModel, state_transform: s
         return provider
     try:
         transform = import_class(state_transform)
-    except ImportError as exc:
+    except Exception as exc:
         raise OrchidConfigError(
             f"decision provider {name!r}: cannot resolve state_transform {state_transform!r}: {exc}"
         ) from exc

@@ -66,14 +66,18 @@ def test_empty_config_builds_nothing() -> None:
 def test_state_questions_provider_is_built_with_injected_client() -> None:
     client = FakeClient()
     config = _config({"fast": PROVIDER})
-    providers = factory.build_decision_models(config, client_factory=lambda cfg, key: client)
+    providers = factory.build_decision_models(
+        config, client_factory=lambda cfg, key: client, api_key_resolver=lambda name: "key"
+    )
     assert isinstance(providers["fast"], StateQuestionsDecisionModel)
 
 
 def test_openai_compatible_provider_is_built() -> None:
     client = FakeClient()
     config = _config({"fast": {**PROVIDER, "protocol": "openai-compatible"}})
-    providers = factory.build_decision_models(config, client_factory=lambda cfg, key: client)
+    providers = factory.build_decision_models(
+        config, client_factory=lambda cfg, key: client, api_key_resolver=lambda name: "key"
+    )
     assert isinstance(providers["fast"], OpenAICompatibleDecisionModel)
 
 
@@ -189,3 +193,108 @@ def test_transform_returning_a_non_state_is_rejected(monkeypatch: pytest.MonkeyP
                 [OrchidDecisionQuestion(name="q", kind="boolean")],
             )
         )
+
+
+def test_missing_api_key_fails_at_build_time() -> None:
+    config = _config({"fast": PROVIDER})
+    with pytest.raises(OrchidConfigError, match="DECISION_API_KEY"):
+        factory.build_decision_models(config, api_key_resolver=lambda name: None)
+
+
+def test_llm_default_timeout_is_ten_seconds() -> None:
+    config = _config({"local": {"protocol": "llm", "model": "gemini/gemini-2.5-flash"}})
+    providers = factory.build_decision_models(config, chat_model_factory=lambda model: FakeChat())
+    assert providers["local"]._timeout == 10.0
+
+
+def test_llm_explicit_timeout_wins() -> None:
+    config = _config({"local": {"protocol": "llm", "model": "gemini/gemini-2.5-flash", "timeout_seconds": 3.0}})
+    providers = factory.build_decision_models(config, chat_model_factory=lambda model: FakeChat())
+    assert providers["local"]._timeout == 3.0
+
+
+def test_llm_protocol_logs_an_egress_warning(caplog: pytest.LogCaptureFixture) -> None:
+    config = _config({"local": {"protocol": "llm", "model": "gemini/gemini-2.5-flash"}})
+    with caplog.at_level("WARNING", logger="orchid_ai.decision.factory"):
+        factory.build_decision_models(config, chat_model_factory=lambda model: FakeChat())
+    assert "not allowed_decision_hosts" in caplog.text
+
+
+def test_default_client_construction_uses_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+
+    class RecordingClient:
+        def __init__(self, **kwargs: Any) -> None:
+            seen.update(kwargs)
+
+    monkeypatch.setattr(factory, "DecisionHttpClient", RecordingClient)
+    config = _config(
+        {
+            "fast": {
+                **PROVIDER,
+                "timeout_seconds": 3.0,
+                "max_retries": 2,
+                "max_response_bytes": 4096,
+            }
+        },
+        decisions={"routing": {"model": "fast"}},
+    )
+    providers = factory.build_decision_models(config, api_key_resolver=lambda name: "secret")
+    assert isinstance(providers["fast"], StateQuestionsDecisionModel)
+    assert seen["allowed_hosts"] == HOSTS
+    assert seen["timeout"] == 3.0
+    assert seen["max_retries"] == 2
+    assert seen["max_response_bytes"] == 4096
+    assert seen["failure_threshold"] == config.decisions.budget.failure_threshold
+    assert seen["cooldown_s"] == config.decisions.budget.breaker_cooldown_s
+    assert seen["api_key"] == "secret"
+
+
+def test_register_protocol_validates_inputs() -> None:
+    with pytest.raises(ValueError):
+        factory.register_decision_protocol("", lambda name, cfg, ctx: StubDecisionModel())
+    with pytest.raises(TypeError):
+        factory.register_decision_protocol("bad", 42)  # type: ignore[arg-type]
+
+
+def _slow(state: OrchidDecisionState) -> OrchidDecisionState:
+    import asyncio
+
+    async def inner() -> OrchidDecisionState:
+        await asyncio.sleep(0.5)
+        return state
+
+    return asyncio.run(inner())
+
+
+async def test_transform_timeout_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("orchid_ai.decision.factory.import_class", lambda path: _slow)
+    config = _config({"stub": {"protocol": "stub", "state_transform": "acme.slow"}})
+    providers = factory.build_decision_models(config)
+    with pytest.raises(OrchidDecisionError) as excinfo:
+        await providers["stub"].decide(
+            OrchidDecisionState(text="secret"),
+            [OrchidDecisionQuestion(name="q", kind="boolean")],
+            timeout=0.05,
+        )
+    assert excinfo.value.code == "timeout"
+
+
+def test_sync_transform_runs_off_the_event_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    import time
+
+    def slow_sync(state: OrchidDecisionState) -> OrchidDecisionState:
+        time.sleep(0.01)
+        return OrchidDecisionState(text="redacted")
+
+    monkeypatch.setattr("orchid_ai.decision.factory.import_class", lambda path: slow_sync)
+    config = _config({"stub": {"protocol": "stub", "state_transform": "acme.sync"}})
+    providers = factory.build_decision_models(config, extras={"stub_answers": {"redacted:q": {"probability": 0.9}}})
+    result = asyncio.run(
+        providers["stub"].decide(
+            OrchidDecisionState(text="secret"),
+            [OrchidDecisionQuestion(name="q", kind="boolean")],
+        )
+    )
+    assert result.answers["q"].value is True

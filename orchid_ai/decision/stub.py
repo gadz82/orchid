@@ -7,6 +7,7 @@ explicit low-confidence and failure modes so fallback paths can be exercised.
 
 from __future__ import annotations
 
+import copy
 import time
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
@@ -48,7 +49,12 @@ class StubDecisionModel(OrchidDecisionModel):
     ) -> None:
         if mode not in ("answer", "low_confidence", "fail"):
             raise ValueError(f"unknown stub mode {mode!r}")
-        self._answers = answers or {}
+        if confidence < 0.0 or confidence > 1.0:
+            raise ValueError("stub confidence must be within [0, 1]")
+        self._answers = copy.deepcopy(dict(answers or {}))
+        for key, spec in self._answers.items():
+            if not isinstance(key, str) or not isinstance(spec, Mapping):
+                raise TypeError("stub answers must map strings to mappings")
         self._confidence = 0.55 if mode == "low_confidence" else max(0.0, min(1.0, confidence))
         self._mode = mode
         self._provider = provider
