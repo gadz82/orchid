@@ -66,6 +66,7 @@ from ..runtime import MCPClientFactory, OrchidRuntime
 from ..tools.external_cli_config import load_external_agents_from_config
 from .guardrail_wiring import _GuardrailWiring
 from .mini_agent_wiring import _MiniAgentWiring
+from .routing import build_routing_strategy
 from .state import GraphState
 from .supervisor import create_supervisor_node
 
@@ -729,6 +730,7 @@ def build_graph(
         supervisor_config=config.supervisor,
         routing_chat_model=routing_chat_model,
         memory=memory,
+        routing=build_routing_strategy(config, runtime),
     )
 
     # ── Build graph ──

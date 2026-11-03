@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
@@ -40,6 +40,9 @@ from ..core.state import OrchidAuthContext
 from .sequential_advancer import SequentialAdvancer
 from .state import GraphState
 from .synthesizer import ResponseSynthesizer
+
+if TYPE_CHECKING:
+    from .routing import OrchidRoutingStrategy
 
 __all__ = [
     "ROUTING_SYSTEM_PROMPT",
@@ -147,6 +150,7 @@ def create_supervisor_node(
     supervisor_config: OrchidSupervisorConfig | None = None,
     routing_chat_model: BaseChatModel | None = None,
     memory: OrchidConversationMemory | None = None,
+    routing: OrchidRoutingStrategy | None = None,
 ):
     """
     Return a LangGraph node function with *model*, *agent_descriptions*,
@@ -216,7 +220,17 @@ def create_supervisor_node(
 
         # ── Case 3: First entry — analyse intent and route ──
         perf_logger.info("[PERF][supervisor] phase=route (initial intent analysis)")
-        result = await _route(state, model, agent_descriptions, skills, sup_config, route_chat_model, memory, auth=auth)
+        result = await _route(
+            state,
+            model,
+            agent_descriptions,
+            skills,
+            sup_config,
+            route_chat_model,
+            memory,
+            auth=auth,
+            routing=routing,
+        )
         elapsed = (time.perf_counter() - start) * 1000
         perf_logger.info(
             "[PERF][supervisor] phase=route took %.1f ms (active=%s pending=%s)",
@@ -471,6 +485,7 @@ async def _route(
     memory: OrchidConversationMemory | None = None,
     *,
     auth: OrchidAuthContext | None = None,
+    routing: OrchidRoutingStrategy | None = None,
 ) -> GraphState:
     """Analyse user intent, choose execution mode, and activate agents."""
     desc_text = "\n".join(f"- **{name}**: {desc}" for name, desc in agent_descriptions.items())
@@ -492,47 +507,67 @@ async def _route(
         skill_descriptions=skill_text,
     )
 
-    clean_history = await _extract_and_compress_history(state, sup, chat_model, memory, auth=auth)
-
-    llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    if clean_history:
-        llm_messages.extend(clean_history)
-
-    # Add the current user query
-    user_query = OrchidAgent.extract_user_query(state)
-    if user_query:
-        llm_messages.append({"role": "user", "content": user_query})
-
-    try:
-        if not chat_model:
-            raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
-
-        structured_model = chat_model.with_structured_output(OrchidRoutingDecision)
-        llm_start = time.perf_counter()
-        decision: OrchidRoutingDecision = await structured_model.ainvoke(llm_messages, temperature=0)
-        llm_elapsed = (time.perf_counter() - llm_start) * 1000
-        perf_logger.info("[PERF][supervisor.route] structured LLM call took %.1f ms", llm_elapsed)
-        logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
-    except Exception as exc:
-        # Handle LLM API failures gracefully
-        logger.exception("[Supervisor] LLM API error during routing")
-        error_msg = str(exc)
-        if "503" in error_msg or "high demand" in error_msg.lower():
-            response_text = (
-                "I'm currently experiencing high demand and cannot process your request. "
-                "Please try again in a few moments."
+    decision: OrchidRoutingDecision | None = None
+    routing_path = "llm"
+    if routing is not None:
+        try:
+            decision = await routing.route(
+                state=state,
+                agent_descriptions=agent_descriptions,
+                orchestrator_skills=orchestrator_skills,
+                auth=auth,
             )
-        elif "rate limit" in error_msg.lower():
-            response_text = "I've hit my rate limit. Please try again in a few moments."
-        else:
-            response_text = f"I encountered an error: {error_msg[:200]}. Please try again later."
+            if decision is not None:
+                routing_path = "decision"
+                logger.info("[Supervisor] decision-model routing: %s", decision.model_dump_json())
+        except Exception:
+            logger.exception("[Supervisor] decision routing failed; falling back to the LLM")
 
-        # Return a direct response to user
-        return {
-            "messages": [AIMessage(content=response_text)],
-            "next": "END",
-            "routing_metadata": {"error": "llm_api_failure", "details": error_msg},
-        }
+    if decision is None:
+        clean_history = await _extract_and_compress_history(state, sup, chat_model, memory, auth=auth)
+
+        llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+        if clean_history:
+            llm_messages.extend(clean_history)
+
+        # Add the current user query
+        user_query = OrchidAgent.extract_user_query(state)
+        if user_query:
+            llm_messages.append({"role": "user", "content": user_query})
+
+        try:
+            if not chat_model:
+                raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
+
+            structured_model = chat_model.with_structured_output(OrchidRoutingDecision)
+            llm_start = time.perf_counter()
+            decision = await structured_model.ainvoke(llm_messages, temperature=0)
+            llm_elapsed = (time.perf_counter() - llm_start) * 1000
+            perf_logger.info("[PERF][supervisor.route] structured LLM call took %.1f ms", llm_elapsed)
+            logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
+        except Exception as exc:
+            # Handle LLM API failures gracefully
+            logger.exception("[Supervisor] LLM API error during routing")
+            error_msg = str(exc)
+            if "503" in error_msg or "high demand" in error_msg.lower():
+                response_text = (
+                    "I'm currently experiencing high demand and cannot process your request. "
+                    "Please try again in a few moments."
+                )
+            elif "rate limit" in error_msg.lower():
+                response_text = "I've hit my rate limit. Please try again in a few moments."
+            else:
+                response_text = f"I encountered an error: {error_msg[:200]}. Please try again later."
+
+            # Return a direct response to user
+            return {
+                "messages": [AIMessage(content=response_text)],
+                "next": "END",
+                "routing_metadata": {"error": "llm_api_failure", "details": error_msg},
+            }
+
+    routing_metadata: dict[str, Any] = {"path": routing_path, "decision_point": "routing"}
+    routing_metadata.update(getattr(routing, "metadata", {}) or {})
 
     agents: list[str] = decision.agents
     direct: str | None = decision.direct_response
@@ -589,6 +624,7 @@ async def _route(
             "execution_mode": "sequential",
             "final_response": None,
             "messages": [AIMessage(content=(f"[Supervisor] Sequential pipeline: {' → '.join(valid)}"))],
+            "routing_metadata": routing_metadata,
         }
     else:
         # Parallel (default): activate all at once
@@ -599,4 +635,5 @@ async def _route(
             "execution_mode": "parallel",
             "final_response": None,
             "messages": [AIMessage(content=f"[Supervisor] Parallel dispatch: {', '.join(valid)}")],
+            "routing_metadata": routing_metadata,
         }
