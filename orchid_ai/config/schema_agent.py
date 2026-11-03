@@ -12,6 +12,7 @@ from .schema_decision import (
     OrchidDecisionModelConfig,
     OrchidDecisionPointConfig,
     OrchidDecisionsConfig,
+    iter_agents,
     validate_allowed_host,
     validate_decision_bindings,
 )
@@ -294,9 +295,16 @@ class OrchidAgentsConfig(BaseModel):
         """
         agent_decisions = None
         if agent_name is not None:
-            agent = self.agents.get(agent_name)
-            if agent is not None:
-                agent_decisions = agent.decisions
+            matches = [
+                agent
+                for path, agent in iter_agents(self.agents)
+                if path == agent_name or path.rsplit(".", 1)[-1] == agent_name
+            ]
+            if not matches:
+                raise KeyError(f"unknown agent {agent_name!r}")
+            if len(matches) > 1:
+                raise ValueError(f"ambiguous agent name {agent_name!r}; pass the full path")
+            agent_decisions = matches[0].decisions
         return self.decisions.resolve(point, agent_decisions)
 
     def merge_from_db(self, db_configs: list[dict], *, strict: bool = True) -> None:
@@ -335,17 +343,22 @@ class OrchidAgentsConfig(BaseModel):
                 raise ValueError(
                     f"Agent(s) defined in both YAML and DB: {sorted(overlap)}. Remove from YAML or DB to proceed."
                 )
-        for row in db_configs:
-            name = row["name"]
-            cfg_dict = row["config"]
-            if name in self.agents:
-                merged = _deep_merge(self.agents[name].model_dump(), cfg_dict)
-                cfg = OrchidAgentConfig.model_validate(merged)
-                self.agents[name] = cfg
-            else:
-                cfg = OrchidAgentConfig.model_validate(cfg_dict)
-                self.agents[name] = cfg
-        validate_decision_bindings(self)
+        previous = dict(self.agents)
+        try:
+            for row in db_configs:
+                name = row["name"]
+                cfg_dict = row["config"]
+                if name in self.agents:
+                    merged = _deep_merge(self.agents[name].model_dump(exclude_unset=True), cfg_dict)
+                    cfg = OrchidAgentConfig.model_validate(merged)
+                    self.agents[name] = cfg
+                else:
+                    cfg = OrchidAgentConfig.model_validate(cfg_dict)
+                    self.agents[name] = cfg
+            validate_decision_bindings(self)
+        except Exception:
+            self.agents = previous
+            raise
 
 
 def _inherit_field(agent_obj: Any, defaults_obj: Any, field_name: str) -> None:
