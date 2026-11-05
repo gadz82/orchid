@@ -130,11 +130,15 @@ class DecisionRoutingStrategy(OrchidRoutingStrategy):
         confidence_threshold: float = 0.75,
         provider_name: str = "",
         on_low_confidence: str = "llm",
+        history_max_turns: int = 10,
+        history_max_chars: int = 400,
     ) -> None:
         self._provider = provider
         self._threshold = max(0.0, min(1.0, confidence_threshold))
         self._provider_name = provider_name
         self._on_low_confidence = on_low_confidence
+        self._history_max_turns = max(1, min(50, history_max_turns))
+        self._history_max_chars = max(100, min(4000, history_max_chars))
         self._last: dict[str, Any] = {}
 
     @property
@@ -199,10 +203,17 @@ class DecisionRoutingStrategy(OrchidRoutingStrategy):
             )
 
         auth_hint = (context or {}).get("auth_hint", "")
+        summary = (context or {}).get("summary")
         started = time.perf_counter()
         try:
             result = await self._provider.decide(
-                _project_state(state, auth_hint=auth_hint),
+                _project_state(
+                    state,
+                    auth_hint=auth_hint,
+                    summary=summary,
+                    max_turns=self._history_max_turns,
+                    max_chars=self._history_max_chars,
+                ),
                 questions,
             )
         except OrchidDecisionError as exc:
@@ -305,15 +316,26 @@ def build_routing_strategy(
         confidence_threshold=binding.confidence_threshold,
         provider_name=binding.model,
         on_low_confidence=binding.on_low_confidence,
+        history_max_turns=binding.history_max_turns or 10,
+        history_max_chars=binding.history_max_chars or 400,
     )
 
 
-def _project_state(state: dict[str, Any], *, auth_hint: str = "") -> OrchidDecisionState:
+def _project_state(
+    state: dict[str, Any],
+    *,
+    auth_hint: str = "",
+    summary: str | None = None,
+    max_turns: int = 10,
+    max_chars: int = 400,
+) -> OrchidDecisionState:
     query = OrchidAgent.extract_user_query(state)[:_MAX_QUERY_CHARS]
-    excerpt = OrchidAgent.extract_conversation_history(state, max_turns=3, max_chars=400)
+    excerpt = OrchidAgent.extract_conversation_history(state, max_turns=max_turns, max_chars=max_chars)
     payload: dict[str, Any] = {}
     if excerpt:
         payload["conversation"] = excerpt
+    if summary:
+        payload["summary"] = summary[:2000]
     if auth_hint:
         payload["auth_hint"] = auth_hint[:1000]
     return OrchidDecisionState(text=query, payload=payload)

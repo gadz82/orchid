@@ -313,6 +313,7 @@ def _instantiate_agent(
     tool_max_candidates: int = 32,
     rag_decision_model: Any | None = None,
     rag_confidence_threshold: float = 0.75,
+    rag_strategies: list[str] | None = None,
     decision_model: Any | None = None,
 ) -> OrchidAgent:
     """
@@ -382,6 +383,7 @@ def _instantiate_agent(
     if rag_decision_model is not None:
         kwargs["rag_decision_model"] = rag_decision_model
         kwargs["rag_confidence_threshold"] = rag_confidence_threshold
+        kwargs["rag_strategies"] = rag_strategies
     if decision_model is not None:
         kwargs["decision_model"] = decision_model
 

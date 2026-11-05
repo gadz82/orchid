@@ -41,12 +41,14 @@ class RagPipeline:
         *,
         decision_model: Any | None = None,
         confidence_threshold: float = 0.75,
+        strategies: list[str] | None = None,
     ) -> None:
         self._reader = reader
         self._chat_model = chat_model
         self._graph_store = graph_store
         self._decision_model = decision_model
         self._confidence_threshold = max(0.0, min(1.0, confidence_threshold))
+        self._strategies = list(strategies) if strategies else None
 
     async def retrieve(
         self,
@@ -70,6 +72,13 @@ class RagPipeline:
             retrieval_strategy or "simple",
             config=retrieval_config,
         )
+        from ..core.retrieval import OrchidRAGExplorer
+
+        if self._decision_model is not None and isinstance(strategy, OrchidRAGExplorer):
+            strategy.bind_decision_model(
+                self._decision_model,
+                confidence_threshold=self._confidence_threshold,
+            )
 
         prompts_cfg = retrieval_config.transformer_prompts if retrieval_config else None
         strategy_transformers = [
@@ -115,7 +124,7 @@ class RagPipeline:
             )
 
         combined.sort(key=lambda d: d.get("score", 0), reverse=True)
-        combined = await self._gate_passages(query, combined)
+        combined = await self._gate_passages(query, combined, retrieval_strategy or "simple")
         return combined[:k]
 
     async def check_cache(
@@ -185,13 +194,21 @@ class RagPipeline:
         pairs = await _asyncio.gather(*(_lookup(name, ttl) for name, ttl in tool_ttls.items()))
         return {name: val for name, val in pairs if val is not None}
 
-    async def _gate_passages(self, query: str, passages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _gate_passages(
+        self,
+        query: str,
+        passages: list[dict[str, Any]],
+        strategy: str = "simple",
+    ) -> list[dict[str, Any]]:
         """Keep only passages the decision provider judges useful.
 
-        Fails open: no provider, too many candidates, a provider error, or an
-        empty/low-confidence selection all return the original ranking.
+        Fails open: no provider, a strategy excluded by config, too many
+        candidates, a provider error, or an empty/low-confidence selection all
+        return the original ranking.
         """
         if self._decision_model is None or not passages:
+            return passages
+        if self._strategies is not None and strategy not in self._strategies:
             return passages
         candidates = passages[:32]
         if len(passages) > 32:
@@ -204,20 +221,33 @@ class RagPipeline:
             aggregate_shortlist,
         )
 
-        questions = [
-            OrchidDecisionQuestion(
-                name=f"chunk:{index}",
-                kind="boolean",
-                instructions=f"Does this passage help answer the query? {str(passage.get('text', ''))[:300]}",
+        payload_passages: list[dict[str, Any]] = []
+        questions: list[OrchidDecisionQuestion] = []
+        for index, passage in enumerate(candidates):
+            text = str(passage.get("content") or passage.get("text") or "")
+            metadata = passage.get("metadata") or {}
+            source = metadata.get("source") if isinstance(metadata, dict) else None
+            score = passage.get("score")
+            payload_passages.append(
+                {
+                    "index": index,
+                    "text": text[:500],
+                    "score": score if isinstance(score, (int, float)) else None,
+                    "source": str(source) if source is not None else None,
+                }
             )
-            for index, passage in enumerate(candidates)
-        ]
+            detail = f"source={source}, score={score}" if source is not None else f"score={score}"
+            questions.append(
+                OrchidDecisionQuestion(
+                    name=f"chunk:{index}",
+                    kind="boolean",
+                    instructions=f"Does passage {index} ({detail}) help answer the query? {text[:300]}",
+                )
+            )
+
         try:
             result = await self._decision_model.decide(
-                OrchidDecisionState(
-                    text=query[:4000],
-                    payload={"passages": [str(p.get("text", ""))[:500] for p in candidates]},
-                ),
+                OrchidDecisionState(text=query[:4000], payload={"passages": payload_passages}),
                 questions,
             )
         except OrchidDecisionError as exc:
@@ -235,5 +265,5 @@ class RagPipeline:
         if not selected:
             return passages
         keep = {int(name.split(":", 1)[1]) for name in selected}
-        logger.info("[RAG] gated %d/%d passages", len(keep), len(passages))
+        logger.info("[RAG] gated %d/%d passages (strategy=%s)", len(keep), len(passages), strategy)
         return [passage for index, passage in enumerate(passages) if index in keep]

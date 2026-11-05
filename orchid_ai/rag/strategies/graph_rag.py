@@ -30,10 +30,16 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from ...core.decision import (
+    OrchidDecisionError,
+    OrchidDecisionQuestion,
+    OrchidDecisionState,
+    aggregate_shortlist,
+)
 from ...core.doc_store import OrchidDocStore
 from ...core.graph_store import OrchidEdge, OrchidEntity, OrchidGraphStore
 from ...core.repository import OrchidDocument, OrchidSearchResult, OrchidVectorReader
-from ...core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
+from ...core.retrieval import OrchidQueryTransformer, OrchidRAGExplorer, OrchidRetrievalStrategy
 from ...core.scopes import OrchidRAGScope
 from .simple import SimpleRetrieval
 
@@ -43,7 +49,7 @@ logger = logging.getLogger(__name__)
 _EntitySerializer = Callable[[list[OrchidEntity], list[OrchidEdge]], str]
 
 
-class GraphRAGRetrieval(OrchidRetrievalStrategy):
+class GraphRAGRetrieval(OrchidRetrievalStrategy, OrchidRAGExplorer):
     """Knowledge-graph-augmented retrieval."""
 
     def __init__(
@@ -64,6 +70,12 @@ class GraphRAGRetrieval(OrchidRetrievalStrategy):
         self._relation_filter = list(relation_filter) if relation_filter else None
         self._seed_k = seed_k
         self._serialiser = entity_serializer or _default_serialise
+        self._decision_model: Any | None = None
+        self._decision_threshold = 0.75
+
+    def bind_decision_model(self, model: Any, *, confidence_threshold: float = 0.75) -> None:
+        self._decision_model = model
+        self._decision_threshold = max(0.0, min(1.0, confidence_threshold))
 
     @classmethod
     def from_config(cls, config: Any) -> GraphRAGRetrieval:
@@ -75,6 +87,58 @@ class GraphRAGRetrieval(OrchidRetrievalStrategy):
             fuse_with_vectors=getattr(graph_cfg, "fuse_with_vectors", True),
             relation_filter=list(getattr(graph_cfg, "relation_filter", []) or []),
         )
+
+    async def _select_entities(
+        self,
+        query: str,
+        scope: OrchidRAGScope,
+        entities: list[OrchidEntity],
+        edges: list[OrchidEdge],
+    ) -> tuple[list[OrchidEntity], list[OrchidEdge]]:
+        """Keep graph nodes the decision model judges relevant (fail-open)."""
+        if self._decision_model is None or not entities:
+            return entities, edges
+        questions = [
+            OrchidDecisionQuestion(
+                name=f"entity:{entity.id}",
+                kind="boolean",
+                instructions=(
+                    f"Keep entity {entity.name!r} (type={entity.type!r}) for answering the query? "
+                    f"Properties: {_format_properties(entity.properties)}"
+                ),
+            )
+            for entity in entities[:32]
+        ]
+        if not questions:
+            return entities, edges
+        try:
+            result = await self._decision_model.decide(
+                OrchidDecisionState(
+                    text=query[:4000],
+                    payload={"entities": [{"id": e.id, "name": e.name, "type": e.type} for e in entities[:32]]},
+                ),
+                questions,
+            )
+        except OrchidDecisionError as exc:
+            logger.warning("[GraphRAGRetrieval] node decision failed code=%s; keeping all nodes", exc.code)
+            return entities, edges
+        except Exception:
+            logger.warning("[GraphRAGRetrieval] node decision raised; keeping all nodes", exc_info=True)
+            return entities, edges
+
+        selected = aggregate_shortlist(
+            result,
+            [f"entity:{entity.id}" for entity in entities[:32]],
+            threshold=self._decision_threshold,
+        )
+        if not selected:
+            return entities, edges
+        keep = {name.split(":", 1)[1] for name in selected}
+        kept_entities = [entity for entity in entities if entity.id in keep]
+        if not kept_entities:
+            return entities, edges
+        kept_edges = [edge for edge in edges if edge.source_id in keep and edge.target_id in keep]
+        return kept_entities, kept_edges
 
     async def retrieve(
         self,
@@ -121,6 +185,7 @@ class GraphRAGRetrieval(OrchidRetrievalStrategy):
             max_hops=self._max_hops,
             relation_filter=self._relation_filter,
         )
+        entities, edges = await self._select_entities(query, scope, entities, edges)
 
         # Step 3 — fetch text chunks via the vector lane.
         chunk_results: list[OrchidSearchResult] = []

@@ -77,6 +77,7 @@ class GenericAgent(OrchidAgent):
         tool_max_candidates: int = 32,
         rag_decision_model: Any | None = None,
         rag_confidence_threshold: float = 0.75,
+        rag_strategies: list[str] | None = None,
         **kwargs: Any,
     ):
         super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
@@ -118,6 +119,7 @@ class GenericAgent(OrchidAgent):
             graph_store=graph_store,
             decision_model=rag_decision_model,
             confidence_threshold=rag_confidence_threshold,
+            strategies=rag_strategies,
         )
         self._prompt_builder = SystemPromptBuilder(config.prompt_sections)
 

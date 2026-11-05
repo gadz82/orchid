@@ -462,3 +462,37 @@ def test_decide_path_parses_and_must_be_absolute() -> None:
     assert config.decision_models["fast"].decide_path == "/v1/systemone"
     with pytest.raises(ValidationError, match="decide_path"):
         _config(decision_models={"fast": {**PROVIDER, "decide_path": "v1/systemone"}})
+
+
+def test_routing_history_window_parses_and_is_routing_only() -> None:
+    config = _config(
+        decision_models={"fast": PROVIDER},
+        decisions={"routing": {"model": "fast", "history_max_turns": 10, "history_max_chars": 400}},
+        allowed_decision_hosts=["api.example.com"],
+    )
+    resolved = config.decisions.resolve("routing")
+    assert resolved is not None
+    assert resolved.history_max_turns == 10
+    with pytest.raises(ValidationError, match="history_max_turns is only valid for routing"):
+        _config(
+            decision_models={"fast": PROVIDER},
+            decisions={"tools": {"model": "fast", "history_max_turns": 3}},
+            allowed_decision_hosts=["api.example.com"],
+        )
+
+
+def test_rag_strategy_allowlist_parses_and_is_rag_only() -> None:
+    config = _config(
+        decision_models={"fast": PROVIDER},
+        decisions={"rag": {"model": "fast", "strategies": ["simple", "hybrid"]}},
+        allowed_decision_hosts=["api.example.com"],
+    )
+    resolved = config.decisions.resolve("rag")
+    assert resolved is not None
+    assert resolved.strategies == ["simple", "hybrid"]
+    with pytest.raises(ValidationError, match="strategies is only valid for rag"):
+        _config(
+            decision_models={"fast": PROVIDER},
+            decisions={"tools": {"model": "fast", "strategies": ["simple"]}},
+            allowed_decision_hosts=["api.example.com"],
+        )

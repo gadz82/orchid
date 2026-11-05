@@ -510,13 +510,19 @@ async def _route(
     decision: OrchidRoutingDecision | None = None
     routing_path = "llm" if routing is None else "llm_fallback"
     if routing is not None:
+        summary: str | None = None
+        if memory is not None and state.get("chat_id"):
+            try:
+                summary = await memory.get_running_summary(state["chat_id"])
+            except Exception:
+                logger.warning("[Supervisor] running summary unavailable for decision routing", exc_info=True)
         try:
             decision = await routing.route(
                 state=state,
                 agent_descriptions=agent_descriptions,
                 orchestrator_skills=orchestrator_skills,
                 auth=auth,
-                context={"auth_hint": auth_hint},
+                context={"auth_hint": auth_hint, "summary": summary},
             )
             if decision is not None:
                 routing_path = "decision"

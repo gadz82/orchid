@@ -118,7 +118,7 @@ from .core.repository import (
     OrchidVectorStoreRepository,
     OrchidVectorWriter,
 )
-from .core.retrieval import OrchidQueryTransformer, OrchidRetrievalStrategy
+from .core.retrieval import OrchidQueryTransformer, OrchidRAGExplorer, OrchidRetrievalStrategy
 from .core.run_config import CONFIG_KEY_AUTH, auth_from_config, with_auth
 from .core.sparse import OrchidSparseEncoder, OrchidSparseVector
 from .core.state import OrchidAgentState, OrchidAuthContext
@@ -191,6 +191,7 @@ __all__ = [  # noqa: RUF022
     "OrchidGraphStore",
     "OrchidIngestionStrategy",
     "OrchidQueryTransformer",
+    "OrchidRAGExplorer",
     "OrchidRAGScope",
     "OrchidRetrievalStrategy",
     "OrchidSearchResult",

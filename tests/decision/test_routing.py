@@ -308,3 +308,51 @@ async def test_default_fallback_returns_a_deterministic_response() -> None:
     assert "rephrase" in result["final_response"].lower()
     assert result["routing_metadata"]["outcome"] == "fallback"
     assert chat.structured.calls == 0
+
+
+def _long_state() -> dict:
+    from langchain_core.messages import AIMessage
+
+    messages = []
+    for index in range(15):
+        messages.append(HumanMessage(content=f"question {index}"))
+        messages.append(AIMessage(content=f"answer {index}"))
+    messages.append(HumanMessage(content="current question"))
+    return {"messages": messages, "chat_id": "c-1"}
+
+
+def test_routing_projection_defaults_to_ten_turns() -> None:
+    provider = RecordingProvider()
+    strategy = DecisionRoutingStrategy(provider=provider)
+    import asyncio
+
+    asyncio.run(strategy.route(state=_long_state(), agent_descriptions=AGENTS))
+    assert provider.state is not None
+    conversation = provider.state.payload["conversation"]
+    assert len(conversation) == 20  # 10 turns × 2 messages
+
+
+def test_routing_projection_is_configurable() -> None:
+    provider = RecordingProvider()
+    strategy = DecisionRoutingStrategy(provider=provider, history_max_turns=2)
+    import asyncio
+
+    asyncio.run(strategy.route(state=_long_state(), agent_descriptions=AGENTS))
+    assert provider.state is not None
+    assert len(provider.state.payload["conversation"]) == 4
+
+
+def test_routing_projection_includes_the_running_summary() -> None:
+    provider = RecordingProvider()
+    strategy = DecisionRoutingStrategy(provider=provider)
+    import asyncio
+
+    asyncio.run(
+        strategy.route(
+            state=_state(),
+            agent_descriptions=AGENTS,
+            context={"summary": "the user is on the billing plan"},
+        )
+    )
+    assert provider.state is not None
+    assert provider.state.payload["summary"] == "the user is on the billing plan"

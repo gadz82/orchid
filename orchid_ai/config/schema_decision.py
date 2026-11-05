@@ -270,6 +270,11 @@ class OrchidDecisionPointConfig(BaseModel):
     on_low_confidence: Literal["llm", "default", "escalate"] = "llm"
     max_candidates: int | None = Field(default=None, ge=1, le=64)
     mode: Literal["filter"] | None = None
+    # Routing-only projection: how much conversation the decision model sees.
+    history_max_turns: int | None = Field(default=None, ge=1, le=50)
+    history_max_chars: int | None = Field(default=None, ge=100, le=4000)
+    # RAG-only: restrict the gate to these retrieval strategy names.
+    strategies: list[str] | None = None
 
 
 class OrchidDecisionDefaultConfig(BaseModel):
@@ -491,3 +496,9 @@ def _validate_binding_shape(
         errors.append(f"{label}.max_candidates is only valid for tools")
     if binding.mode is not None and point != "rag":
         errors.append(f"{label}.mode is only valid for rag")
+    if binding.history_max_turns is not None and point != "routing":
+        errors.append(f"{label}.history_max_turns is only valid for routing")
+    if binding.history_max_chars is not None and point != "routing":
+        errors.append(f"{label}.history_max_chars is only valid for routing")
+    if binding.strategies is not None and point != "rag":
+        errors.append(f"{label}.strategies is only valid for rag")
