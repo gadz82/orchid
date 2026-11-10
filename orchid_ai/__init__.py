@@ -70,7 +70,10 @@ from .core.content import OrchidContentItem, OrchidContentSource
 from .core.decision import (
     OrchidDecisionAnswer,
     OrchidDecisionError,
+    OrchidDecisionFallbackPolicy,
     OrchidDecisionModel,
+    OrchidDecisionPointBinding,
+    OrchidDecisionPointSpec,
     OrchidDecisionQuestion,
     OrchidDecisionResult,
     OrchidDecisionState,
@@ -125,9 +128,10 @@ from .core.state import OrchidAgentState, OrchidAuthContext
 
 # ── EXTEND — tools ───────────────────────────────────────────
 from .core.tool import OrchidTool, OrchidToolInput, OrchidToolOutput
-from .documents.strategies import register_ingestion_strategy, register_post_processor
 
 # ── EXTEND — registries (register implementations at import time) ──
+from .decision.registry import register_decision_point
+from .documents.strategies import register_ingestion_strategy, register_post_processor
 from .guardrails import register_guardrail
 from .mcp.oauth_state import OrchidOAuthStateStore, register_oauth_state_store
 from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
@@ -231,11 +235,15 @@ __all__ = [  # noqa: RUF022
     "OrchidContentSource",
     "OrchidDecisionAnswer",
     "OrchidDecisionError",
+    "OrchidDecisionFallbackPolicy",
     "OrchidDecisionModel",
+    "OrchidDecisionPointBinding",
+    "OrchidDecisionPointSpec",
     "OrchidDecisionQuestion",
     "OrchidDecisionResult",
     "OrchidDecisionState",
     # ── EXTEND — registries ───────────────────────────
+    "register_decision_point",
     "register_doc_store_backend",
     "register_graph_store_backend",
     "register_guardrail",

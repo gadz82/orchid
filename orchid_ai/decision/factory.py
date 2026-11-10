@@ -23,6 +23,7 @@ from ..utils import import_class
 from .http import DecisionHttpClient
 from .llm import LLMDecisionModel
 from .openai_compatible import OpenAICompatibleDecisionModel
+from .registry import iter_decision_points
 from .state_questions import StateQuestionsDecisionModel
 from .stub import StubDecisionModel
 
@@ -192,9 +193,14 @@ def build_decision_models(
 
 
 def _referenced_providers(config: Any) -> set[str]:
+    """Collect providers referenced by any registered point or agent binding.
+
+    The registry is the source of truth, so a newly registered point is built
+    when configured and an unreferenced provider is never constructed.
+    """
     referenced: set[str] = set()
-    for point in ("routing", "skills", "tools", "rag"):
-        resolved = config.decisions.resolve(point)
+    for spec in iter_decision_points():
+        resolved = config.decisions.resolve(spec.name)
         if resolved is not None and resolved.model:
             referenced.add(resolved.model)
     for _path, agent in iter_agents(config.agents):
@@ -204,8 +210,8 @@ def _referenced_providers(config: Any) -> set[str]:
         decisions = getattr(agent, "decisions", None)
         if decisions is None:
             continue
-        for point in ("skills", "tools", "rag"):
-            resolved = config.decisions.resolve(point, decisions)
+        for spec in iter_decision_points("agent"):
+            resolved = config.decisions.resolve(spec.name, decisions)
             if resolved is not None and resolved.model:
                 referenced.add(resolved.model)
     return referenced

@@ -273,6 +273,27 @@ class OrchidAgentsConfig(BaseModel):
     def _normalise_allowed_decision_hosts(cls, value: list[str]) -> list[str]:
         return [validate_allowed_host(entry) for entry in value]
 
+    @field_validator("decision_models", mode="before")
+    @classmethod
+    def _validate_decision_model_keys(cls, value: Any) -> Any:
+        """Reject provider keys that could corrupt logs or metadata.
+
+        Provider keys are operator-controlled YAML identifiers, never secrets.
+        Whitespace, control characters and ``=`` make a structured line
+        ambiguous, so they fail at load time; the binding metadata is also
+        sanitised defensively.
+        """
+        if not isinstance(value, dict):
+            return value
+        for key in value:
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("decision provider keys must be non-empty strings")
+            if any(char.isspace() or ord(char) < 32 or ord(char) == 127 or char == "=" for char in key):
+                raise ValueError(
+                    f"decision provider key {key!r} must not contain whitespace, control characters, or '='"
+                )
+        return value
+
     @model_validator(mode="after")
     def _apply_defaults_and_names(self) -> OrchidAgentsConfig:
         """Merge defaults into each agent and set names recursively."""

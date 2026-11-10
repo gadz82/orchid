@@ -13,17 +13,22 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal, get_args
+from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
 __all__ = [
     "DecisionErrorCode",
     "DecisionKind",
     "OrchidDecisionAnswer",
     "OrchidDecisionError",
+    "OrchidDecisionFallbackPolicy",
     "OrchidDecisionModel",
+    "OrchidDecisionPointBinding",
+    "OrchidDecisionPointScope",
+    "OrchidDecisionPointSpec",
     "OrchidDecisionQuestion",
     "OrchidDecisionResult",
     "OrchidDecisionState",
@@ -35,6 +40,7 @@ __all__ = [
 ]
 
 DecisionKind = Literal["boolean", "choice", "score"]
+OrchidDecisionPointScope = Literal["fleet", "agent"]
 
 DecisionErrorCode = Literal[
     "not_configured",
@@ -48,6 +54,10 @@ DecisionErrorCode = Literal[
 
 _DECISION_KINDS: frozenset[str] = frozenset(get_args(DecisionKind))
 _DECISION_ERROR_CODES: frozenset[str] = frozenset(get_args(DecisionErrorCode))
+_DECISION_POINT_SCOPES: frozenset[str] = frozenset(get_args(OrchidDecisionPointScope))
+
+_POINT_NAME_RE = re.compile(r"[a-z][a-z0-9_]{0,63}")
+_FALLBACK_MODE_RE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 
 _MAX_PAYLOAD_DEPTH = 20
 
@@ -357,6 +367,148 @@ class OrchidDecisionModel(ABC):
         composition root calls this uniformly on reload and teardown.
         """
         return
+
+
+@dataclass(frozen=True)
+class OrchidDecisionFallbackPolicy:
+    """What a consumer does when a point yields no usable answer.
+
+    ``mode`` is a stable, domain-neutral code describing the fallback target
+    (``llm``, ``default``, ``all_tools``, ``configured_strategy``, …). Consumers
+    own the implementation; the spec only declares it so operators can see the
+    contract and tests can assert it.
+    """
+
+    mode: str = "default"
+    description: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.mode, str):
+            raise TypeError("fallback mode must be a string")
+        if not _FALLBACK_MODE_RE.fullmatch(self.mode):
+            raise ValueError(f"fallback mode {self.mode!r} must be a lowercase identifier")
+        if not isinstance(self.description, str):
+            raise TypeError("fallback description must be a string")
+
+
+PointConfigValidator = Callable[[Mapping[str, Any]], None]
+
+
+@dataclass(frozen=True)
+class OrchidDecisionPointSpec:
+    """Declarative description of one decision point.
+
+    A point spec is *data*: it names the point, says whether the binding is
+    fleet-wide or per agent, records the hard candidate ceiling and the declared
+    fallback, and optionally carries a validator for point-specific YAML. It
+    contains no flow logic — adapters own result mapping and fallbacks.
+
+    Validation of the optional ``validate_config`` callable is deliberately
+    delegated: it receives the raw, explicitly-set point mapping and must raise
+    ``ValueError`` on invalid input.
+    """
+
+    name: str
+    scope: OrchidDecisionPointScope = "agent"
+    max_candidates: int | None = None
+    fallback: OrchidDecisionFallbackPolicy | str = field(default_factory=OrchidDecisionFallbackPolicy)
+    description: str = ""
+    builtin: bool = False
+    validate_config: PointConfigValidator | None = field(default=None, compare=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str):
+            raise TypeError("decision point name must be a string")
+        if not _POINT_NAME_RE.fullmatch(self.name):
+            raise ValueError(
+                f"decision point name {self.name!r} must be a lowercase identifier "
+                "(letters, digits, underscore; at most 64 characters)"
+            )
+        if not isinstance(self.scope, str):
+            raise TypeError("decision point scope must be a string")
+        if self.scope not in _DECISION_POINT_SCOPES:
+            raise ValueError(
+                f"decision point scope must be one of {sorted(_DECISION_POINT_SCOPES)}, got {self.scope!r}"
+            )
+        if self.max_candidates is not None:
+            if isinstance(self.max_candidates, bool) or not isinstance(self.max_candidates, int):
+                raise TypeError("decision point max_candidates must be an integer or None")
+            if self.max_candidates < 1:
+                raise ValueError("decision point max_candidates must be at least 1")
+
+        fallback = self.fallback
+        if isinstance(fallback, str):
+            fallback = OrchidDecisionFallbackPolicy(mode=fallback)
+        if not isinstance(fallback, OrchidDecisionFallbackPolicy):
+            raise TypeError("decision point fallback must be an OrchidDecisionFallbackPolicy or a mode string")
+        object.__setattr__(self, "fallback", fallback)
+
+        if not isinstance(self.description, str):
+            raise TypeError("decision point description must be a string")
+        if not isinstance(self.builtin, bool):
+            raise TypeError("decision point builtin must be a boolean")
+        if self.validate_config is not None and not callable(self.validate_config):
+            raise TypeError("decision point validate_config must be callable or None")
+
+
+@runtime_checkable
+class OrchidDecisionPointBinding(Protocol):
+    """Narrow interface a consumer receives for one resolved decision point.
+
+    Consumers depend on this protocol — never on a concrete provider, transport,
+    or config model. ``decide`` mirrors :class:`OrchidDecisionModel` so the
+    binding is a drop-in replacement for existing call sites, while ``metadata``
+    and the limits are read-only declarations for the consumer and the
+    observability helper.
+    """
+
+    @property
+    def point(self) -> str:
+        """Registered point name (for example ``"tool_choice"``)."""
+        ...
+
+    @property
+    def spec(self) -> OrchidDecisionPointSpec:
+        """Declarative point specification."""
+        ...
+
+    @property
+    def provider(self) -> str:
+        """Provider key selected in configuration, or ``""`` when unset."""
+        ...
+
+    @property
+    def confidence_threshold(self) -> float:
+        """Minimum confidence a consumer should require before accepting."""
+        ...
+
+    @property
+    def max_candidates(self) -> int | None:
+        """Effective candidate ceiling, or ``None`` when unbounded."""
+        ...
+
+    @property
+    def options(self) -> Mapping[str, Any]:
+        """Point-specific parameters resolved from YAML (read-only).
+
+        Consumers may read this mapping but must not mutate it; the concrete
+        binding returns an immutable view.
+        """
+        ...
+
+    async def decide(
+        self,
+        state: OrchidDecisionState,
+        questions: Sequence[OrchidDecisionQuestion],
+        *,
+        timeout: float | None = None,
+    ) -> OrchidDecisionResult:
+        """Answer ``questions`` about ``state`` through the bound provider."""
+        ...
+
+    def metadata(self) -> Mapping[str, Any]:
+        """Safe, structured fields for graph metadata and decision logs."""
+        ...
 
 
 class OrchidDecisionError(Exception):

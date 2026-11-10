@@ -291,6 +291,14 @@ async def _build_runtime(
     # ``InMemoryGraphStore`` and assign ``runtime.graph_store``).
     await _run_startup_hook(overrides.startup_hook, reader, runtime, startup_hook_kwargs, agents_config=agents_config)
 
+    # ── 8. Decision-point bindings ───────────────────────────
+    # Resolve configured points against the providers built above so the
+    # public runtime exposes a ready binding. Local import keeps graph
+    # wiring out of bootstrap's module import path.
+    from .graph.decision_bindings import bind_decision_points
+
+    bind_decision_points(agents_config, runtime)
+
     logger.info(
         "[Bootstrap] Ready — model=%s, backend=%s, storage=%s, agents=%s",
         overrides.model,

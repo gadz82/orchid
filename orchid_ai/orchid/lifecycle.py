@@ -14,6 +14,7 @@ from orchid_ai.bootstrap import _BootstrapResult, _teardown_runtime
 from orchid_ai.config.schema import OrchidAgentsConfig
 from orchid_ai.config.watcher import OrchidConfigWatcherBase
 from orchid_ai.core.agent import OrchidAgent
+from orchid_ai.graph.decision_bindings import bind_decision_points
 from orchid_ai.graph.graph import build_graph
 from orchid_ai.mcp.inventory import OrchidMCPServerInventory
 from orchid_ai.mcp.session_warmer import OrchidSessionWarmer
@@ -137,6 +138,7 @@ class OrchidLifecycle:
             previous_inventory = self._inventory
             previous_warmer = self._session_warmer
             previous_models = self._runtime.decision_models
+            previous_bindings = dict(self._runtime.decision_bindings)
             decision_changed = _decision_config_changed(previous_config, new_snapshot.config)
             new_models = previous_models
 
@@ -150,6 +152,9 @@ class OrchidLifecycle:
                         chat_model_factory=build_chat_model,
                     )
                     self._runtime.decision_models = new_models
+                # Refresh bindings against the new config/providers before the
+                # graph is built, so graph wiring sees the new point set.
+                bind_decision_points(new_snapshot.config, self._runtime)
                 new_agents: dict[str, OrchidAgent] = {}
                 new_graph = build_graph(
                     config=new_snapshot.config,
@@ -159,6 +164,8 @@ class OrchidLifecycle:
             except Exception:
                 logger.exception("[Lifecycle] hot reload failed; keeping the previous config and providers")
                 self._runtime.decision_models = previous_models
+                self._runtime.decision_bindings.clear()
+                self._runtime.decision_bindings.update(previous_bindings)
                 self._config = previous_config
                 self._agents = previous_agents
                 self._graph = previous_graph
