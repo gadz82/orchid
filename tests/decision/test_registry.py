@@ -81,22 +81,22 @@ def test_tools_point_declares_the_existing_candidate_ceiling() -> None:
 
 def test_consumer_point_can_be_registered_and_looked_up(registry_state) -> None:
     spec = OrchidDecisionPointSpec(
-        name="tool_choice",
+        name="custom_point",
         scope="agent",
         max_candidates=8,
         fallback="all_tools",
         description="Choose tools for one turn.",
     )
     assert register_decision_point(spec) is spec
-    assert get_decision_point("tool_choice") is spec
-    assert "tool_choice" in list_decision_points()
-    assert "tool_choice" in list_decision_points("agent")
+    assert get_decision_point("custom_point") is spec
+    assert "custom_point" in list_decision_points()
+    assert "custom_point" in list_decision_points("agent")
 
 
 def test_duplicate_registration_is_rejected(registry_state) -> None:
-    register_decision_point(OrchidDecisionPointSpec(name="tool_choice"))
+    register_decision_point(OrchidDecisionPointSpec(name="custom_point"))
     with pytest.raises(ValueError, match="already registered"):
-        register_decision_point(OrchidDecisionPointSpec(name="tool_choice"))
+        register_decision_point(OrchidDecisionPointSpec(name="custom_point"))
 
 
 def test_builtin_point_cannot_be_replaced_even_with_override(registry_state) -> None:
@@ -105,10 +105,10 @@ def test_builtin_point_cannot_be_replaced_even_with_override(registry_state) -> 
 
 
 def test_consumer_point_can_be_replaced_with_override(registry_state) -> None:
-    register_decision_point(OrchidDecisionPointSpec(name="tool_choice", description="first"))
-    replacement = OrchidDecisionPointSpec(name="tool_choice", description="second")
+    register_decision_point(OrchidDecisionPointSpec(name="custom_point", description="first"))
+    replacement = OrchidDecisionPointSpec(name="custom_point", description="second")
     register_decision_point(replacement, override=True)
-    assert get_decision_point("tool_choice") is replacement
+    assert get_decision_point("custom_point") is replacement
 
 
 def test_unknown_point_lists_every_registered_name() -> None:
@@ -122,9 +122,25 @@ def test_unknown_point_lists_every_registered_name() -> None:
 
 
 def test_list_decision_points_filters_by_scope() -> None:
-    assert list_decision_points("fleet") == ("routing",)
-    assert list_decision_points("agent") == ("rag", "skills", "tools")
-    assert set(list_decision_points()) == {"routing", "skills", "tools", "rag"}
+    fleet = set(list_decision_points("fleet"))
+    assert {"routing", "memory", "events"} <= fleet
+    assert not {"rag", "skills", "tools"} & fleet
+
+    agent = set(list_decision_points("agent"))
+    assert {"rag", "skills", "tools"} <= agent
+    assert {
+        "retrieval_strategy",
+        "model_routing",
+        "tool_choice",
+        "guardrails",
+        "ingestion",
+        "delegation",
+        "agentic_loop",
+    } <= agent
+    assert not {"routing", "memory", "events"} & agent
+
+    assert set(list_decision_points()) == fleet | agent
+    assert list(list_decision_points()) == sorted(list_decision_points())
 
 
 def test_iter_decision_points_is_name_sorted() -> None:
@@ -143,14 +159,14 @@ def test_invalid_scope_filter_is_rejected() -> None:
         {"name": "Tool Choice"},
         {"name": "model-routing"},
         {"name": "x" * 65},
-        {"name": "tool_choice\n"},
-        {"name": "tool_choice", "scope": "global"},
-        {"name": "tool_choice", "max_candidates": 0},
-        {"name": "tool_choice", "max_candidates": True},
-        {"name": "tool_choice", "fallback": "All Tools"},
-        {"name": "tool_choice", "fallback": "all_tools\n"},
-        {"name": "tool_choice", "builtin": "yes"},
-        {"name": "tool_choice", "validate_config": "not callable"},
+        {"name": "custom_point\n"},
+        {"name": "custom_point", "scope": "global"},
+        {"name": "custom_point", "max_candidates": 0},
+        {"name": "custom_point", "max_candidates": True},
+        {"name": "custom_point", "fallback": "All Tools"},
+        {"name": "custom_point", "fallback": "all_tools\n"},
+        {"name": "custom_point", "builtin": "yes"},
+        {"name": "custom_point", "validate_config": "not callable"},
     ],
 )
 def test_invalid_specs_are_rejected(kwargs: dict) -> None:
@@ -159,7 +175,7 @@ def test_invalid_specs_are_rejected(kwargs: dict) -> None:
 
 
 def test_fallback_mode_string_is_normalised() -> None:
-    spec = OrchidDecisionPointSpec(name="tool_choice", fallback="all_tools")
+    spec = OrchidDecisionPointSpec(name="custom_point", fallback="all_tools")
     assert isinstance(spec.fallback, OrchidDecisionFallbackPolicy)
     assert spec.fallback.mode == "all_tools"
     assert spec.fallback.description == ""
