@@ -27,6 +27,7 @@ from ..core.decision import (
     require_confidence,
 )
 from ..core.state import OrchidAuthContext
+from ..decision.observability import log_decision
 from .supervisor import OrchidRoutingDecision
 
 if TYPE_CHECKING:
@@ -62,6 +63,16 @@ class OrchidRoutingStrategy(ABC):
     def on_low_confidence(self) -> str:
         """Declared fallback: ``llm``, ``default``, or ``escalate``."""
         return "llm"
+
+    @property
+    def emits_decision_log(self) -> bool:
+        """Whether ``route()`` emits its own structured decision line.
+
+        The supervisor emits the single line for strategies that do not, so a
+        plugin strategy still satisfies the observability contract without
+        knowing about the shared helper.
+        """
+        return False
 
     @abstractmethod
     async def route(
@@ -153,6 +164,10 @@ class DecisionRoutingStrategy(OrchidRoutingStrategy):
     def on_low_confidence(self) -> str:
         return self._on_low_confidence
 
+    @property
+    def emits_decision_log(self) -> bool:
+        return True
+
     async def route(
         self,
         *,
@@ -165,9 +180,29 @@ class DecisionRoutingStrategy(OrchidRoutingStrategy):
         self._last = {
             "provider": self._provider_name,
             "threshold": self._threshold,
-            "outcome": "error",
-            "fallback_reason": None,
+            "outcome": "fallback",
+            "fallback_reason": "provider_error",
         }
+        try:
+            return await self._route_impl(
+                state=state,
+                agent_descriptions=agent_descriptions,
+                orchestrator_skills=orchestrator_skills,
+                auth=auth,
+                context=context,
+            )
+        finally:
+            self._emit_decision_log()
+
+    async def _route_impl(
+        self,
+        *,
+        state: dict[str, Any],
+        agent_descriptions: dict[str, str],
+        orchestrator_skills: dict[str, Any] | None = None,
+        auth: OrchidAuthContext | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> OrchidRoutingDecision | None:
         if len(agent_descriptions) > _MAX_AGENTS:
             return self._fallback("too_many_candidates")
 
@@ -244,6 +279,7 @@ class DecisionRoutingStrategy(OrchidRoutingStrategy):
                         "confidence": skill_answer.confidence,
                         "skill": skill_answer.value,
                         "execution_mode": "skill",
+                        "fallback_reason": None,
                     }
                 )
                 return OrchidRoutingDecision(
@@ -277,12 +313,34 @@ class DecisionRoutingStrategy(OrchidRoutingStrategy):
                 "confidence": confidence,
                 "agents": [name[len(_AGENT_PREFIX) :] for name in selected],
                 "execution_mode": execution,
+                "fallback_reason": None,
             }
         )
         return OrchidRoutingDecision(
             reasoning="decision-model",
             execution=execution,
             agents=[name[len(_AGENT_PREFIX) :] for name in selected],
+        )
+
+    def _emit_decision_log(self) -> None:
+        """Emit the single structured routing line for this attempt.
+
+        ``path`` describes what actually happened: an accepted provider answer
+        is ``decision``; anything else hands routing to the LLM and is
+        ``llm_fallback``. Latency and confidence are omitted (``null``) when the
+        provider was never called or produced no usable answer.
+        """
+        outcome = self._last.get("outcome")
+        if outcome not in ("accepted", "fallback"):
+            outcome = "fallback"
+        log_decision(
+            point="routing",
+            path="decision" if outcome == "accepted" else "llm_fallback",
+            provider=str(self._last.get("provider") or ""),
+            latency_ms=self._last.get("latency_ms"),
+            confidence=self._last.get("confidence"),
+            outcome=outcome,
+            fallback_reason=self._last.get("fallback_reason") if outcome == "fallback" else None,
         )
 
     def _fallback(self, reason: str, *, latency_ms: float | None = None) -> None:

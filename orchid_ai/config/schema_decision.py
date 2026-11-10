@@ -20,8 +20,8 @@ from .errors import OrchidConfigError
 
 _PROTOCOL_ALIASES = {"systemone": "state-questions", "openai-decisions": "openai-compatible"}
 _HTTP_LIKE_EXCLUDED = frozenset({"llm", "stub"})
+_LEGACY_POINTS = ("routing", "skills", "tools", "rag")
 _AGENT_POINTS = ("skills", "tools", "rag")
-_ALL_POINTS = ("routing", "skills", "tools", "rag")
 _ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 _BLOCKED_HOSTNAMES = frozenset(
@@ -260,6 +260,10 @@ class OrchidDecisionPointConfig(BaseModel):
     ``enabled=False`` disables the point for the scope it is declared on,
     including an inherited global binding. ``escalate`` is valid only for
     routing, because tool and RAG paths have no user-facing seam.
+
+    ``options`` carries point-specific parameters for registered points.
+    The point's registry validator owns their semantics so adding a point does
+    not require editing this shared model.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -275,6 +279,83 @@ class OrchidDecisionPointConfig(BaseModel):
     history_max_chars: int | None = Field(default=None, ge=100, le=4000)
     # RAG-only: restrict the gate to these retrieval strategy names.
     strategies: list[str] | None = None
+    # Registered-point options; validated by the point spec, not here.
+    options: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("options", mode="before")
+    @classmethod
+    def _validate_options(cls, value: Any) -> Any:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError("options must be a mapping")  # noqa: TRY004 — pydantic maps ValueError to ValidationError
+        for key in value:
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("options keys must be non-empty strings")
+        return value
+
+
+def _registered_point(name: str) -> Any:
+    """Look up a registered point, converting ``KeyError`` into config vocabulary.
+
+    The registry is imported lazily: ``config`` is imported by ``decision``'s
+    factory, so a module-level import would invert the dependency at import time.
+    """
+    from ..decision.registry import get_decision_point
+
+    try:
+        return get_decision_point(name)
+    except KeyError as exc:
+        raise ValueError(exc.args[0] if exc.args else str(exc)) from None
+
+
+def _validate_point_options(spec: Any, binding: OrchidDecisionPointConfig, *, label: str) -> None:
+    """Validate point-specific YAML against the registered spec.
+
+    Shape rules are shared with :func:`validate_decision_bindings` so a binding
+    rejected at parse time cannot be accepted again during a DB merge.
+    """
+    errors = _point_shape_errors(spec, binding, label)
+    validator = getattr(spec, "validate_config", None)
+    if validator is not None:
+        try:
+            validator(binding.model_dump(exclude_unset=True))
+        except (TypeError, ValueError) as exc:
+            errors.append(f"{label}: {exc}")
+    if errors:
+        raise ValueError("; ".join(errors))
+
+
+def _point_shape_errors(
+    spec: Any,
+    binding: OrchidDecisionPointConfig,
+    label: str,
+) -> list[str]:
+    """Reject fields that do not belong to this point's registry contract."""
+    if spec.name in _LEGACY_POINTS:
+        if binding.options:
+            return [f"{label}.options is not supported for the legacy decision point {spec.name!r}"]
+        return []
+
+    errors: list[str] = []
+    if binding.on_low_confidence == "escalate":
+        errors.append(f"{label}.on_low_confidence 'escalate' is only valid for routing")
+    if binding.mode is not None:
+        errors.append(f"{label}.mode is only valid for rag")
+    if binding.strategies is not None:
+        errors.append(f"{label}.strategies is only valid for rag")
+    if binding.history_max_turns is not None:
+        errors.append(f"{label}.history_max_turns is only valid for routing")
+    if binding.history_max_chars is not None:
+        errors.append(f"{label}.history_max_chars is only valid for routing")
+    if binding.max_candidates is not None:
+        if spec.max_candidates is None:
+            errors.append(f"{label}.max_candidates requires a point that declares a candidate limit")
+        elif binding.max_candidates > spec.max_candidates:
+            errors.append(
+                f"{label}.max_candidates {binding.max_candidates} exceeds the point limit {spec.max_candidates}"
+            )
+    return errors
 
 
 class OrchidDecisionDefaultConfig(BaseModel):
@@ -292,7 +373,13 @@ class OrchidDecisionDefaultConfig(BaseModel):
 
 
 class OrchidDecisionsConfig(BaseModel):
-    """Global decision bindings plus the parameters-only default block."""
+    """Global decision bindings plus the parameters-only default block.
+
+    The four legacy keys (``routing``, ``skills``, ``tools``, ``rag``) keep their
+    exact meaning. ``points`` is the additive map for any *registered* point;
+    the four legacy points may also be written there, but not alongside their
+    legacy key.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -302,11 +389,27 @@ class OrchidDecisionsConfig(BaseModel):
     skills: OrchidDecisionPointConfig | None = None
     tools: OrchidDecisionPointConfig | None = None
     rag: OrchidDecisionPointConfig | None = None
+    points: dict[str, OrchidDecisionPointConfig] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_registered_points(self) -> OrchidDecisionsConfig:
+        for name, binding in self.points.items():
+            spec = _registered_point(name)
+            if name in _LEGACY_POINTS and getattr(self, name) is not None:
+                raise ValueError(
+                    f"decision point {name!r} is configured twice: use decisions.{name} "
+                    f"or decisions.points.{name}, not both"
+                )
+            _validate_point_options(spec, binding, label=f"decisions.points.{name}")
+        return self
 
     def _global_binding(self, point: str) -> OrchidDecisionPointConfig | None:
-        if point not in _ALL_POINTS:
-            raise ValueError(f"unknown decision point {point!r}")
-        return getattr(self, point)
+        spec = _registered_point(point)
+        if spec.name in _LEGACY_POINTS:
+            legacy = getattr(self, spec.name)
+            if legacy is not None:
+                return legacy
+        return self.points.get(spec.name)
 
     def resolve(
         self,
@@ -318,10 +421,11 @@ class OrchidDecisionsConfig(BaseModel):
         Returns ``None`` when no block enables the point. ``decisions.default``
         contributes parameters only, so a default block alone never enables a
         decision. An ``enabled=False`` override disables an inherited binding;
-        ``routing`` is fleet-level and ignores per-agent overrides.
+        fleet points ignore per-agent overrides.
         """
+        spec = _registered_point(point)
         global_binding = self._global_binding(point)
-        agent_binding = agent.get(point) if agent is not None and point in _AGENT_POINTS else None
+        agent_binding = agent.get(point) if agent is not None and spec.scope == "agent" else None
 
         if agent_binding is not None and agent_binding.enabled is False:
             return None
@@ -344,8 +448,9 @@ class OrchidDecisionsConfig(BaseModel):
 class OrchidAgentDecisionsConfig(BaseModel):
     """Per-agent overrides for the decision points that run inside an agent.
 
-    Routing happens before an agent is known, so it is fleet-level and rejected
-    here with an explanatory error rather than a generic extra-field error.
+    Fleet-level points (``routing`` and any consumer point registered with
+    ``scope="fleet"``) happen before an agent is known and are rejected here
+    with an explanatory error rather than a generic extra-field error.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -353,6 +458,7 @@ class OrchidAgentDecisionsConfig(BaseModel):
     skills: OrchidDecisionPointConfig | None = None
     tools: OrchidDecisionPointConfig | None = None
     rag: OrchidDecisionPointConfig | None = None
+    points: dict[str, OrchidDecisionPointConfig] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -364,10 +470,33 @@ class OrchidAgentDecisionsConfig(BaseModel):
             )
         return data
 
+    @model_validator(mode="after")
+    def _validate_registered_points(self) -> OrchidAgentDecisionsConfig:
+        for name, binding in self.points.items():
+            spec = _registered_point(name)
+            if spec.scope != "agent":
+                raise ValueError(
+                    f"agents.<name>.decisions.points.{name} is not supported: {name!r} is a "
+                    f"fleet-level decision point evaluated before an agent is selected. "
+                    f"Configure decisions.{name} instead."
+                )
+            if name in _AGENT_POINTS and getattr(self, name) is not None:
+                raise ValueError(
+                    f"decision point {name!r} is configured twice: use agents.<name>.decisions.{name} "
+                    f"or agents.<name>.decisions.points.{name}, not both"
+                )
+            _validate_point_options(spec, binding, label=f"agents.<name>.decisions.points.{name}")
+        return self
+
     def get(self, point: str) -> OrchidDecisionPointConfig | None:
-        if point not in _AGENT_POINTS:
+        spec = _registered_point(point)
+        if spec.scope != "agent":
             raise ValueError(f"decision point {point!r} is not available per agent")
-        return getattr(self, point)
+        if spec.name in _LEGACY_POINTS:
+            legacy = getattr(self, spec.name)
+            if legacy is not None:
+                return legacy
+        return self.points.get(spec.name)
 
 
 def iter_agents(agents: dict[str, Any], prefix: str = "") -> list[tuple[str, Any]]:
@@ -388,21 +517,27 @@ def validate_decision_bindings(config: Any) -> None:
     DB-sourced agent cannot bypass it. Nested agents are validated with a path
     label. An allowlisted host must match the provider's base URL at load time;
     the transport repeats the check before every request.
+
+    Bindings are discovered from the decision-point registry, so a consumer
+    point is validated by the same pass without editing this function. The
+    legacy-only shape rules (``escalate``, ``mode``, ``strategies``, …) stay
+    attached to the legacy points.
     """
     errors: list[str] = []
     enabled: list[str] = []
     http_enabled: list[str] = []
 
-    for point in _ALL_POINTS:
+    for spec in _registered_points():
+        point = spec.name
         binding = config.decisions._global_binding(point)
         if binding is None:
             continue
         resolved = config.decisions.resolve(point)
         if resolved is None:
             continue
-        label = f"decisions.{point}"
+        label = _global_label(point)
         enabled.append(label)
-        _validate_binding_shape(label, point, resolved, errors)
+        _validate_registered_binding(spec, point, label, resolved, errors)
         _validate_provider_reference(config, label, resolved, errors, expected_transform=None)
         if _uses_http(config, resolved):
             http_enabled.append(label)
@@ -414,16 +549,17 @@ def validate_decision_bindings(config: Any) -> None:
         agent_decisions = getattr(agent, "decisions", None)
         if agent_decisions is None:
             continue
-        for point in _AGENT_POINTS:
+        for spec in _registered_points("agent"):
+            point = spec.name
             binding = agent_decisions.get(point)
             if binding is None:
                 continue
             resolved = config.decisions.resolve(point, agent_decisions)
             if resolved is None:
                 continue
-            label = f"agents.{path}.decisions.{point}"
+            label = _agent_label(path, point)
             enabled.append(label)
-            _validate_binding_shape(label, point, resolved, errors)
+            _validate_registered_binding(spec, point, label, resolved, errors)
             expected_transform = _provider_transform(config, config.decisions.resolve(point))
             _validate_provider_reference(config, label, resolved, errors, expected_transform=expected_transform)
             if _uses_http(config, resolved):
@@ -437,6 +573,41 @@ def validate_decision_bindings(config: Any) -> None:
 
     if errors:
         raise OrchidConfigError("; ".join(errors))
+
+
+def _registered_points(scope: str | None = None) -> list[Any]:
+    from ..decision.registry import iter_decision_points
+
+    return list(iter_decision_points(scope))  # type: ignore[arg-type]
+
+
+def _global_label(point: str) -> str:
+    return f"decisions.{point}" if point in _LEGACY_POINTS else f"decisions.points.{point}"
+
+
+def _agent_label(path: str, point: str) -> str:
+    if point in _LEGACY_POINTS:
+        return f"agents.{path}.decisions.{point}"
+    return f"agents.{path}.decisions.points.{point}"
+
+
+def _validate_registered_binding(
+    spec: Any,
+    point: str,
+    label: str,
+    resolved: OrchidDecisionPointConfig,
+    errors: list[str],
+) -> None:
+    if point in _LEGACY_POINTS:
+        _validate_binding_shape(label, point, resolved, errors)
+    errors.extend(_point_shape_errors(spec, resolved, label))
+    validator = getattr(spec, "validate_config", None)
+    if validator is None:
+        return
+    try:
+        validator(resolved.model_dump(exclude_unset=True))
+    except (TypeError, ValueError) as exc:
+        errors.append(f"{label}: {exc}")
 
 
 def _uses_http(config: Any, binding: OrchidDecisionPointConfig) -> bool:

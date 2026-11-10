@@ -37,6 +37,7 @@ from ..core.helpers import filter_summary_messages
 from ..core.memory import OrchidConversationMemory
 from ..core.run_config import auth_from_config
 from ..core.state import OrchidAuthContext
+from ..decision.observability import log_decision
 from .sequential_advancer import SequentialAdvancer
 from .state import GraphState
 from .synthesizer import ResponseSynthesizer
@@ -475,6 +476,17 @@ def _recover_agent_names(
     return recovered
 
 
+def _numeric_or_none(value: Any) -> float | None:
+    """Return ``value`` as a float when it is a real number, else ``None``.
+
+    Routing strategies are pluggable and their metadata is not validated by the
+    protocol; the observability helper must not crash the request on a bad value.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 async def _route(
     state: GraphState,
     model: str,
@@ -509,6 +521,7 @@ async def _route(
 
     decision: OrchidRoutingDecision | None = None
     routing_path = "llm" if routing is None else "llm_fallback"
+    routing_failure_reason: str | None = None
     if routing is not None:
         summary: str | None = None
         if memory is not None and state.get("chat_id"):
@@ -528,6 +541,7 @@ async def _route(
                 routing_path = "decision"
                 logger.info("[Supervisor] decision-model routing: %s", decision.model_dump_json())
         except Exception:
+            routing_failure_reason = "provider_error"
             logger.exception("[Supervisor] decision routing failed; falling back to the LLM")
 
     routing_metadata: dict[str, Any] | None = None
@@ -536,14 +550,29 @@ async def _route(
         routing_metadata.update(routing.metadata)
         routing_metadata.setdefault("outcome", "accepted" if routing_path == "decision" else "fallback")
         if routing_metadata["outcome"] != "accepted":
-            routing_metadata.setdefault("fallback_reason", "low_confidence")
-        logging.getLogger("orchid.decision").info(
-            "decision point=routing path=%s provider=%s latency_ms=%s confidence=%s outcome=%s",
-            routing_metadata.get("path"),
-            routing_metadata.get("provider"),
-            routing_metadata.get("latency_ms"),
-            routing_metadata.get("confidence"),
-            routing_metadata.get("outcome"),
+            routing_metadata.setdefault("fallback_reason", routing_failure_reason or "low_confidence")
+        if not routing.emits_decision_log:
+            log_path = routing_metadata.get("path")
+            if log_path not in ("decision", "llm_fallback"):
+                log_path = routing_path
+            log_outcome = routing_metadata.get("outcome")
+            if log_outcome not in ("accepted", "fallback"):
+                log_outcome = "accepted" if routing_path == "decision" else "fallback"
+            log_decision(
+                point="routing",
+                path=str(log_path),
+                provider=str(routing_metadata.get("provider") or ""),
+                latency_ms=_numeric_or_none(routing_metadata.get("latency_ms")),
+                confidence=_numeric_or_none(routing_metadata.get("confidence")),
+                outcome=str(log_outcome),
+                fallback_reason=routing_metadata.get("fallback_reason"),
+            )
+    else:
+        log_decision(
+            point="routing",
+            path="llm_fallback",
+            outcome="fallback",
+            fallback_reason="not_configured",
         )
 
     if decision is None and routing is not None:
