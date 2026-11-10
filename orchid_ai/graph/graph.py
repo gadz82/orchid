@@ -38,6 +38,7 @@ Graph topology (parallel vs sequential, guardrails):
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from typing import Any
@@ -67,6 +68,7 @@ from ..tools.external_cli_config import load_external_agents_from_config
 from .decision_bindings import resolve_decision_binding
 from .guardrail_wiring import _GuardrailWiring
 from .mini_agent_wiring import _MiniAgentWiring
+from .model_routing import ModelRoutingSelector, TurnBudgetRegistry, build_routed_chat_model
 from .routing import build_routing_strategy
 from .state import GraphState
 from .supervisor import create_supervisor_node
@@ -98,6 +100,28 @@ def _latest_human_message_id(state: GraphState) -> str | None:
     return None
 
 
+def _turn_key(state: GraphState) -> str:
+    """Stable key for one user turn across every agent node in a graph run.
+
+    The latest human message and its count do not change while the supervisor
+    and agents loop within a request, so the first agent creates the shared
+    turn budget and later agents spend from it. The query text is hashed rather
+    than stored, and the message id distinguishes repeated identical prompts.
+    """
+    chat_id = state.get("chat_id") or ""
+    human_count = 0
+    last_human: Any = None
+    for message in state.get("messages") or []:
+        if isinstance(message, HumanMessage):
+            human_count += 1
+            last_human = message
+
+    text = str(getattr(last_human, "content", "")) if last_human is not None else ""
+    message_id = (getattr(last_human, "id", "") or "") if last_human is not None else ""
+    digest = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:16]
+    return f"{chat_id}:{human_count}:{message_id}:{digest}"
+
+
 class _AgentNodeWrapper:
     """LangGraph node that wraps an :class:`OrchidAgent` with per-agent guardrails
     and the optional mini-agent decomposer hook.
@@ -118,20 +142,40 @@ class _AgentNodeWrapper:
         input_guardrails: OrchidGuardrailChain | None = None,
         output_guardrails: OrchidGuardrailChain | None = None,
         agent_config: OrchidAgentConfig | None = None,
+        model_router: ModelRoutingSelector | None = None,
+        turn_budgets: TurnBudgetRegistry | None = None,
     ) -> None:
         self._agent = agent
         self._input_guardrails = input_guardrails
         self._output_guardrails = output_guardrails
         self._agent_config = agent_config
+        self._model_router = model_router
+        self._turn_budgets = turn_budgets
         self.__name__ = f"{agent.name}_agent"
 
     async def __call__(self, state: GraphState, config: RunnableConfig = None) -> GraphState:
         auth = auth_from_config(config)
 
+        # Per-agent input rails run before the routing point sees the query, so
+        # blocked content is never shipped to a decision provider (F2).
         blocked = await self._run_input_guardrails(state, auth)
         if blocked is not None:
             return blocked
 
+        if self._model_router is None:
+            return await self._run_after_input_guardrails(state, auth)
+
+        # Ask the ``model_routing`` point once per agent run and bind the
+        # selection for the duration of this coroutine. The routed chat model
+        # reads it on every LLM call, so concurrent runs (and every other
+        # agent) keep their own selection. The budget is shared across every
+        # agent node in the same turn (F4).
+        query = self._agent.extract_user_query(state)
+        budget = self._turn_budgets.for_turn(_turn_key(state)) if self._turn_budgets is not None else None
+        async with self._model_router.bound(query, budget=budget):
+            return await self._run_after_input_guardrails(state, auth)
+
+    async def _run_after_input_guardrails(self, state: GraphState, auth: Any) -> GraphState:
         decomposer_update = await self._run_decomposer(state, auth)
         if decomposer_update is not None:
             decomposer_update.setdefault("active_agents", [])
@@ -274,6 +318,8 @@ def _create_agent_node(
     input_guardrails: OrchidGuardrailChain | None = None,
     output_guardrails: OrchidGuardrailChain | None = None,
     agent_config: OrchidAgentConfig | None = None,
+    model_router: ModelRoutingSelector | None = None,
+    turn_budgets: TurnBudgetRegistry | None = None,
 ):
     """
     Wrap a OrchidAgent into a LangGraph node function.
@@ -290,7 +336,7 @@ def _create_agent_node(
     Returns an :class:`_AgentNodeWrapper` — a callable LangGraph node
     that delegates to focused per-concern methods.
     """
-    return _AgentNodeWrapper(agent, input_guardrails, output_guardrails, agent_config)
+    return _AgentNodeWrapper(agent, input_guardrails, output_guardrails, agent_config, model_router, turn_budgets)
 
 
 def _instantiate_agent(
@@ -317,6 +363,10 @@ def _instantiate_agent(
     rag_strategies: list[str] | None = None,
     retrieval_strategy_binding: Any | None = None,
     decision_model: Any | None = None,
+    model_routing_binding: Any | None = None,
+    model_routing_max_calls: int = 4,
+    model_routing_max_total_ms: int | None = None,
+    model_routing_out: dict[str, ModelRoutingSelector] | None = None,
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -356,6 +406,36 @@ def _instantiate_agent(
         )
     else:
         agent_chat_model = default_chat_model
+
+    # Wrap the configured model when the ``model_routing`` point is enabled.
+    # The wrapper delegates every call to the model selected for the current
+    # agent run and falls back to ``agent_chat_model`` (the configured default)
+    # outside a graph run or when no selection is made.
+    model_router: ModelRoutingSelector | None = None
+    if model_routing_binding is not None:
+        model_router = ModelRoutingSelector(
+            model_routing_binding,
+            default_model=agent_model,
+            fallback_model=agent_fallback,
+            agent_name=name,
+            max_calls_per_turn=model_routing_max_calls,
+            max_total_ms=model_routing_max_total_ms,
+        )
+        agent_chat_model = build_routed_chat_model(
+            model_router,
+            default_chat_model=agent_chat_model,
+            temperature=agent_llm.temperature if agent_llm else 0.2,
+            fallback_model=agent_fallback,
+            retry_attempts=agent_retry,
+        )
+        if model_routing_out is not None:
+            model_routing_out[name] = model_router
+        logger.info(
+            "[Graph] agent '%s' model routing enabled (catalog=%s, default=%s)",
+            name,
+            model_router.catalog,
+            agent_model,
+        )
 
     # All kwargs are passed — OrchidAgent accepts **_kwargs so subclasses
     # pick what they need and ignore the rest.  No inspect.signature sniffing.
@@ -408,6 +488,7 @@ def _build_subgraph(
     upload_namespace: str = "uploads",
     root_config: OrchidAgentsConfig | None = None,
     runtime: Any | None = None,
+    turn_budgets: TurnBudgetRegistry | None = None,
 ) -> Any:
     """
     Build a sub-graph for an agent with children.
@@ -416,6 +497,9 @@ def _build_subgraph(
     treats as a single node.
     """
     children_agents: list[OrchidAgent] = []
+    child_model_routers: dict[str, ModelRoutingSelector] = {}
+    model_routing_max_calls = root_config.decisions.budget.max_calls_per_turn if root_config is not None else 4
+    model_routing_max_total_ms = root_config.decisions.budget.max_total_ms if root_config is not None else None
     for child_name, child_config in (agent_config.children or {}).items():
         child_skill_binding = (
             root_config.decisions.resolve("skills", child_config.decisions) if root_config is not None else None
@@ -430,6 +514,16 @@ def _build_subgraph(
                 root_config,
                 runtime,
                 "retrieval_strategy",
+                agent_name=f"{parent_name}.{child_name}",
+            )
+            if root_config is not None and runtime is not None
+            else None
+        )
+        child_model_routing_binding = (
+            resolve_decision_binding(
+                root_config,
+                runtime,
+                "model_routing",
                 agent_name=f"{parent_name}.{child_name}",
             )
             if root_config is not None and runtime is not None
@@ -455,6 +549,10 @@ def _build_subgraph(
                 child_skill_binding.on_low_confidence if child_skill_binding is not None else "llm"
             ),
             retrieval_strategy_binding=child_retrieval_binding,
+            model_routing_binding=child_model_routing_binding,
+            model_routing_max_calls=model_routing_max_calls,
+            model_routing_max_total_ms=model_routing_max_total_ms,
+            model_routing_out=child_model_routers,
         )
         children_agents.append(child_agent)
 
@@ -467,7 +565,14 @@ def _build_subgraph(
 
     for child in children_agents:
         node_name = f"{child.name}_agent"
-        sg.add_node(node_name, _create_agent_node(child))
+        sg.add_node(
+            node_name,
+            _create_agent_node(
+                child,
+                model_router=child_model_routers.get(child.name),
+                turn_budgets=turn_budgets,
+            ),
+        )
         sg.add_edge(node_name, "supervisor")
 
     sg.set_entry_point("supervisor")
@@ -606,6 +711,17 @@ def build_graph(
     agents: list[OrchidAgent] = []
     agent_guardrails: dict[str, tuple[OrchidGuardrailChain, OrchidGuardrailChain]] = {}
     subgraph_nodes: dict[str, Any] = {}
+    # Agent name → selector for a per-agent ``model_routing`` binding. Node
+    # wrappers read it to ask the point once per request and bind the selected
+    # model for that run.
+    model_routing_routers: dict[str, ModelRoutingSelector] = {}
+    model_routing_max_calls = config.decisions.budget.max_calls_per_turn
+    model_routing_max_total_ms = config.decisions.budget.max_total_ms
+    # One budget per graph turn, shared by every agent node (F4).
+    turn_budgets = TurnBudgetRegistry(
+        max_calls_per_turn=model_routing_max_calls,
+        max_total_ms=model_routing_max_total_ms,
+    )
 
     # Build agent descriptions directly from config (no proxy needed)
     agent_descriptions: dict[str, str] = {name: cfg.description for name, cfg in config.agents.items()}
@@ -706,6 +822,7 @@ def build_graph(
                 upload_namespace=runtime.upload_namespace,
                 root_config=config,
                 runtime=runtime,
+                turn_budgets=turn_budgets,
             )
             subgraph_nodes[agent_name] = subgraph
         else:
@@ -758,6 +875,12 @@ def build_graph(
                 "retrieval_strategy",
                 agent_name=agent_name,
             )
+            model_routing_binding = resolve_decision_binding(
+                config,
+                runtime,
+                "model_routing",
+                agent_name=agent_name,
+            )
             agent = _instantiate_agent(
                 agent_name,
                 agent_config,
@@ -774,6 +897,10 @@ def build_graph(
                 skill_decision_model=skill_model,
                 skill_confidence_threshold=(skill_binding.confidence_threshold if skill_binding is not None else 0.8),
                 retrieval_strategy_binding=retrieval_binding,
+                model_routing_binding=model_routing_binding,
+                model_routing_max_calls=model_routing_max_calls,
+                model_routing_max_total_ms=model_routing_max_total_ms,
+                model_routing_out=model_routing_routers,
             )
             agents.append(agent)
 
@@ -864,7 +991,14 @@ def build_graph(
         agent_config = config.agents.get(agent.name)
         g.add_node(
             node_name,
-            _create_agent_node(agent, input_chain, output_chain, agent_config=agent_config),
+            _create_agent_node(
+                agent,
+                input_chain,
+                output_chain,
+                agent_config=agent_config,
+                model_router=model_routing_routers.get(agent.name),
+                turn_budgets=turn_budgets,
+            ),
         )
 
         # Synthesise the mini + aggregator nodes only when the
