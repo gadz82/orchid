@@ -6,11 +6,14 @@ name, scope, candidate ceiling, fallback declaration, and an optional
 point-specific validator. Flow behaviour (payload shaping, result mapping,
 fallbacks) belongs to the adapter that consumes the point binding.
 
-The four legacy points — ``routing``, ``skills``, ``tools``, ``rag`` — are
-registered as built-ins on import so configuration validation and provider
-composition can be registry-driven without changing their YAML keys or
-behaviour. Consumers register new points with :func:`register_decision_point`
-*before* loading a configuration that references them.
+The four legacy points — ``routing``, ``skills``, ``tools``, ``rag`` — and the
+nine extensible flow points — ``retrieval_strategy``, ``model_routing``,
+``tool_choice``, ``guardrails``, ``memory``, ``events``, ``ingestion``,
+``delegation``, ``agentic_loop`` — are registered as built-ins on import so
+configuration validation and provider composition can be registry-driven
+without changing their YAML keys or behaviour. Consumers register new points
+with :func:`register_decision_point` *before* loading a configuration that
+references them.
 
 Import cost: importing this module initialises the ``orchid_ai.decision``
 package, which pulls in the factory and adapters. Code that only needs the
@@ -20,9 +23,15 @@ dependency-free contracts should import :mod:`orchid_ai.core.decision` instead.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+import math
+from collections.abc import Iterator, Mapping
+from typing import Any
 
-from ..core.decision import OrchidDecisionPointScope, OrchidDecisionPointSpec
+from ..core.decision import (
+    OrchidDecisionFallbackPolicy,
+    OrchidDecisionPointScope,
+    OrchidDecisionPointSpec,
+)
 
 __all__ = [
     "DECISION_POINT_REGISTRY",
@@ -136,4 +145,187 @@ def _register_builtins() -> None:
         register_decision_point(spec)
 
 
+def _register_extended_points() -> None:
+    """Register the nine extensible flow points with their fallback contracts.
+
+    Scope and candidate limits describe where the adapter evaluates the point
+    and how many candidates it may send; they carry no flow logic. Fallback
+    modes are stable codes the consuming adapter implements, and every fallback
+    preserves the framework's existing behaviour (configured strategy, default
+    model, deterministic processors, no delegation, the round cap).
+    """
+    extended = (
+        OrchidDecisionPointSpec(
+            name="retrieval_strategy",
+            scope="agent",
+            fallback=OrchidDecisionFallbackPolicy(
+                mode="configured_strategy",
+                description="Use the retrieval strategy configured on the agent.",
+            ),
+            description="Choose the retrieval strategy for one query.",
+            builtin=True,
+            validate_config=_validate_retrieval_strategy_options,
+        ),
+        OrchidDecisionPointSpec(
+            name="model_routing",
+            scope="agent",
+            fallback=OrchidDecisionFallbackPolicy(
+                mode="default_model",
+                description="Use the agent or fleet default chat model.",
+            ),
+            description="Choose the chat model or fallback for a request.",
+            builtin=True,
+            validate_config=_validate_options,
+        ),
+        OrchidDecisionPointSpec(
+            name="tool_choice",
+            scope="agent",
+            max_candidates=32,
+            fallback=OrchidDecisionFallbackPolicy(
+                mode="all_tools",
+                description="Bind every available tool (the existing all strategy).",
+            ),
+            description="Choose and order the tools bound for one turn.",
+            builtin=True,
+            validate_config=_validate_options,
+        ),
+        OrchidDecisionPointSpec(
+            name="guardrails",
+            scope="agent",
+            fallback=OrchidDecisionFallbackPolicy(
+                mode="configured_guardrails",
+                description="Run the configured guardrail chain and its per-rail failure policy.",
+            ),
+            description="Choose allow, block, redact, or warn for input and output content.",
+            builtin=True,
+            validate_config=_validate_options,
+        ),
+        OrchidDecisionPointSpec(
+            name="memory",
+            scope="fleet",
+            fallback=OrchidDecisionFallbackPolicy(
+                mode="configured_memory",
+                description="Keep the configured memory strategy and sliding-window heuristic.",
+            ),
+            description="Choose when to summarise, keep, or persist conversation memory.",
+            builtin=True,
+            validate_config=_validate_options,
+        ),
+        OrchidDecisionPointSpec(
+            name="events",
+            scope="fleet",
+            fallback=OrchidDecisionFallbackPolicy(
+                mode="deterministic_processors",
+                description="Run the deterministic event processors without dropping or duplicating the event.",
+            ),
+            description="Classify, deduplicate, and activate framework events.",
+            builtin=True,
+            validate_config=_validate_options,
+        ),
+        OrchidDecisionPointSpec(
+            name="ingestion",
+            scope="agent",
+            fallback=OrchidDecisionFallbackPolicy(
+                mode="registry_default",
+                description="Use the registry default parser, chunker, and strategy for the document.",
+            ),
+            description="Choose the ingestion strategy for a document.",
+            builtin=True,
+            validate_config=_validate_options,
+        ),
+        OrchidDecisionPointSpec(
+            name="delegation",
+            scope="agent",
+            fallback=OrchidDecisionFallbackPolicy(
+                mode="no_delegation",
+                description="Handle the request locally without invoking an external agent.",
+            ),
+            description="Choose whether and where to delegate a request to an external agent.",
+            builtin=True,
+            validate_config=_validate_options,
+        ),
+        OrchidDecisionPointSpec(
+            name="agentic_loop",
+            scope="agent",
+            fallback=OrchidDecisionFallbackPolicy(
+                mode="max_tool_rounds",
+                description="Continue until the agent's configured max_tool_rounds cap.",
+            ),
+            description="Choose whether the agentic loop continues or stops after a round.",
+            builtin=True,
+            validate_config=_validate_options,
+        ),
+    )
+    for spec in extended:
+        register_decision_point(spec)
+
+
+_MAX_OPTION_DEPTH = 10
+
+
+def _validate_options(binding: Mapping[str, Any]) -> None:
+    """Reject point options a JSON transport cannot carry.
+
+    Options are point-specific and owned by the adapter, so this shared
+    validator deliberately checks only the transport contract: string keys,
+    bounded nesting, and finite scalars. A non-JSON value would otherwise fail
+    when the adapter builds its request state.
+    """
+    options = binding.get("options")
+    if options is None:
+        options = {}
+    if not isinstance(options, Mapping):
+        raise ValueError("options must be a mapping")  # noqa: TRY004 — validators are contracted to raise ValueError
+    _validate_json_safe(options, path="options", depth=0)
+
+
+def _validate_retrieval_strategy_options(binding: Mapping[str, Any]) -> None:
+    """Validate the optional ``options.strategies`` candidate allowlist.
+
+    The allowlist narrows the registry-driven candidate set; it never adds a
+    strategy that is not registered. A name that is unknown at config-load time
+    fails here, so a typo cannot silently shrink the prompt.
+    """
+    _validate_options(binding)
+    options = binding.get("options") or {}
+    strategies = options.get("strategies")
+    if strategies is None:
+        return
+    if (
+        not isinstance(strategies, list)
+        or not strategies
+        or any(not isinstance(name, str) or not name.strip() for name in strategies)
+    ):
+        raise ValueError("options.strategies must be a non-empty list of strategy names")
+
+    from ..rag.strategies import RETRIEVAL_REGISTRY
+
+    unknown = sorted(name for name in strategies if name not in RETRIEVAL_REGISTRY)
+    if unknown:
+        raise ValueError(f"options.strategies contains unknown retrieval strategies: {', '.join(unknown)}")
+
+
+def _validate_json_safe(value: Any, *, path: str, depth: int) -> None:
+    if depth > _MAX_OPTION_DEPTH:
+        raise ValueError(f"{path} exceeds the maximum nesting depth")
+    if value is None or isinstance(value, (bool, int, str)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"{path} must contain only finite numbers")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _validate_json_safe(item, path=f"{path}[{index}]", depth=depth + 1)
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str) or not key:
+                raise ValueError(f"{path} keys must be non-empty strings")
+            _validate_json_safe(item, path=f"{path}.{key}", depth=depth + 1)
+        return
+    raise ValueError(f"{path} contains a non-JSON value ({type(value).__name__})")
+
+
 _register_builtins()
+_register_extended_points()

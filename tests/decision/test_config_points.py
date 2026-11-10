@@ -73,34 +73,34 @@ def registered():
 
 @pytest.fixture
 def points(registered):
-    registered(OrchidDecisionPointSpec(name="tool_choice", scope="agent", max_candidates=8, fallback="all_tools"))
-    registered(OrchidDecisionPointSpec(name="model_routing", scope="fleet", fallback="default_model"))
+    registered(OrchidDecisionPointSpec(name="custom_point", scope="agent", max_candidates=8, fallback="all_tools"))
+    registered(OrchidDecisionPointSpec(name="custom_fleet", scope="fleet", fallback="default_model"))
     return registered
 
 
 def test_points_map_defaults_to_empty(points) -> None:
     config = _config(providers=PROVIDERS)
     assert config.decisions.points == {}
-    assert config.decisions.resolve("tool_choice") is None
+    assert config.decisions.resolve("custom_point") is None
 
 
 def test_registered_point_parses_and_resolves(points) -> None:
     config = _config(
-        decisions={"points": {"tool_choice": {"enabled": True, "model": "stub"}}},
+        decisions={"points": {"custom_point": {"enabled": True, "model": "stub"}}},
         providers=PROVIDERS,
     )
-    resolved = config.decisions.resolve("tool_choice")
+    resolved = config.decisions.resolve("custom_point")
     assert resolved is not None
     assert resolved.model == "stub"
 
 
 def test_one_configured_point_does_not_activate_another(points) -> None:
     config = _config(
-        decisions={"points": {"tool_choice": {"model": "stub"}}},
+        decisions={"points": {"custom_point": {"model": "stub"}}},
         providers=PROVIDERS,
     )
-    assert config.decisions.resolve("tool_choice") is not None
-    assert config.decisions.resolve("model_routing") is None
+    assert config.decisions.resolve("custom_point") is not None
+    assert config.decisions.resolve("custom_fleet") is None
 
 
 def test_unknown_point_fails_and_lists_registered_names(points) -> None:
@@ -110,7 +110,7 @@ def test_unknown_point_fails_and_lists_registered_names(points) -> None:
     assert "unknown decision point" in message
     assert "registered points" in message
     assert "routing" in message
-    assert "tool_choice" in message
+    assert "custom_point" in message
 
 
 def test_legacy_point_can_be_configured_through_the_points_map() -> None:
@@ -134,17 +134,17 @@ def test_legacy_point_cannot_be_configured_twice() -> None:
 def test_fleet_point_rejects_a_per_agent_override(points) -> None:
     with pytest.raises(ValidationError, match="fleet-level"):
         _config(
-            agents={"a": _agent({"points": {"model_routing": {"model": "stub"}}})},
+            agents={"a": _agent({"points": {"custom_fleet": {"model": "stub"}}})},
             providers=PROVIDERS,
         )
 
 
 def test_fleet_point_ignores_agent_context_when_configured_globally(points) -> None:
     config = _config(
-        decisions={"points": {"model_routing": {"model": "stub"}}},
+        decisions={"points": {"custom_fleet": {"model": "stub"}}},
         providers=PROVIDERS,
     )
-    assert config.resolve_decision("model_routing", "a") is not None
+    assert config.resolve_decision("custom_fleet", "a") is not None
 
 
 def test_agent_point_resolves_agent_then_global_then_default(points) -> None:
@@ -152,7 +152,7 @@ def test_agent_point_resolves_agent_then_global_then_default(points) -> None:
         decisions={
             "default": {"confidence_threshold": 0.9},
             "points": {
-                "tool_choice": {
+                "custom_point": {
                     "model": "stub",
                     "confidence_threshold": 0.6,
                     "max_candidates": 4,
@@ -161,46 +161,46 @@ def test_agent_point_resolves_agent_then_global_then_default(points) -> None:
             },
         },
         agents={
-            "a": _agent({"points": {"tool_choice": {"confidence_threshold": 0.8, "options": {"mode": "agent"}}}}),
+            "a": _agent({"points": {"custom_point": {"confidence_threshold": 0.8, "options": {"mode": "agent"}}}}),
             "b": _agent(),
         },
         providers=PROVIDERS,
     )
 
-    overridden = config.resolve_decision("tool_choice", "a")
+    overridden = config.resolve_decision("custom_point", "a")
     assert overridden is not None
     assert overridden.model == "stub"
     assert overridden.confidence_threshold == 0.8
     assert overridden.max_candidates == 4
     assert overridden.options == {"mode": "agent"}
 
-    inherited = config.resolve_decision("tool_choice", "b")
+    inherited = config.resolve_decision("custom_point", "b")
     assert inherited is not None
     assert inherited.confidence_threshold == 0.6
     assert inherited.options == {"mode": "global"}
 
-    global_binding = config.decisions.resolve("tool_choice")
+    global_binding = config.decisions.resolve("custom_point")
     assert global_binding is not None
     assert global_binding.confidence_threshold == 0.6
 
 
 def test_agent_can_disable_an_inherited_point(points) -> None:
     config = _config(
-        decisions={"points": {"tool_choice": {"model": "stub"}}},
-        agents={"a": _agent({"points": {"tool_choice": {"enabled": False}}})},
+        decisions={"points": {"custom_point": {"model": "stub"}}},
+        agents={"a": _agent({"points": {"custom_point": {"enabled": False}}})},
         providers=PROVIDERS,
     )
-    assert config.decisions.resolve("tool_choice") is not None
-    assert config.resolve_decision("tool_choice", "a") is None
+    assert config.decisions.resolve("custom_point") is not None
+    assert config.resolve_decision("custom_point", "a") is None
 
 
 def test_agent_block_alone_enables_a_point(points) -> None:
     config = _config(
-        agents={"a": _agent({"points": {"tool_choice": {"model": "stub"}}})},
+        agents={"a": _agent({"points": {"custom_point": {"model": "stub"}}})},
         providers=PROVIDERS,
     )
-    assert config.decisions.resolve("tool_choice") is None
-    assert config.resolve_decision("tool_choice", "a") is not None
+    assert config.decisions.resolve("custom_point") is None
+    assert config.resolve_decision("custom_point", "a") is not None
 
 
 def test_agent_point_cannot_be_configured_twice(points) -> None:
@@ -219,13 +219,13 @@ def test_point_validator_receives_explicit_global_config(registered) -> None:
 
     registered(
         OrchidDecisionPointSpec(
-            name="tool_choice",
+            name="custom_point",
             scope="agent",
             validate_config=validate,
         )
     )
     _config(
-        decisions={"points": {"tool_choice": {"enabled": True, "model": "stub", "options": {"mode": "fast"}}}},
+        decisions={"points": {"custom_point": {"enabled": True, "model": "stub", "options": {"mode": "fast"}}}},
         providers=PROVIDERS,
     )
     assert seen
@@ -239,10 +239,10 @@ def test_point_validator_failure_is_reported_with_the_point_label(registered) ->
         if payload.get("options", {}).get("mode") == "bad":
             raise ValueError("unsupported mode")
 
-    registered(OrchidDecisionPointSpec(name="tool_choice", scope="agent", validate_config=validate))
-    with pytest.raises(ValidationError, match="decisions.points.tool_choice: unsupported mode"):
+    registered(OrchidDecisionPointSpec(name="custom_point", scope="agent", validate_config=validate))
+    with pytest.raises(ValidationError, match="decisions.points.custom_point: unsupported mode"):
         _config(
-            decisions={"points": {"tool_choice": {"model": "stub", "options": {"mode": "bad"}}}},
+            decisions={"points": {"custom_point": {"model": "stub", "options": {"mode": "bad"}}}},
             providers=PROVIDERS,
         )
 
@@ -252,44 +252,44 @@ def test_agent_point_validator_failure_is_reported_with_the_agent_label(register
         if payload.get("options", {}).get("mode") == "bad":
             raise ValueError("unsupported mode")
 
-    registered(OrchidDecisionPointSpec(name="tool_choice", scope="agent", validate_config=validate))
-    with pytest.raises(ValidationError, match=r"agents.<name>.decisions.points.tool_choice: unsupported mode"):
+    registered(OrchidDecisionPointSpec(name="custom_point", scope="agent", validate_config=validate))
+    with pytest.raises(ValidationError, match=r"agents.<name>.decisions.points.custom_point: unsupported mode"):
         _config(
-            agents={"a": _agent({"points": {"tool_choice": {"model": "stub", "options": {"mode": "bad"}}}})},
+            agents={"a": _agent({"points": {"custom_point": {"model": "stub", "options": {"mode": "bad"}}}})},
             providers=PROVIDERS,
         )
 
 
 def test_registered_point_rejects_an_unknown_provider(points) -> None:
     with pytest.raises(ValidationError, match="unknown decision provider 'missing'"):
-        _config(decisions={"points": {"tool_choice": {"model": "missing"}}}, providers=PROVIDERS)
+        _config(decisions={"points": {"custom_point": {"model": "missing"}}}, providers=PROVIDERS)
 
 
 def test_registered_http_point_requires_the_egress_allowlist(points) -> None:
     with pytest.raises(ValidationError, match="allowed_decision_hosts"):
         _config(
-            decisions={"points": {"tool_choice": {"model": "fast"}}},
+            decisions={"points": {"custom_point": {"model": "fast"}}},
             providers={"fast": HTTP_PROVIDER},
         )
 
     with pytest.raises(ValidationError, match="not listed in allowed_decision_hosts"):
         _config(
-            decisions={"points": {"tool_choice": {"model": "fast"}}},
+            decisions={"points": {"custom_point": {"model": "fast"}}},
             providers={"fast": HTTP_PROVIDER},
             allowed=["other.example.com"],
         )
 
     config = _config(
-        decisions={"points": {"tool_choice": {"model": "fast"}}},
+        decisions={"points": {"custom_point": {"model": "fast"}}},
         providers={"fast": HTTP_PROVIDER},
         allowed=["api.example.com"],
     )
-    assert config.decisions.resolve("tool_choice") is not None
+    assert config.decisions.resolve("custom_point") is not None
 
 
 def test_factory_builds_only_the_referenced_registered_point(points, caplog) -> None:
     config = _config(
-        decisions={"points": {"tool_choice": {"model": "stub"}}},
+        decisions={"points": {"custom_point": {"model": "stub"}}},
         providers=PROVIDERS,
     )
     with caplog.at_level(logging.WARNING, logger="orchid_ai.decision.factory"):
@@ -307,7 +307,7 @@ def test_registered_point_with_options_does_not_require_legacy_point_fields(poin
     config = _config(
         decisions={
             "points": {
-                "tool_choice": {
+                "custom_point": {
                     "model": "stub",
                     "max_candidates": 3,
                     "on_low_confidence": "default",
@@ -317,7 +317,7 @@ def test_registered_point_with_options_does_not_require_legacy_point_fields(poin
         },
         providers=PROVIDERS,
     )
-    resolved = config.decisions.resolve("tool_choice")
+    resolved = config.decisions.resolve("custom_point")
     assert resolved is not None
     assert resolved.max_candidates == 3
     assert resolved.on_low_confidence == "default"
@@ -329,10 +329,10 @@ def test_registered_point_with_options_does_not_require_legacy_point_fields(poin
 
 def test_registered_point_narrows_the_declared_candidate_limit(points) -> None:
     config = _config(
-        decisions={"points": {"tool_choice": {"model": "stub", "max_candidates": 4}}},
+        decisions={"points": {"custom_point": {"model": "stub", "max_candidates": 4}}},
         providers=PROVIDERS,
     )
-    binding = resolve_decision_binding(config, _runtime(), "tool_choice")
+    binding = resolve_decision_binding(config, _runtime(), "custom_point")
     assert binding is not None
     assert binding.max_candidates == 4
 
@@ -340,14 +340,14 @@ def test_registered_point_narrows_the_declared_candidate_limit(points) -> None:
 def test_registered_point_cannot_raise_the_declared_candidate_limit(points) -> None:
     with pytest.raises(ValidationError, match="exceeds the point limit 8"):
         _config(
-            decisions={"points": {"tool_choice": {"model": "stub", "max_candidates": 16}}},
+            decisions={"points": {"custom_point": {"model": "stub", "max_candidates": 16}}},
             providers=PROVIDERS,
         )
 
 
 def test_binding_defensively_clamps_an_oversized_direct_config(points) -> None:
     binding = DecisionBinding(
-        spec=get_decision_point("tool_choice"),
+        spec=get_decision_point("custom_point"),
         config=OrchidDecisionPointConfig(model="stub", max_candidates=16),
         model=StubDecisionModel(),
     )
@@ -357,7 +357,7 @@ def test_binding_defensively_clamps_an_oversized_direct_config(points) -> None:
 def test_registered_point_without_a_declared_limit_rejects_max_candidates(points) -> None:
     with pytest.raises(ValidationError, match="requires a point that declares a candidate limit"):
         _config(
-            decisions={"points": {"model_routing": {"model": "stub", "max_candidates": 4}}},
+            decisions={"points": {"custom_fleet": {"model": "stub", "max_candidates": 4}}},
             providers=PROVIDERS,
         )
 
@@ -395,7 +395,7 @@ def test_legacy_point_via_points_map_rejects_options() -> None:
 def test_non_legacy_points_reject_legacy_only_fields(points, field: str, value: Any, message: str) -> None:
     with pytest.raises(ValidationError, match=message):
         _config(
-            decisions={"points": {"tool_choice": {"model": "stub", field: value}}},
+            decisions={"points": {"custom_point": {"model": "stub", field: value}}},
             providers=PROVIDERS,
         )
 
@@ -403,7 +403,7 @@ def test_non_legacy_points_reject_legacy_only_fields(points, field: str, value: 
 def test_agent_non_legacy_point_rejects_legacy_only_fields(points) -> None:
     with pytest.raises(ValidationError, match="mode is only valid for rag"):
         _config(
-            agents={"a": _agent({"points": {"tool_choice": {"model": "stub", "mode": "filter"}}})},
+            agents={"a": _agent({"points": {"custom_point": {"model": "stub", "mode": "filter"}}})},
             providers=PROVIDERS,
         )
 
@@ -425,7 +425,7 @@ def _runtime() -> OrchidRuntime:
 
 
 async def test_bootstrap_exposes_a_configured_consumer_point(tmp_path, registered) -> None:
-    registered(OrchidDecisionPointSpec(name="model_routing", scope="fleet", fallback="default_model"))
+    registered(OrchidDecisionPointSpec(name="custom_fleet", scope="fleet", fallback="default_model"))
     agents = tmp_path / "agents.yaml"
     agents.write_text(
         "agents:\n"
@@ -437,7 +437,7 @@ async def test_bootstrap_exposes_a_configured_consumer_point(tmp_path, registere
         "    protocol: stub\n"
         "decisions:\n"
         "  points:\n"
-        "    model_routing:\n"
+        "    custom_fleet:\n"
         "      model: stub\n",
         encoding="utf-8",
     )
@@ -450,10 +450,10 @@ async def test_bootstrap_exposes_a_configured_consumer_point(tmp_path, registere
         skip_yaml_sections={"rag", "storage"},
     )
     try:
-        binding = orchid.runtime.get_decision_binding("model_routing")
+        binding = orchid.runtime.get_decision_binding("custom_fleet")
         assert isinstance(binding, OrchidDecisionPointBinding)
 
-        resolved = resolve_decision_binding(orchid.config, orchid.runtime, "model_routing")
+        resolved = resolve_decision_binding(orchid.config, orchid.runtime, "custom_fleet")
         assert resolved is not None
         result = await resolved.decide(
             OrchidDecisionState(text="pick a model"),
@@ -465,17 +465,17 @@ async def test_bootstrap_exposes_a_configured_consumer_point(tmp_path, registere
 
 
 async def test_hot_reload_refreshes_decision_bindings(registered) -> None:
-    registered(OrchidDecisionPointSpec(name="model_routing", scope="fleet", fallback="default_model"))
+    registered(OrchidDecisionPointSpec(name="custom_fleet", scope="fleet", fallback="default_model"))
     initial = _config(
-        decisions={"points": {"model_routing": {"enabled": False}}},
+        decisions={"points": {"custom_fleet": {"enabled": False}}},
         providers=PROVIDERS,
     )
     enabled = _config(
-        decisions={"points": {"model_routing": {"model": "stub"}}},
+        decisions={"points": {"custom_fleet": {"model": "stub"}}},
         providers=PROVIDERS,
     )
     disabled = _config(
-        decisions={"points": {"model_routing": {"enabled": False}}},
+        decisions={"points": {"custom_fleet": {"enabled": False}}},
         providers=PROVIDERS,
     )
     runtime = _runtime()
@@ -494,18 +494,18 @@ async def test_hot_reload_refreshes_decision_bindings(registered) -> None:
     ):
         lifecycle = OrchidLifecycle(config=initial, runtime=runtime, config_watcher=watcher)
         assert await lifecycle.reload_config() is True
-        assert isinstance(runtime.get_decision_binding("model_routing"), OrchidDecisionPointBinding)
+        assert isinstance(runtime.get_decision_binding("custom_fleet"), OrchidDecisionPointBinding)
 
         assert await lifecycle.reload_config() is True
-        assert runtime.get_decision_binding("model_routing") is None
+        assert runtime.get_decision_binding("custom_fleet") is None
 
 
 def test_bind_decision_points_is_publicly_usable(points) -> None:
     config = _config(
-        decisions={"points": {"tool_choice": {"model": "stub", "max_candidates": 4}}},
+        decisions={"points": {"custom_point": {"model": "stub", "max_candidates": 4}}},
         providers=PROVIDERS,
     )
     runtime = _runtime()
     bindings = bind_decision_points(config, runtime)
-    assert isinstance(bindings["tool_choice"], OrchidDecisionPointBinding)
-    assert runtime.get_decision_binding("tool_choice") is bindings["tool_choice"]
+    assert isinstance(bindings["custom_point"], OrchidDecisionPointBinding)
+    assert runtime.get_decision_binding("custom_point") is bindings["custom_point"]

@@ -310,7 +310,7 @@ def test_legacy_routing_without_a_built_provider_returns_no_strategy(caplog: pyt
 
 
 def test_old_yaml_does_not_build_or_bind_an_unconfigured_consumer_point(registry_state) -> None:
-    register_decision_point(OrchidDecisionPointSpec(name="tool_choice", scope="agent", fallback="all_tools"))
+    register_decision_point(OrchidDecisionPointSpec(name="custom_point", scope="agent", fallback="all_tools"))
     config = _config(
         decisions={"routing": {"model": "stub"}},
         providers={"stub": {"protocol": "stub"}, "unused": {"protocol": "stub"}},
@@ -319,8 +319,8 @@ def test_old_yaml_does_not_build_or_bind_an_unconfigured_consumer_point(registry
     assert set(built) == {"stub"}
 
     runtime = _runtime(built["stub"])  # type: ignore[arg-type]
-    assert resolve_decision_binding(config, runtime, "tool_choice") is None
-    assert "tool_choice" not in bind_decision_points(config, runtime)
+    assert resolve_decision_binding(config, runtime, "custom_point") is None
+    assert "custom_point" not in bind_decision_points(config, runtime)
 
 
 def test_legacy_routing_fallback_uses_the_structured_observability_fields(

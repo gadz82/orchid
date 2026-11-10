@@ -64,6 +64,7 @@ from ..core.run_config import auth_from_config
 from ..mcp.auth_registry import OrchidMCPAuthRegistry
 from ..runtime import MCPClientFactory, OrchidRuntime
 from ..tools.external_cli_config import load_external_agents_from_config
+from .decision_bindings import resolve_decision_binding
 from .guardrail_wiring import _GuardrailWiring
 from .mini_agent_wiring import _MiniAgentWiring
 from .routing import build_routing_strategy
@@ -314,6 +315,7 @@ def _instantiate_agent(
     rag_decision_model: Any | None = None,
     rag_confidence_threshold: float = 0.75,
     rag_strategies: list[str] | None = None,
+    retrieval_strategy_binding: Any | None = None,
     decision_model: Any | None = None,
 ) -> OrchidAgent:
     """
@@ -384,6 +386,8 @@ def _instantiate_agent(
         kwargs["rag_decision_model"] = rag_decision_model
         kwargs["rag_confidence_threshold"] = rag_confidence_threshold
         kwargs["rag_strategies"] = rag_strategies
+    if retrieval_strategy_binding is not None:
+        kwargs["retrieval_strategy_binding"] = retrieval_strategy_binding
     if decision_model is not None:
         kwargs["decision_model"] = decision_model
 
@@ -421,6 +425,16 @@ def _build_subgraph(
             if runtime is not None and child_skill_binding is not None and child_skill_binding.model
             else None
         )
+        child_retrieval_binding = (
+            resolve_decision_binding(
+                root_config,
+                runtime,
+                "retrieval_strategy",
+                agent_name=f"{parent_name}.{child_name}",
+            )
+            if root_config is not None and runtime is not None
+            else None
+        )
         child_agent = _instantiate_agent(
             child_name,
             child_config,
@@ -440,6 +454,7 @@ def _build_subgraph(
             skill_on_low_confidence=(
                 child_skill_binding.on_low_confidence if child_skill_binding is not None else "llm"
             ),
+            retrieval_strategy_binding=child_retrieval_binding,
         )
         children_agents.append(child_agent)
 
@@ -737,6 +752,12 @@ def build_graph(
                     agent_name,
                     tool_binding.model,
                 )
+            retrieval_binding = resolve_decision_binding(
+                config,
+                runtime,
+                "retrieval_strategy",
+                agent_name=agent_name,
+            )
             agent = _instantiate_agent(
                 agent_name,
                 agent_config,
@@ -752,6 +773,7 @@ def build_graph(
                 upload_namespace=runtime.upload_namespace,
                 skill_decision_model=skill_model,
                 skill_confidence_threshold=(skill_binding.confidence_threshold if skill_binding is not None else 0.8),
+                retrieval_strategy_binding=retrieval_binding,
             )
             agents.append(agent)
 

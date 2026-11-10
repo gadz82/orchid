@@ -29,6 +29,7 @@ from langchain_core.messages import AIMessage
 
 from ..config.schema import OrchidAgentConfig
 from ..core.agent import OrchidAgent
+from ..core.decision import OrchidDecisionPointBinding
 from ..core.graph_store import OrchidGraphStore
 from ..core.helpers import filter_summary_messages
 from ..core.mcp import OrchidMCPClient
@@ -78,6 +79,7 @@ class GenericAgent(OrchidAgent):
         rag_decision_model: Any | None = None,
         rag_confidence_threshold: float = 0.75,
         rag_strategies: list[str] | None = None,
+        retrieval_strategy_binding: OrchidDecisionPointBinding | None = None,
         **kwargs: Any,
     ):
         super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
@@ -120,6 +122,7 @@ class GenericAgent(OrchidAgent):
             decision_model=rag_decision_model,
             confidence_threshold=rag_confidence_threshold,
             strategies=rag_strategies,
+            retrieval_strategy_binding=retrieval_strategy_binding,
         )
         self._prompt_builder = SystemPromptBuilder(config.prompt_sections)
 

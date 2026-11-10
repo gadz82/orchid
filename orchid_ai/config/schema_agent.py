@@ -320,16 +320,17 @@ class OrchidAgentsConfig(BaseModel):
         """
         agent_decisions = None
         if agent_name is not None:
-            matches = [
-                agent
-                for path, agent in iter_agents(self.agents)
-                if path == agent_name or path.rsplit(".", 1)[-1] == agent_name
-            ]
+            agents = list(iter_agents(self.agents))
+            # An exact path always wins: a top-level ``kid`` and a nested
+            # ``parent.kid`` must not make the top-level lookup ambiguous.
+            matches = [(path, agent) for path, agent in agents if path == agent_name]
+            if not matches:
+                matches = [(path, agent) for path, agent in agents if path.rsplit(".", 1)[-1] == agent_name]
             if not matches:
                 raise KeyError(f"unknown agent {agent_name!r}")
             if len(matches) > 1:
                 raise ValueError(f"ambiguous agent name {agent_name!r}; pass the full path")
-            agent_decisions = matches[0].decisions
+            agent_decisions = matches[0][1].decisions
         return self.decisions.resolve(point, agent_decisions)
 
     def merge_from_db(self, db_configs: list[dict], *, strict: bool = True) -> None:
