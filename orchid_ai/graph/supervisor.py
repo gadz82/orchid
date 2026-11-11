@@ -31,10 +31,12 @@ from langgraph.graph import END
 from langgraph.types import Send
 from pydantic import BaseModel, Field, model_validator
 
+from ..agents.memory_decision import decide_memory_action
 from ..config.schema import OrchidOrchestratorSkillConfig, OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
+from ..core.decision import OrchidDecisionPointBinding
 from ..core.helpers import filter_summary_messages
-from ..core.memory import OrchidConversationMemory
+from ..core.memory import NullConversationMemory, OrchidConversationMemory
 from ..core.run_config import auth_from_config
 from ..core.state import OrchidAuthContext
 from ..decision.observability import log_decision
@@ -152,6 +154,7 @@ def create_supervisor_node(
     routing_chat_model: BaseChatModel | None = None,
     memory: OrchidConversationMemory | None = None,
     routing: OrchidRoutingStrategy | None = None,
+    memory_binding: OrchidDecisionPointBinding | None = None,
 ):
     """
     Return a LangGraph node function with *model*, *agent_descriptions*,
@@ -231,6 +234,7 @@ def create_supervisor_node(
             memory,
             auth=auth,
             routing=routing,
+            memory_binding=memory_binding,
         )
         elapsed = (time.perf_counter() - start) * 1000
         perf_logger.info(
@@ -346,8 +350,24 @@ async def _extract_and_compress_history(
     memory: OrchidConversationMemory | None = None,
     *,
     auth: OrchidAuthContext | None = None,
+    memory_binding: OrchidDecisionPointBinding | None = None,
 ) -> list[dict[str, str]]:
-    """Extract conversation history, optionally compressing older turns."""
+    """Extract conversation history, optionally compressing older turns.
+
+    When the fleet-scoped ``memory`` point is bound, the decision chooses
+    between the existing compression path (``summarize``), leaving the history
+    and stored summary untouched (``keep``), and persisting the pending delta
+    through the existing memory API (``persist``). Any fallback or disabled
+    point runs the configured heuristic exactly as before.
+
+    The decision governs this call site only. ``synthesizer.py``,
+    ``sequential_advancer.py`` and ``GenericAgent`` have their own seams, so a
+    ``keep`` here does not prevent a later legacy write in the same turn; a
+    ``persist`` here can be repeated by another seam. Each seam writes at most
+    once, and no seam duplicates a write inside one call. A persistence
+    failure is swallowed (best-effort), and the accepted decision line is
+    emitted before the write, so it does not prove a successful write.
+    """
     history = OrchidAgent.extract_conversation_history(
         state,
         max_turns=sup.history_max_turns,
@@ -355,24 +375,43 @@ async def _extract_and_compress_history(
         truncation_strategy=sup.memory.truncation_strategy,
     )
     if history and sup.history_summary_enabled and chat_model:
-        running_summary: str | None = None
-        if memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
-            chat_id = state.get("chat_id", "")
-            if chat_id:
-                try:
-                    running_summary = await memory.get_running_summary(chat_id)
-                except Exception:
-                    pass
-        history = await OrchidAgent.compress_conversation_history(
-            history,
-            chat_model=chat_model,
-            recent_turns=sup.history_summary_recent_turns,
-            running_summary=running_summary,
-            structured_output=sup.memory.structured_output,
+        chat_id = state.get("chat_id", "")
+        memory_enabled = (
+            memory is not None
+            and sup.memory.strategy in ("running_summary", "rag_augmented")
+            and not isinstance(memory, NullConversationMemory)
         )
-        if memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
-            chat_id = state.get("chat_id", "")
-            if chat_id:
+        running_summary: str | None = None
+        if memory_enabled and chat_id:
+            try:
+                running_summary = await memory.get_running_summary(chat_id)
+            except Exception:
+                pass
+
+        should_compress = True
+        persist_only = False
+        if memory_binding is not None:
+            decision = await decide_memory_action(
+                memory_binding,
+                recent_turns=history,
+                running_summary=running_summary,
+                persist_available=bool(memory_enabled and chat_id),
+            )
+            if decision.source == "decision":
+                should_compress = decision.action == "summarize"
+                persist_only = decision.action == "persist"
+
+        if should_compress:
+            history = await OrchidAgent.compress_conversation_history(
+                history,
+                chat_model=chat_model,
+                recent_turns=sup.history_summary_recent_turns,
+                running_summary=running_summary,
+                structured_output=sup.memory.structured_output,
+            )
+            if memory_enabled and chat_id:
+                # Seed the first summary when none exists (base semantics): the
+                # memory API accepts ``existing_summary=None``.
                 try:
                     delta = filter_summary_messages(history)
                     await memory.update_running_summary(
@@ -382,6 +421,17 @@ async def _extract_and_compress_history(
                     )
                 except Exception:
                     pass
+        elif persist_only and memory_enabled and chat_id:
+            # One write for the decision, through the existing storage API.
+            # Compression did not run, so this cannot duplicate a summary
+            # already persisted above. The full extracted history is passed
+            # because an accepted ``keep`` can skip compression for several
+            # turns; a recent-window delta would lose those turns.
+            try:
+                delta = filter_summary_messages(history)
+                await memory.update_running_summary(chat_id, delta, running_summary)
+            except Exception:
+                pass
     # ── RAG-augmented retrieval (Phase 3) ──────────────────
     if memory is not None and sup.memory.strategy == "rag_augmented":
         chat_id = state.get("chat_id", "")
@@ -498,6 +548,7 @@ async def _route(
     *,
     auth: OrchidAuthContext | None = None,
     routing: OrchidRoutingStrategy | None = None,
+    memory_binding: OrchidDecisionPointBinding | None = None,
 ) -> GraphState:
     """Analyse user intent, choose execution mode, and activate agents."""
     desc_text = "\n".join(f"- **{name}**: {desc}" for name, desc in agent_descriptions.items())
@@ -596,7 +647,14 @@ async def _route(
             }
 
     if decision is None:
-        clean_history = await _extract_and_compress_history(state, sup, chat_model, memory, auth=auth)
+        clean_history = await _extract_and_compress_history(
+            state,
+            sup,
+            chat_model,
+            memory,
+            auth=auth,
+            memory_binding=memory_binding,
+        )
 
         llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
         if clean_history:
