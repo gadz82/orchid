@@ -7,6 +7,11 @@ writes against the events tables.  All Pydantic models forbid
 unknown keys so typos and removed fields surface as clear validation
 errors instead of silent drift.
 
+``events.decision`` is a second, additive opt-in: it binds the event pipeline
+to a fleet-scoped decision point, and a binding supplied while it is disabled
+is ignored. Its default is ``False``, so an existing configuration never
+starts calling a provider.
+
 Three identity-claim subclasses form a discriminated union:
 
 - ``service_account`` — the platform acts under a named service
@@ -29,7 +34,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # ── Identity claim — discriminated union ─────────────────────
 
@@ -332,6 +337,51 @@ class OrchidProcessorConfig(_ComponentRefAllowExtra):
     drain_timeout_seconds: float = Field(default=10.0, gt=0.0)
 
 
+# ── Decision-backed event classification ────────────────────
+
+
+class OrchidEventsDecisionConfig(BaseModel):
+    """Opt-in binding of the deterministic event pipeline to a decision point.
+
+    Both switches are required to activate the point: ``events.enabled`` turns
+    the layer on and :attr:`enabled` binds the point. The default is ``False``,
+    and a binding supplied while disabled is ignored, so an existing
+    configuration never starts calling a provider.
+
+    ``point`` names the registered fleet-scoped decision point to resolve; the
+    default ``events`` is the framework's own point. A consumer that registers a
+    different fleet point may select it here, and the composition root resolves
+    that name through ``decisions.points``.
+    """
+
+    enabled: bool = False
+    point: str = "events"
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("point")
+    @classmethod
+    def _validate_point(cls, value: str) -> str:
+        point = value.strip()
+        if not point:
+            raise ValueError("events.decision.point must be a non-empty decision point name")
+
+        # Imported lazily so the config package does not pull the decision
+        # package in at module-load time (same pattern as schema_decision).
+        from ..decision.registry import get_decision_point
+
+        try:
+            spec = get_decision_point(point)
+        except KeyError as exc:
+            raise ValueError(exc.args[0] if exc.args else str(exc)) from None
+        if spec.scope != "fleet":
+            raise ValueError(
+                f"events.decision.point {point!r} is {spec.scope}-scoped; "
+                "the event pipeline must use a fleet-scoped point"
+            )
+        return point
+
+
 # ── Top-level events block ───────────────────────────────────
 
 
@@ -357,6 +407,10 @@ class OrchidEventsConfig(BaseModel):
     ingestion: OrchidEventsIngestionConfig = Field(default_factory=OrchidEventsIngestionConfig)
     schedules: list[OrchidScheduleConfig] = Field(default_factory=list)
     triggers: list[OrchidTriggerConfig] = Field(default_factory=list)
+
+    # Additive and disabled by default. Parsed even when ``enabled`` is false
+    # so a typo surfaces at load time; activation requires both switches.
+    decision: OrchidEventsDecisionConfig = Field(default_factory=OrchidEventsDecisionConfig)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -401,6 +455,7 @@ __all__ = [
     "ChatBinding",
     "IdentityClaim",
     "OrchidEventsConfig",
+    "OrchidEventsDecisionConfig",
     "OrchidEventsIngestionConfig",
     "OrchidIngestionSourceConfig",
     "OrchidProcessorConfig",

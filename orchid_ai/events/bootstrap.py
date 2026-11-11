@@ -41,6 +41,7 @@ from orchid_ai.config.schema_events import (
     OrchidIngestionSourceConfig,
     OrchidValidatorConfig,
 )
+from orchid_ai.core.decision import OrchidDecisionPointBinding
 from orchid_ai.core.events.dispatcher import OrchidSignalDispatcher
 from orchid_ai.core.events.producer import OrchidSignalProducer
 from orchid_ai.core.events.queue import OrchidSignalQueue
@@ -88,6 +89,9 @@ class EventsRuntime:
     http_producer: Any = None  # set by orchid-api after building HTTPIngestionProducer
     event_stream: BloomEventStream | None = None
     signal_emitter: DispatcherSignalEmitter | None = None
+    #: Bound ``events`` decision point when both ``events.enabled`` and
+    #: ``events.decision.enabled`` are true; ``None`` on the deterministic path.
+    decision_binding: OrchidDecisionPointBinding | None = None
 
 
 # ── Public lifespan helpers ─────────────────────────────────
@@ -101,6 +105,7 @@ async def start_events(
     session_warmer: Any | None,
     known_agents: set[str],
     graph_invoker: Any | None = None,
+    decision_binding: OrchidDecisionPointBinding | None = None,
 ) -> EventsRuntime:
     """Bring the events block online.
 
@@ -108,6 +113,12 @@ async def start_events(
     ``events.enabled`` is False, returns a default
     :class:`EventsRuntime` with ``enabled=False`` and every field
     ``None`` — exactly the zero-overhead path.
+
+    ``decision_binding`` is the optional fleet-scoped binding resolved by the
+    composition root for ``events.decision.point``.  It is used only when both
+    ``events.enabled`` and ``events.decision.enabled`` are true; otherwise the
+    deterministic processors run unchanged.  The keyword is additive, so
+    existing callers do not change.
 
     Raises any exception from store / queue / producer construction
     or from the trigger-registry validation (so misconfigured YAML
@@ -117,6 +128,7 @@ async def start_events(
         return EventsRuntime(enabled=False)
 
     runtime = EventsRuntime(enabled=True)
+    runtime.decision_binding = _activate_event_decision(events_config, decision_binding)
 
     # ── Storage backend ──────────────────────────────────
     storage = await _build_storage(events_config)
@@ -202,6 +214,7 @@ async def start_events(
             job_runner=_build_runner(chat_storage=chat_storage, graph_invoker=graph_invoker),
             session_warmer=session_warmer,
             event_stream=runtime.event_stream,
+            decision_binding=runtime.decision_binding,
         )
 
     # ── Producers (scheduler, internal, custom) ──────────
@@ -254,6 +267,40 @@ async def stop_events(runtime: EventsRuntime | None) -> None:
 
 
 # ── Private builders ────────────────────────────────────────
+
+
+def _activate_event_decision(
+    cfg: OrchidEventsConfig,
+    binding: OrchidDecisionPointBinding | None,
+) -> OrchidDecisionPointBinding | None:
+    """Return the binding only when both event switches are on.
+
+    ``events.decision.enabled`` is the second switch: a binding resolved from
+    ``decisions.points`` is ignored while it is false, so an upgraded
+    composition root cannot activate the point by accident. A missing binding
+    or a point mismatch is diagnosed and falls back to the deterministic
+    processors rather than failing boot — losing event delivery would be worse
+    than a noisy warning.
+    """
+    if binding is None:
+        if cfg.decision.enabled:
+            _logger.warning(
+                "events.decision.enabled is true but no decision binding was supplied — "
+                "running the deterministic event processors"
+            )
+        return None
+    if not cfg.decision.enabled:
+        return None
+    if binding.point != cfg.decision.point:
+        _logger.warning(
+            "events decision binding is for point %r but events.decision.point is %r — "
+            "running the deterministic event processors",
+            binding.point,
+            cfg.decision.point,
+        )
+        return None
+    _logger.info("events decision point %r active", cfg.decision.point)
+    return binding
 
 
 async def _build_storage(cfg: OrchidEventsConfig) -> Any:
