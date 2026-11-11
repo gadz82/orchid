@@ -363,6 +363,8 @@ def _instantiate_agent(
     rag_strategies: list[str] | None = None,
     retrieval_strategy_binding: Any | None = None,
     decision_model: Any | None = None,
+    tool_choice_binding: Any | None = None,
+    agentic_loop_binding: Any | None = None,
     model_routing_binding: Any | None = None,
     model_routing_max_calls: int = 4,
     model_routing_max_total_ms: int | None = None,
@@ -468,6 +470,10 @@ def _instantiate_agent(
         kwargs["rag_strategies"] = rag_strategies
     if retrieval_strategy_binding is not None:
         kwargs["retrieval_strategy_binding"] = retrieval_strategy_binding
+    if tool_choice_binding is not None:
+        kwargs["tool_choice_binding"] = tool_choice_binding
+    if agentic_loop_binding is not None:
+        kwargs["agentic_loop_binding"] = agentic_loop_binding
     if decision_model is not None:
         kwargs["decision_model"] = decision_model
 
@@ -529,6 +535,26 @@ def _build_subgraph(
             if root_config is not None and runtime is not None
             else None
         )
+        child_tool_choice_binding = (
+            resolve_decision_binding(
+                root_config,
+                runtime,
+                "tool_choice",
+                agent_name=f"{parent_name}.{child_name}",
+            )
+            if root_config is not None and runtime is not None
+            else None
+        )
+        child_agentic_loop_binding = (
+            resolve_decision_binding(
+                root_config,
+                runtime,
+                "agentic_loop",
+                agent_name=f"{parent_name}.{child_name}",
+            )
+            if root_config is not None and runtime is not None
+            else None
+        )
         child_agent = _instantiate_agent(
             child_name,
             child_config,
@@ -553,6 +579,8 @@ def _build_subgraph(
             model_routing_max_calls=model_routing_max_calls,
             model_routing_max_total_ms=model_routing_max_total_ms,
             model_routing_out=child_model_routers,
+            tool_choice_binding=child_tool_choice_binding,
+            agentic_loop_binding=child_agentic_loop_binding,
         )
         children_agents.append(child_agent)
 
@@ -881,6 +909,18 @@ def build_graph(
                 "model_routing",
                 agent_name=agent_name,
             )
+            tool_choice_binding = resolve_decision_binding(
+                config,
+                runtime,
+                "tool_choice",
+                agent_name=agent_name,
+            )
+            agentic_loop_binding = resolve_decision_binding(
+                config,
+                runtime,
+                "agentic_loop",
+                agent_name=agent_name,
+            )
             agent = _instantiate_agent(
                 agent_name,
                 agent_config,
@@ -901,6 +941,8 @@ def build_graph(
                 model_routing_max_calls=model_routing_max_calls,
                 model_routing_max_total_ms=model_routing_max_total_ms,
                 model_routing_out=model_routing_routers,
+                tool_choice_binding=tool_choice_binding,
+                agentic_loop_binding=agentic_loop_binding,
             )
             agents.append(agent)
 

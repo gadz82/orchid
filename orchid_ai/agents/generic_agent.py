@@ -48,6 +48,7 @@ from .prompt_builder import SystemPromptBuilder
 from .rag_pipeline import RagPipeline
 from .skill_detector import SkillDetector
 from .skill_executor import SkillExecutor
+from .strategies import use_tool_choice_binding
 
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
@@ -80,6 +81,8 @@ class GenericAgent(OrchidAgent):
         rag_confidence_threshold: float = 0.75,
         rag_strategies: list[str] | None = None,
         retrieval_strategy_binding: OrchidDecisionPointBinding | None = None,
+        tool_choice_binding: OrchidDecisionPointBinding | None = None,
+        agentic_loop_binding: OrchidDecisionPointBinding | None = None,
         **kwargs: Any,
     ):
         super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
@@ -115,6 +118,13 @@ class GenericAgent(OrchidAgent):
         self._tool_decision_model = tool_decision_model
         self._tool_confidence_threshold = max(0.0, min(1.0, tool_confidence_threshold))
         self._tool_max_candidates = max(1, min(64, tool_max_candidates))
+        # Execution-context bindings for the two tool-flow points. ``None``
+        # means the point is disabled/unconfigured: both flows keep their
+        # historical behaviour. ``tool_choice`` scopes the LLM-decides
+        # strategy for the duration of one run; ``agentic_loop`` is handed to
+        # each per-invocation loop instance.
+        self._tool_choice_binding = tool_choice_binding
+        self._agentic_loop_binding = agentic_loop_binding
         self._rag_pipeline = RagPipeline(
             reader=reader,
             chat_model=chat_model,
@@ -156,6 +166,17 @@ class GenericAgent(OrchidAgent):
     # ── Execution ────────────────────────────────────────────
 
     async def run(self, state: OrchidAgentState) -> OrchidAgentState:
+        """Execute the pipeline with the agent's tool-flow decision bindings.
+
+        ``tool_choice`` is per-run execution context: the MCP dispatcher
+        instantiates strategies from the registry, so the binding is scoped to
+        this async context rather than passed through every call. The pipeline
+        itself lives in :meth:`_run_pipeline`.
+        """
+        with use_tool_choice_binding(self._tool_choice_binding):
+            return await self._run_pipeline(state)
+
+    async def _run_pipeline(self, state: OrchidAgentState) -> OrchidAgentState:
         """Execute the pipeline: RAG → skill check → agentic loop → inject → summarise.
 
         Auth is execution context: the graph node wrapper binds it on the
@@ -607,6 +628,7 @@ class GenericAgent(OrchidAgent):
             max_tool_rounds=self._config.max_tool_rounds,
             max_consecutive_dupes=self._config.max_consecutive_dupes,
             tool_subset=tool_subset,
+            agentic_loop_binding=self._agentic_loop_binding,
         )
         final_text, tool_results = await loop.run(messages)
         return final_text, tool_results, loop._events
