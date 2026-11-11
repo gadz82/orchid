@@ -33,6 +33,7 @@ from ..core.decision import OrchidDecisionPointBinding
 from ..core.graph_store import OrchidGraphStore
 from ..core.helpers import filter_summary_messages
 from ..core.mcp import OrchidMCPClient
+from ..core.memory import NullConversationMemory
 from ..core.repository import OrchidVectorReader
 from ..core.retrieval import apply_pre_strategy
 from ..core.state import OrchidAgentState, OrchidAuthContext
@@ -44,6 +45,7 @@ from ..rag.transformers import (
     resolve_transformer_kwargs,
 )
 from .mcp_dispatcher import MCPCapabilities, MCPDispatcher
+from .memory_decision import decide_memory_action
 from .prompt_builder import SystemPromptBuilder
 from .rag_pipeline import RagPipeline
 from .skill_detector import SkillDetector
@@ -83,6 +85,7 @@ class GenericAgent(OrchidAgent):
         retrieval_strategy_binding: OrchidDecisionPointBinding | None = None,
         tool_choice_binding: OrchidDecisionPointBinding | None = None,
         agentic_loop_binding: OrchidDecisionPointBinding | None = None,
+        memory_binding: OrchidDecisionPointBinding | None = None,
         **kwargs: Any,
     ):
         super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
@@ -125,6 +128,9 @@ class GenericAgent(OrchidAgent):
         # each per-invocation loop instance.
         self._tool_choice_binding = tool_choice_binding
         self._agentic_loop_binding = agentic_loop_binding
+        # Fleet-scoped ``memory`` point: only affects history compression when
+        # a provider is bound. ``None`` keeps the historical behaviour.
+        self._memory_binding = memory_binding
         self._rag_pipeline = RagPipeline(
             reader=reader,
             chat_model=chat_model,
@@ -469,37 +475,9 @@ class GenericAgent(OrchidAgent):
             else []
         )
 
-        # Compress older history via sliding-window summarization when enabled.
-        if history and self._summary_config and self._chat_model:
-            running_summary: str | None = None
-            memory = self._summary_config.get("memory")
-            if memory is not None and state:
-                chat_id = state.get("chat_id", "")
-                if chat_id:
-                    try:
-                        running_summary = await memory.get_running_summary(chat_id)
-                    except Exception:
-                        pass
-            history = await self.compress_conversation_history(
-                history,
-                chat_model=self._chat_model,
-                recent_turns=self._summary_config.get("recent_turns", 3),
-                running_summary=running_summary,
-                structured_output=self._summary_config.get("structured_output", False),
-            )
-            # Persist the updated summary
-            if memory is not None and running_summary is not None and state:
-                chat_id = state.get("chat_id", "")
-                if chat_id:
-                    try:
-                        delta = filter_summary_messages(history)
-                        await memory.update_running_summary(
-                            chat_id,
-                            delta,
-                            running_summary,
-                        )
-                    except Exception:
-                        pass
+        # Compress older history via the sliding-window heuristic, optionally
+        # steered by the fleet-scoped ``memory`` decision point.
+        history = await self._apply_memory_decision(history, state)
 
         prior_ctx = (state.get("mcp_context") or {}).get(self.name) if state else None
 
@@ -522,6 +500,124 @@ class GenericAgent(OrchidAgent):
             user_content_template=sections.summarise_user_template,
             prior_results_max_chars=sections.summarise_prior_results_max_chars,
         )
+
+    async def _apply_memory_decision(
+        self,
+        history: list[dict[str, str]],
+        state: OrchidAgentState | None,
+    ) -> list[dict[str, str]]:
+        """Apply the optional ``memory`` decision around history compression.
+
+        No binding keeps the historical path byte-for-byte. With a binding, a
+        confident ``summarize`` runs the existing compression + persistence
+        step, ``persist`` writes the pending delta through the existing memory
+        API without changing the working history, and ``keep`` leaves both the
+        history and the stored summary untouched. Every ``fallback``/``disabled``
+        outcome runs the configured heuristic exactly as before (which may
+        still perform its normal legacy write).
+
+        This seam governs one agent call only. Other agents and the
+        supervisor's synthesis/advance paths have their own call sites, so a
+        ``keep`` here is not a turn-level veto and a ``persist`` can be repeated
+        by another seam in the same turn. Each individual call writes at most
+        once.
+        """
+        if not history or self._summary_config is None or not self._chat_model:
+            return history
+
+        memory = self._summary_config.get("memory")
+        chat_id = str((state or {}).get("chat_id", "") or "")
+        running_summary = await self._running_summary(memory, chat_id)
+        persist_available = memory is not None and bool(chat_id) and not isinstance(memory, NullConversationMemory)
+
+        if self._memory_binding is not None:
+            decision = await decide_memory_action(
+                self._memory_binding,
+                recent_turns=history,
+                running_summary=running_summary,
+                persist_available=persist_available,
+            )
+            if decision.source == "decision":
+                if decision.action == "summarize":
+                    return await self._compress_history(
+                        history,
+                        memory=memory,
+                        chat_id=chat_id,
+                        running_summary=running_summary,
+                    )
+                if decision.action == "persist":
+                    await self._persist_running_summary(memory, chat_id, history, running_summary)
+                return history
+
+        return await self._compress_history(
+            history,
+            memory=memory,
+            chat_id=chat_id,
+            running_summary=running_summary,
+        )
+
+    async def _compress_history(
+        self,
+        history: list[dict[str, str]],
+        *,
+        memory: Any | None,
+        chat_id: str,
+        running_summary: str | None,
+    ) -> list[dict[str, str]]:
+        """Run the existing sliding-window summary path for one turn."""
+        summary_config = self._summary_config or {}
+        history = await self.compress_conversation_history(
+            history,
+            chat_model=self._chat_model,
+            recent_turns=summary_config.get("recent_turns", 3),
+            running_summary=running_summary,
+            structured_output=summary_config.get("structured_output", False),
+        )
+        if memory is not None and running_summary is not None and chat_id:
+            await self._persist_running_summary(memory, chat_id, history, running_summary)
+        return history
+
+    @staticmethod
+    async def _running_summary(memory: Any | None, chat_id: str) -> str | None:
+        """Best-effort fetch of the stored running summary."""
+        if memory is None or not chat_id:
+            return None
+        try:
+            return await memory.get_running_summary(chat_id)
+        except Exception:
+            return None
+
+    @staticmethod
+    async def _persist_running_summary(
+        memory: Any | None,
+        chat_id: str,
+        history: list[dict[str, str]],
+        running_summary: str | None,
+    ) -> None:
+        """Persist one summary delta through the existing memory API.
+
+        Exactly one call per decision path: callers that already persisted
+        during compression must not also take the ``persist`` branch.
+
+        The delta is the full *extracted* history, because an accepted ``keep``
+        can skip compression for several turns. The extracted history is itself
+        bounded by the configured history limits, so long ``keep`` streaks can
+        lose turns older than that bound, and ``persist`` can re-include turns
+        already represented in the running summary (duplicating them within the
+        bounded window). Losslessness within the bound is preferred over
+        silently dropping turns; the structured summary merges repeated facts.
+
+        An accepted decision line is emitted before this write and storage
+        failures are swallowed, so the line does not prove the write succeeded.
+        A future change should log after the write or add a failure signal.
+        """
+        if memory is None or not chat_id:
+            return
+        try:
+            delta = filter_summary_messages(history)
+            await memory.update_running_summary(chat_id, delta, running_summary)
+        except Exception:
+            pass
 
     # ── Agent prefix computation ─────────────────────────────────
 

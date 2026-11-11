@@ -410,6 +410,7 @@ def _instantiate_agent(
     model_routing_max_calls: int = 4,
     model_routing_max_total_ms: int | None = None,
     model_routing_out: dict[str, ModelRoutingSelector] | None = None,
+    memory_binding: Any | None = None,
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -515,6 +516,8 @@ def _instantiate_agent(
         kwargs["tool_choice_binding"] = tool_choice_binding
     if agentic_loop_binding is not None:
         kwargs["agentic_loop_binding"] = agentic_loop_binding
+    if memory_binding is not None:
+        kwargs["memory_binding"] = memory_binding
     if decision_model is not None:
         kwargs["decision_model"] = decision_model
 
@@ -536,6 +539,9 @@ def _build_subgraph(
     root_config: OrchidAgentsConfig | None = None,
     runtime: Any | None = None,
     turn_budgets: TurnBudgetRegistry | None = None,
+    memory_binding: Any | None = None,
+    summary_config: dict[str, Any] | None = None,
+    memory: Any | None = None,
 ) -> Any:
     """
     Build a sub-graph for an agent with children.
@@ -645,6 +651,8 @@ def _build_subgraph(
             model_routing_out=child_model_routers,
             tool_choice_binding=child_tool_choice_binding,
             agentic_loop_binding=child_agentic_loop_binding,
+            memory_binding=memory_binding,
+            summary_config=summary_config,
         )
         children_agents.append(child_agent)
 
@@ -663,9 +671,18 @@ def _build_subgraph(
                 child_output_chain,
             )
 
-    # Build sub-graph with its own supervisor
+    # Build sub-graph with its own supervisor. The fleet-scoped memory point and
+    # the root supervisor's memory config govern this supervisor too; without
+    # them the sub-supervisor would fall back to defaults and never persist.
     child_descriptions = {a.name: a.description for a in children_agents}
-    sub_supervisor = create_supervisor_node(default_model, child_descriptions, chat_model=default_chat_model)
+    sub_supervisor = create_supervisor_node(
+        default_model,
+        child_descriptions,
+        chat_model=default_chat_model,
+        supervisor_config=root_config.supervisor if root_config is not None else None,
+        memory=memory,
+        memory_binding=memory_binding,
+    )
 
     has_parent_input = parent_input_chain is not None and not parent_input_chain.empty
     has_parent_output = parent_output_chain is not None and not parent_output_chain.empty
@@ -941,6 +958,14 @@ def build_graph(
         summary_cfg["truncation_strategy"] = sup.memory.truncation_strategy
         summary_cfg["truncation_max_chars"] = sup.memory.truncation_max_chars
 
+    # Fleet-scoped ``memory`` point: one binding for the supervisor and every
+    # agent. Unconfigured/disabled resolves to ``None`` and leaves the
+    # configured summary/persistence behaviour untouched. The point governs the
+    # route and agent seams only; synthesis/advance keep their legacy writes.
+    memory_binding = resolve_decision_binding(config, runtime, "memory")
+    if memory_binding is not None:
+        logger.info("[Graph] memory decision point enabled (provider=%s)", memory_binding.provider)
+
     for agent_name, agent_config in config.agents.items():
         if agent_config.children:
             # Agent with children → build a sub-graph
@@ -959,6 +984,9 @@ def build_graph(
                 root_config=config,
                 runtime=runtime,
                 turn_budgets=turn_budgets,
+                memory_binding=memory_binding,
+                summary_config=summary_cfg,
+                memory=memory,
             )
             subgraph_nodes[agent_name] = subgraph
         else:
@@ -1051,6 +1079,7 @@ def build_graph(
                 model_routing_out=model_routing_routers,
                 tool_choice_binding=tool_choice_binding,
                 agentic_loop_binding=agentic_loop_binding,
+                memory_binding=memory_binding,
             )
             agents.append(agent)
 
@@ -1127,6 +1156,7 @@ def build_graph(
         routing_chat_model=routing_chat_model,
         memory=memory,
         routing=build_routing_strategy(config, runtime),
+        memory_binding=memory_binding,
     )
 
     # ── Build graph ──
