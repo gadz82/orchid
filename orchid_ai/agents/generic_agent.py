@@ -32,11 +32,13 @@ from ..core.agent import OrchidAgent
 from ..core.decision import OrchidDecisionPointBinding
 from ..core.graph_store import OrchidGraphStore
 from ..core.helpers import filter_summary_messages
+from ..core.ingestion import OrchidChunkPostProcessor, OrchidIngestionStrategy
 from ..core.mcp import OrchidMCPClient
 from ..core.memory import NullConversationMemory
-from ..core.repository import OrchidVectorReader
+from ..core.repository import OrchidDocument, OrchidVectorReader, OrchidVectorWriter
 from ..core.retrieval import apply_pre_strategy
 from ..core.state import OrchidAgentState, OrchidAuthContext
+from ..documents.strategies import build_ingestion_strategy
 from ..observability.mini_agent_events import make_event_message
 from ..rag.scopes import OrchidRAGScope
 from ..rag.transformers import (
@@ -83,6 +85,7 @@ class GenericAgent(OrchidAgent):
         rag_confidence_threshold: float = 0.75,
         rag_strategies: list[str] | None = None,
         retrieval_strategy_binding: OrchidDecisionPointBinding | None = None,
+        ingestion_binding: OrchidDecisionPointBinding | None = None,
         tool_choice_binding: OrchidDecisionPointBinding | None = None,
         agentic_loop_binding: OrchidDecisionPointBinding | None = None,
         memory_binding: OrchidDecisionPointBinding | None = None,
@@ -131,6 +134,10 @@ class GenericAgent(OrchidAgent):
         # Fleet-scoped ``memory`` point: only affects history compression when
         # a provider is bound. ``None`` keeps the historical behaviour.
         self._memory_binding = memory_binding
+        # Document ingestion selector (the additive ``ingestion`` point). It is
+        # carried for document-ingestion call sites; ``None`` means disabled,
+        # unconfigured, or no provider, so ingestion stays byte-for-byte legacy.
+        self._ingestion_binding = ingestion_binding
         self._rag_pipeline = RagPipeline(
             reader=reader,
             chat_model=chat_model,
@@ -168,6 +175,83 @@ class GenericAgent(OrchidAgent):
     @property
     def rag_namespace(self) -> str:
         return self._config.rag.namespace
+
+    # ── Document ingestion (with the agent's ``ingestion`` binding) ──
+
+    async def extract_text(
+        self,
+        *,
+        file_bytes: bytes,
+        filename: str,
+        vision_model: str = "",
+    ) -> str:
+        """Extract document text through the agent's ``ingestion`` binding.
+
+        Passing the binding here is what lets the point select a parser before
+        parsing. Callers using the parse-once pattern should pass the returned
+        text to :meth:`ingest_document` as ``pre_extracted_text``; both methods
+        need the binding because parser and strategy selection happen in
+        different phases.
+        """
+        from ..documents.pipeline import extract_text
+
+        return await extract_text(
+            file_bytes=file_bytes,
+            filename=filename,
+            vision_model=vision_model,
+            ingestion_binding=self._ingestion_binding,
+        )
+
+    async def ingest_document(
+        self,
+        *,
+        file_bytes: bytes,
+        filename: str,
+        scope: OrchidRAGScope,
+        writer: OrchidVectorWriter,
+        namespace: str | None = None,
+        ingestion: OrchidIngestionStrategy | None = None,
+        post_processors: list[OrchidChunkPostProcessor] | None = None,
+        doc_store: Any | None = None,
+        graph_store: Any | None = None,
+        embeddings: Any | None = None,
+        chat_model: Any | None = None,
+        schema: dict[str, Any] | None = None,
+        vision_model: str = "",
+        pre_extracted_text: str | None = None,
+        documents_out: list[OrchidDocument] | None = None,
+    ) -> int:
+        """Index a document, forwarding the agent's ``ingestion`` binding.
+
+        This is the public library path for document ingestion: callers do not
+        need to reach into ``_ingestion_binding``. ``namespace`` defaults to the
+        agent's upload namespace. When no explicit ``ingestion`` strategy is
+        passed, the agent's ``rag.ingestion`` block is built into one, so its
+        chunk knobs apply. When ``pre_extracted_text`` is supplied the parser
+        gate is bypassed and the text is never re-parsed; the strategy gate
+        still runs after extraction.
+        """
+        from ..documents.pipeline import ingest_document
+
+        configured_ingestion = build_ingestion_strategy(self._config.rag.ingestion) if ingestion is None else ingestion
+        return await ingest_document(
+            file_bytes=file_bytes,
+            filename=filename,
+            scope=scope,
+            namespace=namespace if namespace is not None else self.upload_namespace,
+            writer=writer,
+            ingestion=configured_ingestion,
+            post_processors=post_processors,
+            doc_store=doc_store,
+            graph_store=graph_store,
+            embeddings=embeddings,
+            chat_model=chat_model,
+            schema=schema,
+            vision_model=vision_model,
+            pre_extracted_text=pre_extracted_text,
+            documents_out=documents_out,
+            ingestion_binding=self._ingestion_binding,
+        )
 
     # ── Execution ────────────────────────────────────────────
 
