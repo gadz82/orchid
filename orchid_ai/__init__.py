@@ -90,6 +90,8 @@ from .core.guardrails import (
     OrchidGuardrailChain,
     OrchidGuardrailContext,
     OrchidGuardrailDirection,
+    OrchidGuardrailFailurePolicy,
+    OrchidGuardrailFailurePolicyAware,
     OrchidGuardrailResult,
 )
 from .core.identity import OrchidIdentityError, OrchidIdentityResolver
@@ -229,6 +231,8 @@ __all__ = [  # noqa: RUF022
     "OrchidGuardrailChain",
     "OrchidGuardrailContext",
     "OrchidGuardrailDirection",
+    "OrchidGuardrailFailurePolicy",
+    "OrchidGuardrailFailurePolicyAware",
     "OrchidGuardrailResult",
     # ── EXTEND — content ──────────────────────────────
     "OrchidContentItem",
