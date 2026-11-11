@@ -403,6 +403,7 @@ def _instantiate_agent(
     rag_confidence_threshold: float = 0.75,
     rag_strategies: list[str] | None = None,
     retrieval_strategy_binding: Any | None = None,
+    ingestion_binding: Any | None = None,
     decision_model: Any | None = None,
     tool_choice_binding: Any | None = None,
     agentic_loop_binding: Any | None = None,
@@ -512,6 +513,8 @@ def _instantiate_agent(
         kwargs["rag_strategies"] = rag_strategies
     if retrieval_strategy_binding is not None:
         kwargs["retrieval_strategy_binding"] = retrieval_strategy_binding
+    if ingestion_binding is not None:
+        kwargs["ingestion_binding"] = ingestion_binding
     if tool_choice_binding is not None:
         kwargs["tool_choice_binding"] = tool_choice_binding
     if agentic_loop_binding is not None:
@@ -595,6 +598,16 @@ def _build_subgraph(
             if root_config is not None and runtime is not None
             else None
         )
+        child_ingestion_binding = (
+            resolve_decision_binding(
+                root_config,
+                runtime,
+                "ingestion",
+                agent_name=child_path,
+            )
+            if root_config is not None and runtime is not None
+            else None
+        )
         child_model_routing_binding = (
             resolve_decision_binding(
                 root_config,
@@ -645,6 +658,7 @@ def _build_subgraph(
                 child_skill_binding.on_low_confidence if child_skill_binding is not None else "llm"
             ),
             retrieval_strategy_binding=child_retrieval_binding,
+            ingestion_binding=child_ingestion_binding,
             model_routing_binding=child_model_routing_binding,
             model_routing_max_calls=model_routing_max_calls,
             model_routing_max_total_ms=model_routing_max_total_ms,
@@ -1039,6 +1053,12 @@ def build_graph(
                 "retrieval_strategy",
                 agent_name=agent_name,
             )
+            ingestion_binding = resolve_decision_binding(
+                config,
+                runtime,
+                "ingestion",
+                agent_name=agent_name,
+            )
             model_routing_binding = resolve_decision_binding(
                 config,
                 runtime,
@@ -1073,6 +1093,7 @@ def build_graph(
                 skill_decision_model=skill_model,
                 skill_confidence_threshold=(skill_binding.confidence_threshold if skill_binding is not None else 0.8),
                 retrieval_strategy_binding=retrieval_binding,
+                ingestion_binding=ingestion_binding,
                 model_routing_binding=model_routing_binding,
                 model_routing_max_calls=model_routing_max_calls,
                 model_routing_max_total_ms=model_routing_max_total_ms,
