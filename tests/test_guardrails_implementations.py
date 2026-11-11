@@ -379,15 +379,15 @@ class TestRegistry:
         )
         assert len(chain) == 2
 
-    def test_unknown_type_skipped(self):
+    def test_unknown_type_raises_at_build(self):
         from orchid_ai.guardrails.registry import build_guardrail_chain
 
-        chain = build_guardrail_chain(
-            [
-                {"type": "nonexistent_guardrail"},
-            ]
-        )
-        assert len(chain) == 0
+        with pytest.raises(ValueError, match="unknown guardrail type 'nonexistent_guardrail'"):
+            build_guardrail_chain(
+                [
+                    {"type": "nonexistent_guardrail"},
+                ]
+            )
 
     def test_register_custom(self):
         from orchid_ai.guardrails.registry import GUARDRAIL_REGISTRY, register_guardrail

@@ -158,22 +158,29 @@ class _AgentNodeWrapper:
 
         # Per-agent input rails run before the routing point sees the query, so
         # blocked content is never shipped to a decision provider (F2).
-        blocked = await self._run_input_guardrails(state, auth)
+        state, redacted_input, blocked = await self._run_input_guardrails(state, auth)
         if blocked is not None:
             return blocked
 
         if self._model_router is None:
-            return await self._run_after_input_guardrails(state, auth)
+            result = await self._run_after_input_guardrails(state, auth)
+        else:
+            # Ask the ``model_routing`` point once per agent run and bind the
+            # selection for the duration of this coroutine. The routed chat model
+            # reads it on every LLM call, so concurrent runs (and every other
+            # agent) keep their own selection. The budget is shared across every
+            # agent node in the same turn (F4).
+            query = self._agent.extract_user_query(state)
+            budget = self._turn_budgets.for_turn(_turn_key(state)) if self._turn_budgets is not None else None
+            async with self._model_router.bound(query, budget=budget):
+                result = await self._run_after_input_guardrails(state, auth)
 
-        # Ask the ``model_routing`` point once per agent run and bind the
-        # selection for the duration of this coroutine. The routed chat model
-        # reads it on every LLM call, so concurrent runs (and every other
-        # agent) keep their own selection. The budget is shared across every
-        # agent node in the same turn (F4).
-        query = self._agent.extract_user_query(state)
-        budget = self._turn_budgets.for_turn(_turn_key(state)) if self._turn_budgets is not None else None
-        async with self._model_router.bound(query, budget=budget):
-            return await self._run_after_input_guardrails(state, auth)
+        if redacted_input is not None:
+            # The replacement must be part of the node update so the graph
+            # state — not just this agent's in-memory view — holds the redacted
+            # message.
+            result = {**result, "messages": [redacted_input, *result.get("messages", [])]}
+        return result
 
     async def _run_after_input_guardrails(self, state: GraphState, auth: Any) -> GraphState:
         decomposer_update = await self._run_decomposer(state, auth)
@@ -188,9 +195,20 @@ class _AgentNodeWrapper:
         agent_result["active_agents"] = []
         return agent_result
 
-    async def _run_input_guardrails(self, state: GraphState, auth: Any) -> GraphState | None:
+    async def _run_input_guardrails(
+        self,
+        state: GraphState,
+        auth: Any,
+    ) -> tuple[GraphState, HumanMessage | None, GraphState | None]:
+        """Apply per-agent input rails.
+
+        Returns ``(state_after_rails, redacted_message, blocked_update)``.
+        ``state_after_rails`` carries the redacted message into the agent run;
+        ``redacted_message`` is merged into the node update so the graph state
+        keeps the redacted text. A block short-circuits with its update.
+        """
         if not self._input_guardrails or self._input_guardrails.empty:
-            return None
+            return state, None, None
 
         query = self._agent.extract_user_query(state)
         ctx = OrchidGuardrailContext(
@@ -208,11 +226,34 @@ class _AgentNodeWrapper:
                 result.guardrail_name,
                 result.message,
             )
-            return {
-                "messages": [AIMessage(content=f"[{self._agent.name.title()} Agent] {result.message}")],
-                "active_agents": [],
-            }
-        return None
+            return (
+                state,
+                None,
+                {
+                    "messages": [AIMessage(content=f"[{self._agent.name.title()} Agent] {result.message}")],
+                    "active_agents": [],
+                },
+            )
+
+        if (
+            result.action == OrchidGuardrailAction.REDACT
+            and result.redacted_content is not None
+            and result.redacted_content != query
+        ):
+            messages = list(state.get("messages", []))
+            # The supervisor appends a dispatch AIMessage (and earlier agents
+            # append their replies), so the user turn is not necessarily last.
+            index = next(
+                (i for i in range(len(messages) - 1, -1, -1) if isinstance(messages[i], HumanMessage)),
+                None,
+            )
+            if index is not None:
+                replacement = messages[index].model_copy(update={"content": result.redacted_content})
+                messages[index] = replacement
+                logger.info("[Guardrails] Agent '%s' input redacted by '%s'", self._agent.name, result.guardrail_name)
+                return {**state, "messages": messages}, replacement, None
+
+        return state, None, None
 
     async def _run_decomposer(self, state: GraphState, auth: Any) -> GraphState | None:
         if self._agent_config is None or not self._agent_config.mini_agent.enabled or auth is None:
@@ -504,9 +545,32 @@ def _build_subgraph(
     """
     children_agents: list[OrchidAgent] = []
     child_model_routers: dict[str, ModelRoutingSelector] = {}
+    #: Child path → (input chain, output chain). Nested agents get the same
+    #: per-agent rail treatment as top-level agents; the root config/runtime
+    #: resolves a child-specific ``guardrails`` binding.
+    child_guardrails: dict[str, tuple[OrchidGuardrailChain, OrchidGuardrailChain]] = {}
+    # A parent with children is represented by this subgraph, not by an
+    # ``_AgentNodeWrapper``. Its own rails run at the subgraph boundary so they
+    # are not silently skipped.
+    parent_input_chain: OrchidGuardrailChain | None = None
+    parent_output_chain: OrchidGuardrailChain | None = None
+    if agent_config.guardrails.input or agent_config.guardrails.output:
+        parent_input_chain, parent_output_chain = _GuardrailWiring.build_chains(
+            agent_config.guardrails,
+            config=root_config,
+            runtime=runtime,
+            agent_name=parent_name,
+        )
+        logger.info(
+            "[Graph] parent agent '%s' guardrails: input=%s, output=%s",
+            parent_name,
+            parent_input_chain,
+            parent_output_chain,
+        )
     model_routing_max_calls = root_config.decisions.budget.max_calls_per_turn if root_config is not None else 4
     model_routing_max_total_ms = root_config.decisions.budget.max_total_ms if root_config is not None else None
     for child_name, child_config in (agent_config.children or {}).items():
+        child_path = f"{parent_name}.{child_name}"
         child_skill_binding = (
             root_config.decisions.resolve("skills", child_config.decisions) if root_config is not None else None
         )
@@ -520,7 +584,7 @@ def _build_subgraph(
                 root_config,
                 runtime,
                 "retrieval_strategy",
-                agent_name=f"{parent_name}.{child_name}",
+                agent_name=child_path,
             )
             if root_config is not None and runtime is not None
             else None
@@ -530,7 +594,7 @@ def _build_subgraph(
                 root_config,
                 runtime,
                 "model_routing",
-                agent_name=f"{parent_name}.{child_name}",
+                agent_name=child_path,
             )
             if root_config is not None and runtime is not None
             else None
@@ -540,7 +604,7 @@ def _build_subgraph(
                 root_config,
                 runtime,
                 "tool_choice",
-                agent_name=f"{parent_name}.{child_name}",
+                agent_name=child_path,
             )
             if root_config is not None and runtime is not None
             else None
@@ -550,7 +614,7 @@ def _build_subgraph(
                 root_config,
                 runtime,
                 "agentic_loop",
-                agent_name=f"{parent_name}.{child_name}",
+                agent_name=child_path,
             )
             if root_config is not None and runtime is not None
             else None
@@ -584,27 +648,64 @@ def _build_subgraph(
         )
         children_agents.append(child_agent)
 
+        if child_config.guardrails.input or child_config.guardrails.output:
+            child_input_chain, child_output_chain = _GuardrailWiring.build_chains(
+                child_config.guardrails,
+                config=root_config,
+                runtime=runtime,
+                agent_name=child_path,
+            )
+            child_guardrails[child_name] = (child_input_chain, child_output_chain)
+            logger.info(
+                "[Graph] sub-agent '%s' guardrails: input=%s, output=%s",
+                child_path,
+                child_input_chain,
+                child_output_chain,
+            )
+
     # Build sub-graph with its own supervisor
     child_descriptions = {a.name: a.description for a in children_agents}
     sub_supervisor = create_supervisor_node(default_model, child_descriptions, chat_model=default_chat_model)
 
+    has_parent_input = parent_input_chain is not None and not parent_input_chain.empty
+    has_parent_output = parent_output_chain is not None and not parent_output_chain.empty
+
     sg = StateGraph(GraphState)
+    if has_parent_input:
+        sg.add_node(
+            "input_guardrails",
+            _GuardrailWiring.create_global_input_node(parent_input_chain, agent_name=parent_name),
+        )
     sg.add_node("supervisor", sub_supervisor)
+    if has_parent_output:
+        sg.add_node(
+            "output_guardrails",
+            _GuardrailWiring.create_global_output_node(parent_output_chain, agent_name=parent_name),
+        )
 
     for child in children_agents:
         node_name = f"{child.name}_agent"
+        child_chain = child_guardrails.get(child.name)
         sg.add_node(
             node_name,
             _create_agent_node(
                 child,
+                child_chain[0] if child_chain else None,
+                child_chain[1] if child_chain else None,
                 model_router=child_model_routers.get(child.name),
                 turn_budgets=turn_budgets,
             ),
         )
         sg.add_edge(node_name, "supervisor")
 
-    sg.set_entry_point("supervisor")
-    sg.add_conditional_edges("supervisor", _make_route_to_agents(has_output_guardrails=False))
+    if has_parent_input:
+        sg.set_entry_point("input_guardrails")
+        sg.add_conditional_edges("input_guardrails", _route_after_input_guardrails)
+    else:
+        sg.set_entry_point("supervisor")
+    sg.add_conditional_edges("supervisor", _make_route_to_agents(has_output_guardrails=has_parent_output))
+    if has_parent_output:
+        sg.add_edge("output_guardrails", END)
 
     compiled = sg.compile()
     logger.info(
@@ -726,7 +827,14 @@ def build_graph(
         logger.info("[Graph] registered %d external-agent tools", len(config.external_agents))
 
     # ── Build global guardrail chains ──
-    global_input_chain, global_output_chain = _GuardrailWiring.build_chains(config.guardrails)
+    # Global rails run before an agent is selected, so a decision-backed rail
+    # here uses the fleet-level ``decisions.points.guardrails`` binding only.
+    # Per-agent overrides are resolved when that agent's chain is built below.
+    global_input_chain, global_output_chain = _GuardrailWiring.build_chains(
+        config.guardrails,
+        config=config,
+        runtime=runtime,
+    )
     has_global_input_rails = not global_input_chain.empty
     has_global_output_rails = not global_output_chain.empty
 
@@ -946,9 +1054,18 @@ def build_graph(
             )
             agents.append(agent)
 
-        # Build per-agent guardrail chains
-        if agent_config.guardrails.input or agent_config.guardrails.output:
-            input_chain, output_chain = _GuardrailWiring.build_chains(agent_config.guardrails)
+        # Build per-agent guardrail chains. A decision-backed rail resolves the
+        # ``guardrails`` point for this agent (agent override, else the global
+        # binding); its ``on_failure`` policy applies when no verdict arrives.
+        # Parent agents are represented by their subgraph and build their chains
+        # at that boundary, so skip the unused top-level copy here.
+        if not agent_config.children and (agent_config.guardrails.input or agent_config.guardrails.output):
+            input_chain, output_chain = _GuardrailWiring.build_chains(
+                agent_config.guardrails,
+                config=config,
+                runtime=runtime,
+                agent_name=agent_name,
+            )
             agent_guardrails[agent_name] = (input_chain, output_chain)
             logger.info(
                 "[Graph] agent '%s' guardrails: input=%s, output=%s",
