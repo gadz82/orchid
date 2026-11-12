@@ -6,7 +6,8 @@
     "package": "",
     "section": "",
     "tags": [],
-    "sources": []
+    "sources": [],
+    "markdown": "/.md"
   },
   {
     "route": "/ecosystem",
@@ -15,7 +16,8 @@
     "package": "cross-cutting",
     "section": "ecosystem",
     "tags": [],
-    "sources": []
+    "sources": [],
+    "markdown": "/ecosystem.md"
   },
   {
     "route": "/quickstart",
@@ -24,7 +26,8 @@
     "package": "cross-cutting",
     "section": "quickstart",
     "tags": [],
-    "sources": []
+    "sources": [],
+    "markdown": "/quickstart.md"
   },
   {
     "route": "/concepts/agents",
@@ -33,7 +36,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/agents.md"
   },
   {
     "route": "/concepts/supervisor",
@@ -42,7 +46,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/supervisor.md"
   },
   {
     "route": "/concepts/rag",
@@ -51,7 +56,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/rag.md"
   },
   {
     "route": "/concepts/mcp",
@@ -60,7 +66,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/mcp.md"
   },
   {
     "route": "/concepts/oauth",
@@ -69,7 +76,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/oauth.md"
   },
   {
     "route": "/concepts/embeddings",
@@ -78,7 +86,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": []
+    "sources": [],
+    "markdown": "/concepts/embeddings.md"
   },
   {
     "route": "/concepts/multi-llm",
@@ -87,7 +96,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/multi-llm.md"
   },
   {
     "route": "/concepts/persistence",
@@ -96,7 +106,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/persistence.md"
   },
   {
     "route": "/concepts/tool-strategies",
@@ -105,7 +116,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/tool-strategies.md"
   },
   {
     "route": "/concepts/document-parsing",
@@ -114,7 +126,8 @@
     "package": "orchid",
     "section": "concepts",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/document-parsing.md"
   },
   {
     "route": "/concepts/mini-agents",
@@ -127,7 +140,8 @@
       "fan-out",
       "yaml"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/mini-agents.md"
   },
   {
     "route": "/concepts/pollen-bloom",
@@ -141,7 +155,8 @@
       "webhooks",
       "async"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/pollen-bloom.md"
   },
   {
     "route": "/concepts/chat-summarization",
@@ -156,7 +171,22 @@
       "truncation",
       "conversation"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/concepts/chat-summarization.md"
+  },
+  {
+    "route": "/concepts/decision-models",
+    "title": "Decision Models",
+    "description": "A dedicated LLM layer that returns typed, calibrated judgements for internal routing, gating and selection seams — with deterministic fallbacks.",
+    "package": "orchid",
+    "section": "concepts",
+    "tags": [
+      "decisions",
+      "routing",
+      "guardrails"
+    ],
+    "sources": "",
+    "markdown": "/concepts/decision-models.md"
   },
   {
     "route": "/packages/orchid",
@@ -165,7 +195,8 @@
     "package": "orchid",
     "section": "packages",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid.md"
   },
   {
     "route": "/packages/orchid-api",
@@ -174,7 +205,8 @@
     "package": "orchid-api",
     "section": "packages",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid-api.md"
   },
   {
     "route": "/packages/orchid-cli",
@@ -183,7 +215,8 @@
     "package": "orchid-cli",
     "section": "packages",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid-cli.md"
   },
   {
     "route": "/packages/orchid-mcp",
@@ -192,7 +225,8 @@
     "package": "orchid-mcp",
     "section": "packages",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid-mcp.md"
   },
   {
     "route": "/packages/orchid-frontend",
@@ -201,7 +235,8 @@
     "package": "orchid-frontend",
     "section": "packages",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid-frontend.md"
   },
   {
     "route": "/packages/orchid-storage-sqlite",
@@ -215,7 +250,8 @@
       "plugin",
       "checkpointer"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid-storage-sqlite.md"
   },
   {
     "route": "/packages/orchid-storage-postgres",
@@ -224,7 +260,8 @@
     "package": "orchid-storage-postgres",
     "section": "packages",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid-storage-postgres.md"
   },
   {
     "route": "/packages/orchid-rag-qdrant",
@@ -233,7 +270,8 @@
     "package": "orchid-rag-qdrant",
     "section": "packages",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid-rag-qdrant.md"
   },
   {
     "route": "/packages/orchid-rag-chroma",
@@ -242,7 +280,8 @@
     "package": "orchid-rag-chroma",
     "section": "packages",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid-rag-chroma.md"
   },
   {
     "route": "/packages/orchid-rag-neo4j",
@@ -251,7 +290,8 @@
     "package": "orchid-rag-neo4j",
     "section": "packages",
     "tags": [],
-    "sources": ""
+    "sources": "",
+    "markdown": "/packages/orchid-rag-neo4j.md"
   },
   {
     "route": "/configuration",
@@ -266,7 +306,8 @@
       "reference",
       "atlas"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/configuration.md"
   },
   {
     "route": "/configuration-reference",
@@ -281,7 +322,8 @@
       "reference",
       "properties"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/configuration-reference.md"
   },
   {
     "route": "/configuration-reference/infrastructure",
@@ -296,7 +338,8 @@
       "reference",
       "properties"
     ],
-    "sources": []
+    "sources": [],
+    "markdown": "/configuration-reference/infrastructure.md"
   },
   {
     "route": "/configuration-reference/agents",
@@ -311,7 +354,8 @@
       "reference",
       "properties"
     ],
-    "sources": []
+    "sources": [],
+    "markdown": "/configuration-reference/agents.md"
   },
   {
     "route": "/examples",
@@ -320,7 +364,8 @@
     "package": "cross-cutting",
     "section": "examples",
     "tags": [],
-    "sources": []
+    "sources": [],
+    "markdown": "/examples.md"
   },
   {
     "route": "/examples/basketball",
@@ -334,7 +379,8 @@
       "supervisor",
       "built-in-tools"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/basketball.md"
   },
   {
     "route": "/examples/helpdesk",
@@ -348,7 +394,8 @@
       "supervisor",
       "events"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/helpdesk.md"
   },
   {
     "route": "/examples/restaurant",
@@ -362,7 +409,8 @@
       "supervisor",
       "events"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/restaurant.md"
   },
   {
     "route": "/examples/recipes",
@@ -375,7 +423,8 @@
       "chromadb",
       "ollama"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/recipes.md"
   },
   {
     "route": "/examples/learning",
@@ -388,7 +437,8 @@
       "rag",
       "events"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/learning.md"
   },
   {
     "route": "/examples/education",
@@ -403,7 +453,8 @@
       "events",
       "built-in-tools"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/education.md"
   },
   {
     "route": "/examples/mcp-auth",
@@ -415,7 +466,8 @@
       "mcp",
       "oauth"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/mcp-auth.md"
   },
   {
     "route": "/examples/custom-storage",
@@ -426,7 +478,8 @@
     "tags": [
       "persistence"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/custom-storage.md"
   },
   {
     "route": "/examples/rag-strategies",
@@ -437,7 +490,8 @@
     "tags": [
       "rag"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/rag-strategies.md"
   },
   {
     "route": "/examples/tool-strategies",
@@ -449,7 +503,8 @@
       "tool-strategies",
       "agents"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/tool-strategies.md"
   },
   {
     "route": "/examples/prompt-customization",
@@ -462,7 +517,8 @@
       "agents",
       "rag"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/prompt-customization.md"
   },
   {
     "route": "/examples/graph-kb",
@@ -473,7 +529,8 @@
     "tags": [
       "rag"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/graph-kb.md"
   },
   {
     "route": "/examples/wiki",
@@ -485,7 +542,8 @@
       "document-parsing",
       "rag"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/wiki.md"
   },
   {
     "route": "/examples/orchid-experts",
@@ -500,7 +558,8 @@
       "skills",
       "guardrails"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/orchid-experts.md"
   },
   {
     "route": "/examples/gallery-curator",
@@ -516,7 +575,8 @@
       "truncation",
       "persistence"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/gallery-curator.md"
   },
   {
     "route": "/examples/festival-producer",
@@ -531,7 +591,8 @@
       "skills",
       "summarization"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/festival-producer.md"
   },
   {
     "route": "/examples/architecture-review",
@@ -547,7 +608,8 @@
       "sustainability",
       "summarization"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/architecture-review.md"
   },
   {
     "route": "/examples/postgres-storage",
@@ -561,7 +623,8 @@
       "plugin",
       "checkpointer"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/postgres-storage.md"
   },
   {
     "route": "/examples/weather",
@@ -577,7 +640,8 @@
       "supervisor",
       "chat-summarization"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/examples/weather.md"
   },
   {
     "route": "/best-practices",
@@ -590,7 +654,8 @@
       "deployment",
       "patterns"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/best-practices.md"
   },
   {
     "route": "/glossary",
@@ -602,7 +667,8 @@
       "reference",
       "definitions"
     ],
-    "sources": ""
+    "sources": "",
+    "markdown": "/glossary.md"
   },
   {
     "route": "/contact",
@@ -614,6 +680,7 @@
       "contact",
       "support"
     ],
-    "sources": []
+    "sources": [],
+    "markdown": "/contact.md"
   }
 ]

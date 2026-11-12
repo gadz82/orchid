@@ -9,7 +9,7 @@ sources:
   - "orchid/orchid_ai/core/agent.py"
   - "orchid/orchid_ai/config/schema_llm.py"
   - "orchid/AGENTS.md"
-related: ["/concepts/agents", "/concepts/embeddings"]
+related: ["/concepts/agents", "/concepts/embeddings", "/concepts/decision-models"]
 example: ""
 external:
   - label: "LiteLLM documentation"
@@ -79,7 +79,7 @@ Each agent can use a different provider. The optional `fallback_model` is tried 
 
 ## Simple completions vs agentic tool-calling
 
-Two LLM usage patterns appear inside the framework — each with a distinct interface:
+Two LLM usage patterns appear inside the framework — each with a distinct interface. A third pattern handles *judgements* (routing, gating, selection) and is covered separately in [Decision Models](/concepts/decision-models):
 
 **Simple completions** (summarisation, routing, history compression): use `self.summarise()` inherited from `OrchidAgent`. This delegates to the injected `BaseChatModel` via `chat_model.ainvoke(messages)`. Custom agents should always use this path for synthesising responses.
 

@@ -71,6 +71,8 @@ for (const route of routes) {
     section: meta.section ?? '',
     tags: meta.tags ?? [],
     sources: meta.sources ?? [],
+    // Markdown twin served next to the HTML page (generate-md-pages.mjs).
+    markdown: `${route}.md`,
   });
 }
 
@@ -78,10 +80,15 @@ writeFileSync(join(PUBLIC_DIR, 'docs-index.json'), JSON.stringify(docsIndex, nul
 console.log('✓ public/docs-index.json');
 
 // ── Build sitemap.xml ─────────────────────────────────────────────────────────
+// HTML routes are canonical; each is followed by its `.md` markdown twin so
+// LLM spiders discover both from one place.
 const urlEntries = routes
-  .map((route) => {
+  .flatMap((route) => {
     const loc = `${BASE_URL}${route}`;
-    return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${isoDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${route === '/' ? '1.0' : '0.8'}</priority>\n  </url>`;
+    const priority = route === '/' ? '1.0' : '0.8';
+    const html = `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${isoDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${priority}</priority>\n  </url>`;
+    const twin = `  <url>\n    <loc>${loc}.md</loc>\n    <lastmod>${isoDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${route === '/' ? '0.9' : '0.7'}</priority>\n  </url>`;
+    return [html, twin];
   })
   .join('\n');
 
