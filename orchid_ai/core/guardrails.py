@@ -60,6 +60,19 @@ class OrchidGuardrailDirection(Enum):
     OUTPUT = "output"
 
 
+class OrchidGuardrailFailurePolicy(Enum):
+    """
+    What a failable guardrail does when it cannot obtain a verdict.
+
+    ``OPEN`` lets the content pass; ``CLOSED`` applies the rail's configured
+    fail action. Decision-backed rails must state the policy explicitly in
+    configuration (ADR-002); deterministic rails never consult it.
+    """
+
+    OPEN = "open"
+    CLOSED = "closed"
+
+
 # ── Data classes ─────────────────────────────────────────────
 
 
@@ -149,6 +162,24 @@ class OrchidGuardrail(ABC):
         OrchidGuardrailResult
             The outcome — ``triggered=False`` means the content is clean.
         """
+        ...
+
+
+class OrchidGuardrailFailurePolicyAware(ABC):
+    """
+    Narrow contract for guardrails whose check can fail at runtime.
+
+    Only rails that call an external service (for example a decision provider)
+    declare this contract, and configuration must state their ``on_failure``
+    explicitly (ADR-002). The registry passes ``on_failure`` to these classes
+    only; deterministic rails never use it and keep their existing constructors
+    and defaults.
+    """
+
+    @property
+    @abstractmethod
+    def on_failure(self) -> OrchidGuardrailFailurePolicy:
+        """The configured failure policy for this rail."""
         ...
 
 

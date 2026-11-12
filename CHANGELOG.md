@@ -1,3 +1,15 @@
+# Changelog
+
+## Unreleased
+
+### Features
+
+- **decision models**: opt-in typed decision providers for agent routing, skill selection, tool
+  shortlisting, and RAG gating. YAML `decision_models:` + `decisions:` blocks, state-and-questions
+  and OpenAI-compatible dialects over a bounded `httpx` transport, an LLM-backed fallback, a
+  deterministic stub, confidence thresholds, and LLM fallback on any failure. See ADR-001..006 in
+  the decision-layer iteration.
+
 # CHANGELOG
 
 <!-- version list -->

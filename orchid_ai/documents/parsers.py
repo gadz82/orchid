@@ -253,12 +253,40 @@ def register_parser(ext: str, cls: type[DocumentParser]) -> None:
     logger.info("[Parsers] Registered %s for extension '%s'", cls.__name__, ext)
 
 
+def list_parser_names() -> tuple[str, ...]:
+    """Return the registered parser class names, sorted and de-duplicated.
+
+    Several extensions can share one parser (``.md``/``.txt`` → ``TextParser``,
+    image extensions → ``ImageParser``), so the parser *name* is the stable
+    identity exposed to the decision layer, not the extension.
+    """
+    return tuple(sorted({cls.__name__ for cls in PARSER_REGISTRY.values()}))
+
+
+def get_parser_by_name(name: str, *, vision_model: str = "") -> DocumentParser:
+    """Instantiate a registered parser by its class name.
+
+    Only names returned by :func:`list_parser_names` are accepted. The lookup is
+    exact so a provider answer cannot silently resolve to a different parser.
+    """
+    if not isinstance(name, str):
+        raise TypeError("parser name must be a string")
+    for cls in PARSER_REGISTRY.values():
+        if cls.__name__ == name:
+            return _instantiate_parser(cls, vision_model=vision_model)
+    raise ValueError(f"Unknown parser: {name!r}. Registered: {', '.join(list_parser_names()) or '(none)'}")
+
+
+def _instantiate_parser(cls: type[DocumentParser], *, vision_model: str) -> DocumentParser:
+    if cls is ImageParser:
+        return cls(vision_model=vision_model)
+    return cls()
+
+
 def get_parser(filename: str, *, vision_model: str = "") -> DocumentParser:
     """Get the appropriate parser for a file by extension."""
     ext = Path(filename).suffix.lower()
     cls = PARSER_REGISTRY.get(ext)
     if not cls:
         raise ValueError(f"Unsupported file type: {ext}. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}")
-    if cls is ImageParser:
-        return cls(vision_model=vision_model)
-    return cls()
+    return _instantiate_parser(cls, vision_model=vision_model)

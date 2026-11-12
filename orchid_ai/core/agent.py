@@ -29,6 +29,7 @@ from typing import Any, Literal
 
 from . import helpers as _helpers
 from .content import OrchidContentSource
+from .decision import OrchidDecisionModel, OrchidDecisionQuestion, OrchidDecisionResult, OrchidDecisionState
 from .mcp import OrchidMCPClient
 from .repository import OrchidVectorReader
 from .scopes import OrchidRAGScope
@@ -83,6 +84,7 @@ class OrchidAgent(ABC):
         config: Any | None = None,
         summary_config: dict[str, Any] | None = None,
         graph_store: Any | None = None,
+        decision_model: OrchidDecisionModel | None = None,
         **_kwargs: Any,
     ):
         # ``**_kwargs`` is preserved for backward compatibility with
@@ -94,6 +96,7 @@ class OrchidAgent(ABC):
         self.reader = reader
         self.mcp_clients = mcp_clients or []
         self._chat_model = chat_model  # BaseChatModel (duck-typed to avoid core/ deps)
+        self._decision_model = decision_model
         self._upload_namespace: str = upload_namespace
         self._content_sources: list[OrchidContentSource] = content_sources or []
 
@@ -226,6 +229,25 @@ class OrchidAgent(ABC):
         e.g. 'Handles knowledge-base lookups, document retrieval, and FAQs.'
         """
         ...
+
+    async def decide(
+        self,
+        state: OrchidDecisionState,
+        questions: list[OrchidDecisionQuestion],
+        *,
+        timeout: float | None = None,
+        provider: OrchidDecisionModel | None = None,
+    ) -> OrchidDecisionResult | None:
+        """Ask the injected decision provider, or return ``None`` when absent.
+
+        Custom agents can use this instead of constructing a provider. The
+        provider is injected by the graph builder from the agent's
+        ``decision_model`` config key, or passed explicitly here.
+        """
+        model = provider or self._decision_model
+        if model is None:
+            return None
+        return await model.decide(state, questions, timeout=timeout)
 
     @property
     def rag_namespace(self) -> str:

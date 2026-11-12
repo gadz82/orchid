@@ -33,6 +33,7 @@ import uuid as _uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from ...core.decision import OrchidDecisionPointBinding
 from ...core.events.errors import (
     JobRunnerError,
     OrchidIdentityNotMintableError,
@@ -45,6 +46,7 @@ from ...core.events.runner import OrchidJobRunner
 from ...core.events.signal import Signal
 from ...core.events.store import OrchidJobStore, OrchidSignalStore
 from ...core.events.trigger import OrchidTrigger, TriggerRegistry
+from ..decision import MAX_ENVELOPE_NAME_CHARS, EventDecision, decide_event_action
 from ..registry import resolve_user_id_for_signal
 
 _logger = logging.getLogger(__name__)
@@ -101,6 +103,16 @@ class AsyncioWorkerPoolProcessor(OrchidSignalProcessor):
         # events for every run it advances.  Phase-1 tests work fine
         # without one.
         self._event_stream: Any | None = None
+        # Optional decision binding for the fleet-scoped ``events`` point.
+        # When absent the processor runs exactly as before.  The gate runs
+        # before trigger matching and can skip/dedup a signal; every
+        # failure or low-confidence answer falls through to this path.
+        self._decision_binding: OrchidDecisionPointBinding | None = None
+
+    @property
+    def decision_binding(self) -> OrchidDecisionPointBinding | None:
+        """The bound ``events`` decision point, or ``None`` when disabled."""
+        return self._decision_binding
 
     async def start(
         self,
@@ -113,6 +125,7 @@ class AsyncioWorkerPoolProcessor(OrchidSignalProcessor):
         job_runner: OrchidJobRunner,
         session_warmer: Any | None = None,
         event_stream: Any | None = None,
+        decision_binding: OrchidDecisionPointBinding | None = None,
     ) -> None:
         if self._workers:
             raise RuntimeError("processor already started")
@@ -124,6 +137,7 @@ class AsyncioWorkerPoolProcessor(OrchidSignalProcessor):
         self._job_runner = job_runner
         self._session_warmer = session_warmer
         self._event_stream = event_stream
+        self._decision_binding = decision_binding
         self._stopping.clear()
 
         for i in range(self._concurrency):
@@ -160,6 +174,7 @@ class AsyncioWorkerPoolProcessor(OrchidSignalProcessor):
         job_runner: OrchidJobRunner,
         session_warmer: Any | None = None,
         event_stream: Any | None = None,
+        decision_binding: OrchidDecisionPointBinding | None = None,
         max_iterations: int = 100,
     ) -> int:
         """Drain the queue synchronously by pulling one message at a
@@ -178,6 +193,7 @@ class AsyncioWorkerPoolProcessor(OrchidSignalProcessor):
         self._job_runner = job_runner
         self._session_warmer = session_warmer
         self._event_stream = event_stream
+        self._decision_binding = decision_binding
 
         processed = 0
         empties = 0
@@ -232,6 +248,17 @@ class AsyncioWorkerPoolProcessor(OrchidSignalProcessor):
             await self._queue.ack(msg.queue_msg_id)
             return
 
+        # Fleet-scoped ``events`` decision point: classify/activate only on the
+        # first delivery, before any identity or trigger work. A redelivery must
+        # run the existing path: a provider that flips process -> skip between
+        # attempts would otherwise suppress an event that already failed once.
+        if msg.attempt == 1:
+            decision = await self._decide_event(signal)
+            if decision.gated:
+                self._record_gated_event(decision, signal=signal, queue_msg_id=msg.queue_msg_id)
+                await self._queue.ack(msg.queue_msg_id)
+                return
+
         matches = list(self._triggers.find_matches(signal))
         if not matches:
             await self._queue.ack(msg.queue_msg_id)
@@ -264,6 +291,43 @@ class AsyncioWorkerPoolProcessor(OrchidSignalProcessor):
         # with status=FAILED is already persisted, and reprocessing it
         # would just produce another identical failure.
         await self._queue.ack(msg.queue_msg_id)
+
+    async def _decide_event(self, signal: Signal) -> EventDecision:
+        """Ask the optional ``events`` point what to do with ``signal``.
+
+        Only called for the first delivery. The processor is deliberately
+        defensive: the gate helper already maps provider failures to
+        ``process``, but a broken custom binding must not kill the worker or
+        drop the message either. Any unexpected exception here is logged by
+        type only (never by payload) and treated as a fallback to the
+        deterministic path.
+        """
+        if self._decision_binding is None:
+            return EventDecision(action="process", source="disabled")
+        try:
+            return await decide_event_action(self._decision_binding, signal)
+        except Exception as exc:
+            _logger.warning(
+                "event decision gate raised %s for signal %s — running the deterministic processors",
+                type(exc).__name__,
+                signal.signal_id,
+            )
+            return EventDecision(action="process", source="fallback", fallback_reason="provider_error")
+
+    def _record_gated_event(self, decision: EventDecision, *, signal: Signal, queue_msg_id: str) -> None:
+        """Record one gated outcome; never include the event payload."""
+        _logger.info(
+            "[Events] decision action=%s decision_source=%s confidence=%s signal_id=%s "
+            "signal_type=%r event_source=%r classification=%r queue_msg_id=%s",
+            decision.action,
+            decision.source,
+            decision.confidence,
+            signal.signal_id,
+            signal.type[:MAX_ENVELOPE_NAME_CHARS],
+            signal.source[:MAX_ENVELOPE_NAME_CHARS],
+            decision.classification,
+            queue_msg_id,
+        )
 
     async def _run_trigger(self, *, trigger: OrchidTrigger, signal: Signal, attempt: int) -> _TriggerOutcome:
         assert self._job_store is not None
