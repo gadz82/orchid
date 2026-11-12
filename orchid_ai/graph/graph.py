@@ -50,6 +50,7 @@ from langgraph.errors import GraphBubbleUp
 from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
+from ..agents.delegation import DelegationCatalog
 from ..config.registry import get_class
 from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig
 from ..config.tool_registry import load_tools_from_config
@@ -412,6 +413,10 @@ def _instantiate_agent(
     model_routing_max_total_ms: int | None = None,
     model_routing_out: dict[str, ModelRoutingSelector] | None = None,
     memory_binding: Any | None = None,
+    delegation_binding: Any | None = None,
+    delegation_catalog: DelegationCatalog | None = None,
+    delegation_fail_closed: bool = False,
+    delegation_external_agents: frozenset[str] | None = None,
 ) -> OrchidAgent:
     """
     Create an agent instance from its YAML config.
@@ -431,6 +436,12 @@ def _instantiate_agent(
 
     # Resolve the agent class
     cls = get_class(agent_config.class_path)
+    from ..agents.generic_agent import GenericAgent
+
+    # Delegation is a GenericAgent pipeline concern. Legacy custom agents may
+    # have a strict constructor and override ``run()``; they stay outside the
+    # gate by design, so never inject the delegation kwargs into them.
+    supports_delegation = issubclass(cls, GenericAgent)
 
     # Determine the LLM model, fallback, and retry for this agent
     agent_llm = agent_config.llm
@@ -521,10 +532,54 @@ def _instantiate_agent(
         kwargs["agentic_loop_binding"] = agentic_loop_binding
     if memory_binding is not None:
         kwargs["memory_binding"] = memory_binding
+    if supports_delegation and (delegation_binding is not None or delegation_fail_closed):
+        # Inject the delegation contract only when the point is enabled. A
+        # missing provider still injects the fail-closed sentinel so the agent
+        # suppresses external tools instead of silently falling back to legacy.
+        kwargs["delegation_binding"] = delegation_binding
+        kwargs["delegation_fail_closed"] = delegation_fail_closed
+        if delegation_catalog is not None:
+            kwargs["delegation_catalog"] = delegation_catalog
+        if delegation_external_agents is not None:
+            kwargs["delegation_external_agents"] = delegation_external_agents
     if decision_model is not None:
         kwargs["decision_model"] = decision_model
 
     return cls(**kwargs)
+
+
+def _resolve_delegation_assets(
+    config: OrchidAgentsConfig | None,
+    runtime: Any | None,
+    agent_name: str,
+    agent_config: OrchidAgentConfig,
+) -> tuple[Any | None, DelegationCatalog, bool, frozenset[str]]:
+    """Resolve the ``delegation`` binding, catalog, and fail-closed marker.
+
+    ``resolve_decision_binding`` collapses two materially different states into
+    ``None``: the point is disabled/unconfigured, or it is enabled but its
+    provider is missing from the runtime. The first keeps legacy behaviour; the
+    second must fail closed so external tools stay suppressed. The resolved
+    agent config distinguishes them. The returned external-name set is the full
+    fleet declaration, not the allowlisted catalog, so skills can never reach
+    an external tool outside this agent's ``tools`` list.
+    """
+    if config is None:
+        return None, DelegationCatalog(), False, frozenset()
+
+    external_agents = frozenset(name for name in config.external_agents if isinstance(name, str) and name)
+    catalog = DelegationCatalog.from_config(
+        config.external_agents,
+        allowed_tools=agent_config.tools,
+    )
+    if runtime is None:
+        return None, catalog, False, external_agents
+
+    binding_config = config.resolve_decision("delegation", agent_name)
+    if binding_config is None:
+        return None, catalog, False, external_agents
+    binding = resolve_decision_binding(config, runtime, "delegation", agent_name=agent_name)
+    return binding, catalog, binding is None, external_agents
 
 
 def _build_subgraph(
@@ -638,6 +693,17 @@ def _build_subgraph(
             if root_config is not None and runtime is not None
             else None
         )
+        (
+            child_delegation_binding,
+            child_delegation_catalog,
+            child_delegation_fail_closed,
+            child_delegation_external_agents,
+        ) = _resolve_delegation_assets(
+            root_config,
+            runtime,
+            child_path,
+            child_config,
+        )
         child_agent = _instantiate_agent(
             child_name,
             child_config,
@@ -666,6 +732,10 @@ def _build_subgraph(
             tool_choice_binding=child_tool_choice_binding,
             agentic_loop_binding=child_agentic_loop_binding,
             memory_binding=memory_binding,
+            delegation_binding=child_delegation_binding,
+            delegation_catalog=child_delegation_catalog,
+            delegation_fail_closed=child_delegation_fail_closed,
+            delegation_external_agents=child_delegation_external_agents,
             summary_config=summary_config,
         )
         children_agents.append(child_agent)
@@ -1077,6 +1147,17 @@ def build_graph(
                 "agentic_loop",
                 agent_name=agent_name,
             )
+            (
+                delegation_binding,
+                delegation_catalog,
+                delegation_fail_closed,
+                delegation_external_agents,
+            ) = _resolve_delegation_assets(
+                config,
+                runtime,
+                agent_name,
+                agent_config,
+            )
             agent = _instantiate_agent(
                 agent_name,
                 agent_config,
@@ -1101,6 +1182,10 @@ def build_graph(
                 tool_choice_binding=tool_choice_binding,
                 agentic_loop_binding=agentic_loop_binding,
                 memory_binding=memory_binding,
+                delegation_binding=delegation_binding,
+                delegation_catalog=delegation_catalog,
+                delegation_fail_closed=delegation_fail_closed,
+                delegation_external_agents=delegation_external_agents,
             )
             agents.append(agent)
 
