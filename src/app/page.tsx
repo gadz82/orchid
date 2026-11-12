@@ -7,6 +7,7 @@ import CodeBlock from '@/components/CodeBlock';
 import OrchidIcon from '@/components/OrchidIcon';
 import HeroCanvas from '@/components/HeroCanvas';
 import IntelligenceLayer from '@/components/IntelligenceLayer';
+import MultiLLMBadge from '@/components/MultiLLMBadge';
 import { siteConfig } from '@/site-config';
 
 export const metadata: Metadata = {
@@ -263,6 +264,17 @@ export default function HomePage() {
               Read the Docs →
             </Link>
           </div>
+
+          {/* Provider strip — model-agnosticism is a headline feature */}
+          <div className="mt-10 flex flex-col items-center gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-widest text-orchid-muted/60">
+              Works with your models
+            </span>
+            <MultiLLMBadge providers={['OpenAI', 'Anthropic', 'Google', 'Groq', 'Ollama']} />
+            <span className="text-xs text-orchid-muted/70">
+              …and 100+ providers via <span className="text-orchid-muted">LiteLLM</span> — <Link href="/concepts/multi-llm" className="underline decoration-orchid-border underline-offset-2 hover:text-orchid-text transition-colors">see how</Link>
+            </span>
+          </div>
         </div>
       </section>
 
@@ -279,6 +291,81 @@ export default function HomePage() {
             {PILLARS.map((p) => (
               <PillarCard key={p.title} {...p} />
             ))}
+          </div>
+        </section>
+
+        {/* ── Multi-LLM showcase ──────────────────────────────── */}
+        <section className="mb-16">
+          <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold tracking-widest uppercase text-orchid-accent mb-3">
+                Model-agnostic
+              </p>
+              <h2 className="text-2xl font-bold text-orchid-text mb-3 leading-snug">
+                Any model. Any provider.<br />One YAML field.
+              </h2>
+              <p className="text-orchid-muted text-sm leading-relaxed mb-5">
+                Orchid never locks you into a vendor. Every agent takes a LiteLLM-style
+                model string — switch from OpenAI to Anthropic to a fully local Ollama
+                setup by editing a single line, and mix providers across agents in the
+                same fleet.
+              </p>
+              <ul className="text-sm text-orchid-muted space-y-2.5 mb-6">
+                <li className="flex gap-2.5">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orchid-accent shrink-0" />
+                  <span><strong className="text-orchid-text">Fleet defaults, per-agent overrides</strong> — set a fleet-wide model, then pick a different provider for any agent.</span>
+                </li>
+                <li className="flex gap-2.5">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orchid-accent shrink-0" />
+                  <span><strong className="text-orchid-text">Automatic fallback</strong> — <code className="text-orchid-accent-glow">fallback_model</code> is tried on 503, rate limit or timeout errors.</span>
+                </li>
+                <li className="flex gap-2.5">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orchid-accent shrink-0" />
+                  <span><strong className="text-orchid-text">Cheap judges, smart workers</strong> — prose models answer users, decision models judge internal seams on a budget model. <Link href="/concepts/decision-models" className="text-orchid-accent hover:text-orchid-accent-hover transition-colors whitespace-nowrap">Decision Models →</Link></span>
+                </li>
+                <li className="flex gap-2.5">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orchid-accent shrink-0" />
+                  <span><strong className="text-orchid-text">Local-first</strong> — point <code className="text-orchid-accent-glow">ollama_api_base</code> at your machine and run the whole fleet offline.</span>
+                </li>
+              </ul>
+              <div className="flex flex-wrap items-center gap-3">
+                <MultiLLMBadge providers={['OpenAI', 'Anthropic', 'Google', 'Groq', 'Ollama']} />
+                <span className="text-xs text-orchid-muted">+100 more via LiteLLM</span>
+              </div>
+              <p className="mt-5 text-sm">
+                <Link href="/concepts/multi-llm" className="text-orchid-accent hover:text-orchid-accent-hover transition-colors">
+                  Multi-LLM documentation →
+                </Link>
+              </p>
+            </div>
+            <div className="flex-1 min-w-0 w-full">
+              <CodeBlock
+                tabs={[
+                  {
+                    language: 'yaml' as const,
+                    label: 'agents.yaml',
+                    code: `version: "1"
+
+defaults:
+  llm:
+    model: "gemini/gemini-2.5-flash"   # fleet default
+    fallback_model: "ollama/llama3.2"  # on 503 / rate limit / timeout
+
+agents:
+  support:
+    llm:
+      model: "openai/gpt-4o"
+      temperature: 0.1
+  analyst:
+    llm:
+      model: "anthropic/claude-sonnet-4-5"
+  local-worker:
+    # inherits defaults — runs fully on local Ollama`,
+                  },
+                ]}
+                filename="agents.yaml"
+              />
+            </div>
           </div>
         </section>
 
