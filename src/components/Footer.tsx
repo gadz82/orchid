@@ -90,6 +90,15 @@ export default function Footer() {
               {siteConfig.license}
             </ExternalLink>
           </span>
+          <span>
+            Proudly developed using{' '}
+            <ExternalLink
+              href={siteConfig.sddUrl}
+              className="hover:text-orchid-text transition-colors"
+            >
+              orchid-sdd
+            </ExternalLink>
+          </span>
           <span>v{siteConfig.version} · Built with Orchid</span>
         </div>
       </div>

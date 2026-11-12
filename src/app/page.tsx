@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { FileCode2, Layers, Cog, Zap, Database, Plug, GitBranch, Bot } from 'lucide-react';
 import EcosystemSplice from '@/components/EcosystemSplice';
 import PillarCard from '@/components/PillarCard';
 import CodeBlock from '@/components/CodeBlock';
@@ -8,6 +7,7 @@ import OrchidIcon from '@/components/OrchidIcon';
 import HeroCanvas from '@/components/HeroCanvas';
 import IntelligenceLayer from '@/components/IntelligenceLayer';
 import MultiLLMBadge from '@/components/MultiLLMBadge';
+import { PILLARS } from '@/data/pillars';
 import { siteConfig } from '@/site-config';
 
 export const metadata: Metadata = {
@@ -21,65 +21,6 @@ export const metadata: Metadata = {
     types: { 'text/markdown': `${siteConfig.siteUrl.replace(/\/$/, '')}/index.md` },
   },
 };
-
-const PILLARS = [
-  {
-    icon: FileCode2,
-    title: 'YAML-first',
-    description:
-      'Define agents, skills, tools, and prompts entirely in agents.yaml — no code required for most use cases.',
-    href: '/concepts/agents',
-  },
-  {
-    icon: Layers,
-    title: 'Multi-LLM',
-    description:
-      'OpenAI, Anthropic, Google Gemini, Groq, Ollama — switch providers by changing a single YAML field.',
-    href: '/concepts/multi-llm',
-  },
-  {
-    icon: GitBranch,
-    title: 'Decision Models',
-    description:
-      'Route internal judgements — routing, guardrails, tool choice, model selection — to a dedicated decision LLM with deterministic fallbacks.',
-    href: '/concepts/decision-models',
-  },
-  {
-    icon: Cog,
-    title: 'Customizable Agents',
-    description:
-      'Full control over agentic behaviour, tools, skills, and mini-agents. Compose specialised agents via YAML or Python.',
-    href: '/concepts/agents',
-  },
-  {
-    icon: Zap,
-    title: 'Event-Driven',
-    description:
-      'Pollen and Bloom enable reactive, event-driven agent workflows — react to signals, not just prompts.',
-    href: '/concepts/pollen-bloom',
-  },
-  {
-    icon: Bot,
-    title: 'Mini-Agents',
-    description:
-      'Fork focused sub-agents for a single turn: parallel agentic loops with curated tool subsets, synthesised back into one answer.',
-    href: '/concepts/mini-agents',
-  },
-  {
-    icon: Database,
-    title: 'Hierarchical RAG',
-    description:
-      'Five-level scoped retrieval (root→tenant→user→chat→agent) with pluggable query strategies and Qdrant / ChromaDB built-in.',
-    href: '/concepts/rag',
-  },
-  {
-    icon: Plug,
-    title: 'MCP-native',
-    description:
-      'Connect any MCP server. Supports none, passthrough, and OAuth auth modes out of the box.',
-    href: '/concepts/mcp',
-  },
-];
 
 const AGENTS_YAML = `version: "1"
 
@@ -285,7 +226,7 @@ export default function HomePage() {
         <section className="mb-16">
           <h2 className="text-2xl font-bold text-orchid-text mb-2">Everything a production agent needs</h2>
           <p className="text-orchid-muted mb-6 text-sm">
-            Eight built-in capabilities, configured from YAML — each documented, pluggable, and independently swappable.
+            Nine built-in capabilities, configured from YAML — each documented, pluggable, and independently swappable.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {PILLARS.map((p) => (
