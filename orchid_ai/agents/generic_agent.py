@@ -46,6 +46,13 @@ from ..rag.transformers import (
     get_query_transformer,
     resolve_transformer_kwargs,
 )
+from .delegation import (
+    LOCAL_TARGET,
+    DelegationCatalog,
+    DelegationDecision,
+    DelegationRequest,
+    decide_delegation,
+)
 from .mcp_dispatcher import MCPCapabilities, MCPDispatcher
 from .memory_decision import decide_memory_action
 from .prompt_builder import SystemPromptBuilder
@@ -56,6 +63,16 @@ from .strategies import use_tool_choice_binding
 
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
+
+#: Added to the agentic-loop system prompt when an accepted delegation narrows
+#: the tool inventory to one external agent. The external tool still dispatches
+#: through the existing ``ExternalAgentCLITool``/``CLIRunner`` path, including
+#: HITL approval; this directive only makes the single-tool choice explicit.
+_DELEGATION_DIRECTIVE = (
+    "Delegation is active for this request. Use the {name} tool to hand the "
+    "user's request to that external agent. Do not answer from your own "
+    "knowledge and do not call any other tool."
+)
 
 
 class GenericAgent(OrchidAgent):
@@ -89,6 +106,10 @@ class GenericAgent(OrchidAgent):
         tool_choice_binding: OrchidDecisionPointBinding | None = None,
         agentic_loop_binding: OrchidDecisionPointBinding | None = None,
         memory_binding: OrchidDecisionPointBinding | None = None,
+        delegation_binding: OrchidDecisionPointBinding | None = None,
+        delegation_catalog: DelegationCatalog | None = None,
+        delegation_fail_closed: bool = False,
+        delegation_external_agents: frozenset[str] | None = None,
         **kwargs: Any,
     ):
         super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
@@ -134,6 +155,17 @@ class GenericAgent(OrchidAgent):
         # Fleet-scoped ``memory`` point: only affects history compression when
         # a provider is bound. ``None`` keeps the historical behaviour.
         self._memory_binding = memory_binding
+        # Agent-scoped ``delegation`` point. ``None`` (disabled or
+        # unconfigured) keeps the historical tool inventory. ``fail_closed``
+        # marks an enabled point whose provider is missing from the runtime:
+        # external tools are suppressed and no CLI process can start. The full
+        # configured external-agent set is kept separately from the allowlisted
+        # catalog so skills cannot reach an external tool outside the agent's
+        # ``tools`` allowlist.
+        self._delegation_binding = delegation_binding
+        self._delegation_catalog = delegation_catalog or DelegationCatalog()
+        self._delegation_fail_closed = bool(delegation_fail_closed)
+        self._delegation_external_agents = frozenset(delegation_external_agents or ())
         # Document ingestion selector (the additive ``ingestion`` point). It is
         # carried for document-ingestion call sites; ``None`` means disabled,
         # unconfigured, or no provider, so ingestion stays byte-for-byte legacy.
@@ -255,6 +287,85 @@ class GenericAgent(OrchidAgent):
 
     # ── Execution ────────────────────────────────────────────
 
+    @property
+    def _delegation_active(self) -> bool:
+        """Whether the delegation point governs this agent's external tools.
+
+        True when a provider is bound *or* the point is enabled but its
+        provider is unavailable (fail-closed sentinel). A disabled/unconfigured
+        point stays legacy even when ``external_agents`` are declared.
+        """
+        return self._delegation_binding is not None or self._delegation_fail_closed
+
+    @property
+    def _delegation_blocked_tools(self) -> frozenset[str]:
+        """External-agent names that a local outcome must suppress.
+
+        The full configured set is preferred so a skill cannot reach an
+        external agent that is not in this agent's allowlisted catalog. Direct
+        ``GenericAgent`` constructions without the full set fall back to the
+        catalog names.
+        """
+        if self._delegation_external_agents:
+            return self._delegation_external_agents
+        return frozenset(self._delegation_catalog.names)
+
+    async def _resolve_delegation(self, query: str) -> DelegationDecision | None:
+        """Ask the ``delegation`` point where this request should run.
+
+        ``None`` means the point is disabled or unconfigured: no provider call
+        and the legacy tool inventory stays. An enabled point with a missing
+        provider or an empty/unusable catalog returns a synthetic local decision
+        without a provider call, so external tools stay suppressed and no CLI
+        process can start.
+
+        Any unexpected gate failure fails closed to ``local`` so an external
+        subprocess cannot be started by a broken decision layer.
+        """
+        if not self._delegation_active:
+            return None
+        if self._delegation_fail_closed:
+            return DelegationDecision(
+                target=LOCAL_TARGET,
+                source="fallback",
+                fallback_reason="provider_unavailable",
+            )
+        if not self._delegation_catalog or not query or not query.strip():
+            return DelegationDecision(target=LOCAL_TARGET, source="disabled")
+
+        request = DelegationRequest.from_query(query, agent_name=self.name)
+        try:
+            return await decide_delegation(
+                self._delegation_binding,
+                request,
+                self._delegation_catalog,
+            )
+        except Exception as exc:
+            logger.warning("[%s] delegation gate failed with %s", self.name, type(exc).__name__)
+            return DelegationDecision(
+                target=LOCAL_TARGET,
+                source="fallback",
+                fallback_reason="provider_error",
+                provider=self._delegation_binding.provider if self._delegation_binding is not None else "",
+            )
+
+    def _skill_requires_external_agent(self, skill_name: str) -> bool:
+        """Whether a matched skill explicitly calls a configured external agent.
+
+        The skill path dispatches built-in tools directly, bypassing the
+        agentic loop's HITL approval. When the delegation point is active, any
+        skill step naming *any* configured external agent — allowlisted or not —
+        is skipped for this turn; on this agent's normal run path, external
+        dispatch can then only happen through the selected tool in the agentic
+        loop. Peer-agent skill steps and mini-agent forks have their own paths
+        and are not governed by this check.
+        """
+        skill = self._config.skills.get(skill_name)
+        if skill is None:
+            return False
+        external_names = self._delegation_blocked_tools
+        return any(step.agent is None and step.tool is not None and step.tool in external_names for step in skill.steps)
+
     async def run(self, state: OrchidAgentState) -> OrchidAgentState:
         """Execute the pipeline with the agent's tool-flow decision bindings.
 
@@ -278,6 +389,10 @@ class GenericAgent(OrchidAgent):
             return {
                 "messages": [AIMessage(content=f"[{self.name}] Error: no auth context")],
             }
+
+        # Per-run skill metadata. Never read the detector's shared "last" state
+        # after a skipped detection: that would report the previous run's skill.
+        skill_metadata: dict[str, Any] = {}
 
         raw_query = self.extract_user_query(state)
 
@@ -318,6 +433,11 @@ class GenericAgent(OrchidAgent):
         else:
             query = raw_query
 
+        # Delegation is decided once per agent invocation, after pre-strategy
+        # transformers so the provider sees the effective request. ``None``
+        # keeps the legacy inventory; ``local`` suppresses external tools.
+        delegation = await self._resolve_delegation(query)
+
         scope = self._build_scope(auth, state)
 
         rag_start = time.perf_counter()
@@ -347,9 +467,31 @@ class GenericAgent(OrchidAgent):
         # skill on the decision path, do not let an agent-level skill hijack it.
         routing = state.get("routing_metadata") or {}
         orchestrator_skill = routing.get("skill") if routing.get("path") == "decision" else None
+        delegated = delegation is not None and delegation.delegated
+        delegation_active = self._delegation_active
         skill_start = time.perf_counter()
-        skill_name = None if orchestrator_skill else await self._detect_skill(query)
+        if orchestrator_skill:
+            skill_name = None
+            skill_metadata = {"outcome": "skipped", "reason": "orchestrator_skill"}
+        elif delegated:
+            skill_name = None
+            skill_metadata = {"outcome": "skipped", "reason": "delegation"}
+        else:
+            skill_name = await self._detect_skill(query)
+            if self._config.skills and self._skill_detector is not None:
+                skill_metadata = self._skill_detector.last_metadata
         skill_detect_elapsed = (time.perf_counter() - skill_start) * 1000
+        if skill_name and delegation_active and self._skill_requires_external_agent(skill_name):
+            # The skill path dispatches built-in tools directly and would bypass
+            # both the agent allowlist and HITL. Skip it for this turn; the
+            # agentic loop runs with external-agent tools suppressed.
+            logger.warning(
+                "[%s] skill '%s' references a configured external agent; skipping it",
+                self.name,
+                skill_name,
+            )
+            skill_metadata = {"outcome": "skipped", "reason": "external_agent_skill"}
+            skill_name = None
         if self._config.skills:
             perf_logger.info(
                 "[PERF][agent=%s] step=skill_detect took %.1f ms (matched=%s)",
@@ -391,6 +533,7 @@ class GenericAgent(OrchidAgent):
                 rag_data,
                 skip_tools=set(cached_tools.keys()),
                 content_sources=self._content_sources,
+                delegation=delegation,
             )
             loop_elapsed = (time.perf_counter() - loop_start) * 1000
             perf_logger.info(
@@ -433,7 +576,7 @@ class GenericAgent(OrchidAgent):
         output_messages: list = [AIMessage(content=f"[{self.name.title()} Agent]\n{summary}")]
         for evt in loop_events:
             output_messages.insert(0, evt)
-        metadata = self._skill_detector.last_metadata if self._skill_detector else {}
+        metadata = skill_metadata
         return {
             "messages": output_messages,
             "mcp_context": {self.name: mcp_data},
@@ -727,11 +870,21 @@ class GenericAgent(OrchidAgent):
         *,
         skip_tools: set[str] | None = None,
         content_sources: Any = None,
+        delegation: DelegationDecision | None = None,
     ) -> tuple[str | None, dict[str, Any], list]:
         """Unified MCP + built-in tool loop using native ``tool_calls``.
 
         Delegates to :class:`AgenticLoop` which owns the multi-round
         lifecycle (duplicate tracking, max-round safety, HITL interrupts).
+
+        ``delegation`` is the accepted/fallback outcome of the ``delegation``
+        point for this run. ``None`` keeps the configured inventory. A local
+        outcome removes every configured external-agent tool, while an accepted
+        external target exposes only that tool. This policy governs this
+        agent's normal agentic loop; peer-agent skill steps and mini-agent forks
+        have separate paths and may bypass it. Neither case invokes the CLI
+        directly: dispatch stays on the existing ``ExternalAgentCLITool`` path,
+        so allowlists, the auth context, and HITL approval remain in force.
 
         Returns ``(final_text, tool_results, events)``.  ``final_text`` is
         ``None`` when the loop exhausted rounds without producing text
@@ -749,20 +902,37 @@ class GenericAgent(OrchidAgent):
         # ── Discover MCP capabilities ───────────────────────
         caps = await self._mcp_dispatcher.render_capabilities(auth, agent_name=self.name)
 
+        # ── Resolve the delegation tool policy ──────────────
+        allowed_builtin: set[str] | None = None
+        allow_mcp_tools = True
+        delegated = delegation is not None and delegation.delegated
+        if delegation is not None:
+            if delegated:
+                allowed_builtin = {delegation.target}
+                allow_mcp_tools = False
+            else:
+                allowed_builtin = set(self._config.tools) - set(self._delegation_blocked_tools)
+
         # ── Build unified tool list ─────────────────────────
-        builtin_tool_names, builtin_tool_defs = self._builtin_tools_to_litellm(skip_tools)
-        mcp_tool_defs = MCPDispatcher.mcp_tools_to_litellm(
-            [
-                t
-                for t in caps.raw_tools
-                if t["name"] not in builtin_tool_names and not (skip_tools and t["name"] in skip_tools)
-            ],
+        effective_skip = set(skip_tools or ())
+        if allowed_builtin is not None:
+            effective_skip.update(name for name in self._config.tools if name not in allowed_builtin)
+        builtin_tool_names, builtin_tool_defs = self._builtin_tools_to_litellm(effective_skip)
+        mcp_tool_defs = (
+            MCPDispatcher.mcp_tools_to_litellm(
+                [t for t in caps.raw_tools if t["name"] not in builtin_tool_names and t["name"] not in effective_skip],
+            )
+            if allow_mcp_tools
+            else []
         )
         all_tool_defs = mcp_tool_defs + builtin_tool_defs
         if not all_tool_defs:
             return None, {}, []
 
         tool_subset = await self._shortlist_tools(query, all_tool_defs)
+        if delegated:
+            # The decision already selected the only tool this run may use.
+            tool_subset = [delegation.target]
 
         # ── Build LangChain tool wrappers ───────────────────
         lc_tools = build_langchain_tools(
@@ -779,6 +949,8 @@ class GenericAgent(OrchidAgent):
 
         # ── Build messages ──────────────────────────────────
         system_prompt = self._build_agentic_system_prompt(caps, rag_data, state)
+        if delegated:
+            system_prompt = f"{system_prompt}\n\n{_DELEGATION_DIRECTIVE.format(name=delegation.target)}"
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         if state:
             messages.extend(
