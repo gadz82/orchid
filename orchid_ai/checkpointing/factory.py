@@ -129,6 +129,11 @@ async def build_checkpointer(
     """
     resolved_dsn = os.path.expanduser(dsn) if dsn else dsn
 
+    # Load plugin-provided types on demand: callers may use this factory
+    # directly without going through the Orchid facade, which is the usual
+    # lazy-init entry point.
+    _load_entry_point_checkpointers()
+
     # Check custom registry first (integrators + plugins can register types)
     if checkpointer_type in _CHECKPOINTER_REGISTRY:
         factory_fn = _CHECKPOINTER_REGISTRY[checkpointer_type]
@@ -162,7 +167,14 @@ async def build_checkpointer(
     return cls(dsn=resolved_dsn) if resolved_dsn else cls()
 
 
+_entry_points_loaded: bool = False
+
+
 def _load_entry_point_checkpointers() -> None:
+    global _entry_points_loaded
+    if _entry_points_loaded:
+        return
+    _entry_points_loaded = True
     for name, register_fn in iter_entry_point_plugins("orchid.checkpointers"):
         try:
             register_fn()
