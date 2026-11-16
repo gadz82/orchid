@@ -14,6 +14,127 @@
 
 <!-- version list -->
 
+## v1.12.0 (2026-11-16)
+
+### Bug Fixes
+
+- **decision**: Bound the call, verify peers, harden parsing (P-003)
+  ([`7c32ff1`](https://github.com/gadz82/orchid/commit/7c32ff183ce7ff4aa82086909cfe533aa40af122))
+
+- **decision**: Close config bypasses after CR (P-002)
+  ([`b372d4e`](https://github.com/gadz82/orchid/commit/b372d4e6bc070a16bd919719b2229f817c110c15))
+
+- **decision**: Close factory and LLM review findings (P-006)
+  ([`46a7418`](https://github.com/gadz82/orchid/commit/46a74187fb4b61cc0a29541ba680a9f096d40bbb))
+
+- **decision**: Complete routing metadata, fallback, and projection (P-008)
+  ([`c63c04a`](https://github.com/gadz82/orchid/commit/c63c04ac92ac8b37ca39982e95c8352a1b74643e))
+
+- **decision**: Harden contract validation after CR (P-001)
+  ([`730a143`](https://github.com/gadz82/orchid/commit/730a143d007e9b928126bc92165b417122264bf4))
+
+- **decision**: Make reload transactional and build only referenced providers (P-007)
+  ([`7c785b9`](https://github.com/gadz82/orchid/commit/7c785b9f40ee885ce02753e057dcb8dbfcb409eb))
+
+- **decision**: Strict answer validation in state-and-questions adapter (P-004)
+  ([`c4d32f5`](https://github.com/gadz82/orchid/commit/c4d32f5c8a89a85b184d137714c10c880068d55c))
+
+- **decision**: Strict positional matching and presence-aware validation (P-005)
+  ([`ddfba24`](https://github.com/gadz82/orchid/commit/ddfba24caba7f2b766032f9a2fa1cc0b7b824c15))
+
+### Chores
+
+- **orchid-sdd**: Migrate workspace knowledge and memory [skip ci]
+  ([`6fe73cb`](https://github.com/gadz82/orchid/commit/6fe73cb868fbb09c8597966b94ff7f72b3422c34))
+
+### Documentation
+
+- **decision**: Anchor the RAG explorer port
+  ([`bcba2f0`](https://github.com/gadz82/orchid/commit/bcba2f04b4b490e46267948fd48218b69c4a5e05))
+
+### Features
+
+- **decision**: Add bounded HTTP transport with egress and breaker (P-003)
+  ([`3167c19`](https://github.com/gadz82/orchid/commit/3167c1931dc0fcfc65fc349f817acbb8e9c91cb9))
+
+- **decision**: Add decision configuration schema and resolution (P-002)
+  ([`db733d1`](https://github.com/gadz82/orchid/commit/db733d1318a1f8d951873da1ca390627f8d021c3))
+
+- **decision**: Add decision-backed model routing (P-003)
+  ([`ca1b886`](https://github.com/gadz82/orchid/commit/ca1b886e47e594d067f6360ff25fbc3cc49093f4))
+
+- **decision**: Add decision-first agent skill detection (P-009)
+  ([`1775f6f`](https://github.com/gadz82/orchid/commit/1775f6fb0ecd670c289715e303a6c8372a4b259d))
+
+- **decision**: Add decision-first supervisor routing (P-008)
+  ([`abae19b`](https://github.com/gadz82/orchid/commit/abae19bb817288b7a54cfae8321e9058602fbb71))
+
+- **decision**: Add LLM, stub, factory, and protocol registry (P-006)
+  ([`c902455`](https://github.com/gadz82/orchid/commit/c902455ac3b152f85f399c7d60e2cfb7f5c316a7))
+
+- **decision**: Add OpenAI-compatible adapter and contract suite (P-005)
+  ([`96ae9c4`](https://github.com/gadz82/orchid/commit/96ae9c45dc82b1ab6caa390a8cce94533aba0e8a))
+
+- **decision**: Add pluggable decision-point registry (P-001)
+  ([`33c485e`](https://github.com/gadz82/orchid/commit/33c485e083e21016eda50f066218cf40cbdc1ca1))
+
+- **decision**: Add provider-agnostic decision contract (P-001)
+  ([`3b43548`](https://github.com/gadz82/orchid/commit/3b43548320889efade7ec6bad8c2d805dc844c3f))
+
+- **decision**: Add self.decide helper, skill metadata, and default fallback
+  ([`6f7a2f8`](https://github.com/gadz82/orchid/commit/6f7a2f837597d827621b8093758d1c9c29045d44))
+
+- **decision**: Add state-and-questions adapter (P-004)
+  ([`4d81e8e`](https://github.com/gadz82/orchid/commit/4d81e8e6a99e1beea1c0ef6be1f25291f207e109))
+
+- **decision**: Add stub config, skill hardening, and decision docs (P-009, P-012)
+  ([`d07ede6`](https://github.com/gadz82/orchid/commit/d07ede63f5328d63507adb7f3c28fbca5eb9e43a))
+
+- **decision**: Add tool choice and agentic loop decisions (P-004)
+  ([`8035556`](https://github.com/gadz82/orchid/commit/8035556d81a05ffed67b8bd193d9404ae655b394))
+
+- **decision**: Add tool shortlist and RAG gating (P-010, P-011)
+  ([`6ed2a18`](https://github.com/gadz82/orchid/commit/6ed2a18cbb558a7816d5b1973bb41dcc1eb660bf))
+
+- **decision**: Allow a per-provider decide_path for Jev-style endpoints
+  ([`34cb250`](https://github.com/gadz82/orchid/commit/34cb2505619658f4a39360f2647df58bf5ee4ce6))
+
+- **decision**: Honour the default routing fallback
+  ([`1e55aa4`](https://github.com/gadz82/orchid/commit/1e55aa4b24353d14edaefe8cb308f93acc53a63b))
+
+- **decision**: Inject providers through the runtime and lifecycle (P-007)
+  ([`0fe6081`](https://github.com/gadz82/orchid/commit/0fe60817118257b6c36ba0492b50c0d6d03f6a41))
+
+- **decision**: Register new points and add retrieval strategy (P-002)
+  ([`7cdd22d`](https://github.com/gadz82/orchid/commit/7cdd22d11331f32d2f73c73db93ba1a408361b8f))
+
+- **decision**: Widen routing context and add RAG strategy and graph controls
+  ([`e58b14c`](https://github.com/gadz82/orchid/commit/e58b14cfc683477e30e653c14b08ac3bbf33ab23))
+
+- **decision**: Wire skill providers for child agents
+  ([`5dcc60a`](https://github.com/gadz82/orchid/commit/5dcc60a78f1ce5f695574d7f65bfad144933a18e))
+
+- **delegation**: Add decision-backed external-agent delegation (P-009)
+  ([`9ca554c`](https://github.com/gadz82/orchid/commit/9ca554cb80f752506f83d9f3a631c07ecfa39a53))
+
+- **documents**: Add decision-backed ingestion selection (P-008)
+  ([`1cbc4cd`](https://github.com/gadz82/orchid/commit/1cbc4cd8327031f30596833d0d1e997384645bdf))
+
+- **events**: Add decision-backed event gate (P-007)
+  ([`8b433d5`](https://github.com/gadz82/orchid/commit/8b433d59aa9c1bb1225b9b719e22819c8bc66454))
+
+- **guardrails**: Add decision-backed guardrails (P-005)
+  ([`b33886f`](https://github.com/gadz82/orchid/commit/b33886f78eb182efcfef04c2a166501e16cc603d))
+
+- **memory**: Add decision-backed memory and summarisation (P-006)
+  ([`3c038da`](https://github.com/gadz82/orchid/commit/3c038da6e0bc6b9e1a665d262f3aaf9215c938c6))
+
+### Testing
+
+- **decision**: Add YAML integration fixture and extension docs (P-010)
+  ([`43369d7`](https://github.com/gadz82/orchid/commit/43369d7fcdca2faef1800b4ba16b3849d483b55a))
+
+
 ## v1.11.0 (2026-10-08)
 
 ### Features
