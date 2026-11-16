@@ -1,4 +1,4 @@
-const PROVIDERS = ['Anthropic', 'OpenAI', 'Ollama', 'Google'] as const;
+const PROVIDERS = ['Anthropic', 'OpenAI', 'Ollama', 'Google', 'Groq'] as const;
 
 type Provider = (typeof PROVIDERS)[number];
 

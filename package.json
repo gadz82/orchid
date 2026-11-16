@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "tsx scripts/check-nav.ts && node scripts/generate-llms-txt.mjs && node scripts/generate-sitemap.mjs && next build && pagefind --site out --output-path public/_pagefind",
+    "build": "tsx scripts/check-nav.ts && node scripts/generate-llms-txt.mjs && node scripts/generate-sitemap.mjs && next build && pagefind --site out --output-path public/_pagefind && node scripts/generate-md-pages.mjs",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",

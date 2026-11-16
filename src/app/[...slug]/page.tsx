@@ -15,6 +15,9 @@ import ConfigTable from '@/components/ConfigTable';
 import RepoLink from '@/components/RepoLink';
 import MdxLink from '@/components/MdxLink';
 import CodePair from '@/components/CodePair';
+import Heading from '@/components/Heading';
+import AnchorRail from '@/components/AnchorRail';
+import { siteConfig } from '@/site-config';
 
 export const dynamicParams = false;
 
@@ -23,6 +26,8 @@ const CONTENT_DIR = join(process.cwd(), 'src', 'content');
 const MDX_COMPONENTS = {
   pre: MdxPre,
   a: MdxLink,
+  h2: Heading,
+  h3: Heading,
   Callout,
   ExternalLink,
   MultiLLMBadge,
@@ -72,9 +77,20 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!filePath) return {};
   const raw = readFileSync(filePath, 'utf-8');
   const { data } = matter(raw);
+  // Every documentation page has a static markdown twin (`<route>.md`,
+  // generated post-build by scripts/generate-md-pages.mjs). Advertise it so
+  // LLM spiders fetch clean markdown instead of parsing the HTML page.
+  const route = '/' + slug.join('/');
+  const mdHref = `${siteConfig.siteUrl.replace(/\/$/, '')}${route}.md`;
   return {
     title: data.title ?? slug.at(-1),
     description: data.description ?? undefined,
+    other: {
+      'llms-canonical': mdHref,
+    },
+    alternates: {
+      types: { 'text/markdown': mdHref },
+    },
   };
 }
 
@@ -87,12 +103,15 @@ export default async function ContentPage({ params }: { params: Promise<{ slug: 
   const { data: frontmatter, content } = matter(raw);
 
   return (
-    <article className="prose prose-invert max-w-none [&_a]:text-orchid-accent [&_a:hover]:text-orchid-accent-hover [&_h1]:text-orchid-text [&_h2]:text-orchid-text [&_h3]:text-orchid-text [&_code:not(pre_code)]:bg-orchid-card [&_code:not(pre_code)]:text-orchid-accent-glow [&_code:not(pre_code)]:px-1.5 [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:rounded [&_code:not(pre_code)]:text-sm [&_pre]:p-0 [&_pre]:bg-transparent">
-      <h1>{frontmatter.title}</h1>
-      {frontmatter.description && (
-        <p className="text-orchid-muted text-lg not-prose mb-6">{frontmatter.description}</p>
-      )}
-      <MDXRemote source={content} components={MDX_COMPONENTS} options={{ mdxOptions: { remarkPlugins: [remarkGfm] } }} />
-    </article>
+    <div className="flex gap-10 w-full min-w-0">
+      <article className="prose prose-invert max-w-none min-w-0 flex-1 [&_a]:text-orchid-accent [&_a:hover]:text-orchid-accent-hover [&_h1]:text-orchid-text [&_h2]:text-orchid-text [&_h3]:text-orchid-text [&_code:not(pre_code)]:bg-orchid-card [&_code:not(pre_code)]:text-orchid-accent-glow [&_code:not(pre_code)]:px-1.5 [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:rounded [&_code:not(pre_code)]:text-sm [&_pre]:p-0 [&_pre]:bg-transparent">
+        <h1>{frontmatter.title}</h1>
+        {frontmatter.description && (
+          <p className="text-orchid-muted text-lg not-prose mb-6">{frontmatter.description}</p>
+        )}
+        <MDXRemote source={content} components={MDX_COMPONENTS} options={{ mdxOptions: { remarkPlugins: [remarkGfm] } }} />
+      </article>
+      <AnchorRail />
+    </div>
   );
 }

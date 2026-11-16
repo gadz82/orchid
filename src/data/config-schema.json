@@ -2539,6 +2539,16 @@
   },
   {
     "file": "agents.yaml",
+    "path": "guardrails.input[].on_failure",
+    "type": "\"open\" | \"closed\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
     "path": "guardrails.input[].config",
     "type": "dict[string, any]",
     "required": false,
@@ -2592,6 +2602,16 @@
       "/examples/basketball",
       "/examples/festival-producer"
     ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "guardrails.output[].on_failure",
+    "type": "\"open\" | \"closed\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -4052,6 +4072,16 @@
   },
   {
     "file": "agents.yaml",
+    "path": "agents[].guardrails.input[].on_failure",
+    "type": "\"open\" | \"closed\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
     "path": "agents[].guardrails.input[].config",
     "type": "dict[string, any]",
     "required": false,
@@ -4108,6 +4138,16 @@
   },
   {
     "file": "agents.yaml",
+    "path": "agents[].guardrails.output[].on_failure",
+    "type": "\"open\" | \"closed\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
     "path": "agents[].guardrails.output[].config",
     "type": "dict[string, any]",
     "required": false,
@@ -4119,6 +4159,506 @@
       "/examples/basketball",
       "/examples/festival-producer"
     ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.skills.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.tools.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.rag.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points",
+    "type": "dict[string, object]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decisions.points[].options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].decision_model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -5264,6 +5804,16 @@
   },
   {
     "file": "agents.yaml",
+    "path": "agents[].children[].guardrails.input[].on_failure",
+    "type": "\"open\" | \"closed\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
     "path": "agents[].children[].guardrails.input[].config",
     "type": "dict[string, any]",
     "required": false,
@@ -5320,6 +5870,16 @@
   },
   {
     "file": "agents.yaml",
+    "path": "agents[].children[].guardrails.output[].on_failure",
+    "type": "\"open\" | \"closed\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
     "path": "agents[].children[].guardrails.output[].config",
     "type": "dict[string, any]",
     "required": false,
@@ -5331,6 +5891,506 @@
       "/examples/basketball",
       "/examples/festival-producer"
     ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.skills.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.tools.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.rag.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points",
+    "type": "dict[string, object]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decisions.points[].options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "agents[].children[].decision_model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
   },
   {
     "file": "agents.yaml",
@@ -6085,6 +7145,829 @@
   {
     "file": "agents.yaml",
     "path": "allowed_passthrough_hosts",
+    "type": "list[string]",
+    "required": false,
+    "default": [],
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models",
+    "type": "dict[string, object]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].protocol",
+    "type": "string",
+    "required": false,
+    "default": "state-questions",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].model",
+    "type": "string",
+    "required": false,
+    "default": "",
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].base_url",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/mcp-auth"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].api_key_env",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].decide_path",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].timeout_seconds",
+    "type": "float",
+    "required": false,
+    "default": 2.0,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/education",
+      "/examples/helpdesk"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].max_retries",
+    "type": "int",
+    "required": false,
+    "default": 1,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].max_response_bytes",
+    "type": "int",
+    "required": false,
+    "default": 262144,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].state_transform",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].stub.answers",
+    "type": "dict[string, dict[string, any]]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].stub.confidence",
+    "type": "float",
+    "required": false,
+    "default": 0.9,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decision_models[].stub.mode",
+    "type": "\"answer\" | \"low_confidence\" | \"fail\"",
+    "required": false,
+    "default": "answer",
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.budget.max_calls_per_turn",
+    "type": "int",
+    "required": false,
+    "default": 4,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.budget.max_total_ms",
+    "type": "int",
+    "required": false,
+    "default": 4000,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.budget.breaker_cooldown_s",
+    "type": "float",
+    "required": false,
+    "default": 30.0,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.budget.failure_threshold",
+    "type": "int",
+    "required": false,
+    "default": 3,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.default.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.default.on_low_confidence",
+    "type": "\"llm\" | \"default\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.routing.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.skills.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.tools.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.rag.options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points",
+    "type": "dict[string, object]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].enabled",
+    "type": "boolean",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].model",
+    "type": "string",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].confidence_threshold",
+    "type": "float",
+    "required": false,
+    "default": 0.75,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].on_low_confidence",
+    "type": "\"llm\" | \"default\" | \"escalate\"",
+    "required": false,
+    "default": "llm",
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].max_candidates",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].mode",
+    "type": "\"filter\"",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/learning",
+      "/examples/mcp-auth",
+      "/examples/postgres-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].history_max_turns",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].history_max_chars",
+    "type": "int",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/festival-producer",
+      "/examples/gallery-curator"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].strategies",
+    "type": "list[string]",
+    "required": false,
+    "default": null,
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "decisions.points[].options",
+    "type": "dict[string, any]",
+    "required": false,
+    "default": {},
+    "description": "",
+    "deprecated": false,
+    "examples": []
+  },
+  {
+    "file": "agents.yaml",
+    "path": "allowed_decision_hosts",
     "type": "list[string]",
     "required": false,
     "default": [],
@@ -6952,6 +8835,30 @@
       "/examples/education",
       "/examples/helpdesk"
     ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "events.decision.enabled",
+    "type": "boolean",
+    "required": false,
+    "default": false,
+    "description": "",
+    "deprecated": false,
+    "examples": [
+      "/examples/architecture-review",
+      "/examples/basketball",
+      "/examples/custom-storage"
+    ]
+  },
+  {
+    "file": "agents.yaml",
+    "path": "events.decision.point",
+    "type": "string",
+    "required": false,
+    "default": "events",
+    "description": "",
+    "deprecated": false,
+    "examples": []
   },
   {
     "file": "agents.yaml",

@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Search, ChevronDown } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Search, ChevronDown, Github } from 'lucide-react';
 import { siteConfig } from '@/site-config';
 import OrchidIcon from '@/components/OrchidIcon';
 import SearchModal from '@/components/SearchModal';
@@ -12,35 +13,44 @@ import { navNodes } from '@/nav';
 interface MegaMenuSection {
   label: string;
   href: string;
+  match: string;
   children: { href: string; label: string }[];
 }
 
+// Primary sections (mastra/NestJS docs pattern): always visible in the bar,
+// each with a compact dropdown; the `match` prefix drives the active state.
 const MEGA_MENU: MegaMenuSection[] = [
   {
-    label: 'Concepts',
+    label: 'Docs',
     href: '/concepts/agents',
-    children: navNodes
-      .filter((n) => n.group === 'concepts')
-      .map((n) => ({ href: n.href, label: n.label })),
+    match: '/concepts',
+    children: navNodes.filter((n) => n.group === 'concepts').map((n) => ({ href: n.href, label: n.label })),
   },
   {
     label: 'Packages',
     href: '/packages/orchid',
-    children: navNodes
-      .filter((n) => n.group === 'packages')
-      .map((n) => ({ href: n.href, label: n.label })),
+    match: '/packages',
+    children: navNodes.filter((n) => n.group === 'packages').map((n) => ({ href: n.href, label: n.label })),
   },
   {
     label: 'Examples',
     href: '/examples',
-    children: navNodes
-      .filter((n) => n.group === 'examples')
-      .map((n) => ({ href: n.href, label: n.label })),
+    match: '/examples',
+    children: navNodes.filter((n) => n.group === 'examples').map((n) => ({ href: n.href, label: n.label })),
+  },
+  {
+    label: 'Configuration',
+    href: '/configuration',
+    match: '/configuration',
+    children: navNodes.filter((n) => n.group === 'configuration').map((n) => ({ href: n.href, label: n.label })),
   },
 ];
 
 export default function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
+  // usePathname() is null without a router context (e.g. component tests).
+  // Treat it as "/" so the bar still renders; active states simply stay off.
+  const pathname = usePathname() ?? '';
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -53,6 +63,8 @@ export default function Header() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  const isActive = (prefix: string) => pathname.startsWith(prefix);
+
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b border-orchid-border bg-orchid-bg/90 backdrop-blur">
@@ -62,10 +74,16 @@ export default function Header() {
             <OrchidIcon size={28} />
             <span className="hidden sm:inline">Orchestrator Index</span>
           </Link>
-          <nav aria-label="Top navigation" className="hidden md:flex items-center gap-1 ml-4">
+          <nav aria-label="Top navigation" className="hidden md:flex items-center gap-0.5 ml-6">
             <Link
               href="/quickstart"
-              className="px-3 py-1.5 text-sm text-orchid-muted hover:text-orchid-text transition-colors rounded-md hover:bg-orchid-surface"
+              aria-current={pathname === '/quickstart' ? 'page' : undefined}
+              className={[
+                'px-3 py-1.5 text-sm transition-colors rounded-md',
+                pathname === '/quickstart'
+                  ? 'text-orchid-text font-medium bg-orchid-surface'
+                  : 'text-orchid-muted hover:text-orchid-text hover:bg-orchid-surface',
+              ].join(' ')}
             >
               Quickstart
             </Link>
@@ -73,7 +91,13 @@ export default function Header() {
               <div key={section.label} className="relative group">
                 <Link
                   href={section.href}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-orchid-muted hover:text-orchid-text transition-colors rounded-md hover:bg-orchid-surface"
+                  aria-current={isActive(section.match) ? 'true' : undefined}
+                  className={[
+                    'flex items-center gap-1 px-3 py-1.5 text-sm transition-colors rounded-md',
+                    isActive(section.match)
+                      ? 'text-orchid-text font-medium bg-orchid-surface'
+                      : 'text-orchid-muted hover:text-orchid-text hover:bg-orchid-surface',
+                  ].join(' ')}
                 >
                   {section.label}
                   <ChevronDown size={12} className="opacity-50 group-hover:rotate-180 transition-transform" />
@@ -85,7 +109,12 @@ export default function Header() {
                         <Link
                           key={child.href}
                           href={child.href}
-                          className="block px-3 py-1.5 text-sm text-orchid-muted hover:text-orchid-text hover:bg-orchid-surface rounded-md transition-colors whitespace-nowrap"
+                          className={[
+                            'block px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap',
+                            pathname === child.href
+                              ? 'text-orchid-accent bg-orchid-accent/10'
+                              : 'text-orchid-muted hover:text-orchid-text hover:bg-orchid-surface',
+                          ].join(' ')}
                         >
                           {child.label}
                         </Link>
@@ -96,15 +125,16 @@ export default function Header() {
               </div>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2.5">
             <a
               href={siteConfig.repoUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden sm:block text-sm text-orchid-muted hover:text-orchid-text transition-colors"
+              className="hidden sm:flex items-center gap-1.5 text-sm text-orchid-muted hover:text-orchid-text transition-colors px-2 py-1.5 rounded-md hover:bg-orchid-surface"
               aria-label="GitHub repository"
             >
-              GitHub ↗
+              <Github size={16} />
+              <span className="hidden lg:inline">GitHub</span>
             </a>
             <button
               aria-label="Search documentation (⌘K)"

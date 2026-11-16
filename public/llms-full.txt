@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-10-08
+Last generated: 2026-11-16
 
 ## Overview
 
@@ -555,7 +555,7 @@ Each agent can use a different provider. The optional `fallback_model` is tried 
 
 ## Simple completions vs agentic tool-calling
 
-Two LLM usage patterns appear inside the framework — each with a distinct interface:
+Two LLM usage patterns appear inside the framework — each with a distinct interface. A third pattern handles *judgements* (routing, gating, selection) and is covered separately in [Decision Models](/concepts/decision-models):
 
 **Simple completions** (summarisation, routing, history compression): use `self.summarise()` inherited from `OrchidAgent`. This delegates to the injected `BaseChatModel` via `chat_model.ainvoke(messages)`. Custom agents should always use this path for synthesising responses.
 
@@ -1166,6 +1166,159 @@ supervisor:
     truncation_strategy: "middle"
     truncation_max_chars: 1000
 ```
+
+---
+
+### Decision Models
+URL: https://orchestratorindex.com/concepts/decision-models
+Description: A dedicated LLM layer that returns typed, calibrated judgements for internal routing, gating and selection seams — with deterministic fallbacks.
+
+Most LLM calls in an agent produce **prose**: the answer the user reads. A second class of calls produces **judgements** — which tool to call, whether content is safe, which model to use, whether to delegate. Orchid routes those judgements to a *decision model*: a small, cheap, dedicated LLM that returns **typed answers with calibrated confidence** instead of generated text.
+
+A decision model evaluates a *state* against named *questions* and returns one of three answer kinds:
+
+- **boolean** — a yes/no judgement (e.g. "is this request in topic?")
+- **choice** — one option from a bounded candidate list (e.g. which retrieval strategy to run)
+- **score** — a numeric value (e.g. groundedness between 0 and 1)
+
+Every answer carries a confidence in `[0, 1]`. It never composes tool arguments, writes prose, or touches user-facing output — names and values only. The contract lives in `orchid_ai.core.decision` (stdlib-only), the same interface every consumer depends on regardless of provider wire dialect.
+
+## Decision points
+
+A *decision point* is a named seam in the framework where a judgement is made. Points are declared in a registry and bound to a provider through YAML — adding a new point never edits core switch logic.
+
+Thirteen points ship built in. The four **legacy points** keep their original YAML keys and behaviour; the nine **extended points** are decision-backed versions of existing internal flows. Each declares its scope and the fallback mode that preserves pre-existing behaviour:
+
+| Point | Scope | Decides | Fallback (no provider / low confidence / error) |
+|---|---|---|---|
+| `routing` | fleet | Which agents or orchestrator skill handle a request | `llm` — the existing supervisor prompt |
+| `skills` | agent | Which agent skill handles the request | `llm` |
+| `tools` | agent | Shortlist of tools bound for one turn | `all_tools` |
+| `rag` | agent | Which retrieved passages reach the prompt | `keep_original` |
+| `retrieval_strategy` | agent | Strategy for one query (simple, hybrid, hyde, multi_query, graph_rag) | `configured_strategy` |
+| `model_routing` | agent | Chat model or fallback for a request | `default_model` |
+| `tool_choice` | agent | Which and how many tools are bound for one turn | `all_tools` |
+| `guardrails` | agent | allow / block / redact / warn for input and output | `configured_guardrails` |
+| `memory` | fleet | Summarise, keep, or persist conversation memory | `configured_memory` |
+| `events` | fleet | Process, skip, or deduplicate framework events | `deterministic_processors` |
+| `ingestion` | agent | Parser and strategy for a document | `registry_default` |
+| `delegation` | agent | Local handling vs external-agent delegation | `no_delegation` |
+| `agentic_loop` | agent | Continue or stop the tool loop after a round | `max_tool_rounds` |
+
+The fallback column is the safety contract: on a missing provider, refusal, timeout, provider error, invalid answer, low confidence or budget exhaustion, the point silently returns the behaviour configured before the decision layer existed. Never an exception out of the seam.
+
+## Declaring providers
+
+Decision providers are declared once at the top level and referenced by name from point bindings. Four protocols ship built in — `state-questions` and `openai-compatible` (both bounded HTTPS transports), `llm` (any LangChain chat model via structured output) and `stub` (deterministic, for tests):
+
+```yaml
+decision_models:
+  gatekeeper:
+    protocol: state-questions
+    base_url: https://decisions.example.com
+    api_key_env: DECISIONS_API_KEY
+    timeout_seconds: 2.0
+    max_retries: 1
+    max_response_bytes: 262144
+
+  cheap-judge:
+    protocol: llm
+    model: gemini/gemini-2.5-flash-lite
+
+  offline:
+    protocol: stub
+    stub:
+      confidence: 0.9
+      answers:
+        retrieval_strategy:
+          choice: hyde
+          confidence: 0.95
+```
+
+Providers are built **lazily**: only models referenced by a configured point (or a legacy per-agent `decision_model`) are constructed. An unreferenced declaration is never built.
+
+```yaml
+decisions:
+  budget:
+    max_calls_per_turn: 4      # 1..16 — shared per-turn call budget
+    max_total_ms: 4000         # wall-clock ceiling for decisions in a turn
+    breaker_cooldown_s: 30.0   # circuit-breaker cooldown after failures
+    failure_threshold: 3       # consecutive failures that open the breaker
+  default:
+    model: gatekeeper          # default binding for agent-scoped points
+    confidence_threshold: 0.75
+    on_low_confidence: llm     # llm | default
+  points:
+    retrieval_strategy:
+      model: gatekeeper
+      confidence_threshold: 0.8
+      options:
+        strategies: [simple, hyde]   # allowlist validated at parse time
+    guardrails:
+      model: gatekeeper
+      options:
+        on_failure: closed           # per-rail policy: open | closed
+    delegation:
+      model: gatekeeper
+```
+
+The **budget is shared**: every decision in one turn draws from the same `max_calls_per_turn` / `max_total_ms` allowance, and a failing provider opens a circuit breaker for `breaker_cooldown_s`. An exhausted budget resolves to `None` — the flow falls back exactly as if the point were unconfigured.
+
+## Per-agent overrides
+
+Agent-scoped points can be overridden per agent; fleet-scoped points (`routing`, `memory`, `events`) cannot. `enabled: false` disables a globally inherited binding for that agent:
+
+```yaml
+agents:
+  support:
+    description: "Answers product-support questions."
+    rag:
+      enabled: true
+      namespace: support
+      retrieval:
+        strategy: hyde          # fallback if the decision is not confident
+    decisions:
+      points:
+        retrieval_strategy:
+          model: cheap-judge    # this agent picks its own strategy via LLM
+```
+
+Binding resolution is registry-driven: only points declared in YAML produce a binding, and an unconfigured point has no binding and no provider call. A binding that references a missing provider logs a warning and resolves to `None` — diagnosable, not fatal.
+
+## Custom points and protocols
+
+New points and new wire dialects are registered, not forked:
+
+```python
+from orchid_ai.core.decision import OrchidDecisionFallbackPolicy, OrchidDecisionPointSpec
+from orchid_ai.decision.registry import register_decision_point
+
+register_decision_point(
+    OrchidDecisionPointSpec(
+        name="escalation_target",
+        scope="agent",
+        fallback=OrchidDecisionFallbackPolicy(
+            mode="configured_behaviour",
+            description="Keep the escalation behaviour configured on the agent.",
+        ),
+        description="Choose which human queue receives an escalation.",
+    )
+)
+```
+
+Register the spec before `load_config()` runs; the config then validates `decisions.points.escalation_target` against the spec's own validator, and the consuming adapter resolves it with the same binding protocol as every built-in point. Custom transport dialects register with `register_decision_protocol(name, builder)` and are selected with `protocol: <name>` on a provider.
+
+## Observability and safety
+
+- **One structured log line per evaluation** — provider, latency, confidence, outcome and `fallback_reason`. No state, payloads, prompts or credentials are ever logged.
+- **Metadata in graph state is payload-free** — point, provider, threshold, candidate limit and fallback policy, with operator tokens sanitised for log injection.
+- **Egress is bounded** — HTTPS-only transports with host allowlists (`allowed_decision_hosts`), resolved-address validation, response size caps, deadline and retries.
+- **API keys stay in the environment** — YAML references `api_key_env`, never the secret itself.
+- **Deterministic stub for tests** — `protocol: stub` answers from a fixed table, with `low_confidence` and `fail` modes to exercise fallback paths offline.
+
+## External reading
+
+See the [Configuration Reference](/configuration-reference/agents) for the full `decisions:` schema, and [Multi-LLM](/concepts/multi-llm) for how prose-generating calls pick their models.
 
 ---
 
@@ -7083,6 +7236,9 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 | **Hierarchical RAG** | Orchid's five-level scoping system (root → tenant → user → chat → agent) that controls which vector collections an agent can read from. See [Hierarchical RAG](/concepts/rag). |
 | **Bloom** | The execution layer of Pollen + Bloom. Triggers match incoming Signals and run them through the LangGraph supervisor as `JobRun`s. See [Pollen + Bloom](/concepts/pollen-bloom). |
 | **Chat model** | A LangChain `BaseChatModel` injected into every agent by the graph builder via `build_chat_model()` (`llm_factory.py`). Consumer agents call `self.summarise()` rather than depending on a concrete provider. |
+| **Decision model** | A dedicated LLM that returns typed answers (boolean, choice, score) with calibrated confidence for internal judgements, instead of generated prose. Bound to decision points via the `decisions:` YAML block. See [Decision Models](/concepts/decision-models). |
+| **Decision point** | A named seam (e.g. `routing`, `guardrails`, `retrieval_strategy`) where a decision model is asked to judge. Points are declared in a registry, bound via YAML, and fall back to pre-existing behaviour on any failure. See [Decision Models](/concepts/decision-models). |
+| **Fallback policy** | The per-point mode that describes the behaviour used when a decision is unavailable, refused, or not confident (e.g. `all_tools`, `configured_strategy`, `no_delegation`). The legacy path is always preserved. See [Decision Models](/concepts/decision-models). |
 | **Mini-agent** | A parallel sub-agent forked by an opt-in parent during a single turn. The parent decomposes the request, N minis run focused agentic loops in parallel, and an aggregator synthesises the outcomes. See [Mini-Agents](/concepts/mini-agents). |
 | **`OrchidAgent`** | The base ABC (`orchid_ai.core.agent`) that every agent class extends. Provides `run()`, `summarise()`, `extract_conversation_history()`, and RAG helpers. See [Agents](/concepts/agents). |
 | **`OrchidAuthContext`** | A context object (`orchid_ai.core.state`) carrying `tenant_key`, `user_id`, and `bearer_header`. Resolved once at the API entry point and passed via the LangGraph run configuration — never persisted in graph state. See [OAuth & Auth](/concepts/oauth). |

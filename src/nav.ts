@@ -23,6 +23,7 @@ export const navNodes: NavNode[] = [
   { href: '/concepts/mini-agents', label: 'Mini-Agents', group: 'concepts', order: 20 },
   { href: '/concepts/pollen-bloom', label: 'Pollen + Bloom', group: 'concepts', order: 21 },
   { href: '/concepts/chat-summarization', label: 'Chat Summarization', group: 'concepts', order: 22 },
+  { href: '/concepts/decision-models', label: 'Decision Models', group: 'concepts', order: 23 },
 
   { href: '/packages/orchid', label: 'orchid', group: 'packages', order: 20 },
   { href: '/packages/orchid-api', label: 'orchid-api', group: 'packages', order: 21 },

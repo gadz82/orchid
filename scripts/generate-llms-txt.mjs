@@ -111,7 +111,7 @@ for (const sectionKey of SECTION_ORDER) {
   if (!pages?.length) continue;
   llmsTxt += `## ${SECTION_LABELS[sectionKey] ?? sectionKey}\n\n`;
   for (const p of pages) {
-    llmsTxt += `${p.title} — ${p.description}\n${BASE_URL}${p.route}\n\n`;
+    llmsTxt += `${p.title} — ${p.description}\n${BASE_URL}${p.route} (markdown: ${BASE_URL}${p.route}.md)\n\n`;
   }
 }
 // Any sections not in SECTION_ORDER
@@ -119,7 +119,7 @@ for (const [key, pages] of grouped) {
   if (SECTION_ORDER.includes(key)) continue;
   llmsTxt += `## ${key}\n\n`;
   for (const p of pages) {
-    llmsTxt += `${p.title} — ${p.description}\n${BASE_URL}${p.route}\n\n`;
+    llmsTxt += `${p.title} — ${p.description}\n${BASE_URL}${p.route} (markdown: ${BASE_URL}${p.route}.md)\n\n`;
   }
 }
 

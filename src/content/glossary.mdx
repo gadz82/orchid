@@ -10,10 +10,12 @@ sources:
   - "orchid/orchid_ai/core/state.py"
   - "orchid/orchid_ai/rag/scopes.py"
   - "orchid/orchid_ai/persistence/base.py"
+  - "orchid/orchid_ai/core/decision.py"
+  - "orchid/orchid_ai/decision/registry.py"
   - "orchid/AGENTS.md"
   - ".knowledge/adr/ADR-021-mini-agents.md"
   - ".knowledge/adr/ADR-029-pollen-bloom.md"
-related: ["/concepts/agents", "/concepts/rag", "/concepts/mcp", "/concepts/persistence", "/concepts/tool-strategies", "/concepts/mini-agents", "/concepts/pollen-bloom"]
+related: ["/concepts/agents", "/concepts/rag", "/concepts/mcp", "/concepts/persistence", "/concepts/tool-strategies", "/concepts/mini-agents", "/concepts/pollen-bloom", "/concepts/decision-models"]
 example: ""
 external: []
 ---
@@ -32,6 +34,9 @@ A quick-reference dictionary of terms used across the Orchid documentation. Each
 | **Hierarchical RAG** | Orchid's five-level scoping system (root → tenant → user → chat → agent) that controls which vector collections an agent can read from. See [Hierarchical RAG](/concepts/rag). |
 | **Bloom** | The execution layer of Pollen + Bloom. Triggers match incoming Signals and run them through the LangGraph supervisor as `JobRun`s. See [Pollen + Bloom](/concepts/pollen-bloom). |
 | **Chat model** | A LangChain `BaseChatModel` injected into every agent by the graph builder via `build_chat_model()` (`llm_factory.py`). Consumer agents call `self.summarise()` rather than depending on a concrete provider. |
+| **Decision model** | A dedicated LLM that returns typed answers (boolean, choice, score) with calibrated confidence for internal judgements, instead of generated prose. Bound to decision points via the `decisions:` YAML block. See [Decision Models](/concepts/decision-models). |
+| **Decision point** | A named seam (e.g. `routing`, `guardrails`, `retrieval_strategy`) where a decision model is asked to judge. Points are declared in a registry, bound via YAML, and fall back to pre-existing behaviour on any failure. See [Decision Models](/concepts/decision-models). |
+| **Fallback policy** | The per-point mode that describes the behaviour used when a decision is unavailable, refused, or not confident (e.g. `all_tools`, `configured_strategy`, `no_delegation`). The legacy path is always preserved. See [Decision Models](/concepts/decision-models). |
 | **Mini-agent** | A parallel sub-agent forked by an opt-in parent during a single turn. The parent decomposes the request, N minis run focused agentic loops in parallel, and an aggregator synthesises the outcomes. See [Mini-Agents](/concepts/mini-agents). |
 | **`OrchidAgent`** | The base ABC (`orchid_ai.core.agent`) that every agent class extends. Provides `run()`, `summarise()`, `extract_conversation_history()`, and RAG helpers. See [Agents](/concepts/agents). |
 | **`OrchidAuthContext`** | A context object (`orchid_ai.core.state`) carrying `tenant_key`, `user_id`, and `bearer_header`. Resolved once at the API entry point and passed via the LangGraph run configuration — never persisted in graph state. See [OAuth & Auth](/concepts/oauth). |

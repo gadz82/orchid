@@ -22,6 +22,12 @@ export const siteConfig = {
   contactUrl: '/contact',
   linkedinUrl: 'https://www.linkedin.com/in/francescomarchesini/',
 
+  /**
+   * orchid-sdd — the spec-driven development workflow used to build Orchid
+   * (credit line in the Footer bottom bar).
+   */
+  sddUrl: 'https://github.com/gadz82/orchid-sdd',
+
   license: 'MIT',
   version: '0.1.0-poc',
 } as const;
