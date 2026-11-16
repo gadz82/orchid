@@ -19,6 +19,13 @@ import logging
 import time
 from typing import Any
 
+from orchid_ai.core.decision import (
+    OrchidDecisionError,
+    OrchidDecisionPointBinding,
+    OrchidDecisionQuestion,
+    OrchidDecisionState,
+)
+from orchid_ai.decision.observability import log_decision
 from orchid_ai.observability.mini_agent_events import make_event_message
 
 logger = logging.getLogger(__name__)
@@ -26,6 +33,15 @@ perf_logger = logging.getLogger("orchid.perf")
 
 _MAX_TOOL_ROUNDS = 15
 _MAX_CONSECUTIVE_DUPES = 2
+
+_POINT = "agentic_loop"
+_CONTINUE_QUESTION = "continue"
+_MAX_STATE_TEXT_CHARS = 4000
+_MAX_TOOL_NAMES = 32
+#: Hard wall-clock ceiling for one advisory loop decision. Providers also
+#: receive this value as their per-call ``timeout``; the outer
+#: ``asyncio.timeout`` keeps a provider that ignores it from stalling the run.
+_MAX_DECISION_SECONDS = 2.0
 
 
 def _is_parallel_safe(
@@ -67,12 +83,21 @@ class AgenticLoop:
         is_mini: bool = False,
         max_tool_rounds: int = _MAX_TOOL_ROUNDS,
         max_consecutive_dupes: int = _MAX_CONSECUTIVE_DUPES,
+        agentic_loop_binding: OrchidDecisionPointBinding | None = None,
+        decision_timeout: float | None = _MAX_DECISION_SECONDS,
     ) -> None:
+        if decision_timeout is not None and decision_timeout <= 0:
+            raise ValueError("agentic loop decision timeout must be positive or None")
         self._agent_name = agent_name
         self._chat_model = chat_model
         self._temperature = temperature
         self._max_tool_rounds = max_tool_rounds
         self._max_consecutive_dupes = max_consecutive_dupes
+        # Optional advisory decision point. ``None`` keeps the historical
+        # behaviour: run until the LLM answers or the round cap is reached.
+        self._agentic_loop_binding = agentic_loop_binding
+        self._decision_timeout = decision_timeout
+        self._stop_reason: str | None = None
         # ``_events`` collects lifecycle event SystemMessages emitted
         # during tool dispatch.  ``GenericAgent`` drains this list
         # after ``loop.run()`` returns and includes them in the node
@@ -120,6 +145,16 @@ class AgenticLoop:
     def tool_results(self) -> dict[str, Any]:
         return self._tool_results
 
+    @property
+    def stop_reason(self) -> str | None:
+        """Why :meth:`run` last returned.
+
+        ``final_answer`` (the LLM produced text), ``decision_stop`` (the
+        ``agentic_loop`` point asked to stop), ``max_rounds`` (the configured
+        cap was reached), ``llm_error``, or ``None`` before the first run.
+        """
+        return self._stop_reason
+
     async def run(
         self,
         messages: list[dict[str, Any]],
@@ -131,6 +166,7 @@ class AgenticLoop:
         response (caller should fall back to summarisation).
         """
         loop_start = time.perf_counter()
+        self._stop_reason = None
         if not hasattr(self, "_model_with_tools"):
             self._model_with_tools = self._chat_model.bind_tools(self._all_tool_defs)
         model_with_tools = self._model_with_tools
@@ -148,6 +184,7 @@ class AgenticLoop:
             llm_elapsed = (time.perf_counter() - llm_start) * 1000
             if isinstance(ai_msg, str):
                 # Error message — return early
+                self._stop_reason = "llm_error"
                 perf_logger.warning(
                     "[PERF][agent=%s][loop] round=%d LLM error after %.1f ms",
                     self._agent_name,
@@ -169,6 +206,7 @@ class AgenticLoop:
 
             if not ai_msg.tool_calls:
                 final_text = ai_msg.content or ""
+                self._stop_reason = "final_answer"
                 total_elapsed = (time.perf_counter() - loop_start) * 1000
                 perf_logger.info(
                     "[PERF][agent=%s][loop] DONE rounds=%d total=%.1f ms (final_text=%d chars)",
@@ -190,6 +228,16 @@ class AgenticLoop:
                 dispatch_elapsed,
             )
 
+            if await self._should_stop(round_num + 1, ai_msg.tool_calls, messages):
+                self._stop_reason = "decision_stop"
+                logger.info(
+                    "[%s] agentic loop stopped by the agentic_loop decision point after round %d",
+                    self._agent_name,
+                    round_num + 1,
+                )
+                return None, self._tool_results
+
+        self._stop_reason = "max_rounds"
         total_elapsed = (time.perf_counter() - loop_start) * 1000
         perf_logger.warning(
             "[PERF][agent=%s][loop] HIT_MAX_ROUNDS rounds=%d total=%.1f ms",
@@ -226,6 +274,149 @@ class AgenticLoop:
             from ..llm_errors import format_llm_error
 
             return format_llm_error(exc, context=f"{self._agent_name} round {round_num}")
+
+    # ── Advisory loop decision ─────────────────────────────────
+
+    async def _should_stop(
+        self,
+        rounds_done: int,
+        tool_calls: list[dict[str, Any]],
+        messages: list,
+    ) -> bool:
+        """Ask the ``agentic_loop`` point whether to stop after a tool round.
+
+        The point is advisory: it can stop early, but it can never extend the
+        loop past ``max_tool_rounds``. It is not consulted at the cap because
+        the cap wins regardless of the answer. Every uncertain or failed
+        outcome keeps the historical behaviour (continue to the cap). The call
+        is bounded by ``decision_timeout`` so a stalled provider cannot stall
+        the agent run.
+        """
+        binding = self._agentic_loop_binding
+        if binding is None or rounds_done >= self._max_tool_rounds:
+            return False
+
+        tool_names = sorted({str(tc.get("name", "")) for tc in tool_calls if tc.get("name")})
+        state = OrchidDecisionState(
+            text=self._last_user_text(messages),
+            payload={
+                "agent": self._agent_name,
+                "round": rounds_done,
+                "max_rounds": self._max_tool_rounds,
+                "tools": tool_names[:_MAX_TOOL_NAMES],
+            },
+        )
+        question = OrchidDecisionQuestion(
+            name=_CONTINUE_QUESTION,
+            kind="boolean",
+            instructions=(
+                "Should the agent run another tool round? Answer true only when "
+                "another round is likely to add information needed to answer the request."
+            ),
+        )
+
+        started = time.perf_counter()
+        try:
+            async with asyncio.timeout(self._decision_timeout):
+                result = await binding.decide(state, [question], timeout=self._decision_timeout)
+        except OrchidDecisionError as exc:
+            self._log_fallback(
+                binding,
+                exc.code or "provider_error",
+                started,
+                provider=exc.provider,
+            )
+            return False
+        except TimeoutError:
+            self._log_fallback(binding, "timeout", started)
+            return False
+        except Exception as exc:
+            # Only the exception type crosses this seam: provider messages can
+            # contain user state and must not reach the logs.
+            logger.warning("[%s] agentic_loop provider raised %s", self._agent_name, type(exc).__name__)
+            self._log_fallback(binding, "provider_error", started)
+            return False
+
+        latency_ms = (time.perf_counter() - started) * 1000.0
+        provider = result.provider or binding.provider
+        answer = result.answers.get(_CONTINUE_QUESTION)
+        if answer is None:
+            self._log_fallback(binding, "invalid_response", started, provider=provider)
+            return False
+        if answer.refusal is not None:
+            self._log_fallback(
+                binding,
+                "refusal",
+                started,
+                confidence=answer.confidence,
+                provider=provider,
+            )
+            return False
+        if answer.kind != "boolean":
+            self._log_fallback(
+                binding,
+                "invalid_response",
+                started,
+                confidence=answer.confidence,
+                provider=provider,
+            )
+            return False
+        if answer.confidence < binding.confidence_threshold:
+            self._log_fallback(
+                binding,
+                "low_confidence",
+                started,
+                confidence=answer.confidence,
+                provider=provider,
+            )
+            return False
+
+        log_decision(
+            point=_POINT,
+            path="decision",
+            provider=provider,
+            latency_ms=latency_ms,
+            confidence=answer.confidence,
+            outcome="accepted",
+        )
+        return answer.value is False
+
+    def _log_fallback(
+        self,
+        binding: OrchidDecisionPointBinding,
+        reason: str,
+        started: float,
+        *,
+        confidence: float | None = None,
+        provider: str = "",
+    ) -> None:
+        """Emit one structured fallback line and keep the round-cap behaviour."""
+        logger.warning(
+            "[%s] agentic_loop decision fell back to the max-round cap (reason=%s)",
+            self._agent_name,
+            reason,
+        )
+        log_decision(
+            point=_POINT,
+            path="llm_fallback",
+            provider=provider or binding.provider,
+            latency_ms=(time.perf_counter() - started) * 1000.0,
+            confidence=confidence,
+            outcome="fallback",
+            fallback_reason=reason,
+        )
+
+    @staticmethod
+    def _last_user_text(messages: list) -> str:
+        """Return the bounded text of the most recent user message."""
+        for message in reversed(messages):
+            if isinstance(message, dict):
+                if message.get("role") == "user" and isinstance(message.get("content"), str):
+                    return message["content"][:_MAX_STATE_TEXT_CHARS]
+                continue
+            if getattr(message, "type", None) == "human":
+                return str(getattr(message, "content", ""))[:_MAX_STATE_TEXT_CHARS]
+        return ""
 
     async def _dispatch_tool_calls(
         self,

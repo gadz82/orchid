@@ -1,0 +1,62 @@
+# Additive decision-point fixture.
+#
+# Only `decisions.points.retrieval_strategy` is added: the four legacy points
+# (routing, skills, tools, rag) stay unconfigured, so the framework defaults are
+# unchanged. The `unused` provider is declared but never referenced, proving the
+# composition root builds only providers a registered point selects.
+version: "1"
+
+defaults:
+  llm:
+    model: test/model
+  rag:
+    enabled: false
+
+decision_models:
+  router:
+    protocol: stub
+    stub:
+      confidence: 0.95
+      answers:
+        strategy:
+          choice: simple
+          confidence: 0.95
+
+  cautious:
+    protocol: stub
+    stub:
+      mode: low_confidence
+
+  unused:
+    protocol: stub
+
+decisions:
+  points:
+    retrieval_strategy:
+      model: router
+      confidence_threshold: 0.8
+      options:
+        strategies: [simple, hyde]
+
+agents:
+  support:
+    description: "Answers product-support questions."
+    prompt: "You are a product-support agent. Answer briefly."
+    rag:
+      enabled: true
+      namespace: support
+      retrieval:
+        strategy: hyde
+
+  fallback:
+    description: "Answers product-support questions without a confident strategy."
+    prompt: "You are a product-support agent. Answer briefly."
+    rag:
+      enabled: true
+      namespace: support
+      retrieval:
+        strategy: hyde
+    decisions:
+      points:
+        retrieval_strategy:
+          model: cautious

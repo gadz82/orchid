@@ -44,3 +44,6 @@ Thumbs.db
 
 # mypy
 .mypy_cache/
+
+# orchid-sdd workspace override (root config is authoritative)
+/orchid-sdd.yml

@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.language_models import BaseChatModel
 
 from .core.content import OrchidContentSource
+from .core.decision import OrchidDecisionModel, OrchidDecisionPointBinding
 from .core.doc_store import OrchidDocStore
 from .core.graph_store import OrchidGraphStore
 from .core.mcp import OrchidMCPClient, OrchidMCPClientRegistrationStore, OrchidMCPTokenStore
@@ -135,6 +136,13 @@ class OrchidRuntime:
     #: disabled, which makes ``OrchidAgent.emit_signal()`` raise
     #: ``RuntimeError``.
     signal_emitter: Any | None = None
+    #: Decision providers declared in ``decision_models:``. The composition
+    #: root builds them once; consumers look them up by config key. Empty when
+    #: the decision layer is not configured (the default).
+    decision_models: dict[str, OrchidDecisionModel] = field(default_factory=dict)
+    #: Narrow per-point bindings resolved from config (``graph/decision_bindings``).
+    #: Consumers depend on this protocol, never on a provider or transport.
+    decision_bindings: dict[str, OrchidDecisionPointBinding] = field(default_factory=dict)
 
     # ── Resolved accessors (lazy defaults) ──────────────────────
 
@@ -179,6 +187,31 @@ class OrchidRuntime:
         from .rag.sparse.bm25 import BM25Encoder
 
         return BM25Encoder()
+
+    def get_decision_model(self, name: str) -> OrchidDecisionModel | None:
+        """Return a configured decision provider, or ``None`` when absent.
+
+        # ORCHID-MEM: 01a1a1a4-b33b-7fa2-91ad-e092440143f0 — Runtime accessor for providers built at the composition root.
+        """
+        return self.decision_models.get(name)
+
+    def get_decision_binding(self, point: str) -> OrchidDecisionPointBinding | None:
+        """Return the resolved binding for ``point``, or ``None`` when unusable.
+
+        Bindings are populated by
+        :func:`orchid_ai.graph.decision_bindings.bind_decision_points` after
+        bootstrap runtime assembly and again after every hot-reload rebuild.
+        ``None`` means the point is disabled/unconfigured, or its provider was
+        not built — consumers fall back in both cases.
+        """
+        return self.decision_bindings.get(point)
+
+    def register_decision_binding(self, binding: OrchidDecisionPointBinding) -> None:
+        """Expose ``binding`` by its point name for graph consumers."""
+        point = getattr(binding, "point", "")
+        if not isinstance(point, str) or not point.strip():
+            raise ValueError("a decision binding must expose a non-empty point name")
+        self.decision_bindings[point] = binding
 
     def get_mcp_client_factory(self) -> MCPClientFactory:
         """Return the configured MCP factory, falling back to the default.

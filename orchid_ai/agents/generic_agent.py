@@ -29,12 +29,16 @@ from langchain_core.messages import AIMessage
 
 from ..config.schema import OrchidAgentConfig
 from ..core.agent import OrchidAgent
+from ..core.decision import OrchidDecisionPointBinding
 from ..core.graph_store import OrchidGraphStore
 from ..core.helpers import filter_summary_messages
+from ..core.ingestion import OrchidChunkPostProcessor, OrchidIngestionStrategy
 from ..core.mcp import OrchidMCPClient
-from ..core.repository import OrchidVectorReader
+from ..core.memory import NullConversationMemory
+from ..core.repository import OrchidDocument, OrchidVectorReader, OrchidVectorWriter
 from ..core.retrieval import apply_pre_strategy
 from ..core.state import OrchidAgentState, OrchidAuthContext
+from ..documents.strategies import build_ingestion_strategy
 from ..observability.mini_agent_events import make_event_message
 from ..rag.scopes import OrchidRAGScope
 from ..rag.transformers import (
@@ -42,14 +46,33 @@ from ..rag.transformers import (
     get_query_transformer,
     resolve_transformer_kwargs,
 )
+from .delegation import (
+    LOCAL_TARGET,
+    DelegationCatalog,
+    DelegationDecision,
+    DelegationRequest,
+    decide_delegation,
+)
 from .mcp_dispatcher import MCPCapabilities, MCPDispatcher
+from .memory_decision import decide_memory_action
 from .prompt_builder import SystemPromptBuilder
 from .rag_pipeline import RagPipeline
 from .skill_detector import SkillDetector
 from .skill_executor import SkillExecutor
+from .strategies import use_tool_choice_binding
 
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger("orchid.perf")
+
+#: Added to the agentic-loop system prompt when an accepted delegation narrows
+#: the tool inventory to one external agent. The external tool still dispatches
+#: through the existing ``ExternalAgentCLITool``/``CLIRunner`` path, including
+#: HITL approval; this directive only makes the single-tool choice explicit.
+_DELEGATION_DIRECTIVE = (
+    "Delegation is active for this request. Use the {name} tool to hand the "
+    "user's request to that external agent. Do not answer from your own "
+    "knowledge and do not call any other tool."
+)
 
 
 class GenericAgent(OrchidAgent):
@@ -69,6 +92,24 @@ class GenericAgent(OrchidAgent):
         chat_model: Any | None = None,
         summary_config: dict[str, Any] | None = None,
         graph_store: OrchidGraphStore | None = None,
+        skill_decision_model: Any | None = None,
+        skill_confidence_threshold: float = 0.75,
+        skill_on_low_confidence: str = "llm",
+        tool_decision_model: Any | None = None,
+        tool_confidence_threshold: float = 0.75,
+        tool_max_candidates: int = 32,
+        rag_decision_model: Any | None = None,
+        rag_confidence_threshold: float = 0.75,
+        rag_strategies: list[str] | None = None,
+        retrieval_strategy_binding: OrchidDecisionPointBinding | None = None,
+        ingestion_binding: OrchidDecisionPointBinding | None = None,
+        tool_choice_binding: OrchidDecisionPointBinding | None = None,
+        agentic_loop_binding: OrchidDecisionPointBinding | None = None,
+        memory_binding: OrchidDecisionPointBinding | None = None,
+        delegation_binding: OrchidDecisionPointBinding | None = None,
+        delegation_catalog: DelegationCatalog | None = None,
+        delegation_fail_closed: bool = False,
+        delegation_external_agents: frozenset[str] | None = None,
         **kwargs: Any,
     ):
         super().__init__(reader=reader, mcp_clients=mcp_clients, chat_model=chat_model, **kwargs)
@@ -82,8 +123,13 @@ class GenericAgent(OrchidAgent):
         self._graph_store: OrchidGraphStore | None = graph_store
 
         # ── Create collaborators ──
-        if chat_model:
-            self._skill_detector: SkillDetector | None = SkillDetector(chat_model)
+        if chat_model or skill_decision_model:
+            self._skill_detector: SkillDetector | None = SkillDetector(
+                chat_model,
+                decision_model=skill_decision_model,
+                confidence_threshold=skill_confidence_threshold,
+                on_low_confidence=skill_on_low_confidence,
+            )
         else:
             self._skill_detector = None
 
@@ -96,10 +142,42 @@ class GenericAgent(OrchidAgent):
             content_sources=self._content_sources,
             max_skill_depth=config.max_skill_depth,
         )
+        self._tool_decision_model = tool_decision_model
+        self._tool_confidence_threshold = max(0.0, min(1.0, tool_confidence_threshold))
+        self._tool_max_candidates = max(1, min(64, tool_max_candidates))
+        # Execution-context bindings for the two tool-flow points. ``None``
+        # means the point is disabled/unconfigured: both flows keep their
+        # historical behaviour. ``tool_choice`` scopes the LLM-decides
+        # strategy for the duration of one run; ``agentic_loop`` is handed to
+        # each per-invocation loop instance.
+        self._tool_choice_binding = tool_choice_binding
+        self._agentic_loop_binding = agentic_loop_binding
+        # Fleet-scoped ``memory`` point: only affects history compression when
+        # a provider is bound. ``None`` keeps the historical behaviour.
+        self._memory_binding = memory_binding
+        # Agent-scoped ``delegation`` point. ``None`` (disabled or
+        # unconfigured) keeps the historical tool inventory. ``fail_closed``
+        # marks an enabled point whose provider is missing from the runtime:
+        # external tools are suppressed and no CLI process can start. The full
+        # configured external-agent set is kept separately from the allowlisted
+        # catalog so skills cannot reach an external tool outside the agent's
+        # ``tools`` allowlist.
+        self._delegation_binding = delegation_binding
+        self._delegation_catalog = delegation_catalog or DelegationCatalog()
+        self._delegation_fail_closed = bool(delegation_fail_closed)
+        self._delegation_external_agents = frozenset(delegation_external_agents or ())
+        # Document ingestion selector (the additive ``ingestion`` point). It is
+        # carried for document-ingestion call sites; ``None`` means disabled,
+        # unconfigured, or no provider, so ingestion stays byte-for-byte legacy.
+        self._ingestion_binding = ingestion_binding
         self._rag_pipeline = RagPipeline(
             reader=reader,
             chat_model=chat_model,
             graph_store=graph_store,
+            decision_model=rag_decision_model,
+            confidence_threshold=rag_confidence_threshold,
+            strategies=rag_strategies,
+            retrieval_strategy_binding=retrieval_strategy_binding,
         )
         self._prompt_builder = SystemPromptBuilder(config.prompt_sections)
 
@@ -130,9 +208,176 @@ class GenericAgent(OrchidAgent):
     def rag_namespace(self) -> str:
         return self._config.rag.namespace
 
+    # ── Document ingestion (with the agent's ``ingestion`` binding) ──
+
+    async def extract_text(
+        self,
+        *,
+        file_bytes: bytes,
+        filename: str,
+        vision_model: str = "",
+    ) -> str:
+        """Extract document text through the agent's ``ingestion`` binding.
+
+        Passing the binding here is what lets the point select a parser before
+        parsing. Callers using the parse-once pattern should pass the returned
+        text to :meth:`ingest_document` as ``pre_extracted_text``; both methods
+        need the binding because parser and strategy selection happen in
+        different phases.
+        """
+        from ..documents.pipeline import extract_text
+
+        return await extract_text(
+            file_bytes=file_bytes,
+            filename=filename,
+            vision_model=vision_model,
+            ingestion_binding=self._ingestion_binding,
+        )
+
+    async def ingest_document(
+        self,
+        *,
+        file_bytes: bytes,
+        filename: str,
+        scope: OrchidRAGScope,
+        writer: OrchidVectorWriter,
+        namespace: str | None = None,
+        ingestion: OrchidIngestionStrategy | None = None,
+        post_processors: list[OrchidChunkPostProcessor] | None = None,
+        doc_store: Any | None = None,
+        graph_store: Any | None = None,
+        embeddings: Any | None = None,
+        chat_model: Any | None = None,
+        schema: dict[str, Any] | None = None,
+        vision_model: str = "",
+        pre_extracted_text: str | None = None,
+        documents_out: list[OrchidDocument] | None = None,
+    ) -> int:
+        """Index a document, forwarding the agent's ``ingestion`` binding.
+
+        This is the public library path for document ingestion: callers do not
+        need to reach into ``_ingestion_binding``. ``namespace`` defaults to the
+        agent's upload namespace. When no explicit ``ingestion`` strategy is
+        passed, the agent's ``rag.ingestion`` block is built into one, so its
+        chunk knobs apply. When ``pre_extracted_text`` is supplied the parser
+        gate is bypassed and the text is never re-parsed; the strategy gate
+        still runs after extraction.
+        """
+        from ..documents.pipeline import ingest_document
+
+        configured_ingestion = build_ingestion_strategy(self._config.rag.ingestion) if ingestion is None else ingestion
+        return await ingest_document(
+            file_bytes=file_bytes,
+            filename=filename,
+            scope=scope,
+            namespace=namespace if namespace is not None else self.upload_namespace,
+            writer=writer,
+            ingestion=configured_ingestion,
+            post_processors=post_processors,
+            doc_store=doc_store,
+            graph_store=graph_store,
+            embeddings=embeddings,
+            chat_model=chat_model,
+            schema=schema,
+            vision_model=vision_model,
+            pre_extracted_text=pre_extracted_text,
+            documents_out=documents_out,
+            ingestion_binding=self._ingestion_binding,
+        )
+
     # ── Execution ────────────────────────────────────────────
 
+    @property
+    def _delegation_active(self) -> bool:
+        """Whether the delegation point governs this agent's external tools.
+
+        True when a provider is bound *or* the point is enabled but its
+        provider is unavailable (fail-closed sentinel). A disabled/unconfigured
+        point stays legacy even when ``external_agents`` are declared.
+        """
+        return self._delegation_binding is not None or self._delegation_fail_closed
+
+    @property
+    def _delegation_blocked_tools(self) -> frozenset[str]:
+        """External-agent names that a local outcome must suppress.
+
+        The full configured set is preferred so a skill cannot reach an
+        external agent that is not in this agent's allowlisted catalog. Direct
+        ``GenericAgent`` constructions without the full set fall back to the
+        catalog names.
+        """
+        if self._delegation_external_agents:
+            return self._delegation_external_agents
+        return frozenset(self._delegation_catalog.names)
+
+    async def _resolve_delegation(self, query: str) -> DelegationDecision | None:
+        """Ask the ``delegation`` point where this request should run.
+
+        ``None`` means the point is disabled or unconfigured: no provider call
+        and the legacy tool inventory stays. An enabled point with a missing
+        provider or an empty/unusable catalog returns a synthetic local decision
+        without a provider call, so external tools stay suppressed and no CLI
+        process can start.
+
+        Any unexpected gate failure fails closed to ``local`` so an external
+        subprocess cannot be started by a broken decision layer.
+        """
+        if not self._delegation_active:
+            return None
+        if self._delegation_fail_closed:
+            return DelegationDecision(
+                target=LOCAL_TARGET,
+                source="fallback",
+                fallback_reason="provider_unavailable",
+            )
+        if not self._delegation_catalog or not query or not query.strip():
+            return DelegationDecision(target=LOCAL_TARGET, source="disabled")
+
+        request = DelegationRequest.from_query(query, agent_name=self.name)
+        try:
+            return await decide_delegation(
+                self._delegation_binding,
+                request,
+                self._delegation_catalog,
+            )
+        except Exception as exc:
+            logger.warning("[%s] delegation gate failed with %s", self.name, type(exc).__name__)
+            return DelegationDecision(
+                target=LOCAL_TARGET,
+                source="fallback",
+                fallback_reason="provider_error",
+                provider=self._delegation_binding.provider if self._delegation_binding is not None else "",
+            )
+
+    def _skill_requires_external_agent(self, skill_name: str) -> bool:
+        """Whether a matched skill explicitly calls a configured external agent.
+
+        The skill path dispatches built-in tools directly, bypassing the
+        agentic loop's HITL approval. When the delegation point is active, any
+        skill step naming *any* configured external agent — allowlisted or not —
+        is skipped for this turn; on this agent's normal run path, external
+        dispatch can then only happen through the selected tool in the agentic
+        loop. Peer-agent skill steps and mini-agent forks have their own paths
+        and are not governed by this check.
+        """
+        skill = self._config.skills.get(skill_name)
+        if skill is None:
+            return False
+        external_names = self._delegation_blocked_tools
+        return any(step.agent is None and step.tool is not None and step.tool in external_names for step in skill.steps)
+
     async def run(self, state: OrchidAgentState) -> OrchidAgentState:
+        """Execute the pipeline with the agent's tool-flow decision bindings.
+
+        ``tool_choice`` is per-run execution context: the MCP dispatcher
+        instantiates strategies from the registry, so the binding is scoped to
+        this async context rather than passed through every call. The pipeline
+        itself lives in :meth:`_run_pipeline`.
+        """
+        with use_tool_choice_binding(self._tool_choice_binding):
+            return await self._run_pipeline(state)
+
+    async def _run_pipeline(self, state: OrchidAgentState) -> OrchidAgentState:
         """Execute the pipeline: RAG → skill check → agentic loop → inject → summarise.
 
         Auth is execution context: the graph node wrapper binds it on the
@@ -144,6 +389,10 @@ class GenericAgent(OrchidAgent):
             return {
                 "messages": [AIMessage(content=f"[{self.name}] Error: no auth context")],
             }
+
+        # Per-run skill metadata. Never read the detector's shared "last" state
+        # after a skipped detection: that would report the previous run's skill.
+        skill_metadata: dict[str, Any] = {}
 
         raw_query = self.extract_user_query(state)
 
@@ -184,6 +433,11 @@ class GenericAgent(OrchidAgent):
         else:
             query = raw_query
 
+        # Delegation is decided once per agent invocation, after pre-strategy
+        # transformers so the provider sees the effective request. ``None``
+        # keeps the legacy inventory; ``local`` suppresses external tools.
+        delegation = await self._resolve_delegation(query)
+
         scope = self._build_scope(auth, state)
 
         rag_start = time.perf_counter()
@@ -209,10 +463,35 @@ class GenericAgent(OrchidAgent):
                 len(cached_tools),
             )
 
-        # Skill check — if matched, run the skill and skip the agentic loop
+        # Skill check — if the supervisor already selected an orchestrator
+        # skill on the decision path, do not let an agent-level skill hijack it.
+        routing = state.get("routing_metadata") or {}
+        orchestrator_skill = routing.get("skill") if routing.get("path") == "decision" else None
+        delegated = delegation is not None and delegation.delegated
+        delegation_active = self._delegation_active
         skill_start = time.perf_counter()
-        skill_name = await self._detect_skill(query)
+        if orchestrator_skill:
+            skill_name = None
+            skill_metadata = {"outcome": "skipped", "reason": "orchestrator_skill"}
+        elif delegated:
+            skill_name = None
+            skill_metadata = {"outcome": "skipped", "reason": "delegation"}
+        else:
+            skill_name = await self._detect_skill(query)
+            if self._config.skills and self._skill_detector is not None:
+                skill_metadata = self._skill_detector.last_metadata
         skill_detect_elapsed = (time.perf_counter() - skill_start) * 1000
+        if skill_name and delegation_active and self._skill_requires_external_agent(skill_name):
+            # The skill path dispatches built-in tools directly and would bypass
+            # both the agent allowlist and HITL. Skip it for this turn; the
+            # agentic loop runs with external-agent tools suppressed.
+            logger.warning(
+                "[%s] skill '%s' references a configured external agent; skipping it",
+                self.name,
+                skill_name,
+            )
+            skill_metadata = {"outcome": "skipped", "reason": "external_agent_skill"}
+            skill_name = None
         if self._config.skills:
             perf_logger.info(
                 "[PERF][agent=%s] step=skill_detect took %.1f ms (matched=%s)",
@@ -254,6 +533,7 @@ class GenericAgent(OrchidAgent):
                 rag_data,
                 skip_tools=set(cached_tools.keys()),
                 content_sources=self._content_sources,
+                delegation=delegation,
             )
             loop_elapsed = (time.perf_counter() - loop_start) * 1000
             perf_logger.info(
@@ -296,10 +576,12 @@ class GenericAgent(OrchidAgent):
         output_messages: list = [AIMessage(content=f"[{self.name.title()} Agent]\n{summary}")]
         for evt in loop_events:
             output_messages.insert(0, evt)
+        metadata = skill_metadata
         return {
             "messages": output_messages,
             "mcp_context": {self.name: mcp_data},
             "rag_context": {self.name: rag_data},
+            "skills_metadata": {self.name: metadata} if metadata else {},
         }
 
     # ── Pipeline steps ──────────────────────────────────────────
@@ -420,37 +702,9 @@ class GenericAgent(OrchidAgent):
             else []
         )
 
-        # Compress older history via sliding-window summarization when enabled.
-        if history and self._summary_config and self._chat_model:
-            running_summary: str | None = None
-            memory = self._summary_config.get("memory")
-            if memory is not None and state:
-                chat_id = state.get("chat_id", "")
-                if chat_id:
-                    try:
-                        running_summary = await memory.get_running_summary(chat_id)
-                    except Exception:
-                        pass
-            history = await self.compress_conversation_history(
-                history,
-                chat_model=self._chat_model,
-                recent_turns=self._summary_config.get("recent_turns", 3),
-                running_summary=running_summary,
-                structured_output=self._summary_config.get("structured_output", False),
-            )
-            # Persist the updated summary
-            if memory is not None and running_summary is not None and state:
-                chat_id = state.get("chat_id", "")
-                if chat_id:
-                    try:
-                        delta = filter_summary_messages(history)
-                        await memory.update_running_summary(
-                            chat_id,
-                            delta,
-                            running_summary,
-                        )
-                    except Exception:
-                        pass
+        # Compress older history via the sliding-window heuristic, optionally
+        # steered by the fleet-scoped ``memory`` decision point.
+        history = await self._apply_memory_decision(history, state)
 
         prior_ctx = (state.get("mcp_context") or {}).get(self.name) if state else None
 
@@ -473,6 +727,124 @@ class GenericAgent(OrchidAgent):
             user_content_template=sections.summarise_user_template,
             prior_results_max_chars=sections.summarise_prior_results_max_chars,
         )
+
+    async def _apply_memory_decision(
+        self,
+        history: list[dict[str, str]],
+        state: OrchidAgentState | None,
+    ) -> list[dict[str, str]]:
+        """Apply the optional ``memory`` decision around history compression.
+
+        No binding keeps the historical path byte-for-byte. With a binding, a
+        confident ``summarize`` runs the existing compression + persistence
+        step, ``persist`` writes the pending delta through the existing memory
+        API without changing the working history, and ``keep`` leaves both the
+        history and the stored summary untouched. Every ``fallback``/``disabled``
+        outcome runs the configured heuristic exactly as before (which may
+        still perform its normal legacy write).
+
+        This seam governs one agent call only. Other agents and the
+        supervisor's synthesis/advance paths have their own call sites, so a
+        ``keep`` here is not a turn-level veto and a ``persist`` can be repeated
+        by another seam in the same turn. Each individual call writes at most
+        once.
+        """
+        if not history or self._summary_config is None or not self._chat_model:
+            return history
+
+        memory = self._summary_config.get("memory")
+        chat_id = str((state or {}).get("chat_id", "") or "")
+        running_summary = await self._running_summary(memory, chat_id)
+        persist_available = memory is not None and bool(chat_id) and not isinstance(memory, NullConversationMemory)
+
+        if self._memory_binding is not None:
+            decision = await decide_memory_action(
+                self._memory_binding,
+                recent_turns=history,
+                running_summary=running_summary,
+                persist_available=persist_available,
+            )
+            if decision.source == "decision":
+                if decision.action == "summarize":
+                    return await self._compress_history(
+                        history,
+                        memory=memory,
+                        chat_id=chat_id,
+                        running_summary=running_summary,
+                    )
+                if decision.action == "persist":
+                    await self._persist_running_summary(memory, chat_id, history, running_summary)
+                return history
+
+        return await self._compress_history(
+            history,
+            memory=memory,
+            chat_id=chat_id,
+            running_summary=running_summary,
+        )
+
+    async def _compress_history(
+        self,
+        history: list[dict[str, str]],
+        *,
+        memory: Any | None,
+        chat_id: str,
+        running_summary: str | None,
+    ) -> list[dict[str, str]]:
+        """Run the existing sliding-window summary path for one turn."""
+        summary_config = self._summary_config or {}
+        history = await self.compress_conversation_history(
+            history,
+            chat_model=self._chat_model,
+            recent_turns=summary_config.get("recent_turns", 3),
+            running_summary=running_summary,
+            structured_output=summary_config.get("structured_output", False),
+        )
+        if memory is not None and running_summary is not None and chat_id:
+            await self._persist_running_summary(memory, chat_id, history, running_summary)
+        return history
+
+    @staticmethod
+    async def _running_summary(memory: Any | None, chat_id: str) -> str | None:
+        """Best-effort fetch of the stored running summary."""
+        if memory is None or not chat_id:
+            return None
+        try:
+            return await memory.get_running_summary(chat_id)
+        except Exception:
+            return None
+
+    @staticmethod
+    async def _persist_running_summary(
+        memory: Any | None,
+        chat_id: str,
+        history: list[dict[str, str]],
+        running_summary: str | None,
+    ) -> None:
+        """Persist one summary delta through the existing memory API.
+
+        Exactly one call per decision path: callers that already persisted
+        during compression must not also take the ``persist`` branch.
+
+        The delta is the full *extracted* history, because an accepted ``keep``
+        can skip compression for several turns. The extracted history is itself
+        bounded by the configured history limits, so long ``keep`` streaks can
+        lose turns older than that bound, and ``persist`` can re-include turns
+        already represented in the running summary (duplicating them within the
+        bounded window). Losslessness within the bound is preferred over
+        silently dropping turns; the structured summary merges repeated facts.
+
+        An accepted decision line is emitted before this write and storage
+        failures are swallowed, so the line does not prove the write succeeded.
+        A future change should log after the write or add a failure signal.
+        """
+        if memory is None or not chat_id:
+            return
+        try:
+            delta = filter_summary_messages(history)
+            await memory.update_running_summary(chat_id, delta, running_summary)
+        except Exception:
+            pass
 
     # ── Agent prefix computation ─────────────────────────────────
 
@@ -498,11 +870,21 @@ class GenericAgent(OrchidAgent):
         *,
         skip_tools: set[str] | None = None,
         content_sources: Any = None,
+        delegation: DelegationDecision | None = None,
     ) -> tuple[str | None, dict[str, Any], list]:
         """Unified MCP + built-in tool loop using native ``tool_calls``.
 
         Delegates to :class:`AgenticLoop` which owns the multi-round
         lifecycle (duplicate tracking, max-round safety, HITL interrupts).
+
+        ``delegation`` is the accepted/fallback outcome of the ``delegation``
+        point for this run. ``None`` keeps the configured inventory. A local
+        outcome removes every configured external-agent tool, while an accepted
+        external target exposes only that tool. This policy governs this
+        agent's normal agentic loop; peer-agent skill steps and mini-agent forks
+        have separate paths and may bypass it. Neither case invokes the CLI
+        directly: dispatch stays on the existing ``ExternalAgentCLITool`` path,
+        so allowlists, the auth context, and HITL approval remain in force.
 
         Returns ``(final_text, tool_results, events)``.  ``final_text`` is
         ``None`` when the loop exhausted rounds without producing text
@@ -520,18 +902,37 @@ class GenericAgent(OrchidAgent):
         # ── Discover MCP capabilities ───────────────────────
         caps = await self._mcp_dispatcher.render_capabilities(auth, agent_name=self.name)
 
+        # ── Resolve the delegation tool policy ──────────────
+        allowed_builtin: set[str] | None = None
+        allow_mcp_tools = True
+        delegated = delegation is not None and delegation.delegated
+        if delegation is not None:
+            if delegated:
+                allowed_builtin = {delegation.target}
+                allow_mcp_tools = False
+            else:
+                allowed_builtin = set(self._config.tools) - set(self._delegation_blocked_tools)
+
         # ── Build unified tool list ─────────────────────────
-        builtin_tool_names, builtin_tool_defs = self._builtin_tools_to_litellm(skip_tools)
-        mcp_tool_defs = MCPDispatcher.mcp_tools_to_litellm(
-            [
-                t
-                for t in caps.raw_tools
-                if t["name"] not in builtin_tool_names and not (skip_tools and t["name"] in skip_tools)
-            ],
+        effective_skip = set(skip_tools or ())
+        if allowed_builtin is not None:
+            effective_skip.update(name for name in self._config.tools if name not in allowed_builtin)
+        builtin_tool_names, builtin_tool_defs = self._builtin_tools_to_litellm(effective_skip)
+        mcp_tool_defs = (
+            MCPDispatcher.mcp_tools_to_litellm(
+                [t for t in caps.raw_tools if t["name"] not in builtin_tool_names and t["name"] not in effective_skip],
+            )
+            if allow_mcp_tools
+            else []
         )
         all_tool_defs = mcp_tool_defs + builtin_tool_defs
         if not all_tool_defs:
             return None, {}, []
+
+        tool_subset = await self._shortlist_tools(query, all_tool_defs)
+        if delegated:
+            # The decision already selected the only tool this run may use.
+            tool_subset = [delegation.target]
 
         # ── Build LangChain tool wrappers ───────────────────
         lc_tools = build_langchain_tools(
@@ -548,6 +949,8 @@ class GenericAgent(OrchidAgent):
 
         # ── Build messages ──────────────────────────────────
         system_prompt = self._build_agentic_system_prompt(caps, rag_data, state)
+        if delegated:
+            system_prompt = f"{system_prompt}\n\n{_DELEGATION_DIRECTIVE.format(name=delegation.target)}"
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         if state:
             messages.extend(
@@ -576,9 +979,75 @@ class GenericAgent(OrchidAgent):
             parallel_safety=parallel_safety,
             max_tool_rounds=self._config.max_tool_rounds,
             max_consecutive_dupes=self._config.max_consecutive_dupes,
+            tool_subset=tool_subset,
+            agentic_loop_binding=self._agentic_loop_binding,
         )
         final_text, tool_results = await loop.run(messages)
         return final_text, tool_results, loop._events
+
+    async def _shortlist_tools(self, query: str, all_tool_defs: list[dict[str, Any]]) -> list[str] | None:
+        """Ask the tool decision provider which tools to bind.
+
+        Returns ``None`` on any uncertainty or failure, which means "bind every
+        tool". A decision answer supplies names only; arguments stay with the
+        LLM or the human-approval path.
+        """
+        if self._tool_decision_model is None:
+            return None
+        candidates: list[tuple[str, str]] = []
+        for tool_def in all_tool_defs:
+            function = tool_def.get("function", {})
+            name = function.get("name")
+            if isinstance(name, str) and name:
+                candidates.append((name, str(function.get("description", ""))))
+        if not candidates:
+            return None
+        if len(candidates) > self._tool_max_candidates:
+            logger.warning(
+                "[%s] %d tools exceed the shortlist cap (%d); binding all tools",
+                self.name,
+                len(candidates),
+                self._tool_max_candidates,
+            )
+            return None
+
+        from ..core.decision import (
+            OrchidDecisionError,
+            OrchidDecisionQuestion,
+            OrchidDecisionState,
+            aggregate_shortlist,
+        )
+
+        questions = [
+            OrchidDecisionQuestion(
+                name=f"tool:{name}",
+                kind="boolean",
+                instructions=f"Should the {name} tool be used for this request? {description}",
+            )
+            for name, description in candidates
+        ]
+        try:
+            result = await self._tool_decision_model.decide(
+                OrchidDecisionState(text=query[:4000], payload={"tools": [name for name, _ in candidates]}),
+                questions,
+            )
+        except OrchidDecisionError as exc:
+            logger.warning("[%s] tool decision provider failed code=%s", self.name, exc.code)
+            return None
+        except Exception:
+            logger.warning("[%s] tool decision provider raised an unexpected error", self.name, exc_info=True)
+            return None
+
+        selected = aggregate_shortlist(
+            result,
+            [f"tool:{name}" for name, _ in candidates],
+            threshold=self._tool_confidence_threshold,
+        )
+        if not selected:
+            return None
+        names = [name[len("tool:") :] for name in selected]
+        logger.info("[%s] tool shortlist: %s", self.name, names)
+        return names
 
     # ── Parallel-dispatch safety resolver ───────────────────────
 

@@ -154,6 +154,7 @@ def build_chat_model(
     temperature: float = 0.2,
     fallback_model: str | None = None,
     retry_attempts: int = 0,
+    selected_model: str | None = None,
     **kwargs: Any,
 ) -> BaseChatModel:
     """
@@ -165,6 +166,13 @@ def build_chat_model(
 
     When ``fallback_model`` is provided, the returned model automatically
     tries the fallback if the primary fails (503, rate limit, timeout).
+
+    When ``selected_model`` is provided, ``model`` becomes the default that
+    the selected model falls back to. This is how decision-backed model
+    routing chooses among configured models without changing the provider or
+    transport: only the primary model id changes, and ``model`` (plus the
+    configured fallback, when set) is retried on failure. Omitting
+    ``selected_model`` keeps the behaviour exactly as before.
 
     When ``retry_attempts`` > 0, each model (primary and fallback) is
     wrapped with ``.with_retry()`` using exponential backoff with jitter.
@@ -185,6 +193,11 @@ def build_chat_model(
         Max retry attempts on transient errors (rate limits, 503s, timeouts).
         0 = disabled (default). When > 0, retries use exponential backoff
         with jitter.
+    selected_model : str | None
+        Model chosen by a decision point for this request. When set and
+        different from ``model``, it becomes the primary and ``model`` is
+        appended to the fallback chain. ``None`` preserves the current
+        static behaviour.
     **kwargs
         Additional keyword arguments passed to the model constructor.
 
@@ -194,26 +207,48 @@ def build_chat_model(
         A ready-to-use LangChain chat model (with retry and/or fallback
         if configured).
     """
-    primary = _build_single_model(model, temperature=temperature, **kwargs)
+    selected = (selected_model or "").strip()
+    if selected == model:
+        selected = ""
+    primary_name = selected or model
+
+    primary = _build_single_model(primary_name, temperature=temperature, **kwargs)
 
     if retry_attempts > 0:
         primary = primary.with_retry(
             stop_after_attempt=retry_attempts,
             wait_exponential_jitter=True,
         )
-        logger.info("[LLM] Retry configured for '%s': %d attempts", model, retry_attempts)
+        logger.info("[LLM] Retry configured for '%s': %d attempts", primary_name, retry_attempts)
 
-    if fallback_model:
-        fallback = _build_single_model(fallback_model, temperature=temperature, **kwargs)
+    fallback_names: list[str] = []
+    for candidate in (fallback_model, model if selected else None):
+        if candidate and candidate != primary_name and candidate not in fallback_names:
+            fallback_names.append(candidate)
+
+    if not fallback_names:
+        return primary
+
+    fallbacks: list[BaseChatModel] = []
+    for fallback_name in fallback_names:
+        fallback = _build_single_model(fallback_name, temperature=temperature, **kwargs)
         if retry_attempts > 0:
             fallback = fallback.with_retry(
                 stop_after_attempt=retry_attempts,
                 wait_exponential_jitter=True,
             )
-        logger.info("[LLM] Fallback configured: '%s' → '%s'", model, fallback_model)
-        return primary.with_fallbacks([fallback])
+        fallbacks.append(fallback)
 
-    return primary
+    if selected:
+        logger.info(
+            "[LLM] Routed model '%s' selected (default '%s', fallbacks=%s)",
+            primary_name,
+            model,
+            fallback_names,
+        )
+    else:
+        logger.info("[LLM] Fallback configured: '%s' → '%s'", model, fallback_model)
+    return primary.with_fallbacks(fallbacks)
 
 
 def _build_single_model(

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
@@ -31,15 +31,21 @@ from langgraph.graph import END
 from langgraph.types import Send
 from pydantic import BaseModel, Field, model_validator
 
+from ..agents.memory_decision import decide_memory_action
 from ..config.schema import OrchidOrchestratorSkillConfig, OrchidSupervisorConfig
 from ..core.agent import OrchidAgent
+from ..core.decision import OrchidDecisionPointBinding
 from ..core.helpers import filter_summary_messages
-from ..core.memory import OrchidConversationMemory
+from ..core.memory import NullConversationMemory, OrchidConversationMemory
 from ..core.run_config import auth_from_config
 from ..core.state import OrchidAuthContext
+from ..decision.observability import log_decision
 from .sequential_advancer import SequentialAdvancer
 from .state import GraphState
 from .synthesizer import ResponseSynthesizer
+
+if TYPE_CHECKING:
+    from .routing import OrchidRoutingStrategy
 
 __all__ = [
     "ROUTING_SYSTEM_PROMPT",
@@ -147,6 +153,8 @@ def create_supervisor_node(
     supervisor_config: OrchidSupervisorConfig | None = None,
     routing_chat_model: BaseChatModel | None = None,
     memory: OrchidConversationMemory | None = None,
+    routing: OrchidRoutingStrategy | None = None,
+    memory_binding: OrchidDecisionPointBinding | None = None,
 ):
     """
     Return a LangGraph node function with *model*, *agent_descriptions*,
@@ -216,7 +224,18 @@ def create_supervisor_node(
 
         # ── Case 3: First entry — analyse intent and route ──
         perf_logger.info("[PERF][supervisor] phase=route (initial intent analysis)")
-        result = await _route(state, model, agent_descriptions, skills, sup_config, route_chat_model, memory, auth=auth)
+        result = await _route(
+            state,
+            model,
+            agent_descriptions,
+            skills,
+            sup_config,
+            route_chat_model,
+            memory,
+            auth=auth,
+            routing=routing,
+            memory_binding=memory_binding,
+        )
         elapsed = (time.perf_counter() - start) * 1000
         perf_logger.info(
             "[PERF][supervisor] phase=route took %.1f ms (active=%s pending=%s)",
@@ -331,8 +350,24 @@ async def _extract_and_compress_history(
     memory: OrchidConversationMemory | None = None,
     *,
     auth: OrchidAuthContext | None = None,
+    memory_binding: OrchidDecisionPointBinding | None = None,
 ) -> list[dict[str, str]]:
-    """Extract conversation history, optionally compressing older turns."""
+    """Extract conversation history, optionally compressing older turns.
+
+    When the fleet-scoped ``memory`` point is bound, the decision chooses
+    between the existing compression path (``summarize``), leaving the history
+    and stored summary untouched (``keep``), and persisting the pending delta
+    through the existing memory API (``persist``). Any fallback or disabled
+    point runs the configured heuristic exactly as before.
+
+    The decision governs this call site only. ``synthesizer.py``,
+    ``sequential_advancer.py`` and ``GenericAgent`` have their own seams, so a
+    ``keep`` here does not prevent a later legacy write in the same turn; a
+    ``persist`` here can be repeated by another seam. Each seam writes at most
+    once, and no seam duplicates a write inside one call. A persistence
+    failure is swallowed (best-effort), and the accepted decision line is
+    emitted before the write, so it does not prove a successful write.
+    """
     history = OrchidAgent.extract_conversation_history(
         state,
         max_turns=sup.history_max_turns,
@@ -340,24 +375,43 @@ async def _extract_and_compress_history(
         truncation_strategy=sup.memory.truncation_strategy,
     )
     if history and sup.history_summary_enabled and chat_model:
-        running_summary: str | None = None
-        if memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
-            chat_id = state.get("chat_id", "")
-            if chat_id:
-                try:
-                    running_summary = await memory.get_running_summary(chat_id)
-                except Exception:
-                    pass
-        history = await OrchidAgent.compress_conversation_history(
-            history,
-            chat_model=chat_model,
-            recent_turns=sup.history_summary_recent_turns,
-            running_summary=running_summary,
-            structured_output=sup.memory.structured_output,
+        chat_id = state.get("chat_id", "")
+        memory_enabled = (
+            memory is not None
+            and sup.memory.strategy in ("running_summary", "rag_augmented")
+            and not isinstance(memory, NullConversationMemory)
         )
-        if memory is not None and sup.memory.strategy in ("running_summary", "rag_augmented"):
-            chat_id = state.get("chat_id", "")
-            if chat_id:
+        running_summary: str | None = None
+        if memory_enabled and chat_id:
+            try:
+                running_summary = await memory.get_running_summary(chat_id)
+            except Exception:
+                pass
+
+        should_compress = True
+        persist_only = False
+        if memory_binding is not None:
+            decision = await decide_memory_action(
+                memory_binding,
+                recent_turns=history,
+                running_summary=running_summary,
+                persist_available=bool(memory_enabled and chat_id),
+            )
+            if decision.source == "decision":
+                should_compress = decision.action == "summarize"
+                persist_only = decision.action == "persist"
+
+        if should_compress:
+            history = await OrchidAgent.compress_conversation_history(
+                history,
+                chat_model=chat_model,
+                recent_turns=sup.history_summary_recent_turns,
+                running_summary=running_summary,
+                structured_output=sup.memory.structured_output,
+            )
+            if memory_enabled and chat_id:
+                # Seed the first summary when none exists (base semantics): the
+                # memory API accepts ``existing_summary=None``.
                 try:
                     delta = filter_summary_messages(history)
                     await memory.update_running_summary(
@@ -367,6 +421,17 @@ async def _extract_and_compress_history(
                     )
                 except Exception:
                     pass
+        elif persist_only and memory_enabled and chat_id:
+            # One write for the decision, through the existing storage API.
+            # Compression did not run, so this cannot duplicate a summary
+            # already persisted above. The full extracted history is passed
+            # because an accepted ``keep`` can skip compression for several
+            # turns; a recent-window delta would lose those turns.
+            try:
+                delta = filter_summary_messages(history)
+                await memory.update_running_summary(chat_id, delta, running_summary)
+            except Exception:
+                pass
     # ── RAG-augmented retrieval (Phase 3) ──────────────────
     if memory is not None and sup.memory.strategy == "rag_augmented":
         chat_id = state.get("chat_id", "")
@@ -461,6 +526,17 @@ def _recover_agent_names(
     return recovered
 
 
+def _numeric_or_none(value: Any) -> float | None:
+    """Return ``value`` as a float when it is a real number, else ``None``.
+
+    Routing strategies are pluggable and their metadata is not validated by the
+    protocol; the observability helper must not crash the request on a bad value.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 async def _route(
     state: GraphState,
     model: str,
@@ -471,6 +547,8 @@ async def _route(
     memory: OrchidConversationMemory | None = None,
     *,
     auth: OrchidAuthContext | None = None,
+    routing: OrchidRoutingStrategy | None = None,
+    memory_binding: OrchidDecisionPointBinding | None = None,
 ) -> GraphState:
     """Analyse user intent, choose execution mode, and activate agents."""
     desc_text = "\n".join(f"- **{name}**: {desc}" for name, desc in agent_descriptions.items())
@@ -492,47 +570,134 @@ async def _route(
         skill_descriptions=skill_text,
     )
 
-    clean_history = await _extract_and_compress_history(state, sup, chat_model, memory, auth=auth)
-
-    llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    if clean_history:
-        llm_messages.extend(clean_history)
-
-    # Add the current user query
-    user_query = OrchidAgent.extract_user_query(state)
-    if user_query:
-        llm_messages.append({"role": "user", "content": user_query})
-
-    try:
-        if not chat_model:
-            raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
-
-        structured_model = chat_model.with_structured_output(OrchidRoutingDecision)
-        llm_start = time.perf_counter()
-        decision: OrchidRoutingDecision = await structured_model.ainvoke(llm_messages, temperature=0)
-        llm_elapsed = (time.perf_counter() - llm_start) * 1000
-        perf_logger.info("[PERF][supervisor.route] structured LLM call took %.1f ms", llm_elapsed)
-        logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
-    except Exception as exc:
-        # Handle LLM API failures gracefully
-        logger.exception("[Supervisor] LLM API error during routing")
-        error_msg = str(exc)
-        if "503" in error_msg or "high demand" in error_msg.lower():
-            response_text = (
-                "I'm currently experiencing high demand and cannot process your request. "
-                "Please try again in a few moments."
+    decision: OrchidRoutingDecision | None = None
+    routing_path = "llm" if routing is None else "llm_fallback"
+    routing_failure_reason: str | None = None
+    if routing is not None:
+        summary: str | None = None
+        if memory is not None and state.get("chat_id"):
+            try:
+                summary = await memory.get_running_summary(state["chat_id"])
+            except Exception:
+                logger.warning("[Supervisor] running summary unavailable for decision routing", exc_info=True)
+        try:
+            decision = await routing.route(
+                state=state,
+                agent_descriptions=agent_descriptions,
+                orchestrator_skills=orchestrator_skills,
+                auth=auth,
+                context={"auth_hint": auth_hint, "summary": summary},
             )
-        elif "rate limit" in error_msg.lower():
-            response_text = "I've hit my rate limit. Please try again in a few moments."
-        else:
-            response_text = f"I encountered an error: {error_msg[:200]}. Please try again later."
+            if decision is not None:
+                routing_path = "decision"
+                logger.info("[Supervisor] decision-model routing: %s", decision.model_dump_json())
+        except Exception:
+            routing_failure_reason = "provider_error"
+            logger.exception("[Supervisor] decision routing failed; falling back to the LLM")
 
-        # Return a direct response to user
-        return {
-            "messages": [AIMessage(content=response_text)],
-            "next": "END",
-            "routing_metadata": {"error": "llm_api_failure", "details": error_msg},
-        }
+    routing_metadata: dict[str, Any] | None = None
+    if routing is not None:
+        routing_metadata = {"path": routing_path, "decision_point": "routing"}
+        routing_metadata.update(routing.metadata)
+        routing_metadata.setdefault("outcome", "accepted" if routing_path == "decision" else "fallback")
+        if routing_metadata["outcome"] != "accepted":
+            routing_metadata.setdefault("fallback_reason", routing_failure_reason or "low_confidence")
+        if not routing.emits_decision_log:
+            log_path = routing_metadata.get("path")
+            if log_path not in ("decision", "llm_fallback"):
+                log_path = routing_path
+            log_outcome = routing_metadata.get("outcome")
+            if log_outcome not in ("accepted", "fallback"):
+                log_outcome = "accepted" if routing_path == "decision" else "fallback"
+            log_decision(
+                point="routing",
+                path=str(log_path),
+                provider=str(routing_metadata.get("provider") or ""),
+                latency_ms=_numeric_or_none(routing_metadata.get("latency_ms")),
+                confidence=_numeric_or_none(routing_metadata.get("confidence")),
+                outcome=str(log_outcome),
+                fallback_reason=routing_metadata.get("fallback_reason"),
+            )
+    else:
+        log_decision(
+            point="routing",
+            path="llm_fallback",
+            outcome="fallback",
+            fallback_reason="not_configured",
+        )
+
+    if decision is None and routing is not None:
+        if routing.on_low_confidence == "escalate":
+            message = "I can't route this request confidently. I'm handing it to a human for review."
+            return {
+                "messages": [AIMessage(content=message)],
+                "final_response": message,
+                "active_agents": [],
+                "pending_agents": [],
+                "routing_metadata": routing_metadata or {},
+            }
+        if routing.on_low_confidence == "default":
+            message = "I couldn't confidently route this request. Please rephrase it or contact support."
+            return {
+                "messages": [AIMessage(content=message)],
+                "final_response": message,
+                "active_agents": [],
+                "pending_agents": [],
+                "routing_metadata": routing_metadata or {},
+            }
+
+    if decision is None:
+        clean_history = await _extract_and_compress_history(
+            state,
+            sup,
+            chat_model,
+            memory,
+            auth=auth,
+            memory_binding=memory_binding,
+        )
+
+        llm_messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+        if clean_history:
+            llm_messages.extend(clean_history)
+
+        # Add the current user query
+        user_query = OrchidAgent.extract_user_query(state)
+        if user_query:
+            llm_messages.append({"role": "user", "content": user_query})
+
+        try:
+            if not chat_model:
+                raise RuntimeError("Supervisor requires a BaseChatModel. Pass chat_model= when building the graph.")
+
+            structured_model = chat_model.with_structured_output(OrchidRoutingDecision)
+            llm_start = time.perf_counter()
+            decision = await structured_model.ainvoke(llm_messages, temperature=0)
+            llm_elapsed = (time.perf_counter() - llm_start) * 1000
+            perf_logger.info("[PERF][supervisor.route] structured LLM call took %.1f ms", llm_elapsed)
+            logger.info("[Supervisor] routing decision: %s", decision.model_dump_json())
+        except Exception as exc:
+            # Handle LLM API failures gracefully
+            logger.exception("[Supervisor] LLM API error during routing")
+            error_msg = str(exc)
+            if "503" in error_msg or "high demand" in error_msg.lower():
+                response_text = (
+                    "I'm currently experiencing high demand and cannot process your request. "
+                    "Please try again in a few moments."
+                )
+            elif "rate limit" in error_msg.lower():
+                response_text = "I've hit my rate limit. Please try again in a few moments."
+            else:
+                response_text = f"I encountered an error: {error_msg[:200]}. Please try again later."
+
+            # Return a direct response to user
+            return {
+                "messages": [AIMessage(content=response_text)],
+                "next": "END",
+                "routing_metadata": {"error": "llm_api_failure"},
+            }
+
+    routing_metadata: dict[str, Any] = {"path": routing_path, "decision_point": "routing"}
+    routing_metadata.update(getattr(routing, "metadata", {}) or {})
 
     agents: list[str] = decision.agents
     direct: str | None = decision.direct_response
@@ -546,6 +711,8 @@ async def _route(
             agent_descriptions,
         )
         if skill_result is not None:
+            if routing_metadata is not None:
+                skill_result["routing_metadata"] = routing_metadata
             return skill_result
 
     # ── Direct response (no sub-agent needed) ──
@@ -562,7 +729,7 @@ async def _route(
 
     # Recovery: if the LLM returned empty agents but mentioned an agent name
     # in the reasoning (common with small models), extract it.
-    if not valid and not direct:
+    if not valid and not direct and routing_path != "decision":
         valid = _recover_agent_names(decision.reasoning, agent_descriptions)
 
     if not valid:
@@ -589,6 +756,11 @@ async def _route(
             "execution_mode": "sequential",
             "final_response": None,
             "messages": [AIMessage(content=(f"[Supervisor] Sequential pipeline: {' → '.join(valid)}"))],
+            "routing_metadata": {
+                **(routing_metadata or {}),
+                "agents": valid,
+                "execution_mode": "sequential",
+            },
         }
     else:
         # Parallel (default): activate all at once
@@ -599,4 +771,9 @@ async def _route(
             "execution_mode": "parallel",
             "final_response": None,
             "messages": [AIMessage(content=f"[Supervisor] Parallel dispatch: {', '.join(valid)}")],
+            "routing_metadata": {
+                **(routing_metadata or {}),
+                "agents": valid,
+                "execution_mode": "parallel",
+            },
         }

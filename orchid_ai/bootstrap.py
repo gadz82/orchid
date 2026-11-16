@@ -245,6 +245,14 @@ async def _build_runtime(
     else:
         agents_config = load_config(overrides.agents_config_path)
 
+    # ── 3b. Decision providers (fail before allocating stores) ─
+    decision_models: dict[str, Any] = {}
+    if agents_config.decision_models:
+        from .decision.factory import build_decision_models
+        from .llm_factory import build_chat_model
+
+        decision_models = build_decision_models(agents_config, chat_model_factory=build_chat_model)
+
     # ── 4. Reader + pre-created collections ───────────────────
     reader = await _prepare_reader(overrides, agents_config)
 
@@ -262,6 +270,8 @@ async def _build_runtime(
     built_content_sources = _build_content_sources(content_sources_config, content_sources)
 
     # ── 7. Assemble runtime + optional checkpointer ──────────
+    runtime_kwargs = dict(overrides.runtime_overrides)
+    runtime_kwargs.setdefault("decision_models", decision_models)
     runtime = OrchidRuntime(
         default_model=overrides.model,
         reader=reader,
@@ -271,7 +281,7 @@ async def _build_runtime(
         mcp_gateway_auth_code_store=mcp_gateway_state_store,  # type: ignore[arg-type]
         mcp_gateway_token_store=mcp_gateway_state_store,  # type: ignore[arg-type]
         content_sources=built_content_sources,
-        **overrides.runtime_overrides,
+        **runtime_kwargs,
     )
     await _attach_checkpointer(runtime, overrides.checkpointer_type, overrides.checkpointer_dsn)
 
@@ -280,6 +290,14 @@ async def _build_runtime(
     # post-construction collaborators (e.g. seed an
     # ``InMemoryGraphStore`` and assign ``runtime.graph_store``).
     await _run_startup_hook(overrides.startup_hook, reader, runtime, startup_hook_kwargs, agents_config=agents_config)
+
+    # ── 8. Decision-point bindings ───────────────────────────
+    # Resolve configured points against the providers built above so the
+    # public runtime exposes a ready binding. Local import keeps graph
+    # wiring out of bootstrap's module import path.
+    from .graph.decision_bindings import bind_decision_points
+
+    bind_decision_points(agents_config, runtime)
 
     logger.info(
         "[Bootstrap] Ready — model=%s, backend=%s, storage=%s, agents=%s",
@@ -588,6 +606,13 @@ async def _teardown_runtime(result: _BootstrapResult) -> None:
     Safe to call multiple times; each shutdown step short-circuits when
     its resource is already ``None`` or closed.
     """
+    for model in list(result.runtime.decision_models.values()):
+        try:
+            await model.aclose()
+        except Exception:
+            logger.warning("[Bootstrap] decision provider close failed", exc_info=True)
+    result.runtime.decision_models = {}
+
     if result.runtime.checkpointer is not None:
         from .checkpointing import shutdown_checkpointer
 

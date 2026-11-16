@@ -14,7 +14,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..core.guardrails import OrchidGuardrail, OrchidGuardrailChain
+from ..core.guardrails import (
+    OrchidGuardrail,
+    OrchidGuardrailChain,
+    OrchidGuardrailFailurePolicyAware,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +48,17 @@ def build_guardrail_chain(
     Build a ``OrchidGuardrailChain`` from a list of YAML config dicts.
 
     Each dict must have a ``type`` key matching a registered guardrail.
-    Optional keys: ``fail_action`` (default: "block"), ``config`` (dict
-    of guardrail-specific parameters).
+    An unknown type raises an actionable ``ValueError`` at build time; config
+    load defers type resolution so startup hooks can register custom rails.
+    Optional keys: ``fail_action`` (default: "block"), ``on_failure``
+    (required for rails that declare
+    :class:`~orchid_ai.core.guardrails.OrchidGuardrailFailurePolicyAware`,
+    with ``open`` or ``closed``), and ``config`` (dict of guardrail-specific
+    parameters).
+
+    Only failure-aware rails receive ``on_failure``. Deterministic rails keep
+    their existing constructors and defaults; a policy declared on one of them
+    is warned about and ignored.
 
     Example YAML structure::
 
@@ -57,6 +70,9 @@ def build_guardrail_chain(
                 max_characters: 5000
             - type: content_safety
               fail_action: block
+            - type: decision
+              fail_action: block
+              on_failure: closed
     """
     chain = OrchidGuardrailChain()
 
@@ -64,16 +80,41 @@ def build_guardrail_chain(
         type_name = cfg.get("type", "")
         cls = GUARDRAIL_REGISTRY.get(type_name)
         if not cls:
-            logger.warning("[Guardrails] Unknown guardrail type '%s' — skipped", type_name)
-            continue
+            registered = ", ".join(sorted(GUARDRAIL_REGISTRY)) or "(none)"
+            raise ValueError(f"unknown guardrail type {type_name!r}; registered types: {registered}")
 
         fail_action = cfg.get("fail_action", "block")
         guardrail_config = cfg.get("config", {})
+        if not isinstance(guardrail_config, dict):
+            logger.error("[Guardrails] Guardrail '%s' config must be a mapping — skipped", type_name)
+            continue
+        guardrail_config = dict(guardrail_config)
+        if "on_failure" in guardrail_config:
+            raise ValueError(
+                f"guardrail type '{type_name}': on_failure must be declared at the rule level, not under config"
+            )
+
+        on_failure = cfg.get("on_failure")
+        if issubclass(cls, OrchidGuardrailFailurePolicyAware):
+            if on_failure is None:
+                raise ValueError(f"guardrail type '{type_name}' requires an explicit on_failure ('open' or 'closed')")
+            guardrail_config["on_failure"] = on_failure
+        elif on_failure is not None:
+            logger.warning(
+                "[Guardrails] on_failure is ignored for deterministic guardrail type '%s'",
+                type_name,
+            )
 
         try:
             instance = cls(fail_action=fail_action, **guardrail_config)
             chain.add(instance)
         except (TypeError, ValueError) as exc:
+            if issubclass(cls, OrchidGuardrailFailurePolicyAware):
+                # A misconfigured failable rail must fail loudly, not silently
+                # disable a safety check.
+                raise ValueError(  # noqa: TRY004 — builder config errors are ValueError
+                    f"invalid guardrail config for '{type_name}': {exc}"
+                ) from exc
             logger.error("[Guardrails] Failed to instantiate '%s': %s", type_name, exc)
 
     return chain
@@ -85,6 +126,7 @@ def build_guardrail_chain(
 def _auto_register() -> None:
     """Import and register all built-in guardrails."""
     from .content_safety import ContentSafetyGuardrail
+    from .decision_guardrail import DecisionGuardrail
     from .groundedness import GroundednessGuardrail
     from .max_length import MaxLengthGuardrail
     from .pii import PIIDetectionGuardrail
@@ -97,6 +139,7 @@ def _auto_register() -> None:
     register_guardrail("topic_restriction", TopicRestrictionGuardrail)
     register_guardrail("max_length", MaxLengthGuardrail)
     register_guardrail("groundedness", GroundednessGuardrail)
+    register_guardrail("decision", DecisionGuardrail)
 
 
 _auto_register()

@@ -78,6 +78,24 @@ class OrchidQueryTransformer(ABC):
         ...
 
 
+class OrchidRAGExplorer(ABC):
+    """Optional capability for graph-backed retrieval strategies.
+
+    # ORCHID-MEM: 01a1abf2-b3b3-7980-a37e-970c09acc468 — Graph strategies accept a bound decision model for node selection.
+
+
+    The retrieval pipeline detects this interface and binds the agent's
+    decision model before calling ``retrieve``. The strategy may then select
+    graph nodes before serialising them, instead of filtering only the final
+    text passages.
+    """
+
+    @abstractmethod
+    def bind_decision_model(self, model: Any, *, confidence_threshold: float = 0.75) -> None:
+        """Attach a decision model and confidence threshold to this strategy."""
+        ...
+
+
 class OrchidRetrievalStrategy(ABC):
     """Turn a query into a ranked list of :class:`OrchidSearchResult`.
 

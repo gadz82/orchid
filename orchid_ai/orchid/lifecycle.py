@@ -14,6 +14,7 @@ from orchid_ai.bootstrap import _BootstrapResult, _teardown_runtime
 from orchid_ai.config.schema import OrchidAgentsConfig
 from orchid_ai.config.watcher import OrchidConfigWatcherBase
 from orchid_ai.core.agent import OrchidAgent
+from orchid_ai.graph.decision_bindings import bind_decision_points
 from orchid_ai.graph.graph import build_graph
 from orchid_ai.mcp.inventory import OrchidMCPServerInventory
 from orchid_ai.mcp.session_warmer import OrchidSessionWarmer
@@ -116,30 +117,76 @@ class OrchidLifecycle:
     async def reload_config(self) -> bool:
         """Check for config changes and hot-reload if any are detected.
 
-        Returns ``True`` when a change was detected and the graph was rebuilt.
+        The swap is transactional: providers and the graph are built into
+        temporaries, and the previous config/agents/graph/providers are kept if
+        either build fails. Returns ``True`` only when the new set is installed.
         """
         watcher = self._config_watcher
         if watcher is None:
             return False
 
-        new_snapshot = watcher.reload_if_changed()
-        if new_snapshot is None:
-            return False
-
         async with self._rebuild_lock:
+            if self._closed:
+                return False
+            new_snapshot = watcher.reload_if_changed()
+            if new_snapshot is None:
+                return False
+
+            previous_config = self._config
+            previous_agents = self._agents
+            previous_graph = self._graph
+            previous_inventory = self._inventory
+            previous_warmer = self._session_warmer
+            previous_models = self._runtime.decision_models
+            previous_bindings = dict(self._runtime.decision_bindings)
+            decision_changed = _decision_config_changed(previous_config, new_snapshot.config)
+            new_models = previous_models
+
+            try:
+                if decision_changed:
+                    from orchid_ai.decision.factory import build_decision_models
+                    from orchid_ai.llm_factory import build_chat_model
+
+                    new_models = build_decision_models(
+                        new_snapshot.config,
+                        chat_model_factory=build_chat_model,
+                    )
+                    self._runtime.decision_models = new_models
+                # Refresh bindings against the new config/providers before the
+                # graph is built, so graph wiring sees the new point set.
+                bind_decision_points(new_snapshot.config, self._runtime)
+                new_agents: dict[str, OrchidAgent] = {}
+                new_graph = build_graph(
+                    config=new_snapshot.config,
+                    runtime=self._runtime,
+                    agents_out=new_agents,
+                )
+            except Exception:
+                logger.exception("[Lifecycle] hot reload failed; keeping the previous config and providers")
+                self._runtime.decision_models = previous_models
+                self._runtime.decision_bindings.clear()
+                self._runtime.decision_bindings.update(previous_bindings)
+                self._config = previous_config
+                self._agents = previous_agents
+                self._graph = previous_graph
+                self._inventory = previous_inventory
+                self._session_warmer = previous_warmer
+                if decision_changed:
+                    for model in new_models.values():
+                        await _close_quietly(model)
+                return False
+
             self._config = new_snapshot.config
-            self._agents.clear()
-            self._graph = build_graph(
-                config=new_snapshot.config,
-                runtime=self._runtime,
-                agents_out=self._agents,
-            )
+            self._agents = new_agents
+            self._graph = new_graph
             self._inventory = OrchidMCPServerInventory.from_config(new_snapshot.config)
             self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)
-            # Re-inject signal emitter into the new agent instances
             if self._runtime.signal_emitter is not None:
                 for agent in self._agents.values():
                     agent._signal_emitter = self._runtime.signal_emitter
+            if decision_changed:
+                for model in previous_models.values():
+                    await _close_quietly(model)
 
         logger.info("[Orchid] Hot-reloaded graph with %d agent(s)", len(new_snapshot.config.agents))
         return True
@@ -147,30 +194,51 @@ class OrchidLifecycle:
     # ── Shutdown ────────────────────────────────────────────
 
     async def close(self) -> None:
-        """Release resources owned by this lifecycle."""
-        if self._closed:
-            return
-        self._closed = True
+        """Release resources owned by this lifecycle.
 
-        if not self._owns_resources:
-            return
+        The closed flag is set only after teardown succeeds, so a transient
+        failure can be retried. The rebuild lock prevents a concurrent reload
+        from installing providers after shutdown.
+        """
+        async with self._rebuild_lock:
+            if self._closed:
+                return
+            if not self._owns_resources:
+                self._closed = True
+                return
 
-        await _teardown_runtime(
-            _BootstrapResult(
-                runtime=self._runtime,
-                config=self._config,
-                chat_repo=self._chat_repo,
-                mcp_token_store=self._mcp_token_store,
-                mcp_client_registration_store=self._runtime.mcp_client_registration_store,
-                mcp_gateway_state_store=self._runtime.mcp_gateway_client_store,
+            await _teardown_runtime(
+                _BootstrapResult(
+                    runtime=self._runtime,
+                    config=self._config,
+                    chat_repo=self._chat_repo,
+                    mcp_token_store=self._mcp_token_store,
+                    mcp_client_registration_store=self._runtime.mcp_client_registration_store,
+                    mcp_gateway_state_store=self._runtime.mcp_gateway_client_store,
+                )
             )
-        )
-        self._mcp_token_store = None
-        self._chat_repo = None
-        if self._config_storage is not None:
-            await self._config_storage.close()
-        if self._runtime is not None:
-            self._runtime.mcp_client_registration_store = None
-            self._runtime.mcp_gateway_client_store = None
-            self._runtime.mcp_gateway_auth_code_store = None
-            self._runtime.mcp_gateway_token_store = None
+            self._mcp_token_store = None
+            self._chat_repo = None
+            if self._config_storage is not None:
+                await self._config_storage.close()
+            if self._runtime is not None:
+                self._runtime.mcp_client_registration_store = None
+                self._runtime.mcp_gateway_client_store = None
+                self._runtime.mcp_gateway_auth_code_store = None
+                self._runtime.mcp_gateway_token_store = None
+            self._closed = True
+
+
+def _decision_config_changed(previous: OrchidAgentsConfig, current: OrchidAgentsConfig) -> bool:
+    return (
+        previous.decision_models != current.decision_models
+        or previous.decisions != current.decisions
+        or previous.allowed_decision_hosts != current.allowed_decision_hosts
+    )
+
+
+async def _close_quietly(model: Any) -> None:
+    try:
+        await model.aclose()
+    except Exception:
+        logger.warning("[Lifecycle] decision provider close failed", exc_info=True)

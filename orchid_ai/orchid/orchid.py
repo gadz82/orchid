@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 # ── Orchid ─────────────────────────────────────────────────
 
 
+# ORCHID-MEM: 01a1a0c1-66d5-7e05-a431-d6b1fff274f5 — async facade for runtime, invoke, and lifecycle
 class Orchid:
     """Programmatic entry point for the Orchid framework.
 
@@ -504,7 +505,10 @@ class Orchid:
 
     async def reload_config(self) -> bool:
         """Check for config changes and hot-reload if any are detected."""
-        return await self._lifecycle.reload_config()
+        changed = await self._lifecycle.reload_config()
+        if changed:
+            self._invoker.refresh_graph(self._lifecycle.graph)
+        return changed
 
     # ── Internal helpers (delegated to OrchidInvoker for backward compat) ──
 

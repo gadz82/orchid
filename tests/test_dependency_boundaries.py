@@ -24,6 +24,7 @@ Two distinct rule shapes live here:
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -80,7 +81,11 @@ FORBIDDEN_SOURCE_STRINGS: list[str] = [
 # ``OrchidDocument`` ↔ LangChain ``Document`` conversion layer used by
 # RAG backends.  Any LangChain import sneaking back into ``core/``
 # violates the H1 architectural rule from the 2026-05-28 code review.
-CORE_FORBIDDEN: list[str] = ["langchain", "langchain_core"]
+#
+# ``httpx`` and ``pydantic`` are listed for the same reason: decision
+# adapters and configuration models live outside ``core/``, so the
+# provider contract stays transport- and schema-free.
+CORE_FORBIDDEN: list[str] = ["langchain", "langchain_core", "httpx", "pydantic"]
 
 
 def _python_files() -> list[Path]:
@@ -139,8 +144,8 @@ def test_concrete_backend_clients_are_isolated(forbidden: str) -> None:
 
 
 @pytest.mark.parametrize("forbidden", CORE_FORBIDDEN)
-def test_core_has_no_langchain_imports(forbidden: str) -> None:
-    """``core/`` must not import LangChain — the H1 invariant.
+def test_core_has_no_forbidden_imports(forbidden: str) -> None:
+    """``core/`` must not import any concrete backend or framework library.
 
     The framework's canonical document model is
     :class:`orchid_ai.core.repository.OrchidDocument`, a stdlib
@@ -156,8 +161,9 @@ def test_core_has_no_langchain_imports(forbidden: str) -> None:
             violations.append(str(py_file.relative_to(PACKAGE_ROOT)))
 
     assert not violations, (
-        f"{forbidden!r} imported inside core/ — core/ must remain langchain-free.\n"
-        f"Use OrchidDocument + orchid_ai.rag.adapters at the boundary instead.\n  - " + "\n  - ".join(violations)
+        f"{forbidden!r} imported inside core/ — core/ must remain dependency-free.\n"
+        f"Move the concrete implementation outside core/ and depend on an ABC instead.\n  - "
+        + "\n  - ".join(violations)
     )
 
 
@@ -183,3 +189,45 @@ def test_concrete_checkpoint_backends_are_not_referenced(forbidden: str) -> None
         f"{forbidden!r} referenced inside orchid_ai/ — durable checkpoint backends "
         f"belong in the storage plugin packages.\n  - " + "\n  - ".join(violations)
     )
+
+
+def test_decision_contract_imports_only_stdlib() -> None:
+    """``core/decision.py`` is the decision port; it must stay stdlib-only.
+
+    The denylist above catches known offenders. This test proves the stronger
+    invariant for the new contract: every top-level import is in the standard
+    library (or the package itself).
+    """
+    module = PACKAGE_ROOT / "core" / "decision.py"
+    imported = _imported_names(module)
+    non_stdlib = {name for name in imported if name not in sys.stdlib_module_names and name != "orchid_ai"}
+    assert not non_stdlib, f"core/decision.py imports non-stdlib modules: {sorted(non_stdlib)}"
+
+
+def test_decision_adapters_are_not_reexported() -> None:
+    """Adapters live in ``orchid_ai.decision``; the top level exposes the port only."""
+    import orchid_ai
+
+    for name in (
+        "StateQuestionsDecisionModel",
+        "OpenAICompatibleDecisionModel",
+        "LLMDecisionModel",
+        "StubDecisionModel",
+        "DecisionHttpClient",
+    ):
+        assert not hasattr(orchid_ai, name), f"{name} must not be re-exported from orchid_ai"
+
+
+def test_decision_adapters_import_no_vendor_sdk() -> None:
+    """The adapters speak HTTP dialects directly; no provider SDK is imported."""
+    decision_dir = PACKAGE_ROOT / "decision"
+    forbidden = {"litellm", "openai", "anthropic", "cohere", "groq", "mistralai"}
+    violations: list[str] = []
+    for py_file in decision_dir.rglob("*.py"):
+        if "__pycache__" in py_file.parts:
+            continue
+        imported = _imported_names(py_file)
+        bad = imported & forbidden
+        if bad:
+            violations.append(f"{py_file.relative_to(PACKAGE_ROOT)} imports {sorted(bad)}")
+    assert not violations, "vendor SDK imported in decision/: " + "; ".join(violations)
