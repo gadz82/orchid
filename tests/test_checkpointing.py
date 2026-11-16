@@ -56,6 +56,31 @@ class TestBuildCheckpointerPluginTypes:
             await build_checkpointer("postgres", dsn="postgresql://localhost/test")
 
 
+class TestBuildCheckpointerEntryPoints:
+    """Entry-point plugins are discovered on first use, not only via Orchid."""
+
+    @pytest.mark.asyncio
+    async def test_entry_point_plugin_registers_type(self, monkeypatch):
+        from orchid_ai.checkpointing import factory
+
+        async def build_test_saver(dsn: str) -> BaseCheckpointSaver:
+            return MemorySaver()
+
+        def register_test_plugin() -> None:
+            factory.register_checkpointer("test-entrypoint", build_test_saver)
+
+        monkeypatch.setattr(factory, "_entry_points_loaded", False)
+        monkeypatch.setattr(
+            factory,
+            "iter_entry_point_plugins",
+            lambda group: iter([("test-entrypoint", register_test_plugin)]),
+        )
+
+        saver = await factory.build_checkpointer("test-entrypoint")
+
+        assert isinstance(saver, MemorySaver)
+
+
 class TestBuildCheckpointerCustom:
     """build_checkpointer() with dotted class path."""
 
