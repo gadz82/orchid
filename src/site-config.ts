@@ -1,6 +1,12 @@
+import site from '../site.config.json';
+
 export const siteConfig = {
-  /** Canonical site URL (used for sitemap, social previews, etc.). */
-  siteUrl: 'https://gadz82.github.io/orchid/',
+  /**
+   * Canonical site URL (used for sitemap, social previews, markdown twins).
+   * Sourced from `site.config.json` so build scripts share the same value.
+   * No trailing slash — callers join paths that start with "/".
+   */
+  siteUrl: site.siteUrl.replace(/\/$/, ''),
 
   /** Main "orchid" framework repo — shown in Header / Footer. */
   repoUrl: 'https://github.com/gadz82/orchid',

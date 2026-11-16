@@ -3,12 +3,15 @@ import { execFileSync } from 'child_process';
 import { readFileSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 
+import siteConfigJson from '../../../site.config.json';
+
 /**
  * Integration test for the markdown-twin generator (ADR-001). Runs the real
  * script against the real src/content tree, emitting into a scratch dir via
  * MD_PAGES_OUT_DIR so the actual export output is never touched.
  */
 const OUT_REL = 'out-md-pages-test';
+const SITE_URL = siteConfigJson.siteUrl.replace(/\/$/, '');
 
 function run(script: string): void {
   execFileSync('node', [join('scripts', script)], {
@@ -32,8 +35,8 @@ describe('generate-md-pages.mjs', () => {
   it('frontmatter carries html and markdown urls', () => {
     const root = join(__dirname, '..', '..', '..', OUT_REL);
     const md = readFileSync(join(root, 'concepts', 'decision-models.md'), 'utf8');
-    expect(md).toContain('markdown_url: https://gadz82.github.io/orchid/concepts/decision-models.md');
-    expect(md).toContain('html_url: https://gadz82.github.io/orchid/concepts/decision-models');
+    expect(md).toContain(`markdown_url: ${SITE_URL}/concepts/decision-models.md`);
+    expect(md).toContain(`html_url: ${SITE_URL}/concepts/decision-models`);
   });
 
   it('converts MDX components to markdown and leaves no JSX residue', () => {

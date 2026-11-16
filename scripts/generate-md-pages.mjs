@@ -21,8 +21,8 @@ const CONTENT_DIR = join(ROOT, 'src', 'content');
 // real export output.
 const OUT_DIR = process.env.MD_PAGES_OUT_DIR ? join(ROOT, process.env.MD_PAGES_OUT_DIR) : join(ROOT, 'out');
 
-// Canonical site URL — mirrors scripts/generate-sitemap.mjs and siteConfig.
-const BASE_URL = 'https://gadz82.github.io/orchid';
+// Canonical site URL — shared with the other build scripts and siteConfig.
+import { SITE_URL as BASE_URL } from './site-url.mjs';
 
 // ── Parse packageRepos from site-config.ts (RepoLink needs the URLs) ─────────
 function parsePackageRepos() {

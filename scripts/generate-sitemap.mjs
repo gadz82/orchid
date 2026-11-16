@@ -11,11 +11,14 @@ import { fileURLToPath } from 'url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = join(__dirname, '..');
 const CONTENT_DIR = join(ROOT, 'src', 'content');
-const PUBLIC_DIR = join(ROOT, 'public');
+// Overridable so tests can emit into a scratch directory.
+const PUBLIC_DIR = process.env.SITE_ARTIFACTS_OUT_DIR
+  ? join(ROOT, process.env.SITE_ARTIFACTS_OUT_DIR)
+  : join(ROOT, 'public');
 // Canonical site URL used to build absolute <loc> entries in sitemap.xml.
-// Mirrors siteConfig.siteUrl (the file lives in TS so we can't import here).
+// Sourced from site.config.json via scripts/site-url.mjs.
 // Trailing slash is intentionally omitted — paths joined below already start with "/".
-const BASE_URL = 'https://orchestratorindex.com';
+import { SITE_URL as BASE_URL } from './site-url.mjs';
 
 mkdirSync(PUBLIC_DIR, { recursive: true });
 
@@ -24,6 +27,10 @@ mkdirSync(PUBLIC_DIR, { recursive: true });
 const navSrc = readFileSync(join(ROOT, 'src', 'nav.ts'), 'utf8');
 const routeMatches = [...navSrc.matchAll(/href:\s*'([^']+)'/g)];
 const routes = routeMatches.map((m) => m[1]);
+
+// The markdown twin of the home route is emitted as /index.md (see
+// generate-md-pages.mjs), so "/" must not collapse to "/.md".
+const mdTwinPath = (route) => `${route === '/' ? '/index' : route}.md`;
 
 // ── Frontmatter parser ────────────────────────────────────────────────────────
 function parseFrontmatter(raw) {
@@ -72,7 +79,7 @@ for (const route of routes) {
     tags: meta.tags ?? [],
     sources: meta.sources ?? [],
     // Markdown twin served next to the HTML page (generate-md-pages.mjs).
-    markdown: `${route}.md`,
+    markdown: mdTwinPath(route),
   });
 }
 
@@ -87,7 +94,7 @@ const urlEntries = routes
     const loc = `${BASE_URL}${route}`;
     const priority = route === '/' ? '1.0' : '0.8';
     const html = `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${isoDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${priority}</priority>\n  </url>`;
-    const twin = `  <url>\n    <loc>${loc}.md</loc>\n    <lastmod>${isoDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${route === '/' ? '0.9' : '0.7'}</priority>\n  </url>`;
+    const twin = `  <url>\n    <loc>${BASE_URL}${mdTwinPath(route)}</loc>\n    <lastmod>${isoDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${route === '/' ? '0.9' : '0.7'}</priority>\n  </url>`;
     return [html, twin];
   })
   .join('\n');
