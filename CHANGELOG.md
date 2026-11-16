@@ -14,6 +14,14 @@
 
 <!-- version list -->
 
+## v1.12.1 (2026-11-16)
+
+### Bug Fixes
+
+- **checkpointing**: Load entry-point plugins on direct factory use
+  ([`494a930`](https://github.com/gadz82/orchid/commit/494a93038efca70afa919632d69d7fefcb235229))
+
+
 ## v1.12.0 (2026-11-16)
 
 ### Bug Fixes
