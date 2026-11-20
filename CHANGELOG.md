@@ -14,6 +14,19 @@
 
 <!-- version list -->
 
+## v1.13.0 (2026-11-20)
+
+### Bug Fixes
+
+- Satisfy ruff SIM102 in the pipeline config validator
+  ([`afb9a34`](https://github.com/gadz82/orchid/commit/afb9a34627f1d7e16578599be8ba8ca58c40f8e8))
+
+### Features
+
+- Add typed data pipelines as a run-scoped DAG execution model
+  ([`ab5e6d1`](https://github.com/gadz82/orchid/commit/ab5e6d1f75acb90008203eca4c6beed64cb1247a))
+
+
 ## v1.12.1 (2026-11-16)
 
 ### Bug Fixes
