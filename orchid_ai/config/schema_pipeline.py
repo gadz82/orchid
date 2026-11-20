@@ -1705,9 +1705,8 @@ def _validate_job(
                 errors.append(f"{label} template job {job.job!r} is itself a map job; nested maps are not supported")
             if isinstance(template, OrchidPipelineDecisionJobConfig) and template.branches:
                 errors.append(f"{label} template job {job.job!r} is a branching decision job")
-    elif isinstance(job, OrchidPipelineSubPipelineJobConfig):
-        if job.pipeline not in config.definitions:
-            errors.append(f"{label} references unknown sub-pipeline {job.pipeline!r}")
+    elif isinstance(job, OrchidPipelineSubPipelineJobConfig) and job.pipeline not in config.definitions:
+        errors.append(f"{label} references unknown sub-pipeline {job.pipeline!r}")
     return errors
 
 
