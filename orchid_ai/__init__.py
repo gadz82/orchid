@@ -114,6 +114,17 @@ from .core.mcp_gateway_state import (
     OrchidMCPGatewayClientStore,
     OrchidMCPGatewayTokenStore,
 )
+from .core.pipeline import (
+    OrchidGraphMutation,
+    OrchidGraphObject,
+    OrchidGraphRelation,
+    OrchidPipelineEvent,
+    OrchidPipelineObserver,
+    OrchidPipelineResult,
+    OrchidPipelineStep,
+    OrchidPipelineStepContext,
+    OrchidPipelineStepResult,
+)
 from .core.repository import (
     Document,
     OrchidDocument,
@@ -138,6 +149,7 @@ from .guardrails import register_guardrail
 from .mcp.oauth_state import OrchidOAuthStateStore, register_oauth_state_store
 from .orchid import Orchid, OrchidInvokeResult, OrchidPendingApproval
 from .persistence.base import OrchidChatStorage
+from .pipeline.registry import register_pipeline_step
 from .rag.factory import (
     register_doc_store_backend,
     register_graph_store_backend,
@@ -246,8 +258,19 @@ __all__ = [  # noqa: RUF022
     "OrchidDecisionQuestion",
     "OrchidDecisionResult",
     "OrchidDecisionState",
+    # ── EXTEND — pipelines ────────────────────────────
+    "OrchidGraphMutation",
+    "OrchidGraphObject",
+    "OrchidGraphRelation",
+    "OrchidPipelineEvent",
+    "OrchidPipelineObserver",
+    "OrchidPipelineResult",
+    "OrchidPipelineStep",
+    "OrchidPipelineStepContext",
+    "OrchidPipelineStepResult",
     # ── EXTEND — registries ───────────────────────────
     "register_decision_point",
+    "register_pipeline_step",
     "register_doc_store_backend",
     "register_graph_store_backend",
     "register_guardrail",

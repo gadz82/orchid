@@ -32,9 +32,15 @@ boot — same pattern as the rest of the framework.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+import math
+import re
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from ..core.pipeline import OrchidPipelineError
+from .pipeline_templates import validate_expression, validate_template
 
 # ── Identity claim — discriminated union ─────────────────────
 
@@ -149,9 +155,63 @@ _VISIBILITY_MATRIX: dict[str, set[VisibilityLevel]] = {
 }
 
 
+_PIPELINE_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,62}$")
+
+
+def _validate_json_value(value: Any, path: str) -> None:
+    """Reject values that cannot survive the job-spec JSON column."""
+    if value is None or isinstance(value, bool):
+        return
+    if isinstance(value, str):
+        if "\x00" in value:
+            raise ValueError(f"{path} must not contain NUL characters")
+        return
+    if isinstance(value, int):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"{path} must be a finite JSON number")
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_json_value(item, f"{path}[{index}]")
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError(f"{path} keys must be non-empty strings")
+            if "\x00" in key:
+                raise ValueError(f"{path} keys must not contain NUL characters")
+            _validate_json_value(item, f"{path}.{key}")
+        return
+    raise ValueError(f"{path} must be JSON-serializable; got {type(value).__name__}")
+
+
+def _validate_input_templates(value: Any, path: str) -> None:
+    """Validate every template in a nested trigger input mapping."""
+    if isinstance(value, str):
+        if "{{" in value or "}}" in value:
+            try:
+                validate_template(value, path=path)
+            except OrchidPipelineError as exc:
+                raise ValueError(str(exc)) from exc
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _validate_input_templates(item, f"{path}.{key}")
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_input_templates(item, f"{path}[{index}]")
+
+
 class OrchidTriggerEmitConfig(BaseModel):
-    agent: str
-    prompt_template: str
+    agent: str = ""
+    prompt_template: str = ""
+    pipeline: str | None = None
+    input: dict[str, Any] = Field(default_factory=dict)
+    input_from: str | None = None
+    persist_graph: bool = False
     identity: IdentityClaim
     # §25 — opt-in.  ``respect_chat_binding=true`` plus
     # ``identity.mode=service_account`` is rejected below: a pure
@@ -172,6 +232,30 @@ class OrchidTriggerEmitConfig(BaseModel):
     #   service_account    → admin
     visibility: VisibilityLevel | None = None
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _exactly_one_target(self) -> OrchidTriggerEmitConfig:
+        has_agent = bool(self.agent.strip())
+        has_pipeline = bool((self.pipeline or "").strip())
+        if has_agent == has_pipeline:
+            raise ValueError("trigger emits must set exactly one of 'agent' or 'pipeline'")
+        if has_agent:
+            if not self.prompt_template.strip():
+                raise ValueError("agent triggers require a non-empty 'prompt_template'")
+            # Pipeline-only fields are ignored on the agent target (spec §13.1).
+            return self
+        if self.prompt_template.strip():
+            raise ValueError("pipeline triggers must not declare 'prompt_template'")
+        if not _PIPELINE_NAME_RE.fullmatch(self.pipeline or ""):
+            raise ValueError(f"pipeline trigger target {self.pipeline!r} is not a valid pipeline name")
+        if self.input_from is not None:
+            try:
+                validate_expression(self.input_from, path="trigger emits.input_from")
+            except OrchidPipelineError as exc:
+                raise ValueError(str(exc)) from exc
+        _validate_json_value(self.input, "trigger emits.input")
+        _validate_input_templates(self.input, "trigger emits.input")
+        return self
 
     @model_validator(mode="after")
     def _binding_requires_user_identity(self) -> OrchidTriggerEmitConfig:

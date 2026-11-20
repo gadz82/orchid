@@ -126,3 +126,119 @@ class TestLoadConfigDirectory:
         original = str(agents_dir)
         load_config_directory(agents_dir)
         assert str(agents_dir) == original
+
+    def test_rejects_duplicate_pipeline_definition_names(self, tmp_path):
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        definition = (
+            "pipelines:\n"
+            "  definitions:\n"
+            "    shared:\n"
+            "      jobs:\n"
+            "        load:\n"
+            "          kind: deterministic\n"
+            "          uses: app.steps.load\n"
+        )
+        (agents_dir / "a.yaml").write_text(definition, encoding="utf-8")
+        (agents_dir / "b.yaml").write_text(definition, encoding="utf-8")
+
+        with pytest.raises(OrchidConfigError) as excinfo:
+            load_config_directory(agents_dir)
+
+        message = str(excinfo.value)
+        assert "Pipeline definition 'shared'" in message
+        assert "a.yaml" in message and "b.yaml" in message
+
+    def test_rejects_duplicate_shape_names(self, tmp_path):
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        shape = "pipelines:\n  shapes:\n    Account:\n      fields:\n        id:\n          type: string\n"
+        (agents_dir / "a.yaml").write_text(shape, encoding="utf-8")
+        (agents_dir / "b.yaml").write_text(shape, encoding="utf-8")
+
+        with pytest.raises(OrchidConfigError) as excinfo:
+            load_config_directory(agents_dir)
+
+        message = str(excinfo.value)
+        assert "Shape 'Account'" in message
+        assert "a.yaml" in message and "b.yaml" in message
+
+    def test_rejects_duplicate_relation_names(self, tmp_path):
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "a.yaml").write_text(
+            "pipelines:\n"
+            "  shapes:\n"
+            "    Account:\n"
+            "      fields:\n"
+            "        id:\n"
+            "          type: string\n"
+            "    Usage:\n"
+            "      fields:\n"
+            "        id:\n"
+            "          type: string\n"
+            "  relations:\n"
+            "    has_usage:\n"
+            "      from: [Account]\n"
+            "      to: [Usage]\n",
+            encoding="utf-8",
+        )
+        (agents_dir / "b.yaml").write_text(
+            "pipelines:\n  relations:\n    has_usage:\n      from: [Account]\n      to: [Usage]\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(OrchidConfigError) as excinfo:
+            load_config_directory(agents_dir)
+
+        message = str(excinfo.value)
+        assert "Relation 'has_usage'" in message
+        assert "a.yaml" in message and "b.yaml" in message
+
+    def test_same_name_in_different_pipeline_sections_does_not_collide(self, tmp_path):
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "pipelines.yaml").write_text(
+            "pipelines:\n"
+            "  shapes:\n"
+            "    shared:\n"
+            "      fields:\n"
+            "        id:\n"
+            "          type: string\n"
+            "  definitions:\n"
+            "    shared:\n"
+            "      jobs:\n"
+            "        load:\n"
+            "          kind: deterministic\n"
+            "          uses: app.steps.load\n",
+            encoding="utf-8",
+        )
+
+        config = load_config_directory(agents_dir)
+        assert "shared" in config.pipelines.shapes
+        assert "shared" in config.pipelines.definitions
+
+    def test_valid_pipeline_directory_without_duplicates_loads(self, tmp_path):
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "shapes.yaml").write_text(
+            "pipelines:\n  shapes:\n    Account:\n      fields:\n        id:\n          type: string\n",
+            encoding="utf-8",
+        )
+        (agents_dir / "pipelines.yaml").write_text(
+            "pipelines:\n"
+            "  definitions:\n"
+            "    assess:\n"
+            "      jobs:\n"
+            "        load:\n"
+            "          kind: deterministic\n"
+            "          uses: app.steps.load\n"
+            "          writes:\n"
+            "            - id: account:1\n"
+            "              shape: Account\n",
+            encoding="utf-8",
+        )
+
+        config = load_config_directory(agents_dir)
+        assert "Account" in config.pipelines.shapes
+        assert "assess" in config.pipelines.definitions

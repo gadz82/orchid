@@ -204,6 +204,19 @@ def test_decision_contract_imports_only_stdlib() -> None:
     assert not non_stdlib, f"core/decision.py imports non-stdlib modules: {sorted(non_stdlib)}"
 
 
+def test_pipeline_contract_imports_only_stdlib() -> None:
+    """``core/pipeline.py`` is the pipeline port; it must stay stdlib-only.
+
+    The denylist above catches known offenders. This test proves the stronger
+    invariant for the pipeline contract: every top-level import is in the
+    standard library (or the package itself).
+    """
+    module = PACKAGE_ROOT / "core" / "pipeline.py"
+    imported = _imported_names(module)
+    non_stdlib = {name for name in imported if name not in sys.stdlib_module_names and name != "orchid_ai"}
+    assert not non_stdlib, f"core/pipeline.py imports non-stdlib modules: {sorted(non_stdlib)}"
+
+
 def test_decision_adapters_are_not_reexported() -> None:
     """Adapters live in ``orchid_ai.decision``; the top level exposes the port only."""
     import orchid_ai

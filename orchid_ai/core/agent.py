@@ -35,12 +35,13 @@ from .repository import OrchidVectorReader
 from .scopes import OrchidRAGScope
 from .state import OrchidAgentState
 
-__all__ = ["OrchidAgent", "OrchidAgentRunContext"]
+__all__ = ["OrchidAgent", "OrchidAgentRunContext", "current_run_context"]
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+# ORCHID-MEM: 01a1e9ec-537a-72cf-a855-df94e4447e9a — Per-run agent context; carries auth, correlation, chat/message ids and the persist_memory policy.
 class OrchidAgentRunContext:
     """Per-request state for a single agent activation.
 
@@ -54,6 +55,10 @@ class OrchidAgentRunContext:
     correlation_id: str | None = None
     chat_id: str | None = None
     message_id: str | None = None
+    #: Whether the agent may write conversation memory for this run. Chat
+    #: turns keep the historical behaviour (``True``); callers that must not
+    #: persist (for example pipeline agent jobs) opt out explicitly.
+    persist_memory: bool = True
 
 
 _EMPTY_RUN_CONTEXT = OrchidAgentRunContext()
@@ -62,6 +67,17 @@ _run_ctx_var: contextvars.ContextVar[OrchidAgentRunContext] = contextvars.Contex
     "orchid.agent_run_context",
     default=_EMPTY_RUN_CONTEXT,
 )
+
+
+def current_run_context() -> OrchidAgentRunContext | None:
+    """Return the run context bound to the current task, or ``None``.
+
+    ``None`` means no caller bound a context for this activation (the
+    ContextVar still holds its empty default). The whole context is returned so
+    consumers can read ``persist_memory`` alongside the run ids.
+    """
+    ctx = _run_ctx_var.get()
+    return None if ctx is _EMPTY_RUN_CONTEXT else ctx
 
 
 class OrchidAgent(ABC):
@@ -202,7 +218,7 @@ class OrchidAgent(ABC):
 
         Pair every call with :meth:`reset_run_context` in a
         ``try/finally`` to restore the previous binding on return.
-        The graph wrapper (``_AgentNodeWrapper._run_agent``) drives
+        The shared executor (``OrchidAgentExecutor._run_agent``) drives
         this around each agent activation so concurrent fan-out of
         the same agent stays isolated.
         """
@@ -211,6 +227,15 @@ class OrchidAgent(ABC):
     def reset_run_context(self, token: contextvars.Token) -> None:
         """Restore the run context bound before :meth:`set_run_context`."""
         _run_ctx_var.reset(token)
+
+    def current_run_context(self) -> OrchidAgentRunContext | None:
+        """Return the run context bound to the current task, or ``None``.
+
+        ``None`` means no caller bound a context for this activation. The whole
+        context is returned so consumers can read ``persist_memory`` alongside
+        the run ids without adding one proxy property per field.
+        """
+        return current_run_context()
 
     # ── Identity ────────────────────────────────────────────
 

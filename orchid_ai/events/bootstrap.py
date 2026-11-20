@@ -43,6 +43,7 @@ from orchid_ai.config.schema_events import (
 )
 from orchid_ai.core.decision import OrchidDecisionPointBinding
 from orchid_ai.core.events.dispatcher import OrchidSignalDispatcher
+from orchid_ai.core.events.errors import TriggerRegistrationError
 from orchid_ai.core.events.producer import OrchidSignalProducer
 from orchid_ai.core.events.queue import OrchidSignalQueue
 from orchid_ai.core.events.store import (
@@ -104,7 +105,9 @@ async def start_events(
     identity_resolver: Any,
     session_warmer: Any | None,
     known_agents: set[str],
+    known_pipelines: set[str] | frozenset[str] = frozenset(),
     graph_invoker: Any | None = None,
+    pipeline_runner: Any | None = None,
     decision_binding: OrchidDecisionPointBinding | None = None,
 ) -> EventsRuntime:
     """Bring the events block online.
@@ -113,6 +116,15 @@ async def start_events(
     ``events.enabled`` is False, returns a default
     :class:`EventsRuntime` with ``enabled=False`` and every field
     ``None`` — exactly the zero-overhead path.
+
+    ``known_pipelines`` and ``pipeline_runner`` are additive: the composition
+    root passes the pipeline names it registered and an object exposing
+    ``async run(name, input, *, auth, mode, correlation_id, chat_id,
+    include_graph)`` (normally a facade over the compiled pipeline registry).
+    When a pipeline runner is supplied, Bloom builds a pipeline adapter and a
+    target dispatcher; otherwise the agent-only runner path is unchanged.  A
+    config that declares a pipeline trigger without a runner is rejected at
+    boot instead of silently dispatching to the agent runner.
 
     ``decision_binding`` is the optional fleet-scoped binding resolved by the
     composition root for ``events.decision.point``.  It is used only when both
@@ -129,6 +141,11 @@ async def start_events(
 
     runtime = EventsRuntime(enabled=True)
     runtime.decision_binding = _activate_event_decision(events_config, decision_binding)
+    if pipeline_runner is None and any((cfg.emits.pipeline or "").strip() for cfg in events_config.triggers):
+        raise TriggerRegistrationError(
+            "events config declares pipeline triggers but no pipeline_runner "
+            "was supplied; refusing to route pipeline jobs to the agent runner"
+        )
 
     # ── Storage backend ──────────────────────────────────
     storage = await _build_storage(events_config)
@@ -145,6 +162,7 @@ async def start_events(
     runtime.trigger_registry = build_registry_from_config(
         events_config.triggers,
         known_agents=known_agents,
+        known_pipelines=known_pipelines,
         identity_resolver=identity_resolver,
     )
 
@@ -211,7 +229,11 @@ async def start_events(
             triggers=runtime.trigger_registry,
             identity_resolver=identity_resolver,
             job_store=runtime.job_store,
-            job_runner=_build_runner(chat_storage=chat_storage, graph_invoker=graph_invoker),
+            job_runner=_build_runner(
+                chat_storage=chat_storage,
+                graph_invoker=graph_invoker,
+                pipeline_runner=pipeline_runner,
+            ),
             session_warmer=session_warmer,
             event_stream=runtime.event_stream,
             decision_binding=runtime.decision_binding,
@@ -359,8 +381,13 @@ async def _build_queue(cfg: OrchidEventsConfig, *, storage: Any) -> OrchidSignal
     return instance
 
 
-def _build_runner(*, chat_storage: Any, graph_invoker: Any | None = None) -> Any:
-    """Construct the GraphJobRunner.
+def _build_runner(
+    *,
+    chat_storage: Any,
+    graph_invoker: Any | None = None,
+    pipeline_runner: Any | None = None,
+) -> Any:
+    """Construct the agent runner, or the target dispatcher when pipelines exist.
 
     When ``graph_invoker`` is supplied (the production path — a closure over
     the compiled LangGraph built by the API/CLI lifespan), it is passed
@@ -368,20 +395,40 @@ def _build_runner(*, chat_storage: Any, graph_invoker: Any | None = None) -> Any
     wired up the full graph yet), a no-op stub that returns the run
     parameters as a string is used so the processor can still mark runs
     SUCCEEDED and the ``bloom.run.finished`` event carries something visible.
+
+    ``pipeline_runner`` is the object supplied by the composition root.  It
+    exposes ``async run(name, input, *, auth, mode, correlation_id, chat_id,
+    include_graph)``.  Only when it is present does Bloom build a
+    :class:`DispatchJobRunner`; without it the agent-only runner path is
+    byte-for-byte the previous one.
     """
     from orchid_ai.events.runners.graph_runner import GraphJobRunner
 
     if graph_invoker is not None:
-        return GraphJobRunner(invoker=graph_invoker, chat_storage=chat_storage)
+        agent_runner = GraphJobRunner(invoker=graph_invoker, chat_storage=chat_storage)
+    else:
 
-    async def _stub_invoker(run, auth) -> dict:
-        return {
-            "final_response": (
-                f"[bloom-default-invoker] run={run.run_id} agent={run.spec.agent_name} prompt={run.spec.prompt!r}"
-            )
+        async def _stub_invoker(run, auth) -> dict:
+            return {
+                "final_response": (
+                    f"[bloom-default-invoker] run={run.run_id} agent={run.spec.agent_name} prompt={run.spec.prompt!r}"
+                )
+            }
+
+        agent_runner = GraphJobRunner(invoker=_stub_invoker, chat_storage=chat_storage)
+
+    if pipeline_runner is None:
+        return agent_runner
+
+    from orchid_ai.events.runners.dispatch_runner import DispatchJobRunner
+    from orchid_ai.events.runners.pipeline_runner import PipelineJobRunner
+
+    return DispatchJobRunner(
+        runners={
+            "agent": agent_runner,
+            "pipeline": PipelineJobRunner(pipeline_runner=pipeline_runner, chat_storage=chat_storage),
         }
-
-    return GraphJobRunner(invoker=_stub_invoker, chat_storage=chat_storage)
+    )
 
 
 async def _build_producers(cfg: OrchidEventsConfig, runtime: EventsRuntime) -> list[OrchidSignalProducer]:

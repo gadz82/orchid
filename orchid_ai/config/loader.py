@@ -146,12 +146,29 @@ def load_config(path: str | Path) -> OrchidAgentsConfig:
     return config
 
 
+def _track_names(entries: Any, seen: dict[str, str], label: str, file_name: str) -> None:
+    """Reject a name already declared by an earlier file in the same section.
+
+    ``entries`` is the parsed YAML mapping for a section (agents, pipeline
+    definitions, shapes, relations). A non-mapping is left for Pydantic to
+    reject; this pass only compares names across files.
+    """
+    if not isinstance(entries, dict):
+        return
+    for name in entries:
+        previous = seen.get(name)
+        if previous is not None:
+            raise OrchidConfigError(f"{label} '{name}' is defined in both {previous} and {file_name}")
+        seen[name] = file_name
+
+
 def load_config_directory(path: Path) -> OrchidAgentsConfig:
     """Load and merge every ``*.yaml`` / ``*.yml`` file in a directory.
 
     Files are processed in deterministic alphabetical order.  Top-level
-    dictionaries are deep-merged; the ``agents`` map is merged across
-    files but duplicate agent names are rejected.
+    dictionaries are deep-merged; the ``agents`` map and the pipeline
+    ``definitions`` / ``shapes`` / ``relations`` maps are merged across files,
+    and a name declared in more than one file is rejected.
     """
     files = sorted(path.glob("*.yaml")) + sorted(path.glob("*.yml"))
     if not files:
@@ -159,6 +176,16 @@ def load_config_directory(path: Path) -> OrchidAgentsConfig:
 
     merged: dict[str, Any] = {}
     seen_agents: dict[str, str] = {}
+    seen_pipeline_names: dict[str, dict[str, str]] = {
+        "definitions": {},
+        "shapes": {},
+        "relations": {},
+    }
+    section_labels = {
+        "definitions": "Pipeline definition",
+        "shapes": "Shape",
+        "relations": "Relation",
+    }
 
     for file in files:
         raw_text = file.read_text(encoding="utf-8")
@@ -167,14 +194,12 @@ def load_config_directory(path: Path) -> OrchidAgentsConfig:
         if not isinstance(data, dict):
             raise TypeError(f"Expected YAML dict in {file}, got {type(data).__name__}")
 
-        file_agents = data.get("agents")
-        if isinstance(file_agents, dict):
-            for agent_name in file_agents:
-                if agent_name in seen_agents:
-                    raise OrchidConfigError(
-                        f"Agent '{agent_name}' is defined in both {seen_agents[agent_name]} and {file.name}"
-                    )
-                seen_agents[agent_name] = file.name
+        _track_names(data.get("agents"), seen_agents, "Agent", file.name)
+
+        pipelines = data.get("pipelines")
+        if isinstance(pipelines, dict):
+            for section, label in section_labels.items():
+                _track_names(pipelines.get(section), seen_pipeline_names[section], label, file.name)
 
         merged = _deep_merge(merged, data)
 

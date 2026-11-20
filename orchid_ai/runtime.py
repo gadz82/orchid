@@ -143,6 +143,10 @@ class OrchidRuntime:
     #: Narrow per-point bindings resolved from config (``graph/decision_bindings``).
     #: Consumers depend on this protocol, never on a provider or transport.
     decision_bindings: dict[str, OrchidDecisionPointBinding] = field(default_factory=dict)
+    #: Compiled pipeline registry, built by the lifecycle after the chat graph.
+    #: ``None`` when the configuration has no ``pipelines:`` block (or the block
+    #: is disabled), so the pipeline feature is zero-impact when unused.
+    pipeline_registry: Any | None = None
 
     # ── Resolved accessors (lazy defaults) ──────────────────────
 

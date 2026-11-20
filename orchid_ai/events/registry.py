@@ -22,9 +22,10 @@ implementation that indexes by ``signal.type`` first.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable, Iterable
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import jmespath
 
@@ -32,6 +33,7 @@ from ..config.schema_events import (
     ActAsUserIdentity,
     AddressedToUserIdentity,
     OrchidTriggerConfig,
+    OrchidTriggerEmitConfig,
     ServiceAccountIdentity,
     VisibilityLevel,
 )
@@ -44,6 +46,10 @@ from ..core.events.errors import (
 from ..core.events.job import JobSpec, RetryPolicy
 from ..core.events.signal import Signal
 from ..core.events.trigger import OrchidTrigger, TriggerRegistry
+
+# P-014 requires trigger inputs to share the pipeline renderer, so this is
+# the one deliberate events→pipeline import outside the Bloom runner adapter.
+from ..pipeline.mapping import evaluate, render_value
 
 # §26.3 — same matrix the Pydantic validator uses; mirrored here for
 # defence-in-depth at registration time.
@@ -131,13 +137,30 @@ class _OrchidYamlTrigger(OrchidTrigger):
                 f"trigger {self.trigger_id!r} when-expression raised on signal {signal.signal_id}: {exc!r}"
             ) from exc
 
+    # ORCHID-MEM: 01a1f342-9db3-7546-b16f-2d987b39371d — Pipeline trigger target; the emit target selects the job spec shape and renders input with the pipeline mapping renderer.
     def build_job_spec(self, signal: Signal) -> JobSpec:
         identity = self.identity_claim
-        prompt = _render_prompt(
-            self._config.emits.prompt_template,
-            signal=signal,
-            identity=identity,
-        )
+        target: Literal["agent", "pipeline"] = "pipeline" if (self._config.emits.pipeline or "").strip() else "agent"
+        if target == "pipeline":
+            agent_name = ""
+            prompt = ""
+            pipeline_name = self._config.emits.pipeline
+            pipeline_input = _render_pipeline_input(
+                self._config.emits,
+                trigger_id=self.trigger_id,
+                signal=signal,
+            )
+            persist_graph = self._config.emits.persist_graph
+        else:
+            agent_name = self._config.emits.agent
+            prompt = _render_prompt(
+                self._config.emits.prompt_template,
+                signal=signal,
+                identity=identity,
+            )
+            pipeline_name = None
+            pipeline_input = None
+            persist_graph = False
         # §26 — visibility / visibility_user_id are immutable from this
         # point on.  ``actor`` and ``addressed`` carry a user id; the
         # other levels do not (the migration's CHECK constraint enforces
@@ -155,7 +178,7 @@ class _OrchidYamlTrigger(OrchidTrigger):
         return JobSpec(
             trigger_id=self.trigger_id,
             signal_id=signal.signal_id,
-            agent_name=self._config.emits.agent,
+            agent_name=agent_name,
             prompt=prompt,
             identity_claim=identity,
             correlation_id=signal.correlation_id,
@@ -164,6 +187,10 @@ class _OrchidYamlTrigger(OrchidTrigger):
             visibility_user_id=visibility_user_id,
             chat_binding=chat_binding,
             proactive_chat=self._config.emits.proactive_chat,
+            target=target,
+            pipeline_name=pipeline_name,
+            pipeline_input=pipeline_input,
+            persist_graph=persist_graph,
         )
 
 
@@ -209,6 +236,7 @@ def build_registry_from_config(
     triggers: list[OrchidTriggerConfig],
     *,
     known_agents: set[str],
+    known_pipelines: set[str] | frozenset[str] = frozenset(),
     identity_resolver: _ResolverProbe | None = None,
 ) -> InMemoryTriggerRegistry:
     """Compile + validate + register a list of trigger configs.
@@ -216,7 +244,8 @@ def build_registry_from_config(
     Validation order — fail fast on the cheapest checks first:
 
     1. Trigger ID uniqueness.
-    2. ``emits.agent`` must exist in ``known_agents``.
+    2. The emit target must exist: ``emits.agent`` in ``known_agents``,
+       or ``emits.pipeline`` in ``known_pipelines``.
     3. ``when:`` must parse as JMESPath (parse-time only — runtime
        errors against malformed payloads are caught later).
     4. ``act_as_user`` triggers probe ``mint_for_user``: resolvers that
@@ -238,7 +267,14 @@ def build_registry_from_config(
             raise TriggerRegistrationError(f"duplicate trigger id: {cfg.id!r}")
         seen.add(cfg.id)
 
-        if cfg.emits.agent not in known_agents:
+        if (cfg.emits.pipeline or "").strip():
+            if cfg.emits.pipeline not in known_pipelines:
+                raise TriggerRegistrationError(
+                    f"trigger {cfg.id!r} targets unknown pipeline "
+                    f"{cfg.emits.pipeline!r} (known pipelines: "
+                    f"{sorted(known_pipelines) or 'none'})"
+                )
+        elif cfg.emits.agent not in known_agents:
             raise TriggerRegistrationError(
                 f"trigger {cfg.id!r} targets unknown agent "
                 f"{cfg.emits.agent!r} (known agents: "
@@ -387,6 +423,93 @@ def _identity_claim_to_dict(
     if isinstance(claim, ActAsUserIdentity):
         return {"mode": "act_as_user", "user_id_from": claim.user_id_from}
     raise TypeError(f"unknown identity claim type: {type(claim).__name__}")
+
+
+def _pipeline_input_context(signal: Signal, *, trigger_id: str) -> dict[str, Any]:
+    """Context for trigger ``input`` templates and ``input_from``.
+
+    ``payload`` is exposed both directly and under ``input`` so the same
+    template works in a pipeline job and in a Bloom trigger.  ``signal`` and
+    ``run`` carry the identity of the signal that produced the job; neither
+    contains an access token.
+    """
+    payload = dict(signal.payload or {})
+    return {
+        "input": payload,
+        "payload": payload,
+        "signal": {
+            "id": str(signal.signal_id),
+            "type": signal.type,
+            "source": signal.source,
+            "tenant_key": signal.tenant_key,
+            "user_id": signal.user_id or "",
+            "correlation_id": signal.correlation_id,
+            "occurred_at": signal.occurred_at.isoformat(),
+        },
+        "run": {
+            "trigger_id": trigger_id,
+            "signal_id": str(signal.signal_id),
+            "correlation_id": signal.correlation_id,
+        },
+        "jobs": {},
+        "objects": {},
+        "types": {},
+        "aliases": {},
+        "summary": "",
+    }
+
+
+def _reject_nul_text(value: Any) -> None:
+    if isinstance(value, str):
+        if "\x00" in value:
+            raise ValueError("value contains a NUL character")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _reject_nul_text(key)
+            _reject_nul_text(item)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _reject_nul_text(item)
+
+
+def _render_pipeline_input(
+    emits: OrchidTriggerEmitConfig,
+    *,
+    trigger_id: str,
+    signal: Signal,
+) -> dict[str, Any]:
+    context = _pipeline_input_context(signal, trigger_id=trigger_id)
+    base: dict[str, Any] = {}
+    if emits.input_from is not None:
+        value = evaluate(
+            emits.input_from,
+            context,
+            path=f"trigger {trigger_id!r} emits.input_from",
+        )
+        if not isinstance(value, dict):
+            raise TriggerMatchError(
+                f"trigger {trigger_id!r} emits.input_from {emits.input_from!r} "
+                f"must resolve to an object, got {type(value).__name__}"
+            )
+        base = dict(value)
+    if emits.input:
+        rendered = render_value(
+            dict(emits.input),
+            context,
+            path=f"trigger {trigger_id!r} emits.input",
+        )
+        if not isinstance(rendered, dict):  # pragma: no cover — mapping input stays a mapping
+            raise TriggerMatchError(f"trigger {trigger_id!r} emits.input must render to an object")
+        base.update(rendered)
+    # The job spec is persisted as JSON: normalize runtime values once here so a
+    # non-JSON payload cannot fail later inside the store's encoder.
+    try:
+        _reject_nul_text(base)
+        return json.loads(json.dumps(base, ensure_ascii=False, allow_nan=False, default=str))
+    except (TypeError, ValueError) as exc:
+        raise TriggerMatchError(f"trigger {trigger_id!r} pipeline input is not JSON-serializable: {exc}") from exc
 
 
 def _render_prompt(template: str, *, signal: Signal, identity: dict[str, Any]) -> str:

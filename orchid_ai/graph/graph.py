@@ -38,15 +38,11 @@ Graph topology (parallel vs sequential, guardrails):
 
 from __future__ import annotations
 
-import hashlib
 import logging
-import time
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
-from langgraph.errors import GraphBubbleUp
 from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
@@ -54,18 +50,14 @@ from ..agents.delegation import DelegationCatalog
 from ..config.registry import get_class
 from ..config.schema import OrchidAgentConfig, OrchidAgentsConfig
 from ..config.tool_registry import load_tools_from_config
-from ..core.agent import OrchidAgent, OrchidAgentRunContext
-from ..core.guardrails import (
-    OrchidGuardrailAction,
-    OrchidGuardrailChain,
-    OrchidGuardrailContext,
-    OrchidGuardrailDirection,
-)
+from ..core.agent import OrchidAgent
+from ..core.guardrails import OrchidGuardrailChain
 from ..core.repository import OrchidVectorReader
 from ..core.run_config import auth_from_config
 from ..mcp.auth_registry import OrchidMCPAuthRegistry
 from ..runtime import MCPClientFactory, OrchidRuntime
 from ..tools.external_cli_config import load_external_agents_from_config
+from .agent_executor import OrchidAgentExecutor, latest_human_message_id, turn_key
 from .decision_bindings import resolve_decision_binding
 from .guardrail_wiring import _GuardrailWiring
 from .mini_agent_wiring import _MiniAgentWiring
@@ -74,67 +66,24 @@ from .routing import build_routing_strategy
 from .state import GraphState
 from .supervisor import create_supervisor_node
 
-# Backward-compat re-exports (moved to dedicated modules in M2 refactoring)
+# Aliases kept because existing importers reach these helpers through this
+# module; their implementation lives next to the shared execution policy.
 _make_fork_router = _MiniAgentWiring.make_fork_router
+_latest_human_message_id = latest_human_message_id
+_turn_key = turn_key
 
 logger = logging.getLogger(__name__)
-perf_logger = logging.getLogger("orchid.perf")
-
-
-def _latest_human_message_id(state: GraphState) -> str | None:
-    """Find the id of the most recent ``HumanMessage`` in graph state.
-
-    Returns ``None`` when the messages list is empty, when no
-    ``HumanMessage`` is present, or when the message has no
-    ``.id`` attribute (LangChain typically assigns one but the
-    field is optional in the base class).  Used by
-    :func:`_create_agent_node` to anchor in-chat live progress
-    cards under the message that triggered the turn (§LS5).
-    """
-    messages = state.get("messages") or []
-    for msg in reversed(messages):
-        if isinstance(msg, HumanMessage):
-            mid = getattr(msg, "id", None)
-            if isinstance(mid, str) and mid:
-                return mid
-            return None
-    return None
-
-
-def _turn_key(state: GraphState) -> str:
-    """Stable key for one user turn across every agent node in a graph run.
-
-    The latest human message and its count do not change while the supervisor
-    and agents loop within a request, so the first agent creates the shared
-    turn budget and later agents spend from it. The query text is hashed rather
-    than stored, and the message id distinguishes repeated identical prompts.
-    """
-    chat_id = state.get("chat_id") or ""
-    human_count = 0
-    last_human: Any = None
-    for message in state.get("messages") or []:
-        if isinstance(message, HumanMessage):
-            human_count += 1
-            last_human = message
-
-    text = str(getattr(last_human, "content", "")) if last_human is not None else ""
-    message_id = (getattr(last_human, "id", "") or "") if last_human is not None else ""
-    digest = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:16]
-    return f"{chat_id}:{human_count}:{message_id}:{digest}"
 
 
 class _AgentNodeWrapper:
-    """LangGraph node that wraps an :class:`OrchidAgent` with per-agent guardrails
-    and the optional mini-agent decomposer hook.
+    """LangGraph node that wraps an :class:`OrchidAgent` with the shared executor.
 
-    Extracted from the :func:`_create_agent_node` closure so each concern
-    lives in its own method.
-
-    SRP — each method has one reason to change:
-    - Input guardrails
-    - Mini-agent decomposer
-    - Agent execution
-    - Output guardrails
+    The executor owns run-context binding, per-agent guardrails, model routing
+    and error translation. This node keeps only the LangGraph-specific pieces:
+    reading auth from the ``RunnableConfig``, deriving the run ids from state,
+    and enabling the decomposer hook whose fork decision the graph's ``Send``
+    topology consumes. Inline mini-agent orchestration is disabled here — the
+    chat graph keeps its own fan-out.
     """
 
     def __init__(
@@ -147,212 +96,25 @@ class _AgentNodeWrapper:
         turn_budgets: TurnBudgetRegistry | None = None,
     ) -> None:
         self._agent = agent
-        self._input_guardrails = input_guardrails
-        self._output_guardrails = output_guardrails
-        self._agent_config = agent_config
-        self._model_router = model_router
-        self._turn_budgets = turn_budgets
+        self._executor = OrchidAgentExecutor(
+            agent,
+            input_guardrails=input_guardrails,
+            output_guardrails=output_guardrails,
+            agent_config=agent_config,
+            model_router=model_router,
+            turn_budgets=turn_budgets,
+            inline_mini_agents=False,
+        )
         self.__name__ = f"{agent.name}_agent"
 
     async def __call__(self, state: GraphState, config: RunnableConfig = None) -> GraphState:
-        auth = auth_from_config(config)
-
-        # Per-agent input rails run before the routing point sees the query, so
-        # blocked content is never shipped to a decision provider (F2).
-        state, redacted_input, blocked = await self._run_input_guardrails(state, auth)
-        if blocked is not None:
-            return blocked
-
-        if self._model_router is None:
-            result = await self._run_after_input_guardrails(state, auth)
-        else:
-            # Ask the ``model_routing`` point once per agent run and bind the
-            # selection for the duration of this coroutine. The routed chat model
-            # reads it on every LLM call, so concurrent runs (and every other
-            # agent) keep their own selection. The budget is shared across every
-            # agent node in the same turn (F4).
-            query = self._agent.extract_user_query(state)
-            budget = self._turn_budgets.for_turn(_turn_key(state)) if self._turn_budgets is not None else None
-            async with self._model_router.bound(query, budget=budget):
-                result = await self._run_after_input_guardrails(state, auth)
-
-        if redacted_input is not None:
-            # The replacement must be part of the node update so the graph
-            # state — not just this agent's in-memory view — holds the redacted
-            # message.
-            result = {**result, "messages": [redacted_input, *result.get("messages", [])]}
-        return result
-
-    async def _run_after_input_guardrails(self, state: GraphState, auth: Any) -> GraphState:
-        decomposer_update = await self._run_decomposer(state, auth)
-        if decomposer_update is not None:
-            decomposer_update.setdefault("active_agents", [])
-            return decomposer_update
-
-        agent_result = await self._run_agent(state, auth)
-
-        await self._run_output_guardrails(state, auth, agent_result)
-
-        agent_result["active_agents"] = []
-        return agent_result
-
-    async def _run_input_guardrails(
-        self,
-        state: GraphState,
-        auth: Any,
-    ) -> tuple[GraphState, HumanMessage | None, GraphState | None]:
-        """Apply per-agent input rails.
-
-        Returns ``(state_after_rails, redacted_message, blocked_update)``.
-        ``state_after_rails`` carries the redacted message into the agent run;
-        ``redacted_message`` is merged into the node update so the graph state
-        keeps the redacted text. A block short-circuits with its update.
-        """
-        if not self._input_guardrails or self._input_guardrails.empty:
-            return state, None, None
-
-        query = self._agent.extract_user_query(state)
-        ctx = OrchidGuardrailContext(
-            direction=OrchidGuardrailDirection.INPUT,
-            agent_name=self._agent.name,
-            tenant_key=auth.tenant_key if auth else "default",
-            user_id=auth.user_id if auth else "",
-            chat_id=state.get("chat_id", ""),
+        return await self._executor.run(
+            state,
+            auth=auth_from_config(config),
+            chat_id=state.get("chat_id") or None,
+            message_id=latest_human_message_id(state),
+            correlation_id=self._agent._current_correlation_id,
         )
-        result = await self._input_guardrails.evaluate(query, ctx)
-        if result.blocked:
-            logger.warning(
-                "[Guardrails] Agent '%s' input blocked by '%s': %s",
-                self._agent.name,
-                result.guardrail_name,
-                result.message,
-            )
-            return (
-                state,
-                None,
-                {
-                    "messages": [AIMessage(content=f"[{self._agent.name.title()} Agent] {result.message}")],
-                    "active_agents": [],
-                },
-            )
-
-        if (
-            result.action == OrchidGuardrailAction.REDACT
-            and result.redacted_content is not None
-            and result.redacted_content != query
-        ):
-            messages = list(state.get("messages", []))
-            # The supervisor appends a dispatch AIMessage (and earlier agents
-            # append their replies), so the user turn is not necessarily last.
-            index = next(
-                (i for i in range(len(messages) - 1, -1, -1) if isinstance(messages[i], HumanMessage)),
-                None,
-            )
-            if index is not None:
-                replacement = messages[index].model_copy(update={"content": result.redacted_content})
-                messages[index] = replacement
-                logger.info("[Guardrails] Agent '%s' input redacted by '%s'", self._agent.name, result.guardrail_name)
-                return {**state, "messages": messages}, replacement, None
-
-        return state, None, None
-
-    async def _run_decomposer(self, state: GraphState, auth: Any) -> GraphState | None:
-        if self._agent_config is None or not self._agent_config.mini_agent.enabled or auth is None:
-            return None
-
-        from ..agents.mini_agent_decomposer import maybe_decompose
-
-        decomp_start = time.perf_counter()
-        update = await maybe_decompose(
-            agent_config=self._agent_config,
-            chat_model=self._agent.chat_model,
-            mcp_clients=self._agent.mcp_clients or [],
-            auth=auth,
-            state=state,
-        )
-        decomp_elapsed = (time.perf_counter() - decomp_start) * 1000
-        perf_logger.info(
-            "[PERF][agent=%s] step=decomposer took %.1f ms (forked=%s)",
-            self._agent.name,
-            decomp_elapsed,
-            bool(update and "mini_agent_decisions" in update),
-        )
-        return update
-
-    async def _run_agent(self, state: GraphState, auth: Any) -> GraphState:
-        # Bind per-request state on a ContextVar so two concurrent
-        # activations of the same agent (LangGraph ``Send()``
-        # fan-out, mini-agent forks, events runner) stay isolated.
-        # ``correlation_id`` inherits the existing binding — the
-        # wrapper does not own it.
-        token = self._agent.set_run_context(
-            OrchidAgentRunContext(
-                auth=auth,
-                correlation_id=self._agent._current_correlation_id,
-                chat_id=state.get("chat_id") or None,
-                message_id=_latest_human_message_id(state),
-            )
-        )
-
-        agent_start = time.perf_counter()
-        perf_logger.info("[PERF][agent=%s] >>> START", self._agent.name)
-        try:
-            result = await self._agent.run(state)
-        except GraphBubbleUp:
-            # HITL ``interrupt()`` and LangGraph control-flow signals must
-            # bubble up to the graph runtime, not be swallowed as agent errors.
-            raise
-        except Exception as exc:
-            logger.exception(
-                "[Graph] Agent '%s' raised an unhandled exception",
-                self._agent.name,
-            )
-            result = {
-                "messages": [
-                    AIMessage(
-                        content=(
-                            f"[{self._agent.name.title()} Agent] I'm temporarily unable to process "
-                            "your request. Please try again in a few moments."
-                        )
-                    )
-                ],
-                "error": f"{type(exc).__name__}: {exc}",
-            }
-        finally:
-            self._agent.reset_run_context(token)
-        agent_elapsed = (time.perf_counter() - agent_start) * 1000
-        perf_logger.info("[PERF][agent=%s] <<< DONE total=%.1f ms", self._agent.name, agent_elapsed)
-        return result
-
-    async def _run_output_guardrails(self, state: GraphState, auth: Any, agent_result: GraphState) -> None:
-        if not self._output_guardrails or self._output_guardrails.empty:
-            return
-
-        agent_messages = agent_result.get("messages", [])
-        if not agent_messages:
-            return
-
-        response_text = str(agent_messages[-1].content) if hasattr(agent_messages[-1], "content") else ""
-        ctx = OrchidGuardrailContext(
-            direction=OrchidGuardrailDirection.OUTPUT,
-            agent_name=self._agent.name,
-            tenant_key=auth.tenant_key if auth else "default",
-            user_id=auth.user_id if auth else "",
-            chat_id=state.get("chat_id", ""),
-            metadata={"rag_context": agent_result.get("rag_context", {}).get(self._agent.name, [])},
-        )
-        result = await self._output_guardrails.evaluate(response_text, ctx)
-        if result.blocked:
-            logger.warning(
-                "[Guardrails] Agent '%s' output blocked by '%s': %s",
-                self._agent.name,
-                result.guardrail_name,
-                result.message,
-            )
-            agent_result["messages"] = [AIMessage(content=f"[{self._agent.name.title()} Agent] {result.message}")]
-        elif result.action == OrchidGuardrailAction.REDACT and result.redacted_content is not None:
-            logger.info("[Guardrails] Agent '%s' output redacted by '%s'", self._agent.name, result.guardrail_name)
-            agent_result["messages"] = [AIMessage(content=result.redacted_content)]
 
 
 def _create_agent_node(
@@ -376,7 +138,7 @@ def _create_agent_node(
     graph's conditional edge fans out into mini-agents.
 
     Returns an :class:`_AgentNodeWrapper` — a callable LangGraph node
-    that delegates to focused per-concern methods.
+    that delegates execution to the shared :class:`OrchidAgentExecutor`.
     """
     return _AgentNodeWrapper(agent, input_guardrails, output_guardrails, agent_config, model_router, turn_budgets)
 
@@ -857,11 +619,26 @@ def _make_route_to_agents(has_output_guardrails: bool = False):
     return route_to_agents
 
 
+def _merge_guardrail_chains(*chains: OrchidGuardrailChain | None) -> OrchidGuardrailChain | None:
+    """Combine guardrail chains in order, dropping empty inputs.
+
+    Pipeline jobs have no supervisor or global guardrail node, so their executor
+    must run the global and per-agent rules in one chain. ``None`` is returned
+    when every input is empty, which keeps the executor's fast path.
+    """
+    rails = [rail for chain in chains if chain is not None for rail in chain.guardrails]
+    if not rails:
+        return None
+    return OrchidGuardrailChain(rails)
+
+
+# ORCHID-MEM: 01a1ef10-9ed5-7bee-8cb7-9ecc818e02af — build_graph exposes leaf pipeline executors with guardrails, routing and inline minis.
 def build_graph(
     *,
     config: OrchidAgentsConfig,
     runtime: OrchidRuntime,
     agents_out: dict[str, OrchidAgent] | None = None,
+    executors_out: dict[str, OrchidAgentExecutor] | None = None,
 ) -> Any:  # returns CompiledGraph
     """
     Build and compile the full agent graph from YAML configuration.
@@ -881,6 +658,12 @@ def build_graph(
         cache warming via
         :class:`orchid_ai.mcp.session_warmer.OrchidSessionWarmer`.
         Child agents inside compiled subgraphs are not exposed.
+    executors_out : dict[str, OrchidAgentExecutor] | None
+        Optional mutable dict populated with one executor per **top-level leaf**
+        agent. Each executor merges the global and per-agent guardrail chains,
+        carries the agent's model router and enables inline mini-agents, so
+        non-chat callers (pipeline agent jobs) reuse the chat execution policy.
+        Parent agents are omitted because their subgraph owns the execution.
     """
     from ..llm_factory import build_chat_model as _build_chat_model
 
@@ -1284,6 +1067,18 @@ def build_graph(
         input_chain = ag[0] if ag else None
         output_chain = ag[1] if ag else None
         agent_config = config.agents.get(agent.name)
+        if executors_out is not None and agent_config is not None and not agent_config.children:
+            # Pipeline jobs are independent activations, so they get a fresh
+            # routing budget from the selector instead of the chat graph's
+            # per-turn registry (which would let identical jobs share a cap).
+            executors_out[agent.name] = OrchidAgentExecutor(
+                agent,
+                input_guardrails=_merge_guardrail_chains(global_input_chain, input_chain),
+                output_guardrails=_merge_guardrail_chains(output_chain, global_output_chain),
+                agent_config=agent_config,
+                model_router=model_routing_routers.get(agent.name),
+                inline_mini_agents=True,
+            )
         g.add_node(
             node_name,
             _create_agent_node(

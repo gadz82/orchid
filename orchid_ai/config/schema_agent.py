@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -22,6 +23,13 @@ from .schema_guardrails import OrchidGuardrailsConfig
 from .schema_llm import OrchidLLMConfig
 from .schema_mcp import OrchidMCPServerConfig, OrchidToolConfig
 from .schema_mini_agent import OrchidMiniAgentConfig
+from .schema_pipeline import (
+    OrchidPipelineAgentJobConfig,
+    OrchidPipelineDecisionJobConfig,
+    OrchidPipelineDefinitionConfig,
+    OrchidPipelineLLMJobConfig,
+    OrchidPipelinesConfig,
+)
 from .schema_prompts import OrchidAgentPromptConfig
 from .schema_rag import OrchidRAGConfig, OrchidRAGDefaultsConfig
 from .schema_skills import (
@@ -262,6 +270,14 @@ class OrchidAgentsConfig(BaseModel):
     # explicit ``events:`` block opts in.
     events: OrchidEventsConfig | None = None
 
+    # Data pipelines — typed DAG execution over an in-memory information
+    # graph.  ``None`` (the default) keeps the block out of the model
+    # entirely: no validation, no registry, no tools.  When present, the
+    # block validates on its own first, then the cross-block pass below
+    # resolves agent/tool/decision-model/trigger references against the
+    # rest of this configuration.
+    pipelines: OrchidPipelinesConfig | None = None
+
     # Database-backed agent config store.  ``enabled=False`` (default)
     # skips the store entirely.  When ``enabled=True``, the store is
     # initialised at bootstrap and its configs are merged into
@@ -305,6 +321,20 @@ class OrchidAgentsConfig(BaseModel):
     def _validate_decision_layer(self) -> OrchidAgentsConfig:
         """Fail at load time on bad references or unsafe egress."""
         validate_decision_bindings(self)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_pipeline_layer(self) -> OrchidAgentsConfig:
+        """Resolve pipeline references against agents, tools, and events.
+
+        The ``pipelines`` block has already validated its own structure and
+        internal references.  This pass only checks what needs the rest of the
+        root configuration; it is skipped entirely when the block is absent so
+        existing YAML loads exactly as before.
+        """
+        if self.pipelines is None:
+            return self
+        _validate_pipeline_bindings(self, self.pipelines)
         return self
 
     def resolve_decision(
@@ -382,9 +412,169 @@ class OrchidAgentsConfig(BaseModel):
                     cfg = OrchidAgentConfig.model_validate(cfg_dict)
                     self.agents[name] = cfg
             validate_decision_bindings(self)
+            if self.pipelines is not None:
+                _validate_pipeline_bindings(self, self.pipelines)
         except Exception:
             self.agents = previous
             raise
+
+
+_PIPELINE_TOOL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
+def _validate_pipeline_bindings(config: OrchidAgentsConfig, pipelines: OrchidPipelinesConfig) -> None:
+    """Check pipeline references that need the whole root configuration.
+
+    Split from :mod:`orchid_ai.config.schema_pipeline` so the pipeline block can
+    parse on its own, without importing agent models or resolving a consumer
+    class. Every problem is collected and reported once.
+    """
+    errors: list[str] = []
+    agents = list(iter_agents(config.agents))
+    top_level_agents = set(config.agents)
+    exposed_tools = _pipeline_exposed_tools(pipelines, config, errors)
+    available_tools = set(config.tools) | set(config.external_agents) | set(exposed_tools)
+
+    for pipeline_name, definition in pipelines.definitions.items():
+        pipeline_label = f"pipeline {pipeline_name!r}"
+        for job_id, job in definition.jobs.items():
+            job_label = f"{pipeline_label} job {job_id!r}"
+            if isinstance(job, OrchidPipelineAgentJobConfig):
+                _resolve_pipeline_agent(
+                    job.agent,
+                    agents,
+                    job_label,
+                    errors,
+                    top_level=top_level_agents,
+                )
+            elif isinstance(job, OrchidPipelineLLMJobConfig):
+                for tool_name in job.tools:
+                    if tool_name not in available_tools:
+                        errors.append(f"{job_label} references unknown tool {tool_name!r}")
+            elif isinstance(job, OrchidPipelineDecisionJobConfig) and (
+                job.decision_model not in config.decision_models
+            ):
+                errors.append(f"{job_label} references unknown decision model {job.decision_model!r}")
+        _validate_pipeline_async(definition, config, pipeline_label, errors)
+
+    if errors:
+        raise ValueError("invalid pipelines configuration: " + "; ".join(errors))
+
+
+def _default_pipeline_tool_name(pipeline_name: str) -> str:
+    """Sanitize and truncate the generated ``pipeline_<name>`` tool name.
+
+    Mirrors spec §8.2.1: characters outside ``[A-Za-z0-9_-]`` become ``_``, a
+    name that does not start with an alphanumeric gets the ``pipeline_``
+    prefix, and the result is capped at 64 characters.
+    """
+    candidate = re.sub(r"[^A-Za-z0-9_-]", "_", f"pipeline_{pipeline_name}")
+    if not candidate or not candidate[0].isalnum():
+        candidate = f"pipeline_{candidate}"
+    return candidate[:64]
+
+
+def _pipeline_exposed_tools(
+    pipelines: OrchidPipelinesConfig,
+    config: OrchidAgentsConfig,
+    errors: list[str],
+) -> dict[str, str]:
+    """Return ``tool_name → pipeline`` for definitions that will be built."""
+    exposed: dict[str, str] = {}
+    if not pipelines.enabled:
+        return exposed
+    for pipeline_name, definition in pipelines.definitions.items():
+        if not definition.enabled or not definition.expose.as_tool:
+            continue
+        tool_name = definition.expose.tool_name or _default_pipeline_tool_name(pipeline_name)
+        if not _PIPELINE_TOOL_NAME_RE.fullmatch(tool_name):
+            errors.append(
+                f"pipeline {pipeline_name!r} exposes invalid tool name {tool_name!r} "
+                "(must match [A-Za-z0-9][A-Za-z0-9_-]{0,63})"
+            )
+            continue
+        if tool_name in exposed:
+            errors.append(
+                f"pipelines {exposed[tool_name]!r} and {pipeline_name!r} expose the same tool name {tool_name!r}"
+            )
+        elif tool_name in config.tools:
+            errors.append(
+                f"pipeline {pipeline_name!r} exposed tool {tool_name!r} collides with a declared built-in tool"
+            )
+        elif tool_name in config.external_agents:
+            errors.append(f"pipeline {pipeline_name!r} exposed tool {tool_name!r} collides with an external agent tool")
+        exposed[tool_name] = pipeline_name
+    return exposed
+
+
+# ORCHID-MEM: 01a1ef10-9f07-72cb-8266-f1ceee2053b1 — Pipeline agent references resolve only top-level leaf agents; nested children are rejected at config load.
+def _resolve_pipeline_agent(
+    name: str,
+    agents: list[tuple[str, Any]],
+    label: str,
+    errors: list[str],
+    *,
+    top_level: set[str] | None = None,
+) -> None:
+    """Resolve a top-level leaf agent by exact name, then by unique short name.
+
+    The pipeline registry is built from ``build_graph``'s top-level agent map;
+    a nested child (``parent.child`` or ``child``) has no instance there, so
+    accepting it at config load would make the build fail later. Rejecting it
+    here keeps configuration and runtime resolution aligned. ``top_level`` is
+    the config's top-level key set, so an agent name containing a dot is not
+    mistaken for a nested path.
+    """
+    by_path = dict(agents)
+    if top_level is None:
+        top_level = {path for path, _agent in agents if "." not in path}
+    top = [(path, by_path[path]) for path in top_level if path in by_path]
+    exact = [(path, agent) for path, agent in top if path == name]
+    if exact:
+        _path, agent = exact[0]
+        if agent.children:
+            errors.append(
+                f"{label} references agent {name!r} which has children; "
+                "pipeline agent jobs require a top-level leaf agent — use multiple jobs or a sub-pipeline."
+            )
+        return
+
+    nested = [
+        path for path, _agent in agents if path not in top_level and (path == name or path.rsplit(".", 1)[-1] == name)
+    ]
+    if nested:
+        errors.append(
+            f"{label} references nested agent {name!r}; pipeline agent jobs can only address top-level agents."
+        )
+        return
+
+    matches = [(path, agent) for path, agent in top if path.rsplit(".", 1)[-1] == name and not agent.children]
+    if not matches:
+        if any(path.rsplit(".", 1)[-1] == name for path, _agent in top):
+            errors.append(
+                f"{label} references agent {name!r} which has children; "
+                "pipeline agent jobs require a top-level leaf agent — use multiple jobs or a sub-pipeline."
+            )
+        else:
+            errors.append(f"{label} references unknown agent {name!r}")
+        return
+    if len(matches) > 1:
+        errors.append(f"{label} agent reference {name!r} is ambiguous; use the full agent path")
+
+
+def _validate_pipeline_async(
+    definition: OrchidPipelineDefinitionConfig,
+    config: OrchidAgentsConfig,
+    label: str,
+    errors: list[str],
+) -> None:
+    """A signal-mode launch needs a real trigger once events are enabled."""
+    async_cfg = definition.async_
+    if not async_cfg.enabled or config.events is None or not config.events.enabled:
+        return
+    trigger_ids = {trigger.id for trigger in config.events.triggers}
+    if async_cfg.trigger_id not in trigger_ids:
+        errors.append(f"{label} async.trigger_id {async_cfg.trigger_id!r} does not match an enabled events trigger")
 
 
 def _inherit_field(agent_obj: Any, defaults_obj: Any, field_name: str) -> None:

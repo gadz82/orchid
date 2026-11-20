@@ -14,6 +14,7 @@ from orchid_ai.bootstrap import _BootstrapResult, _teardown_runtime
 from orchid_ai.config.schema import OrchidAgentsConfig
 from orchid_ai.config.watcher import OrchidConfigWatcherBase
 from orchid_ai.core.agent import OrchidAgent
+from orchid_ai.graph.agent_executor import OrchidAgentExecutor
 from orchid_ai.graph.decision_bindings import bind_decision_points
 from orchid_ai.graph.graph import build_graph
 from orchid_ai.mcp.inventory import OrchidMCPServerInventory
@@ -21,6 +22,44 @@ from orchid_ai.mcp.session_warmer import OrchidSessionWarmer
 from orchid_ai.runtime import OrchidRuntime
 
 logger = logging.getLogger(__name__)
+
+
+def build_pipeline_registry(
+    config: OrchidAgentsConfig,
+    runtime: OrchidRuntime,
+    agents: dict[str, OrchidAgent],
+    *,
+    agent_executors: dict[str, OrchidAgentExecutor] | None = None,
+) -> tuple[Any | None, Any | None]:
+    """Compile the ``pipelines:`` block and return ``(registry, deps)``.
+
+    Built after ``build_graph`` so agent instances, their graph-wired executors
+    and the built-in tool map exist and can be validated at build time. Both
+    values are ``None`` when the block is absent or disabled. The dependencies
+    are retained so the facade can pass them to every runner. A compile failure
+    propagates: it is a configuration error, and the caller decides whether to
+    keep the previous registry (reload) or fail construction.
+    """
+    pipelines = config.pipelines
+    if pipelines is None or not pipelines.enabled:
+        return None, None
+    from orchid_ai.config.tool_registry import list_tools
+    from orchid_ai.pipeline.definition import PipelineDependencies, compile_pipelines
+    from orchid_ai.pipeline.registry import PipelineRegistry
+
+    compiled: dict[str, Any] = {}
+    deps = PipelineDependencies(
+        agents=agents,
+        decision_models=runtime.decision_models,
+        tools={tool.name: tool for tool in list_tools()},
+        signal_emitter=runtime.signal_emitter,
+        agent_configs=dict(config.agents),
+        agent_executors=dict(agent_executors or {}),
+        pipeline_resolver=compiled.get,
+    )
+    definitions = compile_pipelines(pipelines, deps=deps)
+    compiled.update(definitions)
+    return PipelineRegistry(definitions.values()), deps
 
 
 class OrchidLifecycle:
@@ -53,12 +92,35 @@ class OrchidLifecycle:
         self._config_file_hashes = config_file_hashes
         self._closed = False
         self._agents: dict[str, OrchidAgent] = {}
+        self._pipeline_tools: list[Any] = []
+        self._pipeline_tool_names: set[str] = set()
         self._rebuild_lock = asyncio.Lock()
 
+        self._annotate_pipeline_tool_policies(config)
+
         # Build initial graph
-        self._graph = build_graph(config=config, runtime=runtime, agents_out=self._agents)
+        pipeline_executors: dict[str, OrchidAgentExecutor] = {}
+        self._graph = build_graph(
+            config=config,
+            runtime=runtime,
+            agents_out=self._agents,
+            executors_out=pipeline_executors,
+        )
+        self._pipeline_registry, self._pipeline_dependencies = build_pipeline_registry(
+            config,
+            runtime,
+            self._agents,
+            agent_executors=pipeline_executors,
+        )
+        runtime.pipeline_registry = self._pipeline_registry
         self._inventory = OrchidMCPServerInventory.from_config(config)
         self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)
+        self._pipeline_tools = self._build_pipeline_tools(
+            self._pipeline_registry,
+            self._pipeline_dependencies,
+            config,
+        )
+        self._install_pipeline_tools(self._pipeline_tools)
 
     # ── Public accessors ────────────────────────────────────
 
@@ -79,6 +141,21 @@ class OrchidLifecycle:
     def agents(self) -> dict[str, OrchidAgent]:
         """Instantiated agent instances (populated by graph builder)."""
         return self._agents
+
+    @property
+    def pipeline_registry(self) -> Any | None:
+        """Compiled pipeline registry, or ``None`` when no pipeline is configured."""
+        return self._pipeline_registry
+
+    @property
+    def pipeline_dependencies(self) -> Any | None:
+        """Build-time dependency map the registry was compiled with."""
+        return self._pipeline_dependencies
+
+    @property
+    def pipeline_tools(self) -> list[Any]:
+        """Pipeline tools currently registered by this lifecycle."""
+        return list(self._pipeline_tools)
 
     @property
     def chat_repo(self) -> Any | None:
@@ -139,6 +216,9 @@ class OrchidLifecycle:
             previous_warmer = self._session_warmer
             previous_models = self._runtime.decision_models
             previous_bindings = dict(self._runtime.decision_bindings)
+            previous_registry = self._pipeline_registry
+            previous_dependencies = self._pipeline_dependencies
+            previous_tools = self._pipeline_tools
             decision_changed = _decision_config_changed(previous_config, new_snapshot.config)
             new_models = previous_models
 
@@ -154,12 +234,31 @@ class OrchidLifecycle:
                     self._runtime.decision_models = new_models
                 # Refresh bindings against the new config/providers before the
                 # graph is built, so graph wiring sees the new point set.
+                self._annotate_pipeline_tool_policies(new_snapshot.config)
                 bind_decision_points(new_snapshot.config, self._runtime)
                 new_agents: dict[str, OrchidAgent] = {}
+                new_executors: dict[str, OrchidAgentExecutor] = {}
                 new_graph = build_graph(
                     config=new_snapshot.config,
                     runtime=self._runtime,
                     agents_out=new_agents,
+                    executors_out=new_executors,
+                )
+                new_registry, new_dependencies = build_pipeline_registry(
+                    new_snapshot.config,
+                    self._runtime,
+                    new_agents,
+                    agent_executors=new_executors,
+                )
+                new_tools = self._build_pipeline_tools(new_registry, new_dependencies, new_snapshot.config)
+                new_inventory = OrchidMCPServerInventory.from_config(new_snapshot.config)
+                new_warmer = OrchidSessionWarmer(new_inventory, new_agents)
+                removed = set(self._pipeline_tool_names) - {tool.name for tool in new_tools}
+                self._check_removed_tools_in_agents(new_snapshot.config, removed)
+                self._install_pipeline_tools(
+                    new_tools,
+                    previous_tools=self._pipeline_tools,
+                    previous_names=self._pipeline_tool_names,
                 )
             except Exception:
                 logger.exception("[Lifecycle] hot reload failed; keeping the previous config and providers")
@@ -169,6 +268,10 @@ class OrchidLifecycle:
                 self._config = previous_config
                 self._agents = previous_agents
                 self._graph = previous_graph
+                self._pipeline_registry = previous_registry
+                self._pipeline_dependencies = previous_dependencies
+                self._runtime.pipeline_registry = previous_registry
+                self._restore_pipeline_tools(previous_tools)
                 self._inventory = previous_inventory
                 self._session_warmer = previous_warmer
                 if decision_changed:
@@ -179,8 +282,13 @@ class OrchidLifecycle:
             self._config = new_snapshot.config
             self._agents = new_agents
             self._graph = new_graph
-            self._inventory = OrchidMCPServerInventory.from_config(new_snapshot.config)
-            self._session_warmer = OrchidSessionWarmer(self._inventory, self._agents)
+            # The swap is atomic for new runs: an in-flight run holds its own
+            # compiled definition, so replacing the registry cannot change it.
+            self._pipeline_registry = new_registry
+            self._pipeline_dependencies = new_dependencies
+            self._runtime.pipeline_registry = new_registry
+            self._inventory = new_inventory
+            self._session_warmer = new_warmer
             if self._runtime.signal_emitter is not None:
                 for agent in self._agents.values():
                     agent._signal_emitter = self._runtime.signal_emitter
@@ -190,6 +298,213 @@ class OrchidLifecycle:
 
         logger.info("[Orchid] Hot-reloaded graph with %d agent(s)", len(new_snapshot.config.agents))
         return True
+
+    # ── Pipeline tools (ADR-034) ────────────────────────────
+
+    @staticmethod
+    def _annotate_pipeline_tool_policies(config: OrchidAgentsConfig) -> None:
+        """Add generated pipeline tools to each agent's HITL/parallel policy.
+
+        ``OrchidAgentConfig.approval_tools`` is computed from configured tools,
+        MCP tools and external agents before the graph is built. Pipeline tools
+        are generated later from ``pipelines`` definitions, so this pre-graph
+        pass makes ``requires_approval`` and ``parallel_safe`` visible to the
+        existing agentic loop and parallel scheduler.
+        """
+        pipelines = config.pipelines
+        if pipelines is None or not pipelines.enabled:
+            return
+        from orchid_ai.config.schema_agent import iter_agents
+        from orchid_ai.pipeline.tools import sanitize_tool_name
+
+        policies: dict[str, tuple[bool, bool]] = {}
+        for name, definition in pipelines.definitions.items():
+            if not definition.enabled or not definition.expose.as_tool:
+                continue
+            expose = definition.expose
+            tool_name = expose.tool_name or sanitize_tool_name(f"pipeline_{name}")
+            policies[tool_name] = (expose.requires_approval, expose.parallel_safe)
+        for _path, agent_config in iter_agents(config.agents):
+            for tool_name, (requires_approval, parallel_safe) in policies.items():
+                if tool_name not in agent_config.tools:
+                    continue
+                if requires_approval:
+                    agent_config.approval_tools.add(tool_name)
+                if parallel_safe:
+                    agent_config.parallel_safe_builtin_tools.add(tool_name)
+
+    def _build_pipeline_tools(
+        self,
+        registry: Any | None,
+        dependencies: Any | None,
+        config: OrchidAgentsConfig,
+    ) -> list[Any]:
+        """Build the tools for every exposed pipeline without registering them."""
+        if registry is None:
+            return []
+        from orchid_ai.pipeline.launcher import PipelineLauncher
+        from orchid_ai.pipeline.tools import PipelineTool
+
+        launcher = PipelineLauncher(
+            registry=registry,
+            events_config=config.events,
+            signal_emitter_getter=lambda: self._runtime.signal_emitter,
+        )
+        invoker = self._pipeline_invoker(registry, dependencies)
+        tools: list[Any] = []
+        for spec in registry.tool_specs():
+            definition = registry.get(spec.pipeline)
+            timeout = definition.limits.timeout_seconds if definition is not None else None
+            tools.append(
+                PipelineTool(
+                    spec=spec,
+                    invoker=invoker,
+                    launcher=launcher,
+                    default_timeout=timeout,
+                )
+            )
+        return tools
+
+    def _pipeline_invoker(self, registry: Any, dependencies: Any):
+        """Return the sync invoker used by pipeline tools.
+
+        The invoker resolves the definition at call time from the registry it
+        was built with, so a tool installed by a reload always runs the new
+        definition. ``interpretation`` defaults to ``caller`` for tool runs, as
+        specified for conversational use.
+        """
+
+        async def invoke(
+            name: str,
+            input: dict[str, Any],
+            *,
+            auth: Any,
+            chat_id: str | None,
+            correlation_id: str | None,
+            timeout: float | None,
+        ):
+            from orchid_ai.core.pipeline import OrchidPipelineNotFoundError
+            from orchid_ai.pipeline.builder import PipelineExecution
+            from orchid_ai.pipeline.runner import OrchidPipelineRunner
+
+            definition = registry.get(name)
+            if definition is None:
+                raise OrchidPipelineNotFoundError(f"pipeline {name!r} is not configured")
+            runner = OrchidPipelineRunner(
+                definition,
+                deps=dependencies,
+                execution=PipelineExecution(
+                    chat_model=self._runtime.chat_model,
+                    reader=self._runtime.reader,
+                    signal_emitter=self._runtime.signal_emitter,
+                ),
+            )
+            interpretation = definition.definition.expose.interpretation or "caller"
+            return await runner.run(
+                input,
+                auth=auth,
+                chat_id=chat_id,
+                correlation_id=correlation_id,
+                mode="chat",
+                timeout=timeout,
+                include_graph=False,
+                interpretation=interpretation,
+            )
+
+        return invoke
+
+    # ORCHID-MEM: 01a1f37c-20cd-72b4-bc2c-6a062403dd5c — Pipeline tool lifecycle; build, collision-check and swap tools with the registry, owning only the names it created.
+    def _install_pipeline_tools(
+        self,
+        tools: list[Any],
+        *,
+        previous_tools: list[Any] | None = None,
+        previous_names: set[str] | None = None,
+    ) -> None:
+        """Atomically replace the lifecycle-owned pipeline tools.
+
+        Collisions with tools this lifecycle does not own are configuration
+        errors. Registration never clears the global registry; only names in
+        ``previous_names`` are removed before the new set is installed.
+        """
+        from orchid_ai.config.tool_registry import TOOL_REGISTRY, register_tool, unregister
+        from orchid_ai.core.pipeline import OrchidPipelineConfigError
+
+        previous_tools = list(previous_tools or [])
+        previous_names = set(previous_names or ())
+        previous_by_name = {tool.name: tool for tool in previous_tools}
+        new_names = {tool.name for tool in tools}
+        if len(new_names) != len(tools):
+            raise OrchidPipelineConfigError("pipeline tools must have unique names")
+
+        current = TOOL_REGISTRY.get_all()
+        for name, tool in previous_by_name.items():
+            existing = current.get(name)
+            if existing is not None and existing is not tool:
+                raise OrchidPipelineConfigError(
+                    f"pipeline tool {name!r} was replaced by another registration; refusing to overwrite it"
+                )
+
+        collisions = new_names & (set(current) - previous_names)
+        if collisions:
+            owners = {tool.name: tool.pipeline for tool in tools}
+            detail = ", ".join(f"{name!r} (pipeline {owners[name]!r})" for name in sorted(collisions))
+            raise OrchidPipelineConfigError(f"pipeline tools collide with registered tools: {detail}")
+
+        try:
+            for name, tool in previous_by_name.items():
+                if current.get(name) is tool:
+                    unregister(name)
+            for tool in tools:
+                register_tool(tool)
+        except Exception:
+            for name in new_names - previous_names:
+                unregister(name)
+            self._restore_pipeline_tools(previous_tools)
+            raise
+        self._pipeline_tools = list(tools)
+        self._pipeline_tool_names = new_names
+
+    def _restore_pipeline_tools(self, tools: list[Any]) -> None:
+        """Restore exactly the previous tool instances after a failed swap."""
+        from orchid_ai.config.tool_registry import TOOL_REGISTRY, register_tool, unregister
+
+        target_names = {tool.name for tool in tools}
+        current = TOOL_REGISTRY.get_all()
+        for tool in self._pipeline_tools:
+            if tool.name not in target_names and current.get(tool.name) is tool:
+                unregister(tool.name)
+        for tool in tools:
+            register_tool(tool)
+        self._pipeline_tools = list(tools)
+        self._pipeline_tool_names = target_names
+
+    def _unregister_pipeline_tools(self) -> None:
+        from orchid_ai.config.tool_registry import TOOL_REGISTRY, unregister
+
+        current = TOOL_REGISTRY.get_all()
+        for tool in self._pipeline_tools:
+            if current.get(tool.name) is tool:
+                unregister(tool.name)
+        self._pipeline_tools = []
+        self._pipeline_tool_names = set()
+
+    def _check_removed_tools_in_agents(
+        self,
+        config: OrchidAgentsConfig,
+        removed: set[str],
+    ) -> None:
+        if not removed:
+            return
+        from orchid_ai.config.schema_agent import iter_agents
+        from orchid_ai.core.pipeline import OrchidPipelineConfigError
+
+        for agent_name, agent_config in iter_agents(config.agents):
+            referenced = set(agent_config.tools) & removed
+            if referenced:
+                raise OrchidPipelineConfigError(
+                    f"agent {agent_name!r} references removed pipeline tool(s) {sorted(referenced)}"
+                )
 
     # ── Shutdown ────────────────────────────────────────────
 
@@ -203,6 +518,7 @@ class OrchidLifecycle:
         async with self._rebuild_lock:
             if self._closed:
                 return
+            self._unregister_pipeline_tools()
             if not self._owns_resources:
                 self._closed = True
                 return

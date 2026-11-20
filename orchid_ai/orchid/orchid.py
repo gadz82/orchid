@@ -25,6 +25,7 @@ from langgraph.errors import GraphInterrupt
 from orchid_ai.config.schema import OrchidAgentsConfig
 from orchid_ai.config.watcher import OrchidConfigWatcherBase
 from orchid_ai.core.content import OrchidContentSource
+from orchid_ai.core.pipeline import OrchidPipelineResult
 from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.mcp.inventory import OrchidMCPServerInventory
 from orchid_ai.mcp.session_warmer import OrchidSessionWarmer, OrchidWarmReport
@@ -44,9 +45,14 @@ from orchid_ai.persistence.base import OrchidChatStorage
 from orchid_ai.runtime import OrchidRuntime
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from .config.storage import OrchidConfigStorage
     from .core.agent import OrchidAgent
     from .core.mcp import OrchidMCPTokenStore
+    from .core.pipeline import OrchidPipelineEvent, OrchidPipelineObserver
+    from .pipeline.definition import CompiledPipeline
+    from .pipeline.registry import PipelineRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -497,6 +503,11 @@ class Orchid:
         return self._lifecycle.config_storage
 
     @property
+    def pipelines(self) -> PipelineRegistry | None:
+        """Compiled pipeline registry, or ``None`` when no pipeline is configured."""
+        return self._lifecycle.pipeline_registry
+
+    @property
     def _agents(self) -> dict[str, OrchidAgent]:
         """Backward-compat alias — delegates to ``OrchidLifecycle._agents``."""
         return self._lifecycle.agents
@@ -602,6 +613,113 @@ class Orchid:
 
     # ── Shutdown ────────────────────────────────────────────
 
+    # ── Pipelines ───────────────────────────────────────────
+
+    def _require_pipeline(self, name: str) -> CompiledPipeline:
+        """Resolve a compiled pipeline or raise the documented not-found error."""
+        from orchid_ai.core.pipeline import OrchidPipelineNotFoundError
+        from orchid_ai.pipeline.definition import CompiledPipeline as _CompiledPipeline
+        from orchid_ai.pipeline.registry import PipelineRegistry as _PipelineRegistry
+
+        registry = self._lifecycle.pipeline_registry
+        if not isinstance(registry, _PipelineRegistry):
+            raise OrchidPipelineNotFoundError(f"pipeline {name!r} is not configured")
+        definition = registry.get(name)
+        if not isinstance(definition, _CompiledPipeline):
+            raise OrchidPipelineNotFoundError(f"pipeline {name!r} is not configured")
+        return definition
+
+    def _pipeline_runner(self, definition: CompiledPipeline) -> Any:
+        from orchid_ai.pipeline.builder import PipelineExecution
+        from orchid_ai.pipeline.runner import OrchidPipelineRunner
+
+        return OrchidPipelineRunner(
+            definition,
+            deps=self._lifecycle.pipeline_dependencies,
+            execution=PipelineExecution(
+                chat_model=self.runtime.chat_model,
+                reader=self.runtime.reader,
+                signal_emitter=self.runtime.signal_emitter,
+                tool_caller=_pipeline_tool_caller,
+            ),
+        )
+
+    # ORCHID-MEM: 01a1ed8b-249e-7e41-bb9d-049f0ffb4ff0 — Pipeline facade; run and stream a configured pipeline with derived auth, no chat storage and no checkpointer.
+    async def run_pipeline(
+        self,
+        name: str,
+        input: Mapping[str, Any],
+        *,
+        auth: OrchidAuthContext | None = None,
+        user_id: str = "",
+        tenant_id: str = "default",
+        access_token: str = "",
+        chat_id: str | None = None,
+        correlation_id: str | None = None,
+        seed: Sequence[Mapping[str, Any]] = (),
+        mode: str = "direct",
+        timeout: float | None = None,
+        include_graph: bool = True,
+        observer: OrchidPipelineObserver | None = None,
+    ) -> OrchidPipelineResult:
+        """Run a configured pipeline and return its typed result.
+
+        ``auth`` wins; otherwise an :class:`OrchidAuthContext` is built from
+        ``user_id``/``tenant_id``/``access_token``. A pipeline run never creates
+        a chat or persists a message, even in ``mode="chat"``.
+        """
+        self._ensure_open()
+        definition = self._require_pipeline(name)
+        runner = self._pipeline_runner(definition)
+        return await runner.run(
+            input,
+            auth=auth,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            access_token=access_token,
+            chat_id=chat_id,
+            correlation_id=correlation_id,
+            seed=seed,
+            mode="chat" if mode == "chat" else "direct",
+            timeout=timeout,
+            include_graph=include_graph,
+            observer=observer,
+        )
+
+    def stream_pipeline(
+        self,
+        name: str,
+        input: Mapping[str, Any],
+        *,
+        auth: OrchidAuthContext | None = None,
+        user_id: str = "",
+        tenant_id: str = "default",
+        access_token: str = "",
+        chat_id: str | None = None,
+        correlation_id: str | None = None,
+        seed: Sequence[Mapping[str, Any]] = (),
+        mode: str = "direct",
+        timeout: float | None = None,
+        observer: OrchidPipelineObserver | None = None,
+    ) -> AsyncIterator[OrchidPipelineEvent]:
+        """Stream a pipeline run's events; the last event carries the result."""
+        self._ensure_open()
+        definition = self._require_pipeline(name)
+        runner = self._pipeline_runner(definition)
+        return runner.stream(
+            input,
+            auth=auth,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            access_token=access_token,
+            chat_id=chat_id,
+            correlation_id=correlation_id,
+            seed=seed,
+            mode="chat" if mode == "chat" else "direct",
+            timeout=timeout,
+            observer=observer,
+        )
+
     async def close(self) -> None:
         """Release resources owned by this client."""
         await self._lifecycle.close()
@@ -627,3 +745,10 @@ __all__ = [
     "StartupOverrides",
     "StorageOverrides",
 ]
+
+
+async def _pipeline_tool_caller(name: str, **kwargs: Any) -> Any:
+    """Invoke a built-in tool for a pipeline step (MCP belongs to agent jobs)."""
+    from orchid_ai.config.tool_registry import call_tool
+
+    return await call_tool(name, **kwargs)

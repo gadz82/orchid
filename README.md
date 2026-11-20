@@ -31,6 +31,7 @@ Orchid (alias for Orchestrator-Index) lets you define AI agents via YAML configu
 - **HITL graph interrupts** — `requires_approval: true` tools pause the graph; resume via the API or CLI with the user's decision
 - **MCP capability cache warming** — `OrchidSessionWarmer` keeps tool inventories ready so the first agentic round avoids discovery RPCs
 - **Pollen & Bloom (event-driven activation)** — opt-in async substrate that turns external webhooks, cron schedules, and in-graph `emit_signal` calls into background LangGraph runs. Triggers match signals to agent invocations under a synthesised `OrchidAuthContext`; run results can be appended back into a real user chat.
+- **Typed data pipelines** — declarative run-scoped DAGs with deterministic, LLM, agent, decision, map, sub-pipeline and emit jobs, typed shapes/relations and a stable result contract. See [docs/pipelines.md](./docs/pipelines.md).
 - **Document pipeline** — PDF, DOCX, XLSX, CSV, image parsing with pluggable ingestion strategies and post-processors
 
 ## Installation

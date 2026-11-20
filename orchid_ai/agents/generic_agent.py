@@ -596,7 +596,11 @@ class GenericAgent(OrchidAgent):
         state: OrchidAgentState | None,
         response: str,
     ) -> None:
-        if state is None or self._summary_config is None:
+        if state is None:
+            return
+        if not self._persist_memory_allowed():
+            return
+        if self._summary_config is None:
             return
         memory = self._summary_config.get("memory")
         if memory is None:
@@ -804,6 +808,16 @@ class GenericAgent(OrchidAgent):
             await self._persist_running_summary(memory, chat_id, history, running_summary)
         return history
 
+    def _persist_memory_allowed(self) -> bool:
+        """Whether this run may write conversation memory.
+
+        A missing run context keeps the historical behaviour (``True``);
+        pipeline agent jobs bind ``persist_memory=False`` and get no writes
+        from either the conversation-turn path or the running-summary path.
+        """
+        context = self.current_run_context()
+        return context is None or context.persist_memory
+
     @staticmethod
     async def _running_summary(memory: Any | None, chat_id: str) -> str | None:
         """Best-effort fetch of the stored running summary."""
@@ -814,8 +828,8 @@ class GenericAgent(OrchidAgent):
         except Exception:
             return None
 
-    @staticmethod
     async def _persist_running_summary(
+        self,
         memory: Any | None,
         chat_id: str,
         history: list[dict[str, str]],
@@ -825,6 +839,8 @@ class GenericAgent(OrchidAgent):
 
         Exactly one call per decision path: callers that already persisted
         during compression must not also take the ``persist`` branch.
+        ``persist_memory=False`` turns this into a no-op, so the summary path
+        cannot write either.
 
         The delta is the full *extracted* history, because an accepted ``keep``
         can skip compression for several turns. The extracted history is itself
@@ -838,6 +854,8 @@ class GenericAgent(OrchidAgent):
         failures are swallowed, so the line does not prove the write succeeded.
         A future change should log after the write or add a failure signal.
         """
+        if not self._persist_memory_allowed():
+            return
         if memory is None or not chat_id:
             return
         try:

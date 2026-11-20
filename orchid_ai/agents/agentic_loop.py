@@ -706,6 +706,7 @@ class AgenticLoop:
         tool = self._tool_map[fn_name]
         tool_kind = type(tool).__name__
 
+        approval_token = None
         if tool.requires_approval:
             from langgraph.types import interrupt
 
@@ -720,9 +721,18 @@ class AgenticLoop:
             )
             if not decision.get("approved"):
                 return "Tool execution cancelled by user."
+            from ..core.tool import set_tool_approval
 
-        invoke_start = time.perf_counter()
-        result_text = await tool.ainvoke(fn_args)
+            approval_token = set_tool_approval(fn_name)
+
+        try:
+            invoke_start = time.perf_counter()
+            result_text = await tool.ainvoke(fn_args)
+        finally:
+            if approval_token is not None:
+                from ..core.tool import reset_tool_approval
+
+                reset_tool_approval(approval_token)
         invoke_elapsed = (time.perf_counter() - invoke_start) * 1000
         is_error = result_text.startswith("[Tool error]")
         perf_logger.info(

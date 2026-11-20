@@ -6,6 +6,7 @@ import contextvars
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 
 from ..config.schema import OrchidAgentSkillStepConfig
@@ -188,19 +189,17 @@ class SkillExecutor:
             "mcp_context": {},
         }
 
-        # Auth is execution context, not graph state — bind it on the
-        # peer for this direct ``run`` call so the peer reads
-        # ``self._current_auth`` exactly as the graph node wrapper would.
-        # Other run-context fields are inherited from the current
-        # (parent) activation.
-        run_token = peer.set_run_context(
-            OrchidAgentRunContext(
-                auth=auth,
-                correlation_id=peer._current_correlation_id,
-                chat_id=peer._current_chat_id,
-                message_id=peer._current_message_id,
-            )
+        # Auth is execution context, not graph state — bind it on the peer for
+        # this direct ``run`` call so the peer reads ``self._current_auth``
+        # exactly as the executor binds it for a graph node. Every other
+        # per-run field, including the memory policy, is copied from the
+        # current (parent) activation's bound context; with no parent context
+        # the defaults apply.
+        parent_context = peer.current_run_context()
+        peer_context = (
+            replace(parent_context, auth=auth) if parent_context is not None else OrchidAgentRunContext(auth=auth)
         )
+        run_token = peer.set_run_context(peer_context)
         # Increment task-local depth via the ContextVar.  The Token
         depth_token = _skill_depth_var.set(current_depth + 1)
         try:

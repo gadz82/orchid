@@ -14,7 +14,7 @@ import datetime as _dt
 import uuid as _uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 
 class JobStatus(str, Enum):
@@ -80,7 +80,7 @@ class JobSpec:
     # §25 chat binding — opt-in metadata read from the matched
     # signal's ``chat_binding`` AND the trigger's
     # ``respect_chat_binding=true`` flag.  The runner re-validates at
-    # runtime via ``_resolve_chat_binding`` so a signal that hand-
+    # runtime via ``ChatBindingDeliverer.resolve_binding`` so a signal that hand-
     # crafts the binding cannot smuggle messages into chats the
     # resolved auth doesn't own.
     chat_binding: dict[str, Any] | None = None
@@ -89,6 +89,10 @@ class JobSpec:
     # Mutually exclusive with service-account identity (enforced at
     # schema + registry time).
     proactive_chat: bool = False
+    target: Literal["agent", "pipeline"] = "agent"
+    pipeline_name: str | None = None
+    pipeline_input: dict[str, Any] | None = None
+    persist_graph: bool = False
 
 
 @dataclass(slots=True)
