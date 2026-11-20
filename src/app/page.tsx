@@ -206,6 +206,13 @@ export default function HomePage() {
             </Link>
           </div>
 
+          <Link
+            href="/concepts/pipelines"
+            className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-orchid-accent hover:text-orchid-accent-hover transition-colors"
+          >
+            New · Typed data pipelines →
+          </Link>
+
           {/* Provider strip — model-agnosticism is a headline feature */}
           <div className="mt-10 flex flex-col items-center gap-2">
             <span className="text-[11px] font-medium uppercase tracking-widest text-orchid-muted/60">
@@ -232,6 +239,37 @@ export default function HomePage() {
             {PILLARS.map((p) => (
               <PillarCard key={p.title} {...p} />
             ))}
+          </div>
+        </section>
+
+        {/* ── Data pipelines spotlight ───────────────────────── */}
+        <section className="mb-16">
+          <div className="rounded-xl border border-orchid-accent/30 bg-orchid-accent/5 p-6 sm:p-8 flex flex-col lg:flex-row gap-6 lg:items-center lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-orchid-accent mb-2">
+                New · Typed DAGs
+              </p>
+              <h2 className="text-2xl font-bold text-orchid-text mb-2">Data pipelines</h2>
+              <p className="text-orchid-muted text-sm leading-relaxed">
+                Combine deterministic code, LLM jobs, agents, decisions, maps and sub-pipelines over a
+                validated information graph. Run them from Python, HTTP, the CLI, an agent tool or a
+                Pollen/Bloom trigger.
+              </p>
+            </div>
+            <div className="flex gap-3 shrink-0">
+              <Link
+                href="/concepts/pipelines"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-orchid-accent text-white font-medium text-sm hover:bg-orchid-accent-hover transition-colors"
+              >
+                Read the guide →
+              </Link>
+              <Link
+                href="/examples/data-pipeline"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-orchid-border bg-orchid-surface/70 text-orchid-text font-medium text-sm hover:bg-orchid-card hover:border-orchid-accent/40 transition-colors"
+              >
+                See the example
+              </Link>
+            </div>
           </div>
         </section>
 

@@ -13,14 +13,15 @@ sources:
   - "orchid-api/orchid_api/auth.py"
   - "orchid-api/orchid_api/settings.py"
   - "orchid-api/orchid_api/tracing.py"
-related: ["/packages/orchid", "/packages/orchid-frontend", "/packages/orchid-mcp", "/configuration"]
+  - "orchid-api/orchid_api/routers/pipelines.py"
+related: ["/packages/orchid", "/packages/orchid-cli", "/packages/orchid-frontend", "/packages/orchid-mcp", "/concepts/pipelines", "/configuration"]
 example: ""
 external: []
 ---
 
 <RepoLink package="orchid-api" />
 
-`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, and identity bridging. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface. It bundles the **`orchid-storage-sqlite`** plugin, so durable SQLite persistence works out of the box; RAG backends are not bundled — install the corresponding plugin packages alongside it.
+`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, identity bridging, and typed data-pipeline runs. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface. It bundles the **`orchid-storage-sqlite`** plugin, so durable SQLite persistence works out of the box; RAG backends are not bundled — install the corresponding plugin packages alongside it.
 
 ## Installation and startup
 
@@ -73,6 +74,20 @@ Endpoints are split across domain-scoped routers. New endpoints always go into t
 ### `auth_info`, `auth_exchange`, `auth_identity` — Identity bridging
 
 `GET /auth-info` advertises the deployment's auth posture. `POST /auth/exchange-code` and `POST /auth/refresh-token` perform server-side token exchange so `orchid-mcp` and frontends never hold `client_secret`. `POST /auth/resolve-identity` proxies upstream token resolution via the pluggable `OrchidIdentityResolver`.
+
+### `pipelines` — Typed DAG runs
+
+The pipeline router is a thin adapter over `Orchid.run_pipeline` / `stream_pipeline`. It never runs a graph itself and never creates a chat row.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/pipelines` | List configured pipelines (paginated, sanitized) |
+| `GET` | `/pipelines/{name}` | Pipeline detail: jobs, input/output schema, expose/async flags |
+| `POST` | `/pipelines/{name}/validate` | Validate input against the shape without running |
+| `POST` | `/pipelines/{name}/runs` | Sync run (`mode: sync`) or Bloom launch (`mode: async`) |
+| `POST` | `/pipelines/{name}/runs/stream` | SSE `pipeline.*` events; the last event carries the result |
+
+Sync runs return `200` with the typed `output`, `summary`, per-job statuses and `graph_stats`. Invalid input is `422` with `pipeline_input_schema_invalid`; an unknown/disabled pipeline is `404`; a graph snapshot over the cap is `413`; a timeout is `504`. Async runs return `202` with a `status_url` under `/jobs/{trigger_id}/runs`; `seed`, `include_graph` and `timeout_seconds` are sync-only.
 
 ### `admin` — RAG indexing
 

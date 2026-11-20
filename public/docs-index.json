@@ -189,6 +189,22 @@
     "markdown": "/concepts/decision-models.md"
   },
   {
+    "route": "/concepts/pipelines",
+    "title": "Data Pipelines",
+    "description": "Typed, run-scoped DAGs that combine deterministic code, LLM jobs, agents, decisions, maps and sub-pipelines over a validated information graph.",
+    "package": "orchid",
+    "section": "concepts",
+    "tags": [
+      "pipelines",
+      "dag",
+      "typed-data",
+      "agents",
+      "events"
+    ],
+    "sources": "",
+    "markdown": "/concepts/pipelines.md"
+  },
+  {
     "route": "/packages/orchid",
     "title": "orchid",
     "description": "The core Python library: ABCs, agents, graph builder, RAG, and persistence.",
@@ -642,6 +658,37 @@
     ],
     "sources": "",
     "markdown": "/examples/weather.md"
+  },
+  {
+    "route": "/examples/data-pipeline",
+    "title": "Data Pipeline",
+    "description": "Direct typed DAG example: deterministic, LLM, agent, decision, map, sub-pipeline and emit jobs over a synthetic customer-health graph.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "pipelines",
+      "dag",
+      "typed-data",
+      "agents"
+    ],
+    "sources": "",
+    "markdown": "/examples/data-pipeline.md"
+  },
+  {
+    "route": "/examples/data-pipeline-events",
+    "title": "Event-Driven Data Pipeline",
+    "description": "Bloom-triggered typed pipeline: bearer-authenticated webhook, cron schedule, SQLite event storage and chat-bound results.",
+    "package": "cross-cutting",
+    "section": "examples",
+    "tags": [
+      "pipelines",
+      "events",
+      "bloom",
+      "pollen",
+      "schedules"
+    ],
+    "sources": "",
+    "markdown": "/examples/data-pipeline-events.md"
   },
   {
     "route": "/best-practices",

@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-11-16
+Last generated: 2026-11-20
 
 ## Overview
 
@@ -55,6 +55,9 @@ https://orchestratorindex.com/concepts/chat-summarization (markdown: https://orc
 
 Decision Models — A dedicated LLM layer that returns typed, calibrated judgements for internal routing, gating and selection seams — with deterministic fallbacks.
 https://orchestratorindex.com/concepts/decision-models (markdown: https://orchestratorindex.com/concepts/decision-models.md)
+
+Data Pipelines — Typed, run-scoped DAGs that combine deterministic code, LLM jobs, agents, decisions, maps and sub-pipelines over a validated information graph.
+https://orchestratorindex.com/concepts/pipelines (markdown: https://orchestratorindex.com/concepts/pipelines.md)
 
 ## Packages
 
@@ -139,6 +142,12 @@ https://orchestratorindex.com/examples/weather (markdown: https://orchestratorin
 
 Custom Storage Backend — Plug in a custom OrchidChatStorage subclass via the storage.class field.
 https://orchestratorindex.com/examples/custom-storage (markdown: https://orchestratorindex.com/examples/custom-storage.md)
+
+Data Pipeline — Direct typed DAG example: deterministic, LLM, agent, decision, map, sub-pipeline and emit jobs over a synthetic customer-health graph.
+https://orchestratorindex.com/examples/data-pipeline (markdown: https://orchestratorindex.com/examples/data-pipeline.md)
+
+Event-Driven Data Pipeline — Bloom-triggered typed pipeline: bearer-authenticated webhook, cron schedule, SQLite event storage and chat-bound results.
+https://orchestratorindex.com/examples/data-pipeline-events (markdown: https://orchestratorindex.com/examples/data-pipeline-events.md)
 
 RAG Retrieval Strategies — Side-by-side comparison of simple, multi_query, hyde, and a custom recency-weighted retrieval strategy.
 https://orchestratorindex.com/examples/rag-strategies (markdown: https://orchestratorindex.com/examples/rag-strategies.md)

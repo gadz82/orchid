@@ -82,4 +82,6 @@ Behind the scenes, chat history is persisted to PostgreSQL via the `orchid-stora
 
 Explore the [configuration reference](/configuration) for all `orchid.yml` and `agents.yaml` options. Browse the [examples](/examples) for more complex scenarios including helpdesk, restaurant ordering, MCP auth flows, and RAG strategies. The [best practices](/best-practices) guide covers production-ready patterns for scaling Orchid in a real deployment.
 
+When the work has a stable shape, move from chat to a [data pipeline](/concepts/pipelines): a typed, run-scoped DAG that mixes deterministic code, LLM jobs, agents, decisions, maps and sub-pipelines — invokable from Python, HTTP, the CLI, an agent tool or a Bloom trigger. The [direct pipeline example](/examples/data-pipeline) is the quickest end-to-end starting point.
+
 ---

@@ -1,0 +1,127 @@
+---
+title: "Event-Driven Data Pipeline"
+description: "Bloom-triggered typed pipeline: bearer-authenticated webhook, cron schedule, SQLite event storage and chat-bound results."
+package: "cross-cutting"
+section: "examples"
+order: 61
+tags: ["pipelines", "events", "bloom", "pollen", "schedules"]
+sources:
+  - "examples/data_pipeline_events/agents.yaml"
+  - "examples/data_pipeline_events/orchid.yml"
+  - "examples/data_pipeline_events/identity.py"
+  - "examples/data_pipeline_events/README.md"
+related:
+  - "/concepts/pipelines"
+  - "/concepts/pollen-bloom"
+  - "/examples/data-pipeline"
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+This example runs the same customer-health pipeline as the direct example, but
+starts it from Pollen signals instead of a caller:
+
+- a **bearer-authenticated webhook** starts a per-user Bloom run and, when the
+  signal carries a chat binding, posts the pipeline summary back to that chat;
+- a **cron schedule** starts a service-account run every morning.
+
+It uses SQLite for chat and event storage, the HTTP ingestion producer, the
+scheduler producer, `act_as_user` identity minting, `actor`/`tenant` visibility
+and a deterministic decision provider. No frontend, MCP gateway or Qdrant is
+required.
+
+## Run it
+
+From `workspace-py`:
+
+```bash
+make demo-data_pipeline_events    # via script/start_data_pipeline_events.sh
+make run-data_pipeline_events     # docker compose up --build
+```
+
+Or run the example's own compose file:
+
+```bash
+cd examples/data_pipeline_events
+cp .env.example .env
+docker compose up --build
+```
+
+The API listens on `http://localhost:8080`.
+
+## Send a request signal
+
+```bash
+curl -sS -X POST http://localhost:8080/signals \
+  -H 'X-Orchid-Source: customer-health-webhook' \
+  -H 'Authorization: Bearer dev-ingest-token' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "pipeline.customer_health.requested",
+    "tenant_key": "data-pipeline-demo",
+    "user_id": "dev-user",
+    "payload": {"customer_id": "C-100"}
+  }'
+```
+
+The trigger copies `payload` into the pipeline input (`input_from: payload`),
+runs as the signal's user (`act_as_user`) and records `actor` visibility. To
+post the summary to a chat, create a chat and add a binding:
+
+```bash
+curl -sS -X POST http://localhost:8080/chats \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'Content-Type: application/json' -d '{}'
+```
+
+Then include `"chat_binding": {"chat_id": "CHAT_ID", "mode": "append_final_message"}`
+in the signal body. The binding is honored only when the signal user owns the
+chat (or an admin writes it); a foreign chat fails the Bloom run before the
+pipeline starts. The assistant message carries `metadata.origin = "bloom"`, the
+trigger id, the pipeline name and the pipeline run id.
+
+## Schedule
+
+`agents.yaml` declares a daily cron schedule and a matching `cron` trigger:
+
+```yaml
+schedules:
+  - id: customer-health-daily
+    cron: "0 6 * * *"
+    trigger_id: customer-health-scheduled
+    identity: { mode: service_account, name: scheduler }
+```
+
+The scheduler producer emits a synthetic `cron` signal; the trigger runs the
+pipeline with `customer_id: C-SCHEDULED` under the `scheduler` service account.
+Change the cron expression in both the schedule and the trigger to test a
+different cadence.
+
+## Inspect runs
+
+```bash
+curl -sS http://localhost:8080/runs -H 'Authorization: Bearer dev-token'
+curl -sS http://localhost:8080/runs/<run-id> -H 'Authorization: Bearer dev-token'
+```
+
+Request runs are visible to their actor in `data-pipeline-demo`; the scheduled
+run lives in tenant `default` under the service account, so the demo webhook
+identity does not see it. `/schedules` is admin-only in v1.
+
+## Tests
+
+```bash
+cd workspace-py
+../.venv/bin/python -m pytest examples/data_pipeline_events \
+  -m "not integration" --import-mode=importlib -x
+```
+
+The suite covers trigger parsing, HTTP signal ingest, the real pipeline
+`JobRun`, result shape, chat binding and rejection, the schedule producer,
+visibility, the emit sink and the production API adapter. It uses SQLite event
+storage in a temp directory, an in-memory chat store and a deterministic model.
+
+See the [pipelines guide](/concepts/pipelines) and
+[Pollen + Bloom](/concepts/pollen-bloom) for the underlying contracts.

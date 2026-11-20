@@ -1,0 +1,116 @@
+---
+title: "Data Pipeline"
+description: "Direct typed DAG example: deterministic, LLM, agent, decision, map, sub-pipeline and emit jobs over a synthetic customer-health graph."
+package: "cross-cutting"
+section: "examples"
+order: 60
+tags: ["pipelines", "dag", "typed-data", "agents"]
+sources:
+  - "examples/data_pipeline/agents.yaml"
+  - "examples/data_pipeline/orchid.yml"
+  - "examples/data_pipeline/steps.py"
+  - "examples/data_pipeline/README.md"
+related:
+  - "/concepts/pipelines"
+  - "/concepts/agents"
+  - "/concepts/pollen-bloom"
+example: ""
+external: []
+---
+
+## What this demonstrates
+
+The direct data-pipeline example turns a synthetic customer record into a typed
+customer-health report. It exercises every required job kind — deterministic,
+LLM, agent, decision, map, sub-pipeline and emit — in one DAG. The pipeline
+writes typed `Account`, `Usage`, `Assessment`, `Action` and `Report` objects and
+two `has_usage` relations into the run-scoped information graph.
+
+No frontend, no MCP gateway and no Qdrant are required. The API uses SQLite in
+Docker; the test suite uses an in-memory chat backend and a deterministic chat
+model, so it needs neither Ollama nor a network connection.
+
+## Run it
+
+From `workspace-py`:
+
+```bash
+make demo-data_pipeline    # start via script/start_data_pipeline.sh
+make run-data_pipeline     # docker compose up --build
+```
+
+Or run the example's own compose file:
+
+```bash
+cd examples/data_pipeline
+cp .env.example .env
+docker compose up --build
+```
+
+The API listens on `http://localhost:8080`.
+
+## Pipeline shape
+
+```text
+load_account ──► usage_map ──► assess ──► route ──► propose ──► escalate ──► report ──► notify
+      │
+      └────────► snapshot (sub-pipeline: account_snapshot)
+```
+
+| Job | Kind | What it does |
+|---|---|---|
+| `load_account` | deterministic | Writes the synthetic `Account` object |
+| `usage_map` | map | Fans out over `input.regions`, writes one `Usage` per region and links `has_usage` |
+| `assess` | llm | Produces an `Assessment` shape from the account and usage graph |
+| `route` | decision | Selects `retain`, `review` or `escalate` through the stub provider |
+| `propose` | deterministic | Turns the label into an `Action` recommendation |
+| `escalate` | agent | Runs the leaf `advisor` agent for a one-paragraph note |
+| `snapshot` | subpipeline | Runs `account_snapshot` and returns its `Snapshot` output |
+| `report` | llm | Produces the final `Report` shape |
+| `notify` | emit | Emits the completion signal with the report headline |
+
+The output is the typed `Report` (`headline`, `body`, `risk`). The result also
+contains per-job statuses, graph statistics and type counts.
+
+## Call it
+
+```bash
+curl -sS -X POST http://localhost:8080/pipelines/customer_health/runs \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'Content-Type: application/json' \
+  -d '{"input": {"customer_id": "C-100"}, "include_graph": true}'
+```
+
+Or drive it directly with the facade:
+
+```python
+from orchid_ai import Orchid
+
+async with Orchid.from_config_path(
+    "examples/data_pipeline/orchid.yml",
+    agents_config_path="examples/data_pipeline/agents.yaml",
+    chat_storage_class="memory",
+) as orchid:
+    result = await orchid.run_pipeline(
+        "customer_health",
+        {"customer_id": "C-100"},
+        user_id="u-1",
+        tenant_id="t-1",
+        include_graph=True,
+    )
+    print(result.status, result.output)
+```
+
+## Tests
+
+```bash
+cd workspace-py
+../.venv/bin/python -m pytest examples/data_pipeline \
+  -m "not integration" --import-mode=importlib -x
+```
+
+The suite covers the direct facade, the HTTP API, the CLI and the Docker-free
+runner contract. It runs with a deterministic model and synthetic data only.
+See the [pipelines guide](/concepts/pipelines) for the YAML, job and result
+contracts, and the [extension guide](https://github.com/gadz82/orchid/blob/main/docs/pipelines-extension.md)
+for custom steps and shapes.

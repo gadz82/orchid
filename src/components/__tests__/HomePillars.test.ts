@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { PILLARS } from '@/data/pillars';
 
 /**
- * The home grid promises a complete 3x3 set of documented, independently
- * linked pillars. Guards: exactly nine cards, every card fully populated,
- * titles unique, and every href points at a site-local route.
+ * The home grid promises a complete set of documented, independently linked
+ * pillars. Guards: exactly nine cards, every card fully populated, titles
+ * unique, and every href points at a site-local route.
  */
 describe('PILLARS (home feature grid)', () => {
   it('has exactly nine fully populated cards with unique titles', () => {

@@ -11,14 +11,15 @@ sources:
   - "orchid-cli/orchid_cli/main.py"
   - "orchid-cli/orchid_cli/bootstrap.py"
   - "orchid-cli/orchid_cli/commands/"
-related: ["/packages/orchid", "/packages/orchid-api"]
+  - "orchid-cli/orchid_cli/commands/pipeline.py"
+related: ["/packages/orchid", "/packages/orchid-api", "/concepts/pipelines"]
 example: ""
 external: []
 ---
 
 <RepoLink package="orchid-cli" />
 
-`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. It bundles the **`orchid-storage-sqlite`** plugin, so the default storage is durable SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
+`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, persistence and typed data pipelines accessible from a shell script or interactive REPL. It bundles the **`orchid-storage-sqlite`** plugin, so the default storage is durable SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
 
 The CLI bundles the **`orchid-rag-chroma`** plugin as a dependency for zero-infrastructure RAG — vectors live on disk at `~/.orchid/chroma/`, no Qdrant container required. Set `VECTOR_BACKEND=qdrant` and install `orchid-rag-qdrant` to switch when you need sparse/hybrid search or scope promotion.
 
@@ -78,6 +79,17 @@ Authentication is required when MCP servers or tools need a real Bearer token. W
 | `orchid config validate <agents.yaml>` | Validates the agent config against the Pydantic schema; exits non-zero on any error |
 
 Use this in CI pipelines to catch schema errors before deployment.
+
+### `orchid pipeline` — Typed DAG runs
+
+| Command | Purpose |
+|---|---|
+| `orchid pipeline list --config <path>` | List configured pipelines |
+| `orchid pipeline show <name> --config <path>` | Show jobs, schemas and exposure flags |
+| `orchid pipeline validate <name> --config <path> [--input-json JSON]` | Validate input without running |
+| `orchid pipeline run <name> --config <path> [--input-json JSON] [--output pretty/json/yaml] [--include-graph] [--graph-out PATH]` | Run the pipeline |
+
+`list`, `show` and `validate` are offline: they load the config and registry without starting models, MCP or tools. `run` uses the normal facade bootstrap and per-user MCP warm-up. Machine output goes to stdout; verbose events go to stderr. Exit codes: `0` success, `1` internal error, `2` validation, `3` failed/partial, `4` timeout, `5` not found.
 
 ### `orchid index` — RAG ingestion
 

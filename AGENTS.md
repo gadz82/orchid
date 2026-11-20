@@ -125,7 +125,7 @@ external: []             # external links [{label, url}]
 ---
 ```
 
-Bodies are empty in Phase 1. Do **not** add prose until Phase 2+.
+Bodies are Markdown/MDX. Every page must keep the frontmatter contract and cite its sources.
 
 ## `<CodeBlock>` API
 
@@ -153,6 +153,23 @@ In MDX, any fenced code block is automatically wrapped into a single-tab `<CodeB
 1. Add the language key to the `CodeTab['language']` union in `CodeBlock.tsx`.
 2. Add it to `SUPPORTED_LANGS` in `src/lib/shiki.ts`.
 3. Verify the Shiki grammar is in the `shiki` bundle (most common languages are).
+
+## Data pipelines content
+
+The typed data-pipeline feature has a dedicated concept page and two example pages:
+
+- `/concepts/pipelines` → `src/content/concepts/pipelines.mdx` (the full YAML,
+  shapes, job kinds, result, limits, API/CLI and Bloom contract).
+- `/examples/data-pipeline` → `src/content/examples/data-pipeline.mdx` (direct example).
+- `/examples/data-pipeline-events` → `src/content/examples/data-pipeline-events.mdx`
+  (webhook + cron + chat binding).
+
+They are registered in `src/nav.ts` under `concepts` and `examples`; the home
+page mentions the feature through the "New · Typed data pipelines" hero link and
+the dedicated Data Pipelines spotlight section in `src/app/page.tsx`. Keep the `sources` frontmatter aligned with
+`orchid/docs/pipelines.md`, `orchid/docs/pipelines-extension.md` and the two
+examples. Rebuild with `npm test && npm run build`; `check-nav` fails if a nav
+route has no content file.
 
 ## Navigation
 

@@ -2,7 +2,7 @@
 Orchid is a generic, platform-agnostic multi-agent AI framework built on LangGraph (Python) and Next.js.
 Audience: developers building or deploying multi-agent AI systems.
 Each entry below is a documentation page with its URL and description.
-Last generated: 2026-11-16
+Last generated: 2026-11-20
 
 ## Overview
 
@@ -137,6 +137,8 @@ Behind the scenes, chat history is persisted to PostgreSQL via the `orchid-stora
 ## Next steps
 
 Explore the [configuration reference](/configuration) for all `orchid.yml` and `agents.yaml` options. Browse the [examples](/examples) for more complex scenarios including helpdesk, restaurant ordering, MCP auth flows, and RAG strategies. The [best practices](/best-practices) guide covers production-ready patterns for scaling Orchid in a real deployment.
+
+When the work has a stable shape, move from chat to a [data pipeline](/concepts/pipelines): a typed, run-scoped DAG that mixes deterministic code, LLM jobs, agents, decisions, maps and sub-pipelines — invokable from Python, HTTP, the CLI, an agent tool or a Bloom trigger. The [direct pipeline example](/examples/data-pipeline) is the quickest end-to-end starting point.
 
 ---
 
@@ -1322,6 +1324,348 @@ See the [Configuration Reference](/configuration-reference/agents) for the full 
 
 ---
 
+### Data Pipelines
+URL: https://orchestratorindex.com/concepts/pipelines
+Description: Typed, run-scoped DAGs that combine deterministic code, LLM jobs, agents, decisions, maps and sub-pipelines over a validated information graph.
+
+A **data pipeline** is a named, typed DAG of jobs that runs over a **run-scoped
+information graph**. It is the structured counterpart to a chat turn: instead
+of asking a supervisor to choose agents turn by turn, you declare the steps,
+the data each step produces, and the shape of the final result.
+
+Pipelines are built for repeatable work that mixes deterministic code, LLM
+calls and agents over data that must be validated. The same definition can be
+invoked from Python, HTTP, the CLI, an agent tool, or a Pollen/Bloom trigger.
+Pipeline runs never create chat rows and never use a LangGraph checkpointer.
+
+## When to use a pipeline
+
+Use a pipeline when you need one or more of these:
+
+- **A typed contract** — input, intermediate objects and output are validated
+  against named shapes, not passed around as prose.
+- **A repeatable sequence** — deterministic code, an LLM call, a decision, a
+  fan-out and an agent run in a declared order.
+- **An inspectable artefact** — job statuses, durations, object/relation counts
+  and the final typed output are returned with every run.
+- **A schedulable or event-driven unit** — the same pipeline can be triggered by
+  a webhook, a cron schedule or a chat tool.
+- **Isolation from chat** — a pipeline does not write chat history, does not
+  read a chat checkpoint and does not need a chat session at all.
+
+Keep using the chat supervisor for open-ended dialogue and routing. Use a
+pipeline when the work has a stable shape.
+
+## A pipeline in YAML
+
+The definition lives beside the agents in `agents.yaml`:
+
+```yaml
+pipelines:
+  enabled: true
+  defaults:
+    model: ollama/llama3.2
+
+  shapes:
+    Request:
+      fields:
+        customer_id:
+          type: string
+          required: true
+    Report:
+      fields:
+        headline:
+          type: string
+          required: true
+        risk:
+          type: string
+
+  definitions:
+    customer_health:
+      description: "Assess a customer and produce a report."
+      input:
+        shape: Request
+      jobs:
+        load:
+          kind: deterministic
+          uses: examples.data_pipeline.steps.load_account
+        assess:
+          kind: llm
+          prompt: |
+            Assess customer {{ input.customer_id }}.
+            Account: {{ jobs.load.output }}
+          output:
+            shape: Report
+          depends_on: [load]
+      output:
+        shape: Report
+        from: "jobs.assess.output"
+      interpretation:
+        mode: template
+        template: "{{ output.headline }}"
+```
+
+The example above has two jobs. The first is trusted operator code; the second
+renders a prompt from the mapping context, asks the configured chat model for a
+structured `Report`, and the pipeline projects that report as its typed output.
+
+## The run model
+
+```text
+input ──► validate shape ──► run session ──► job 1 ──► job 2 ──► output
+                               │             │          │
+                               ├─ information graph (objects + relations)
+                               ├─ job results + usage
+                               └─ limits, deadline, events
+```
+
+Five concepts explain almost everything:
+
+| Concept | Meaning |
+|---|---|
+| **Pipeline** | A named DAG declared under `pipelines.definitions`. |
+| **Job** | One node. Its `kind` selects the step implementation. |
+| **Run** | One execution with an immutable `run_id`, validated input and an isolated graph. |
+| **Shape** | A named, versioned schema used for input, output and graph writes. |
+| **Object / relation** | Typed nodes and edges in the run's information graph. |
+
+A job declares what it may write. Writes are applied atomically after the job
+returns, so a failed job cannot leave half-written objects behind. Objects and
+relations carry revisions and provenance; the graph is serialized only when
+the caller asks for it and stays within a size cap.
+
+## Shapes and typed writes
+
+Shapes can be declared with fields or imported from a Pydantic model or
+dataclass:
+
+```yaml
+shapes:
+  Account:
+    fields:
+      id: { type: string, required: true }
+      tier: { type: string }
+  Score:
+    class: my_pkg.shapes.Score
+
+relations:
+  has_usage:
+    from: [Account]
+    to: [Usage]
+```
+
+A job writes an object with a declaration such as:
+
+```yaml
+writes:
+  - id: "account:{{ input.customer_id }}"
+    shape: Account
+    as: account
+links:
+  - type: has_usage
+    from: "account:{{ input.customer_id }}"
+    to: "usage:{{ input.customer_id }}:north"
+```
+
+The write id and relation endpoints are templates. The written value is
+validated against the shape; a job may only write relation types declared in
+its own `links` allowlist.
+
+## Job kinds
+
+| Kind | What it does |
+|---|---|
+| `deterministic` | Runs trusted operator code resolved from a dotted path. Sync functions run off the event loop; async functions are awaited. |
+| `llm` | Renders a prompt, optionally retrieves RAG context and built-in tools, and returns a shape-validated structured output with one repair attempt. |
+| `agent` | Runs one top-level leaf agent through the same executor as chat: guardrails, model routing, MCP skills and mini-agents are preserved. |
+| `decision` | Asks a configured decision model to choose one of the declared labels, records confidence, and applies the low-confidence policy. |
+| `map` | Fans out over a list, runs a template job per mapping item with bounded concurrency, and joins the results. |
+| `subpipeline` | Runs another pipeline as a child run with bounded depth and optional graph merge. |
+| `emit` | Renders an identity-only signal envelope and hands it to the configured emitter; it never persists the envelope or includes the bearer token. |
+| `custom` | Loads an `OrchidPipelineStep` subclass from an operator-configured dotted path. |
+
+Every job shares the same policy surface: `depends_on`, `when`, `writes`,
+`links`, `retry`, `timeout_seconds`, `on_error` and `metadata`.
+
+## Mapping context
+
+Prompts, gates, write ids and output projections evaluate against one
+documented context:
+
+| Key | Contents |
+|---|---|
+| `input` | The validated run input. |
+| `run` | Run identity: `run.id`, `pipeline`, `mode`, timestamps. |
+| `jobs` | Per-job results: `jobs.job_id.output`, `.status`, `.kind`, `.error`. |
+| `objects` | Every graph object keyed by id. |
+| `types` | Objects grouped by type. |
+| `aliases` | The latest object written under each alias. |
+| `summary` | The interpretation text, when one already exists. |
+
+`{{ ... }}` renders a value; a bare string documented as JMESPath is evaluated
+directly. Missing paths fail the job instead of silently rendering an empty
+string. Map items add their own binding plus `item`, `index` and
+`parent_job`.
+
+## Results and interpretation
+
+Every run returns an `OrchidPipelineResult`:
+
+| Field | Meaning |
+|---|---|
+| `run_id`, `pipeline` | Run identity and definition name. |
+| `status` | `succeeded`, `partial`, `failed` or `cancelled`. |
+| `output` | The typed output, or `null` when projection failed. |
+| `summary`, `summary_source` | Human-readable summary and how it was produced. |
+| `jobs` | Per-job status, output, duration, LLM/token usage, attempts and errors. |
+| `graph_stats` | Object/relation counts, type counts, bytes, LLM calls and errors. |
+| `graph` | Optional serialized snapshot, capped and opt-in. |
+
+Summary modes are `none`, `template`, `llm` and `caller`. `caller` is the
+deterministic digest used by chat-mode runs; `template` is useful when a
+pipeline has a natural headline; `llm` adds one bounded summarisation call.
+
+## Limits
+
+Defaults live under `pipelines.limits`; a definition may tighten them.
+
+| Limit | Default | Protects |
+|---|---:|---|
+| `max_jobs` | 100 | Declared jobs |
+| `max_objects` | 10,000 | Graph objects |
+| `max_relations` | 50,000 | Graph relations |
+| `max_object_bytes` | 1,000,000 | One serialized object |
+| `max_graph_bytes` | 20,000,000 | Graph snapshot |
+| `max_llm_calls` | 50 | LLM calls per run |
+| `max_prompt_chars` | 32,000 | Rendered prompt |
+| `max_context_chars` | 8,000 | Retrieved context |
+| `max_map_items` | 100 | Items in one map |
+| `max_parallel` | 8 | Concurrent jobs/items |
+| `max_subpipeline_depth` | 3 | Nested child runs |
+
+A run deadline covers the whole graph; per-job timeouts apply per attempt.
+Cancellation is terminal for the remaining jobs.
+
+## Invoking a pipeline
+
+### Python
+
+```python
+from orchid_ai import Orchid
+
+async with Orchid.from_config_path("orchid.yml") as orchid:
+    result = await orchid.run_pipeline(
+        "customer_health",
+        {"customer_id": "C-100"},
+        user_id="alice",
+        tenant_id="acme",
+        include_graph=True,
+    )
+    print(result.status, result.output)
+```
+
+`stream_pipeline(...)` yields `pipeline.started`, `pipeline.job.*` and
+`pipeline.finished` events; the final event carries the result.
+
+### HTTP
+
+The API exposes a stable pipeline surface:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/pipelines` | List configured pipelines |
+| `GET` | `/pipelines/{name}` | Sanitized definition detail |
+| `POST` | `/pipelines/{name}/validate` | Validate input without running |
+| `POST` | `/pipelines/{name}/runs` | Sync run (`mode: sync`) or Bloom launch (`mode: async`) |
+| `POST` | `/pipelines/{name}/runs/stream` | SSE event stream for a sync run |
+
+```bash
+curl -sS -X POST http://localhost:8000/pipelines/customer_health/runs \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'Content-Type: application/json' \
+  -d '{"input": {"customer_id": "C-100"}, "include_graph": true}'
+```
+
+The response carries `status`, `output`, `summary`, `jobs` and `graph_stats`.
+Invalid input is a `422` with `pipeline_input_schema_invalid`; an unknown
+pipeline is `404`; a graph over the cap is `413`. Async runs return `202` with
+a `status_url` under `/jobs/{trigger_id}/runs`.
+
+### CLI
+
+```bash
+orchid pipeline list --config orchid.yml
+orchid pipeline show customer_health --config orchid.yml
+orchid pipeline validate customer_health --config orchid.yml \
+  --input-json '{"customer_id":"C-100"}'
+orchid pipeline run customer_health --config orchid.yml \
+  --input-json '{"customer_id":"C-100"}' --output json
+```
+
+`list`, `show` and `validate` are offline: they do not start models, MCP
+servers or tools. `run` uses the normal facade bootstrap and per-user MCP
+warm-up. Exit codes are `0` success, `1` internal error, `2` validation,
+`3` failed/partial, `4` timeout and `5` not found.
+
+### Agent tool
+
+A pipeline with `expose.as_tool: true` becomes a built-in tool. Registration
+alone does not grant access: the operator must list the tool in the agent's
+`tools:`. The tool returns a bounded structured result plus the summary, and
+the agent writes the user-facing answer.
+
+### Pollen + Bloom
+
+A trigger can target a pipeline with `emits.pipeline`:
+
+```yaml
+events:
+  triggers:
+    - id: customer-health-request
+      "on":
+        signal: pipeline.customer_health.requested
+      emits:
+        pipeline: customer_health
+        input_from: payload
+        identity: { mode: act_as_user, user_id_from: signal.user_id }
+        respect_chat_binding: true
+```
+
+The dispatcher creates a pipeline `JobRun`; the runner materialises auth,
+executes the pipeline and stores the result. With `respect_chat_binding: true`
+and a writable chat, the summary is appended to the bound chat with
+`metadata.origin = "bloom"`. Schedules produce synthetic `cron` signals on the
+same path. Read [Pollen + Bloom](/concepts/pollen-bloom) for the event layer.
+
+## Extending pipelines
+
+The extension surface is intentionally operator-only:
+
+- **Deterministic functions** via `uses: my_pkg.steps.fn`.
+- **Custom step classes** via `kind: custom` + `class: my_pkg.steps.MyStep`.
+- **Registered kinds** via `register_pipeline_step(kind, factory)` for
+  programmatic/plugin pipelines.
+- **Class-based shapes** via `shapes.MyShape.class: my_pkg.shapes.MyShape`.
+
+A custom step is trusted code. It runs with the run's auth, model, reader and
+tool caller; never build `uses`/`class` paths from user input, and never put a
+bearer token in an output, log or signal. The full extension contract is in the
+[Pipeline extension guide](https://github.com/gadz82/orchid/blob/main/docs/pipelines-extension.md).
+
+## Runnable examples
+
+- [Data Pipeline](/examples/data-pipeline) — the direct example: deterministic,
+  LLM, agent, decision, map, sub-pipeline and emit jobs with a typed
+  customer-health report.
+- [Event-Driven Data Pipeline](/examples/data-pipeline-events) — a
+  bearer-authenticated webhook and a cron schedule start the same pipeline;
+  a chat binding posts the summary back to the chat.
+
+Both examples run with a deterministic model in their e2e suites — no API key,
+no network and no Ollama required for tests.
+
+---
+
 ## Packages
 
 ### orchid
@@ -1361,6 +1705,8 @@ async with Orchid.from_config_path("orchid.yml") as orchid:
 
 **Extend** — subclass the ABCs and call the `register_*` hooks exported at the top level (`OrchidAgent`, `OrchidIdentityResolver`, `OrchidChatStorage`, `OrchidVectorReader`, the guardrail / ingestion / retrieval contracts, …). These are *import-time* extension points: you subclass or register them **before** an `Orchid` instance exists, so they sit alongside the facade rather than behind it.
 
+Pipelines are the second run mode on the same facade: `await orchid.run_pipeline(name, input, ...)` executes a typed, run-scoped DAG without creating a chat row or a checkpoint. Define it under `pipelines:` in `agents.yaml`; see [Data Pipelines](/concepts/pipelines).
+
 Lower-level plumbing (the `build_*` factories, concrete built-in backends, LangChain adapters, observability handlers) is intentionally **not** re-exported at the top level — import it from its submodule when you need it:
 
 ```python
@@ -1384,6 +1730,10 @@ Pure Python abstractions with zero external dependencies beyond the standard lib
 ### `graph/`
 
 LangGraph wiring: `build_graph()` factory, the supervisor node, and state definitions. The graph is assembled once at startup from `OrchidAgentsConfig` and reused for every request. See [Supervisor](/concepts/supervisor).
+
+### `pipelines/`
+
+The typed DAG runtime: `config/schema_pipeline.py` for the YAML contract, `pipeline/schema.py` for shape compilation, `pipeline/graph.py` and `session.py` for the run-scoped information graph and atomic commits, `pipeline/definition.py` and `registry.py` for compilation, `pipeline/builder.py` and `runner.py` for execution, and `pipeline/steps/` for the seven built-in job kinds plus custom steps. See [Data Pipelines](/concepts/pipelines).
 
 ### `config/`
 
@@ -1485,7 +1835,7 @@ ruff format orchid_ai/
 URL: https://orchestratorindex.com/packages/orchid-api
 Description: FastAPI server exposing the Orchid framework over HTTP with SSE streaming.
 
-`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, and identity bridging. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface. It bundles the **`orchid-storage-sqlite`** plugin, so durable SQLite persistence works out of the box; RAG backends are not bundled — install the corresponding plugin packages alongside it.
+`orchid-api` is the HTTP layer over the Orchid framework. It imports `orchid-ai` as a dependency and exposes endpoints for chat management, SSE-streamed message handling, document upload and RAG ingestion, identity bridging, and typed data-pipeline runs. All agent logic, graph building, and persistence live in the `orchid` library — this package adds only the FastAPI plumbing and the operator-facing surface. It bundles the **`orchid-storage-sqlite`** plugin, so durable SQLite persistence works out of the box; RAG backends are not bundled — install the corresponding plugin packages alongside it.
 
 ## Installation and startup
 
@@ -1539,6 +1889,20 @@ Endpoints are split across domain-scoped routers. New endpoints always go into t
 
 `GET /auth-info` advertises the deployment's auth posture. `POST /auth/exchange-code` and `POST /auth/refresh-token` perform server-side token exchange so `orchid-mcp` and frontends never hold `client_secret`. `POST /auth/resolve-identity` proxies upstream token resolution via the pluggable `OrchidIdentityResolver`.
 
+### `pipelines` — Typed DAG runs
+
+The pipeline router is a thin adapter over `Orchid.run_pipeline` / `stream_pipeline`. It never runs a graph itself and never creates a chat row.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/pipelines` | List configured pipelines (paginated, sanitized) |
+| `GET` | `/pipelines/{name}` | Pipeline detail: jobs, input/output schema, expose/async flags |
+| `POST` | `/pipelines/{name}/validate` | Validate input against the shape without running |
+| `POST` | `/pipelines/{name}/runs` | Sync run (`mode: sync`) or Bloom launch (`mode: async`) |
+| `POST` | `/pipelines/{name}/runs/stream` | SSE `pipeline.*` events; the last event carries the result |
+
+Sync runs return `200` with the typed `output`, `summary`, per-job statuses and `graph_stats`. Invalid input is `422` with `pipeline_input_schema_invalid`; an unknown/disabled pipeline is `404`; a graph snapshot over the cap is `413`; a timeout is `504`. Async runs return `202` with a `status_url` under `/jobs/{trigger_id}/runs`; `seed`, `include_graph` and `timeout_seconds` are sync-only.
+
 ### `admin` — RAG indexing
 
 `POST /index` triggers document indexing for a given namespace. Used by admin scripts and the CLI when targeting a running API rather than running the library in-process.
@@ -1590,7 +1954,7 @@ Set `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` to enable LangSmith. All
 URL: https://orchestratorindex.com/packages/orchid-cli
 Description: Command-line interface for interacting with Orchid without running the API.
 
-`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, and persistence accessible from a shell script or interactive REPL. It bundles the **`orchid-storage-sqlite`** plugin, so the default storage is durable SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
+`orchid-cli` runs the full Orchid framework in-process from the terminal — no server, no Docker, no external database required. It imports `orchid-ai` directly and mirrors the lifecycle of `orchid-api`, giving you the same agents, tools, RAG, persistence and typed data pipelines accessible from a shell script or interactive REPL. It bundles the **`orchid-storage-sqlite`** plugin, so the default storage is durable SQLite (`~/.orchid/chats.db`); swap in PostgreSQL via `orchid-storage-postgres` when you need it.
 
 The CLI bundles the **`orchid-rag-chroma`** plugin as a dependency for zero-infrastructure RAG — vectors live on disk at `~/.orchid/chroma/`, no Qdrant container required. Set `VECTOR_BACKEND=qdrant` and install `orchid-rag-qdrant` to switch when you need sparse/hybrid search or scope promotion.
 
@@ -1650,6 +2014,17 @@ Authentication is required when MCP servers or tools need a real Bearer token. W
 | `orchid config validate <agents.yaml>` | Validates the agent config against the Pydantic schema; exits non-zero on any error |
 
 Use this in CI pipelines to catch schema errors before deployment.
+
+### `orchid pipeline` — Typed DAG runs
+
+| Command | Purpose |
+|---|---|
+| `orchid pipeline list --config <path>` | List configured pipelines |
+| `orchid pipeline show <name> --config <path>` | Show jobs, schemas and exposure flags |
+| `orchid pipeline validate <name> --config <path> [--input-json JSON]` | Validate input without running |
+| `orchid pipeline run <name> --config <path> [--input-json JSON] [--output pretty/json/yaml] [--include-graph] [--graph-out PATH]` | Run the pipeline |
+
+`list`, `show` and `validate` are offline: they load the config and registry without starting models, MCP or tools. `run` uses the normal facade bootstrap and per-user MCP warm-up. Machine output goes to stdout; verbose events go to stderr. Exit codes: `0` success, `1` internal error, `2` validation, `3` failed/partial, `4` timeout, `5` not found.
 
 ### `orchid index` — RAG ingestion
 
@@ -5923,6 +6298,20 @@ The examples repository contains:
 - Startup hooks and event producers
 - Test suites for each example
 
+### Data pipelines
+
+Two examples are dedicated to the typed data-pipeline feature:
+
+- **[Data Pipeline](/examples/data-pipeline)** — a direct DAG with deterministic,
+  LLM, agent, decision, map, sub-pipeline and emit jobs. It produces a typed
+  customer-health report and runs from Python, HTTP and the CLI.
+- **[Event-Driven Data Pipeline](/examples/data-pipeline-events)** — the same
+  pipeline started by a bearer-authenticated webhook and a cron schedule, with
+  SQLite event storage, `act_as_user` identity and chat-bound results.
+
+Read the [Data Pipelines guide](/concepts/pipelines) for the YAML, shapes,
+job kinds, result contract and limits.
+
 ### Running Examples
 
 Each example can be run in three ways:
@@ -6495,6 +6884,223 @@ persisted to a JSON file by the custom storage backend.
 ## Related concepts
 
 - [Chat Persistence](/concepts/persistence)
+
+---
+
+### Data Pipeline
+URL: https://orchestratorindex.com/examples/data-pipeline
+Description: Direct typed DAG example: deterministic, LLM, agent, decision, map, sub-pipeline and emit jobs over a synthetic customer-health graph.
+
+## What this demonstrates
+
+The direct data-pipeline example turns a synthetic customer record into a typed
+customer-health report. It exercises every required job kind — deterministic,
+LLM, agent, decision, map, sub-pipeline and emit — in one DAG. The pipeline
+writes typed `Account`, `Usage`, `Assessment`, `Action` and `Report` objects and
+two `has_usage` relations into the run-scoped information graph.
+
+No frontend, no MCP gateway and no Qdrant are required. The API uses SQLite in
+Docker; the test suite uses an in-memory chat backend and a deterministic chat
+model, so it needs neither Ollama nor a network connection.
+
+## Run it
+
+From `workspace-py`:
+
+```bash
+make demo-data_pipeline    # start via script/start_data_pipeline.sh
+make run-data_pipeline     # docker compose up --build
+```
+
+Or run the example's own compose file:
+
+```bash
+cd examples/data_pipeline
+cp .env.example .env
+docker compose up --build
+```
+
+The API listens on `http://localhost:8080`.
+
+## Pipeline shape
+
+```text
+load_account ──► usage_map ──► assess ──► route ──► propose ──► escalate ──► report ──► notify
+      │
+      └────────► snapshot (sub-pipeline: account_snapshot)
+```
+
+| Job | Kind | What it does |
+|---|---|---|
+| `load_account` | deterministic | Writes the synthetic `Account` object |
+| `usage_map` | map | Fans out over `input.regions`, writes one `Usage` per region and links `has_usage` |
+| `assess` | llm | Produces an `Assessment` shape from the account and usage graph |
+| `route` | decision | Selects `retain`, `review` or `escalate` through the stub provider |
+| `propose` | deterministic | Turns the label into an `Action` recommendation |
+| `escalate` | agent | Runs the leaf `advisor` agent for a one-paragraph note |
+| `snapshot` | subpipeline | Runs `account_snapshot` and returns its `Snapshot` output |
+| `report` | llm | Produces the final `Report` shape |
+| `notify` | emit | Emits the completion signal with the report headline |
+
+The output is the typed `Report` (`headline`, `body`, `risk`). The result also
+contains per-job statuses, graph statistics and type counts.
+
+## Call it
+
+```bash
+curl -sS -X POST http://localhost:8080/pipelines/customer_health/runs \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'Content-Type: application/json' \
+  -d '{"input": {"customer_id": "C-100"}, "include_graph": true}'
+```
+
+Or drive it directly with the facade:
+
+```python
+from orchid_ai import Orchid
+
+async with Orchid.from_config_path(
+    "examples/data_pipeline/orchid.yml",
+    agents_config_path="examples/data_pipeline/agents.yaml",
+    chat_storage_class="memory",
+) as orchid:
+    result = await orchid.run_pipeline(
+        "customer_health",
+        {"customer_id": "C-100"},
+        user_id="u-1",
+        tenant_id="t-1",
+        include_graph=True,
+    )
+    print(result.status, result.output)
+```
+
+## Tests
+
+```bash
+cd workspace-py
+../.venv/bin/python -m pytest examples/data_pipeline \
+  -m "not integration" --import-mode=importlib -x
+```
+
+The suite covers the direct facade, the HTTP API, the CLI and the Docker-free
+runner contract. It runs with a deterministic model and synthetic data only.
+See the [pipelines guide](/concepts/pipelines) for the YAML, job and result
+contracts, and the [extension guide](https://github.com/gadz82/orchid/blob/main/docs/pipelines-extension.md)
+for custom steps and shapes.
+
+---
+
+### Event-Driven Data Pipeline
+URL: https://orchestratorindex.com/examples/data-pipeline-events
+Description: Bloom-triggered typed pipeline: bearer-authenticated webhook, cron schedule, SQLite event storage and chat-bound results.
+
+## What this demonstrates
+
+This example runs the same customer-health pipeline as the direct example, but
+starts it from Pollen signals instead of a caller:
+
+- a **bearer-authenticated webhook** starts a per-user Bloom run and, when the
+  signal carries a chat binding, posts the pipeline summary back to that chat;
+- a **cron schedule** starts a service-account run every morning.
+
+It uses SQLite for chat and event storage, the HTTP ingestion producer, the
+scheduler producer, `act_as_user` identity minting, `actor`/`tenant` visibility
+and a deterministic decision provider. No frontend, MCP gateway or Qdrant is
+required.
+
+## Run it
+
+From `workspace-py`:
+
+```bash
+make demo-data_pipeline_events    # via script/start_data_pipeline_events.sh
+make run-data_pipeline_events     # docker compose up --build
+```
+
+Or run the example's own compose file:
+
+```bash
+cd examples/data_pipeline_events
+cp .env.example .env
+docker compose up --build
+```
+
+The API listens on `http://localhost:8080`.
+
+## Send a request signal
+
+```bash
+curl -sS -X POST http://localhost:8080/signals \
+  -H 'X-Orchid-Source: customer-health-webhook' \
+  -H 'Authorization: Bearer dev-ingest-token' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "pipeline.customer_health.requested",
+    "tenant_key": "data-pipeline-demo",
+    "user_id": "dev-user",
+    "payload": {"customer_id": "C-100"}
+  }'
+```
+
+The trigger copies `payload` into the pipeline input (`input_from: payload`),
+runs as the signal's user (`act_as_user`) and records `actor` visibility. To
+post the summary to a chat, create a chat and add a binding:
+
+```bash
+curl -sS -X POST http://localhost:8080/chats \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'Content-Type: application/json' -d '{}'
+```
+
+Then include `"chat_binding": {"chat_id": "CHAT_ID", "mode": "append_final_message"}`
+in the signal body. The binding is honored only when the signal user owns the
+chat (or an admin writes it); a foreign chat fails the Bloom run before the
+pipeline starts. The assistant message carries `metadata.origin = "bloom"`, the
+trigger id, the pipeline name and the pipeline run id.
+
+## Schedule
+
+`agents.yaml` declares a daily cron schedule and a matching `cron` trigger:
+
+```yaml
+schedules:
+  - id: customer-health-daily
+    cron: "0 6 * * *"
+    trigger_id: customer-health-scheduled
+    identity: { mode: service_account, name: scheduler }
+```
+
+The scheduler producer emits a synthetic `cron` signal; the trigger runs the
+pipeline with `customer_id: C-SCHEDULED` under the `scheduler` service account.
+Change the cron expression in both the schedule and the trigger to test a
+different cadence.
+
+## Inspect runs
+
+```bash
+curl -sS http://localhost:8080/runs -H 'Authorization: Bearer dev-token'
+curl -sS http://localhost:8080/runs/<run-id> -H 'Authorization: Bearer dev-token'
+```
+
+Request runs are visible to their actor in `data-pipeline-demo`; the scheduled
+run lives in tenant `default` under the service account, so the demo webhook
+identity does not see it. `/schedules` is admin-only in v1.
+
+## Tests
+
+```bash
+cd workspace-py
+../.venv/bin/python -m pytest examples/data_pipeline_events \
+  -m "not integration" --import-mode=importlib -x
+```
+
+The suite covers trigger parsing, HTTP signal ingest, the real pipeline
+`JobRun`, result shape, chat binding and rejection, the schedule producer,
+visibility, the emit sink and the production API adapter. It uses SQLite event
+storage in a temp directory, an in-memory chat store and a deterministic model.
+
+See the [pipelines guide](/concepts/pipelines) and
+[Pollen + Bloom](/concepts/pollen-bloom) for the underlying contracts.
 
 ---
 

@@ -24,6 +24,7 @@ export const navNodes: NavNode[] = [
   { href: '/concepts/pollen-bloom', label: 'Pollen + Bloom', group: 'concepts', order: 21 },
   { href: '/concepts/chat-summarization', label: 'Chat Summarization', group: 'concepts', order: 22 },
   { href: '/concepts/decision-models', label: 'Decision Models', group: 'concepts', order: 23 },
+  { href: '/concepts/pipelines', label: 'Data Pipelines', group: 'concepts', order: 24 },
 
   { href: '/packages/orchid', label: 'orchid', group: 'packages', order: 20 },
   { href: '/packages/orchid-api', label: 'orchid-api', group: 'packages', order: 21 },
@@ -61,10 +62,12 @@ export const navNodes: NavNode[] = [
   { href: '/examples/architecture-review', label: 'Architecture Review', group: 'examples', order: 57 },
   { href: '/examples/postgres-storage', label: 'Postgres Storage', group: 'examples', order: 58 },
   { href: '/examples/weather', label: 'Weather Fleet', group: 'examples', order: 59 },
+  { href: '/examples/data-pipeline', label: 'Data Pipeline', group: 'examples', order: 60 },
+  { href: '/examples/data-pipeline-events', label: 'Event-Driven Pipeline', group: 'examples', order: 61 },
 
-  { href: '/best-practices', label: 'Best Practices', group: 'meta', order: 60 },
-  { href: '/glossary', label: 'Glossary', group: 'meta', order: 61 },
-  { href: '/contact', label: 'Contact', group: 'meta', order: 62 },
+  { href: '/best-practices', label: 'Best Practices', group: 'meta', order: 62 },
+  { href: '/glossary', label: 'Glossary', group: 'meta', order: 63 },
+  { href: '/contact', label: 'Contact', group: 'meta', order: 64 },
 ];
 
 export type NavGroup = {

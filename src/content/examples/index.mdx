@@ -29,6 +29,20 @@ The examples repository contains:
 - Startup hooks and event producers
 - Test suites for each example
 
+### Data pipelines
+
+Two examples are dedicated to the typed data-pipeline feature:
+
+- **[Data Pipeline](/examples/data-pipeline)** — a direct DAG with deterministic,
+  LLM, agent, decision, map, sub-pipeline and emit jobs. It produces a typed
+  customer-health report and runs from Python, HTTP and the CLI.
+- **[Event-Driven Data Pipeline](/examples/data-pipeline-events)** — the same
+  pipeline started by a bearer-authenticated webhook and a cron schedule, with
+  SQLite event storage, `act_as_user` identity and chat-bound results.
+
+Read the [Data Pipelines guide](/concepts/pipelines) for the YAML, shapes,
+job kinds, result contract and limits.
+
 ### Running Examples
 
 Each example can be run in three ways:

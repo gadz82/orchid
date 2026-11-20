@@ -14,7 +14,9 @@ sources:
   - "orchid/orchid_ai/core/mcp.py"
   - "orchid/orchid_ai/core/repository.py"
   - "orchid/orchid_ai/persistence/base.py"
-related: ["/packages/orchid-api", "/packages/orchid-cli", "/concepts/agents"]
+  - "orchid/orchid_ai/pipeline/runner.py"
+  - "orchid/docs/pipelines.md"
+related: ["/packages/orchid-api", "/packages/orchid-cli", "/concepts/agents", "/concepts/pipelines"]
 example: ""
 external: []
 ---
@@ -54,6 +56,8 @@ async with Orchid.from_config_path("orchid.yml") as orchid:
 
 **Extend** — subclass the ABCs and call the `register_*` hooks exported at the top level (`OrchidAgent`, `OrchidIdentityResolver`, `OrchidChatStorage`, `OrchidVectorReader`, the guardrail / ingestion / retrieval contracts, …). These are *import-time* extension points: you subclass or register them **before** an `Orchid` instance exists, so they sit alongside the facade rather than behind it.
 
+Pipelines are the second run mode on the same facade: `await orchid.run_pipeline(name, input, ...)` executes a typed, run-scoped DAG without creating a chat row or a checkpoint. Define it under `pipelines:` in `agents.yaml`; see [Data Pipelines](/concepts/pipelines).
+
 Lower-level plumbing (the `build_*` factories, concrete built-in backends, LangChain adapters, observability handlers) is intentionally **not** re-exported at the top level — import it from its submodule when you need it:
 
 ```python
@@ -77,6 +81,10 @@ Pure Python abstractions with zero external dependencies beyond the standard lib
 ### `graph/`
 
 LangGraph wiring: `build_graph()` factory, the supervisor node, and state definitions. The graph is assembled once at startup from `OrchidAgentsConfig` and reused for every request. See [Supervisor](/concepts/supervisor).
+
+### `pipelines/`
+
+The typed DAG runtime: `config/schema_pipeline.py` for the YAML contract, `pipeline/schema.py` for shape compilation, `pipeline/graph.py` and `session.py` for the run-scoped information graph and atomic commits, `pipeline/definition.py` and `registry.py` for compilation, `pipeline/builder.py` and `runner.py` for execution, and `pipeline/steps/` for the seven built-in job kinds plus custom steps. See [Data Pipelines](/concepts/pipelines).
 
 ### `config/`
 

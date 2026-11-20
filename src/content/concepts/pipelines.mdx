@@ -1,0 +1,377 @@
+---
+title: "Data Pipelines"
+description: "Typed, run-scoped DAGs that combine deterministic code, LLM jobs, agents, decisions, maps and sub-pipelines over a validated information graph."
+package: "orchid"
+section: "concepts"
+order: 24
+tags: ["pipelines", "dag", "typed-data", "agents", "events"]
+sources:
+  - "orchid/docs/pipelines.md"
+  - "orchid/docs/pipelines-extension.md"
+  - "orchid/orchid_ai/config/schema_pipeline.py"
+  - "orchid/orchid_ai/pipeline/runner.py"
+  - "orchid/orchid_ai/pipeline/steps/"
+  - "examples/data_pipeline/agents.yaml"
+  - "examples/data_pipeline_events/agents.yaml"
+related:
+  - "/concepts/agents"
+  - "/concepts/pollen-bloom"
+  - "/examples/data-pipeline"
+  - "/examples/data-pipeline-events"
+example: "/examples/data-pipeline"
+external:
+  - label: "Pipeline YAML reference"
+    url: "https://github.com/gadz82/orchid/blob/main/docs/pipelines.md"
+  - label: "Pipeline extension guide"
+    url: "https://github.com/gadz82/orchid/blob/main/docs/pipelines-extension.md"
+---
+
+<Callout variant="info" title="Pipelines are opt-in">
+  Add a `pipelines:` block to `agents.yaml` to define one or more pipelines. A
+  config without that block behaves exactly as before — no registry, graph,
+  tools, or validation overhead.
+</Callout>
+
+A **data pipeline** is a named, typed DAG of jobs that runs over a **run-scoped
+information graph**. It is the structured counterpart to a chat turn: instead
+of asking a supervisor to choose agents turn by turn, you declare the steps,
+the data each step produces, and the shape of the final result.
+
+Pipelines are built for repeatable work that mixes deterministic code, LLM
+calls and agents over data that must be validated. The same definition can be
+invoked from Python, HTTP, the CLI, an agent tool, or a Pollen/Bloom trigger.
+Pipeline runs never create chat rows and never use a LangGraph checkpointer.
+
+## When to use a pipeline
+
+Use a pipeline when you need one or more of these:
+
+- **A typed contract** — input, intermediate objects and output are validated
+  against named shapes, not passed around as prose.
+- **A repeatable sequence** — deterministic code, an LLM call, a decision, a
+  fan-out and an agent run in a declared order.
+- **An inspectable artefact** — job statuses, durations, object/relation counts
+  and the final typed output are returned with every run.
+- **A schedulable or event-driven unit** — the same pipeline can be triggered by
+  a webhook, a cron schedule or a chat tool.
+- **Isolation from chat** — a pipeline does not write chat history, does not
+  read a chat checkpoint and does not need a chat session at all.
+
+Keep using the chat supervisor for open-ended dialogue and routing. Use a
+pipeline when the work has a stable shape.
+
+## A pipeline in YAML
+
+The definition lives beside the agents in `agents.yaml`:
+
+```yaml
+pipelines:
+  enabled: true
+  defaults:
+    model: ollama/llama3.2
+
+  shapes:
+    Request:
+      fields:
+        customer_id:
+          type: string
+          required: true
+    Report:
+      fields:
+        headline:
+          type: string
+          required: true
+        risk:
+          type: string
+
+  definitions:
+    customer_health:
+      description: "Assess a customer and produce a report."
+      input:
+        shape: Request
+      jobs:
+        load:
+          kind: deterministic
+          uses: examples.data_pipeline.steps.load_account
+        assess:
+          kind: llm
+          prompt: |
+            Assess customer {{ input.customer_id }}.
+            Account: {{ jobs.load.output }}
+          output:
+            shape: Report
+          depends_on: [load]
+      output:
+        shape: Report
+        from: "jobs.assess.output"
+      interpretation:
+        mode: template
+        template: "{{ output.headline }}"
+```
+
+The example above has two jobs. The first is trusted operator code; the second
+renders a prompt from the mapping context, asks the configured chat model for a
+structured `Report`, and the pipeline projects that report as its typed output.
+
+## The run model
+
+```text
+input ──► validate shape ──► run session ──► job 1 ──► job 2 ──► output
+                               │             │          │
+                               ├─ information graph (objects + relations)
+                               ├─ job results + usage
+                               └─ limits, deadline, events
+```
+
+Five concepts explain almost everything:
+
+| Concept | Meaning |
+|---|---|
+| **Pipeline** | A named DAG declared under `pipelines.definitions`. |
+| **Job** | One node. Its `kind` selects the step implementation. |
+| **Run** | One execution with an immutable `run_id`, validated input and an isolated graph. |
+| **Shape** | A named, versioned schema used for input, output and graph writes. |
+| **Object / relation** | Typed nodes and edges in the run's information graph. |
+
+A job declares what it may write. Writes are applied atomically after the job
+returns, so a failed job cannot leave half-written objects behind. Objects and
+relations carry revisions and provenance; the graph is serialized only when
+the caller asks for it and stays within a size cap.
+
+## Shapes and typed writes
+
+Shapes can be declared with fields or imported from a Pydantic model or
+dataclass:
+
+```yaml
+shapes:
+  Account:
+    fields:
+      id: { type: string, required: true }
+      tier: { type: string }
+  Score:
+    class: my_pkg.shapes.Score
+
+relations:
+  has_usage:
+    from: [Account]
+    to: [Usage]
+```
+
+A job writes an object with a declaration such as:
+
+```yaml
+writes:
+  - id: "account:{{ input.customer_id }}"
+    shape: Account
+    as: account
+links:
+  - type: has_usage
+    from: "account:{{ input.customer_id }}"
+    to: "usage:{{ input.customer_id }}:north"
+```
+
+The write id and relation endpoints are templates. The written value is
+validated against the shape; a job may only write relation types declared in
+its own `links` allowlist.
+
+## Job kinds
+
+| Kind | What it does |
+|---|---|
+| `deterministic` | Runs trusted operator code resolved from a dotted path. Sync functions run off the event loop; async functions are awaited. |
+| `llm` | Renders a prompt, optionally retrieves RAG context and built-in tools, and returns a shape-validated structured output with one repair attempt. |
+| `agent` | Runs one top-level leaf agent through the same executor as chat: guardrails, model routing, MCP skills and mini-agents are preserved. |
+| `decision` | Asks a configured decision model to choose one of the declared labels, records confidence, and applies the low-confidence policy. |
+| `map` | Fans out over a list, runs a template job per mapping item with bounded concurrency, and joins the results. |
+| `subpipeline` | Runs another pipeline as a child run with bounded depth and optional graph merge. |
+| `emit` | Renders an identity-only signal envelope and hands it to the configured emitter; it never persists the envelope or includes the bearer token. |
+| `custom` | Loads an `OrchidPipelineStep` subclass from an operator-configured dotted path. |
+
+Every job shares the same policy surface: `depends_on`, `when`, `writes`,
+`links`, `retry`, `timeout_seconds`, `on_error` and `metadata`.
+
+<Callout variant="warning" title="v1 scheduling note">
+  `depends_on` wires scheduling edges, not an all-predecessor barrier. In v1 a
+  job with multiple independent predecessors can start when the first
+  predecessor triggers it. For a strict sequence, chain jobs with one
+  predecessor each. `join: any` is the supported convergence point for mutually
+  exclusive decision branches.
+</Callout>
+
+## Mapping context
+
+Prompts, gates, write ids and output projections evaluate against one
+documented context:
+
+| Key | Contents |
+|---|---|
+| `input` | The validated run input. |
+| `run` | Run identity: `run.id`, `pipeline`, `mode`, timestamps. |
+| `jobs` | Per-job results: `jobs.job_id.output`, `.status`, `.kind`, `.error`. |
+| `objects` | Every graph object keyed by id. |
+| `types` | Objects grouped by type. |
+| `aliases` | The latest object written under each alias. |
+| `summary` | The interpretation text, when one already exists. |
+
+`{{ ... }}` renders a value; a bare string documented as JMESPath is evaluated
+directly. Missing paths fail the job instead of silently rendering an empty
+string. Map items add their own binding plus `item`, `index` and
+`parent_job`.
+
+## Results and interpretation
+
+Every run returns an `OrchidPipelineResult`:
+
+| Field | Meaning |
+|---|---|
+| `run_id`, `pipeline` | Run identity and definition name. |
+| `status` | `succeeded`, `partial`, `failed` or `cancelled`. |
+| `output` | The typed output, or `null` when projection failed. |
+| `summary`, `summary_source` | Human-readable summary and how it was produced. |
+| `jobs` | Per-job status, output, duration, LLM/token usage, attempts and errors. |
+| `graph_stats` | Object/relation counts, type counts, bytes, LLM calls and errors. |
+| `graph` | Optional serialized snapshot, capped and opt-in. |
+
+Summary modes are `none`, `template`, `llm` and `caller`. `caller` is the
+deterministic digest used by chat-mode runs; `template` is useful when a
+pipeline has a natural headline; `llm` adds one bounded summarisation call.
+
+## Limits
+
+Defaults live under `pipelines.limits`; a definition may tighten them.
+
+| Limit | Default | Protects |
+|---|---:|---|
+| `max_jobs` | 100 | Declared jobs |
+| `max_objects` | 10,000 | Graph objects |
+| `max_relations` | 50,000 | Graph relations |
+| `max_object_bytes` | 1,000,000 | One serialized object |
+| `max_graph_bytes` | 20,000,000 | Graph snapshot |
+| `max_llm_calls` | 50 | LLM calls per run |
+| `max_prompt_chars` | 32,000 | Rendered prompt |
+| `max_context_chars` | 8,000 | Retrieved context |
+| `max_map_items` | 100 | Items in one map |
+| `max_parallel` | 8 | Concurrent jobs/items |
+| `max_subpipeline_depth` | 3 | Nested child runs |
+
+A run deadline covers the whole graph; per-job timeouts apply per attempt.
+Cancellation is terminal for the remaining jobs.
+
+## Invoking a pipeline
+
+### Python
+
+```python
+from orchid_ai import Orchid
+
+async with Orchid.from_config_path("orchid.yml") as orchid:
+    result = await orchid.run_pipeline(
+        "customer_health",
+        {"customer_id": "C-100"},
+        user_id="alice",
+        tenant_id="acme",
+        include_graph=True,
+    )
+    print(result.status, result.output)
+```
+
+`stream_pipeline(...)` yields `pipeline.started`, `pipeline.job.*` and
+`pipeline.finished` events; the final event carries the result.
+
+### HTTP
+
+The API exposes a stable pipeline surface:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/pipelines` | List configured pipelines |
+| `GET` | `/pipelines/{name}` | Sanitized definition detail |
+| `POST` | `/pipelines/{name}/validate` | Validate input without running |
+| `POST` | `/pipelines/{name}/runs` | Sync run (`mode: sync`) or Bloom launch (`mode: async`) |
+| `POST` | `/pipelines/{name}/runs/stream` | SSE event stream for a sync run |
+
+```bash
+curl -sS -X POST http://localhost:8000/pipelines/customer_health/runs \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'Content-Type: application/json' \
+  -d '{"input": {"customer_id": "C-100"}, "include_graph": true}'
+```
+
+The response carries `status`, `output`, `summary`, `jobs` and `graph_stats`.
+Invalid input is a `422` with `pipeline_input_schema_invalid`; an unknown
+pipeline is `404`; a graph over the cap is `413`. Async runs return `202` with
+a `status_url` under `/jobs/{trigger_id}/runs`.
+
+### CLI
+
+```bash
+orchid pipeline list --config orchid.yml
+orchid pipeline show customer_health --config orchid.yml
+orchid pipeline validate customer_health --config orchid.yml \
+  --input-json '{"customer_id":"C-100"}'
+orchid pipeline run customer_health --config orchid.yml \
+  --input-json '{"customer_id":"C-100"}' --output json
+```
+
+`list`, `show` and `validate` are offline: they do not start models, MCP
+servers or tools. `run` uses the normal facade bootstrap and per-user MCP
+warm-up. Exit codes are `0` success, `1` internal error, `2` validation,
+`3` failed/partial, `4` timeout and `5` not found.
+
+### Agent tool
+
+A pipeline with `expose.as_tool: true` becomes a built-in tool. Registration
+alone does not grant access: the operator must list the tool in the agent's
+`tools:`. The tool returns a bounded structured result plus the summary, and
+the agent writes the user-facing answer.
+
+### Pollen + Bloom
+
+A trigger can target a pipeline with `emits.pipeline`:
+
+```yaml
+events:
+  triggers:
+    - id: customer-health-request
+      "on":
+        signal: pipeline.customer_health.requested
+      emits:
+        pipeline: customer_health
+        input_from: payload
+        identity: { mode: act_as_user, user_id_from: signal.user_id }
+        respect_chat_binding: true
+```
+
+The dispatcher creates a pipeline `JobRun`; the runner materialises auth,
+executes the pipeline and stores the result. With `respect_chat_binding: true`
+and a writable chat, the summary is appended to the bound chat with
+`metadata.origin = "bloom"`. Schedules produce synthetic `cron` signals on the
+same path. Read [Pollen + Bloom](/concepts/pollen-bloom) for the event layer.
+
+## Extending pipelines
+
+The extension surface is intentionally operator-only:
+
+- **Deterministic functions** via `uses: my_pkg.steps.fn`.
+- **Custom step classes** via `kind: custom` + `class: my_pkg.steps.MyStep`.
+- **Registered kinds** via `register_pipeline_step(kind, factory)` for
+  programmatic/plugin pipelines.
+- **Class-based shapes** via `shapes.MyShape.class: my_pkg.shapes.MyShape`.
+
+A custom step is trusted code. It runs with the run's auth, model, reader and
+tool caller; never build `uses`/`class` paths from user input, and never put a
+bearer token in an output, log or signal. The full extension contract is in the
+[Pipeline extension guide](https://github.com/gadz82/orchid/blob/main/docs/pipelines-extension.md).
+
+## Runnable examples
+
+- [Data Pipeline](/examples/data-pipeline) — the direct example: deterministic,
+  LLM, agent, decision, map, sub-pipeline and emit jobs with a typed
+  customer-health report.
+- [Event-Driven Data Pipeline](/examples/data-pipeline-events) — a
+  bearer-authenticated webhook and a cron schedule start the same pipeline;
+  a chat binding posts the summary back to the chat.
+
+Both examples run with a deterministic model in their e2e suites — no API key,
+no network and no Ollama required for tests.
