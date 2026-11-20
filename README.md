@@ -1585,6 +1585,38 @@ The first agentic round normally needs an MCP `tools/list` /
 Manual flush via `OrchidMCPClient.invalidate_cache()` or
 `OrchidSessionWarmer.invalidate_user(auth)`.
 
+## Data Pipelines
+
+Pipelines are typed, run-scoped DAGs declared under `pipelines:` in
+`agents.yaml`. A pipeline mixes deterministic functions, LLM jobs, leaf agents,
+decision models, map fan-out, sub-pipelines and signal emits over an information
+graph of validated objects and relations. It runs on its own graph with no
+checkpointer and no chat storage, and returns a typed output plus per-job
+statuses, usage and graph statistics.
+
+```python
+result = await orchid.run_pipeline(
+    "customer_health",
+    {"customer_id": "C-100"},
+    user_id="alice",
+    tenant_id="acme",
+    include_graph=True,
+)
+```
+
+The same definition is callable from `orchid-api` (`/pipelines`), `orchid-cli`
+(`orchid pipeline ...`), an exposed agent tool and a Pollen/Bloom trigger.
+
+- [`docs/pipelines.md`](docs/pipelines.md) — concept, YAML, shapes/relations,
+  job kinds, mapping, results, limits, CLI/API and security.
+- [`docs/pipelines-extension.md`](docs/pipelines-extension.md) — custom steps,
+  registered kinds, class-based shapes and the operator trust boundary.
+- [`examples/data_pipeline/`](../examples/data_pipeline/) and
+  [`examples/data_pipeline_events/`](../examples/data_pipeline_events/) —
+  runnable direct and event-driven examples.
+- [Documentation site](https://orchestratorindex.com/concepts/pipelines) — the
+  same material with site navigation.
+
 ## Embedding Dimensions
 
 | Model | Dimensions |

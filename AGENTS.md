@@ -25,11 +25,22 @@ orchid/
                             (inbound gateway DCR clients + auth codes + tokens)
       repository.py       OrchidVectorReader / OrchidVectorWriter / OrchidVectorStoreAdmin ABCs
     config/               YAML config loader + schema + tool registry (parameter metadata)
+      schema_pipeline.py     pipelines: shapes, relations, jobs, defaults, limits
       storage.py            OrchidConfigStorage ABC
       storage_factory.py    build_config_storage() factory
       schema_storage.py     OrchidConfigStorageConfig Pydantic model
     agents/               GenericAgent + strategies (SkillDetector, MCPDispatcher, SkillExecutor)
     graph/                LangGraph wiring: supervisor.py, graph.py, state.py
+    pipeline/             Typed data-pipeline runtime:
+      schema.py             Shape compiler (field/class shapes, JSON Schema)
+      graph.py              Run-scoped information graph + revisions + mutations
+      session.py            Run session: auth, graph, limits, deadline, atomic commits
+      mapping.py            JMESPath context + {{ }} renderer
+      definition.py         CompiledPipeline/CompiledJob + DAG validation
+      registry.py           PipelineRegistry + register_pipeline_step
+      builder.py            LangGraph topology (work=? no checkpointer)
+      runner.py             OrchidPipelineRunner + result assembly
+      steps/                deterministic, llm, agent, decision, map, subpipeline, emit, custom
     rag/                  Scopes, indexer, embeddings, factory, backends/qdrant.py
     documents/            Parsers (PDF/DOCX/XLSX/CSV/Image), chunker, pipeline
     persistence/          Storage contracts + in-memory default + migration-runner ABC:
@@ -57,6 +68,9 @@ orchid/
 graph/ → agents/ → core/
          agents/ → rag/ → core/
          agents/ → mcp/ → core/
+pipeline/ → core/
+pipeline/steps/ → core/pipeline.py + injected context (no concrete adapter imports)
+events/ → pipeline/ only in the runner adapter
 persistence/ → core/  (standalone)
 documents/   → core/  (standalone)
 ```
@@ -82,6 +96,8 @@ documents/   → core/  (standalone)
 | `OrchidVectorWriter` | `repository.py` | Vector store indexing |
 | `OrchidVectorStoreAdmin` | `repository.py` | Collection management |
 | `OrchidChatStorage` | `persistence/base.py` | Chat CRUD + message persistence |
+| `OrchidPipelineStep` | `core/pipeline.py` | Custom pipeline job contract (`execute(ctx)`), registered by kind or dotted class |
+| `OrchidPipelineObserver` | `core/pipeline.py` | Run event port used by SSE, logs and metrics |
 
 **LLM abstraction:** Orchid uses LangChain's `BaseChatModel` directly (no custom ABC). Use `build_chat_model(model_string)` factory to create one from a LiteLLM-style model string.
 
@@ -138,6 +154,43 @@ documents/   → core/  (standalone)
 12. **Built-in tool parameters are declared in YAML or auto-extracted.** The `tools:` section in `agents.yaml` supports an optional `parameters:` block per tool. When declared, YAML parameters take precedence. When omitted, parameters are auto-extracted from the Python function signature via `inspect`. Framework-injected params (`query`, `context`, `auth_context`, `**kwargs`) are filtered out automatically. Parameter metadata is used by the CLI skill generator to produce accurate documentation.
 
 13. **Mini-agents are opt-in via `mini_agent.enabled: true`** on a top-level agent (no nesting). When enabled, a deterministic structured-output decomposer runs at the start of the agent's turn; if it returns `should_fork=True` the graph fans out into N parallel mini-agent nodes (default cap 3, hard cap 8) each running a focused agentic loop with a curated tool subset, then synthesises their outcomes back into one `AIMessage` via the aggregator. The decomposer hook lives at the **graph-wrapper** level (`graph._create_agent_node`), not inside `GenericAgent.run()` — so any `OrchidAgent` subclass can opt in via YAML without coordinating with its own `run()`. Cross-node data uses **shadow-slot keys**: `mini_agent_outcomes[f"{parent}#{mini_id}"]`, `mini_agent_decisions[parent_name]`. Four lifecycle SSE events (`mini_agent.{decomposed,started,finished,aggregated}`) surface activity to the streaming UI without leaking inner token streams. See the `mini_agent_*` modules under `orchid_ai/agents/`.
+
+## Data Pipelines
+
+A pipeline is a named, typed DAG over a **run-scoped information graph**. It is
+declared under `pipelines:` in `agents.yaml`, compiled into `CompiledPipeline`,
+and executed by its own LangGraph graph with **no checkpointer** and **no chat
+storage**. The run session owns the graph, job results, limits, deadline,
+cancellation, events and atomic commits.
+
+- **Entry points:** `Orchid.run_pipeline` / `stream_pipeline`; `orchid-api`
+  `/pipelines`; `orchid-cli` `orchid pipeline`; exposed agent tools; Bloom
+  pipeline triggers/schedules.
+- **Job kinds:** `deterministic`, `llm`, `agent`, `decision`, `map`,
+  `subpipeline`, `emit`, `custom`.
+- **Typed writes:** every object/relation write is validated against a shape and
+  committed atomically; jobs see a read-only graph view and return mutations.
+- **Auth:** `OrchidAuthContext` travels in the run config, never in graph state.
+  Emit envelopes carry identity only — never the bearer token.
+- **Extensions:** class-based shapes (`shapes.X.class`), `kind: custom` +
+  `class:`, and `register_pipeline_step(kind, factory)` for programmatic/plugin
+  pipelines. YAML accepts the eight built-in kinds only; a new registered kind
+  needs a directly built `CompiledJob`/`CompiledPipeline` in v1.
+- **v1 scheduling:** `depends_on` is a scheduling edge, not an all-predecessor
+  barrier. Chain one predecessor per job when order matters; `join: any` is for
+  mutually exclusive decision branches.
+- **Decision providers:** a provider referenced only by a pipeline job is not
+  auto-built; bind it to an agent or registered decision point.
+
+Documentation: `docs/pipelines.md` (YAML, shapes, jobs, results, limits,
+security) and `docs/pipelines-extension.md` (custom steps/kinds/shapes, trust
+boundary). Examples: `../examples/data_pipeline/` and
+`../examples/data_pipeline_events/`.
+
+```bash
+cd orchid && .venv/bin/python -m pytest tests/pipeline -x
+cd orchid && .venv/bin/python -m pytest tests/events -x
+```
 
 ## Key Patterns
 
